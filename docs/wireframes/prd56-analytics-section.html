@@ -1,0 +1,2606 @@
+<!doctype html>
+<html lang="ru" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-56, экран 1 из 2 — раздел «Аналитика» (рабочее место оценщика).
+    Контракт: docs/specs/prd-56/analytics-rework.md, раздел 3 (FR-01 - FR-12) плюс
+    правила представления раздела 6 (FR-26 - FR-32).
+
+    Анатомия и разметка сняты с работающей системы и с компонентов ui-kit, своих
+    компонентов эскиз не заводит:
+      • оболочка — `AppShell` из `AuthorLayout` (client/src/pages/author/layout.tsx):
+        `ou-shell__side` + `ou-shell__header` (переключатель темы и пользователь
+        справа) + `ou-shell__main`, у которого свои поля и вертикальный ритм;
+      • боковое меню — `AppSidebar` (client/src/components/app-sidebar.tsx): восемь
+        пунктов в том же порядке, версия в подвале;
+      • содержимое — карточки `Card` с `CardHeader`, как на «Главной» и на нынешней
+        аналитике; раскладка — примитивы ДС (`Stack`, `Box`, `Text`, `Separator`);
+      • элементы — `FilterBar`, `SearchField`, `Chip`, `DataGrid`, `Tabs`, `Banner`,
+        `Select`, `Checkbox`, `ModalDialog`, `Spinner`, `Tag`, `ProgressBar`: разметка
+        скопирована из vendor/ui-kit/src/components.
+
+    Единица этого экрана — ЧЕЛОВЕК и ПРОХОЖДЕНИЕ; тест здесь фильтр, а не предмет
+    (решение владельца 1). Плитки «Средний балл» и «Pass Rate» по всем тестам, блок
+    «Проблемные темы» вне контекста теста и тренды по всем тестам сразу с экрана
+    УХОДЯТ (FR-12) — их место занимают срезы и очередь внимания.
+
+    Состояния (8):
+      реестр   — reg (фильтр пуст), reg-filtered (фильтр применён), reg-empty
+                 (под условия ничего не подошло), reg-export (выгрузка по фильтру);
+      срезы    — slices (ось «Группа»), slice-gap (строка развёрнута: разрыв по темам);
+      оргструктура (дельта 2026-09-28) — slices-unit (ось «Подразделение»),
+                 filter-org (окно условий в нынешнем виде из кода плюс три оргполя);
+      очередь  — attention;
+      docs     — пояснения и DS-маппинг.
+    -->
+    <title>PRD-56 — Раздел «Аналитика»</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css?v=3" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css?v=2" />
+    <script defer src="/docs/wireframes/prd7-shared.js?v=2"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css?v=3" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css?v=2" />
+    <style>
+      /* Переключатель состояний здесь переносится на две строки, а общий
+         `--wf-nav-offset` рассчитан на одну — иначе шапка оболочки уезжает под него.
+         WIREFRAME-ONLY. */
+      body { --wf-nav-offset: var(--wf-size-84); }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset); }
+      .wf-state.active { display: block; }
+      .wf-sprite { display: none; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+      .wf-mt-4 { margin-top: var(--ou-space-4); }
+
+      /* Четыре класса-держателя. Все они в КОДЕ — пропы компонентов, а не CSS:
+         числовая колонка `DataGrid` (`align: 'right'`), ширина `Select`, ряд
+         `Cluster` с фиксированной колонкой имени темы и отметка базы на полосе
+         `ProgressBar`. Своих компонентов эскиз не вводит. */
+      /* Шапка оболочки в продукте липкая (`position: sticky`), а поверх эскиза лежит
+         фиксированный переключатель состояний — липкая шапка уезжала бы под него.
+         WIREFRAME-ONLY, к продукту не относится. */
+      .wf-state .ou-shell__header { position: static; }
+
+      .wf-th-end { justify-content: flex-end; }
+      .wf-ctl { min-width: var(--wf-size-200); }
+      /* Сброс периода показывается только когда интервал задан. */
+      .wf-scope-clear { display: none; }
+      [data-scope-dated] .wf-scope-clear { display: inline-flex; }
+      .wf-ctl--grow { flex: 1 1 var(--wf-size-320); max-width: var(--wf-size-560); }
+      /* Блок одного сравниваемого среза и подзаголовок группы строк в таблице —
+         в коде это `Stack` в рамке и строка `DataGrid` с `colSpan`. */
+      .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
+      .wf-slot-add:hover { border-color: var(--ou-accent-default); }
+      /* Карточки срезов не тянутся под самую высокую: развёрнутые условия одного
+         среза не должны оставлять пустоту в соседних. */
+      .wf-slots { align-items: start; }
+      .wf-slot { min-width: 0; padding: var(--ou-space-6); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-l); }
+      /* Аккордеон условий: в эскизе открытое состояние рисуется классом. */
+      .ou-acc__item:not(.is-open) .ou-acc__body { display: none; }
+      /* Ячейка меню строки: в коде это `MenuTrigger`, здесь — раскрытый список. */
+      .wf-rowmenu-cell { position: relative; text-align: right; }
+      .wf-rowmenu { position: absolute; right: 0; top: 100%; z-index: 20; min-width: var(--wf-size-240); }
+      /* Вложенность подтемы показывается одним и тем же сдвигом 6x везде:
+         и в строках раскрытия, и в таблицах сравнения. */
+      .wf-gap__row--tag { padding-left: var(--ou-space-6); }
+      .wf-gap__row { display: grid; grid-template-columns: var(--wf-size-220) 1fr var(--wf-size-160) var(--wf-size-90); align-items: center; gap: var(--ou-space-4); }
+      /* Модульная сетка 4 px (1x / 4x / 6x): между блоками страницы 4x, от краёв 6x. Правило
+         было введено для «Требует внимания»; с 6.2 оно держит все рабочие состояния, чтобы
+         ритм не зависел от версии каркаса. */
+      .wf-state[data-tab] .ou-shell__main { gap: var(--ou-space-4); padding-inline: var(--ou-space-6); }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <!-- ДЕЛЬТА 6.2 (2026-09-26, решение владельца): модульная сетка 4 px во всех состояниях.
+         Связанные элементы — 1x (4 px, gap-1): подпись и поле, кнопки одной группы, заголовок
+         и счётчик, ключ и значение условия, строки одного списка. Разные элементы — 4x (16 px,
+         gap-4): поля формы, блоки карточки среза, колонки строки разрыва по темам, элементы
+         общих условий вкладки. От краёв карточки и рамки — 6x (24 px): рамка среза в
+         сравнении и плитка «Добавить срез». Значения вне сетки (gap-2, gap-3, gap-5, pad-4 у
+         рамки, 12 px в CSS-держателях) заменены; эталон — состояние «Требует внимания». -->
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></symbol>
+      <symbol id="i-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5l-1-1H13a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.5l-1-1H13a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1Z"/><path d="M3 3v16a2 2 0 0 0 2 2h7"/><path d="M3 8h9"/></symbol>
+      <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+      <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
+      <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 21a8 8 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/></symbol>
+      <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
+    </svg>
+
+    <!-- Боковое меню — `AppSidebar` системы: восемь пунктов, тот же порядок. -->
+    <template id="wf-side-tpl">
+      <aside class="ou-side">
+        <div class="ou-side__brand">
+          <a href="#" class="ou-link-reset ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+            <span class="ou-shell__brand-mark"><svg width="16" height="16"><use href="#i-book" /></svg></span>
+            <span class="ou-text ou-text--body-m ou-text--w-semibold">Skill'Ум</span>
+          </a>
+        </div>
+        <nav class="ou-side__nav">
+          <div class="ou-side__group">
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-home" /></svg></span><span class="ou-side__lbl">Главная</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-folder-tree" /></svg></span><span class="ou-side__lbl">Темы и вопросы</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-clipboard" /></svg></span><span class="ou-side__lbl">Тесты</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-layout" /></svg></span><span class="ou-side__lbl">Шаблоны</span></button>
+            <button type="button" class="ou-side__item is-active" aria-current="page"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-chart" /></svg></span><span class="ou-side__lbl">Аналитика</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users" /></svg></span><span class="ou-side__lbl">Пользователи</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users-round" /></svg></span><span class="ou-side__lbl">Группы</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-import" /></svg></span><span class="ou-side__lbl">Импорт</span></button>
+          </div>
+        </nav>
+        <div class="ou-side__foot">
+          <span class="ou-text ou-text--caption ou-text--tone-subtle">Версия 1.18.0</span>
+        </div>
+      </aside>
+    </template>
+
+    <!-- Шапка оболочки — `AppShellActions`: переключатель темы и пользователь. -->
+    <template id="wf-header-tpl">
+      <div class="ou-shell__actions">
+        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" aria-label="Переключить на тёмную тему"><span class="ou-iconbtn__ico"><svg width="20" height="20"><use href="#i-moon" /></svg></span></button>
+        <button type="button" class="ou-shell__user">
+          <span class="ou-shell__avatar">А</span>
+          <span class="ou-shell__user-meta">
+            <span class="ou-shell__user-name">Администратор</span>
+            <span class="ou-shell__user-role">Суперадминистратор</span>
+          </span>
+        </button>
+      </div>
+    </template>
+
+    <!-- Заголовок страницы и действия раздела: одинаковы на всех вкладках. -->
+    <template id="wf-head-tpl">
+      <div class="ou-stack ou-stack--gap-1">
+        <h1 class="ou-text ou-text--heading-l">Аналитика</h1>
+        <p class="ou-text ou-text--body-m ou-text--tone-muted">Что происходит с людьми и процессом: прохождения, срезы и дела, требующие внимания</p>
+      </div>
+      <div class="ou-stack ou-stack--row ou-stack--gap-1">
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-upload" /></svg></span><span>Загрузить выгрузку LMS</span></button>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-refresh" /></svg></span><span>Обновить</span></button>
+      </div>
+    </template>
+
+    <!-- Вкладки раздела: активная проставляется скриптом по `data-tab` состояния. -->
+    <template id="wf-tabs-tpl">
+      <div class="ou-tabs__list" role="tablist">
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="reg" onclick="showState(null, 'reg')"><span class="ou-tabs__label">Прохождения</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="slices" onclick="showState(null, 'slices')"><span class="ou-tabs__label">Срезы</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="attention" onclick="showState(null, 'attention')"><span class="ou-tabs__label">Требует внимания</span><span class="ou-tabs__badge">31</span></button>
+      </div>
+    </template>
+
+    <!-- Панель фильтра — `FilterBar` с `SearchField` в слоте поиска. -->
+    <template id="wf-search-tpl">
+      <div class="ou-filterbar__search">
+        <div class="ou-field ou-field--s ou-field--full ou-searchfield">
+          <div class="ou-field__box">
+            <span class="ou-field__ico"><svg width="16" height="16"><use href="#i-search" /></svg></span>
+            <input class="ou-field__input" type="search" placeholder="Участник или тест" aria-label="Поиск по участнику или тесту" />
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Шапка таблицы реестра: один набор колонок на все состояния. -->
+    <template id="wf-reg-head-tpl">
+      <tr>
+        <th><div class="ou-grid__th is-sortable">Участник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable">Тест<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable is-sorted">Дата<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Попытка<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable">Источник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable">Группа<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+      </tr>
+    </template>
+
+    <!-- Шапка таблицы срезов. -->
+    <template id="wf-slice-head-tpl">
+      <tr>
+        <th class="ou-grid__control-cell"></th>
+        <th><div class="ou-grid__th is-sortable">Срез<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Назначено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Начато<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Завершено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th><div class="ou-grid__th">Слабейшая тема</div></th>
+        <th class="ou-grid__control-cell" aria-label="Действия"></th>
+      </tr>
+    </template>
+
+    <!-- Общие условия вкладки «Срезы»: ровно два — тест и период. Это не фильтр:
+         фильтровать тут нечего, оба условия обязательны и задают рамку расчёта. -->
+    <template id="wf-slices-scope-tpl">
+      <div class="ou-stack ou-stack--row ou-stack--gap-4 ou-stack--wrap ou-stack--ai-end">
+        <div class="ou-stack ou-stack--gap-1 wf-ctl wf-ctl--grow">
+          <span class="ou-text ou-text--body-xs ou-text--tone-muted">Тест</span>
+          <div class="ou-combo ou-combo--single ou-combo--s">
+            <div class="ou-combo__control">
+              <span class="ou-combo__chip ou-combo__chip--accent">
+                <span class="ou-combo__chip-label">Определение ведущего стиля человекоцентричного лидерства</span>
+              </span>
+              <input class="ou-combo__input" type="text" value="" autocomplete="off" role="combobox" aria-label="Тест" aria-expanded="false" aria-haspopup="listbox" />
+              <span class="ou-combo__trail">
+                <button type="button" class="ou-combo__clear" aria-label="Очистить всё"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+                <svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="ou-datepicker">
+          <label class="ou-datepicker__lbl" for="wf-scope-from">Период с</label>
+          <button type="button" class="ou-datepicker__trigger" id="wf-scope-from" aria-haspopup="dialog" aria-expanded="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+            <span class="ou-datepicker__value is-empty">не ограничен</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+          </button>
+        </div>
+        <div class="ou-datepicker">
+          <label class="ou-datepicker__lbl" for="wf-scope-to">по</label>
+          <button type="button" class="ou-datepicker__trigger" id="wf-scope-to" aria-haspopup="dialog" aria-expanded="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+            <span class="ou-datepicker__value is-empty">не ограничен</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+          </button>
+        </div>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s wf-scope-clear"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span><span>Сбросить период</span></button>
+      </div>
+    </template>
+
+    <!-- Единственный собственный параметр списка срезов — ось разбиения. -->
+    <template id="wf-slice-controls-tpl">
+      <div class="ou-stack ou-stack--row ou-stack--gap-4 ou-stack--wrap ou-stack--ai-end">
+        <div class="ou-stack ou-stack--gap-1 wf-ctl">
+          <span class="ou-text ou-text--body-xs ou-text--tone-muted">Разбить по</span>
+          <!-- ДЕЛЬТА 2026-09-28 (оргструктура, FR-06b отменено): «Подразделение», «Должность»,
+               «Организация» сразу за группой — по убыванию практической ценности (FR-06a). -->
+          <div class="ou-select ou-field--s" data-ou-options="Группа|Подразделение|Должность|Организация|Поток (период)|Номер попытки|Версия теста|Вариант выдачи|Источник|Внутренние и внешние">
+            <button type="button" class="ou-select__trigger"><span class="ou-select__value">Группа</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Реестр прохождений:</span>
+      <button type="button" class="active" onclick="showState(this, 'reg')">без фильтра</button>
+      <button type="button" onclick="showState(this, 'reg-filtered')">фильтр применён</button>
+      <button type="button" onclick="showState(this, 'reg-empty')">ничего не подошло</button>
+      <button type="button" onclick="showState(this, 'reg-export')">экспорт выборки</button>
+      <button type="button" onclick="showState(this, 'save-slice')">сохранить как срез</button>
+      <span class="wf-nav-sep"></span>
+      <span class="wf-nav-title">Срезы:</span>
+      <button type="button" onclick="showState(this, 'slices')">список срезов</button>
+      <button type="button" onclick="showState(this, 'slice-gap')">темы среза</button>
+      <button type="button" onclick="showState(this, 'compare')">сравнение срезов</button>
+      <button type="button" onclick="showState(this, 'compare-many')">предел: четыре среза</button>
+      <button type="button" onclick="showState(this, 'filter-form')">условия отбора</button>
+      <span class="wf-nav-sep"></span>
+      <span class="wf-nav-title">Оргструктура:</span>
+      <button type="button" onclick="showState(this, 'slices-unit')">срез по подразделениям</button>
+      <button type="button" onclick="showState(this, 'filter-org')">условия с оргполями</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'attention')">Требует внимания</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <!-- ════════════════ Реестр: фильтр пуст ════════════════ -->
+    <div id="wf-reg" class="wf-state active" data-tab="reg">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row" data-wf-search>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+              <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" disabled><span>Сохранить как срез</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'reg-export')"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Экспорт</span></button>
+              </div>
+            </div>
+          </div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Реестр прохождений</h2>
+                <p class="ou-card__subtitle">1 284 прохождения за всё время · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table">
+                    <thead data-wf-reg-head></thead>
+                    <tbody>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Морозова Анна</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>11.09.2026 14:20</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">78 %</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Сафин Ильдар</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>11.09.2026 11:05</td>
+                        <td class="is-numeric">2</td>
+                        <td class="is-numeric">62 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td>Логистика</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td>
+                          <span class="ou-grid__cell-strong">Участник 7F3A·9C21</span>
+                          <span class="ou-grid__cell-sub">псевдоним, обезличено при импорте</span>
+                        </td>
+                        <td>Охрана труда</td>
+                        <td>10.09.2026</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">71 %</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Импорт</span></td>
+                        <td>Подрядчики</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Кузнецов Павел</span></td>
+                        <td>Охрана труда</td>
+                        <td>10.09.2026 09:12</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric is-muted">—</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--s">Не завершено</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Розница</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Тихонова Мария</span></td>
+                        <td>Опросник ЧИЛ V3.6</td>
+                        <td>09.09.2026 16:40</td>
+                        <td class="is-numeric">1</td>
+                        <td>профиль по шкалам</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--s">Завершено</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Сервисные центры</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Гаврилов Сергей</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>08.09.2026 13:31</td>
+                        <td class="is-numeric">3</td>
+                        <td class="is-numeric">58 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td>
+                          <span class="ou-grid__cell-strong">Участник B14C·02E8</span>
+                          <span class="ou-grid__cell-sub">псевдоним, обезличено при импорте</span>
+                        </td>
+                        <td>Охрана труда</td>
+                        <td>08.09.2026</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">88 %</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Импорт</span></td>
+                        <td class="is-muted">Без группы</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td>
+                          <span class="ou-grid__cell-strong">Орлова Ксения</span>
+                          <span class="ou-grid__cell-sub">внешний участник</span>
+                        </td>
+                        <td>Сертификация руководителей</td>
+                        <td>07.09.2026 10:02</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">91 %</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Подрядчики</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ou-grid__footer">
+                  <span>Показано 25 из 1 284</span>
+                  <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">Следующие подгружаются при прокрутке</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Реестр: фильтр применён ════════════════ -->
+    <div id="wf-reg-filtered" class="wf-state" data-tab="reg">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row" data-wf-search>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">4</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+              <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'save-slice')"><span>Сохранить как срез</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'reg-export')"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Экспорт</span></button>
+              </div>
+            </div>
+            <div class="ou-filterbar__applied">
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Тест: Сертификация руководителей</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Группа: Отдел продаж</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.08 — 12.09.2026</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Исход: не сдал</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+            </div>
+          </div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Реестр прохождений</h2>
+                <p class="ou-card__subtitle">128 прохождений из 1 284 · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table">
+                    <thead data-wf-reg-head></thead>
+                    <tbody>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Гаврилов Сергей</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>08.09.2026 13:31</td>
+                        <td class="is-numeric">3</td>
+                        <td class="is-numeric">58 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Белкина Ольга</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>05.09.2026 09:48</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">61 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Сафин Ильдар</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>03.09.2026 15:12</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">54 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Дорохов Артём</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>02.09.2026 11:27</td>
+                        <td class="is-numeric">2</td>
+                        <td class="is-numeric">66 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Зуева Полина</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>29.08.2026 14:05</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">49 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ou-grid__footer">
+                  <span>Показано 25 из 128</span>
+                  <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1"><span class="ou-spinner ou-spinner--xs ou-spinner--neutral" role="status" aria-label="Загрузка"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="ou-spinner__track" cx="12" cy="12" r="10" /><circle class="ou-spinner__head" cx="12" cy="12" r="10" /></svg></span>Загружаем следующие 25</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Реестр: под условия ничего не подошло ════════════════ -->
+    <div id="wf-reg-empty" class="wf-state" data-tab="reg">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row" data-wf-search>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">3</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+              <div class="ou-filterbar__spacer">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" disabled><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Экспорт</span></button>
+              </div>
+            </div>
+            <div class="ou-filterbar__applied">
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Тест: Опросник ЧИЛ V3.6</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: импорт</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.09 — 12.09.2026</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+            </div>
+          </div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Реестр прохождений</h2>
+                <p class="ou-card__subtitle">0 прохождений из 1 284</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table">
+                    <thead data-wf-reg-head></thead>
+                    <tbody>
+                      <tr>
+                        <td colspan="8" class="ou-grid__empty">Под эти условия не подошло ни одного прохождения. Снимите условие или расширьте период.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Реестр: экспорт отфильтрованного ════════════════ -->
+    <div id="wf-reg-export" class="wf-state" data-tab="reg">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Реестр прохождений</h2>
+                <p class="ou-card__subtitle">128 прохождений из 1 284 · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table">
+                    <thead data-wf-reg-head></thead>
+                    <tbody>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Гаврилов Сергей</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>08.09.2026 13:31</td>
+                        <td class="is-numeric">3</td>
+                        <td class="is-numeric">58 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td><span class="ou-grid__cell-strong">Белкина Ольга</span></td>
+                        <td>Сертификация руководителей</td>
+                        <td>05.09.2026 09:48</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">61 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-export-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="wf-export-title">Экспорт прохождений</h2>
+              <p class="ou-modal__desc">Выгружается текущая выборка, а не весь журнал</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'reg-filtered')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-stack ou-stack--gap-4">
+              <div class="ou-banner ou-banner--subtle ou-banner--info ou-banner--sm" role="status">
+                <span class="ou-banner__ico"><svg width="20" height="20"><use href="#i-info" /></svg></span>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">128 прохождений из 1 284</div>
+                  <div class="ou-banner__desc">Тест: Сертификация руководителей · Группа: Отдел продаж · Период: 01.08 — 12.09.2026 · Исход: не сдал</div>
+                </div>
+              </div>
+              <div class="ou-check-group">
+                <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Прохождения</span><span class="ou-check__desc">Участник, тест, дата, результат, исход, источник, группа</span></span></label>
+                <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Ответы по заданиям</span><span class="ou-check__desc">По одной строке на ответ, включая время на ответ там, где оно измерено</span></span></label>
+                <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Шкалы и показатели</span><span class="ou-check__desc">Только для измерительных тестов в выборке</span></span></label>
+                <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Разрезы по темам</span><span class="ou-check__desc">Подытоги по ключам разреза, как на экране результата</span></span></label>
+              </div>
+              <!-- ДЕЛЬТА 2026-09-25 (решение владельца, вариант «б» задачи 2.2): «только лучшая попытка»
+                   переезжает из снятой вкладки «Экспорт». Это правило ОТБОРА строк книги, поэтому
+                   стоит отдельной группой после листов; критерий виден, только когда галочка стоит. -->
+              <div class="ou-stack ou-stack--gap-1">
+                <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Только лучшая попытка участника</span><span class="ou-check__desc">Из нескольких попыток одного человека по тесту в книгу идёт одна — лучшая</span></span></label>
+                <div class="ou-select ou-field--s">
+                  <label class="ou-field__lbl" for="wf-best-criteria">Лучшая — по</label>
+                  <button type="button" class="ou-field__box ou-select__trigger" id="wf-best-criteria" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="ou-select__value">Проценту результата</span>
+                    <svg class="ou-select__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                  </button>
+                  <p class="ou-field__msg">Ещё: сумме уровней, числу уровней — для адаптивных тестов</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null, 'reg-filtered')"><span>Отмена</span></button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Скачать книгу</span></button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ════════════════ Реестр: фильтр сохраняется как срез ════════════════ -->
+    <div id="wf-save-slice" class="wf-state" data-tab="reg">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Реестр прохождений</h2>
+                <p class="ou-card__subtitle">128 прохождений из 1 284 · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table">
+                    <thead data-wf-reg-head></thead>
+                    <tbody>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td class="ou-grid__cell-strong">Гаврилов Сергей</td>
+                        <td>Сертификация руководителей</td>
+                        <td>08.09.2026 13:31</td>
+                        <td class="is-numeric">3</td>
+                        <td class="is-numeric">58 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="location.href='analytics-attempt-details.html'">
+                        <td class="ou-grid__cell-strong">Белкина Ольга</td>
+                        <td>Сертификация руководителей</td>
+                        <td>05.09.2026 09:48</td>
+                        <td class="is-numeric">1</td>
+                        <td class="is-numeric">61 %</td>
+                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td>Отдел продаж</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-save-slice-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--s">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="wf-save-slice-title">Сохранить как срез</h2>
+              <p class="ou-modal__desc">Срез — это сохранённый набор условий отбора. Его можно открыть заново и сравнить с другим</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'reg-filtered')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-stack ou-stack--gap-4">
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="wf-slice-name">Название среза</label>
+                <div class="ou-field__box">
+                  <input class="ou-field__input" id="wf-slice-name" type="text" value="Отдел продаж, не сдали" />
+                </div>
+              </div>
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-xs ou-text--tone-muted">Условия — те же, что в фильтре сейчас</span>
+                <div class="ou-chip-group">
+                  <span class="ou-chip ou-chip--xs"><button type="button" class="ou-chip__action" aria-pressed="false">Тест: Сертификация руководителей</button></span>
+                  <span class="ou-chip ou-chip--xs"><button type="button" class="ou-chip__action" aria-pressed="false">Группа: Отдел продаж</button></span>
+                  <span class="ou-chip ou-chip--xs"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.08 — 12.09.2026</button></span>
+                  <span class="ou-chip ou-chip--xs"><button type="button" class="ou-chip__action" aria-pressed="false">Исход: не сдал</button></span>
+                </div>
+              </div>
+              <div class="ou-banner ou-banner--subtle ou-banner--info ou-banner--sm" role="status">
+                <span class="ou-banner__ico"><svg width="20" height="20"><use href="#i-info" /></svg></span>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__desc">Под условия сейчас подходит 128 прохождений. Срез считается заново при каждом открытии — состав не консервируется.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null, 'reg-filtered')"><span>Отмена</span></button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null, 'compare')"><span>Сохранить срез</span></button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Срезы: сравнение с базой ════════════════ -->
+    <div id="wf-slices" class="wf-state" data-tab="slices">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div data-wf-slices-scope></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Срез по группам</h2>
+                <p class="ou-card__subtitle">486 завершённых прохождений теста за всё время · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Список срезов</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'compare')"><span>Сравнение</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-4" data-wf-slice-controls>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <thead data-wf-slice-head></thead>
+                      <tbody>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Розница</td>
+                          <td class="is-numeric">168</td>
+                          <td class="is-numeric">166</td>
+                          <td class="is-numeric">163</td>
+                          <td class="is-numeric">85 %</td>
+                          <td class="is-numeric">81 %</td>
+                          <td class="is-muted">Управление командой · 71 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Сервисные центры</td>
+                          <td class="is-numeric">216</td>
+                          <td class="is-numeric">210</td>
+                          <td class="is-numeric">206</td>
+                          <td class="is-numeric">80 %</td>
+                          <td class="is-numeric">77 %</td>
+                          <td class="is-muted">Право и комплаенс · 69 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Логистика</td>
+                          <td class="is-numeric">46</td>
+                          <td class="is-numeric">44</td>
+                          <td class="is-numeric">41</td>
+                          <td class="is-numeric">74 %</td>
+                          <td class="is-numeric">70 %</td>
+                          <td>Право и комплаенс · <span class="ou-tag ou-tag--warning ou-tag--s">61 %</span></td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Отдел продаж</td>
+                          <td class="is-numeric">64</td>
+                          <td class="is-numeric">61</td>
+                          <td class="is-numeric">58</td>
+                          <td class="is-numeric">71 %</td>
+                          <td class="is-numeric">68 %</td>
+                          <td>Право и комплаенс · <span class="ou-tag ou-tag--error ou-tag--s">54 %</span></td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong is-muted">Без группы</td>
+                          <td class="is-numeric is-muted">—</td>
+                          <td class="is-numeric">16</td>
+                          <td class="is-numeric">15</td>
+                          <td class="is-numeric">73 %</td>
+                          <td class="is-numeric">72 %</td>
+                          <td class="is-muted">Управление командой · 66 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"></td>
+                          <td class="ou-grid__cell-strong">Новые сотрудники</td>
+                          <td class="is-numeric">5</td>
+                          <td class="is-numeric">4</td>
+                          <td class="is-numeric">3</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-muted">—</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Срезы: строка развёрнута — разрыв по темам ════════════════ -->
+    <div id="wf-slice-gap" class="wf-state" data-tab="slices">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div data-wf-slices-scope></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Срез по группам</h2>
+                <p class="ou-card__subtitle">486 завершённых прохождений теста за всё время · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Список срезов</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'compare')"><span>Сравнение</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-4" data-wf-slice-controls>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <thead data-wf-slice-head></thead>
+                      <tbody>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slices')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Розница</td>
+                          <td class="is-numeric">168</td>
+                          <td class="is-numeric">166</td>
+                          <td class="is-numeric">163</td>
+                          <td class="is-numeric">85 %</td>
+                          <td class="is-numeric">81 %</td>
+                          <td class="is-muted">Управление командой · 71 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn is-open" aria-label="Свернуть" aria-expanded="true" onclick="showState(null, 'slices')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Отдел продаж</td>
+                          <td class="is-numeric">64</td>
+                          <td class="is-numeric">61</td>
+                          <td class="is-numeric">58</td>
+                          <td class="is-numeric">71 %</td>
+                          <td class="is-numeric">68 %</td>
+                          <td>Право и комплаенс · <span class="ou-tag ou-tag--error ou-tag--s">54 %</span></td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="true"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                            <div class="ou-menu ou-menu--sm wf-rowmenu" role="menu">
+                              <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null, 'reg-filtered')"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Открыть прохождения</span></span></button>
+                              <!-- ДЕЛЬТА 6.3 (2026-09-26, PRD-56 FR-24): «Аналитика теста» вторым пунктом —
+                                   переход к аналитике теста с условиями этого среза. Условные пункты:
+                                   «Изменить условия» — только у СОХРАНЁННОГО среза, «Сохранить как срез» —
+                                   только у среза по ОСИ (строка списка «Разбить по»). Остальные — всегда. -->
+                              <a class="ou-menu__item ou-link-reset" role="menuitem" href="prd56-test-analytics.html"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Аналитика теста</span></span></a>
+                              <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null, 'compare')"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Сравнить с другим срезом</span></span></button>
+                              <div class="ou-menu__divider" role="separator"></div>
+                              <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null, 'save-slice')"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Сохранить как срез</span></span></button>
+                              <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null, 'reg-export')"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Выгрузить прохождения</span></span></button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr class="ou-grid__expanded">
+                          <td colspan="9">
+                            <div class="ou-grid__expanded-inner">
+                              <div class="ou-stack ou-stack--gap-4">
+                                <div class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--wrap ou-stack--ai-center">
+                                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Условия среза:</span>
+                                  <span class="ou-chip ou-chip--xs"><button type="button" class="ou-chip__action" aria-pressed="false">Группа: Отдел продаж</button></span>
+                                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+                                </div>
+
+                                <div class="ou-stack ou-stack--gap-1">
+                                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж, 58 завершённых прохождений · доля верных ответов по темам и подтемам</span>
+
+                                  <div class="wf-gap__row">
+                                    <span class="ou-text ou-text--body-s">Право и комплаенс</span>
+                                    <span class="ou-progress ou-progress--s ou-progress--error"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 54%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">54 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Антикоррупция</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--error"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 41%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">41 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Персональные данные</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--error"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 52%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">52 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Договорная работа</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--warning"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 69%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">69 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 34 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row">
+                                    <span class="ou-text ou-text--body-s">Управление командой</span>
+                                    <span class="ou-progress ou-progress--s ou-progress--warning"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 63%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">63 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Обратная связь</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--warning"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 58%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">58 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Делегирование</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--neutral"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 68%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">68 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row">
+                                    <span class="ou-text ou-text--body-s">Документооборот</span>
+                                    <span class="ou-progress ou-progress--s ou-progress--neutral"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 70%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">70 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">ЭДО</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--neutral"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 72%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">72 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Архивное хранение</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--neutral"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 67%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">67 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 29 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row">
+                                    <span class="ou-text ou-text--body-s">Охрана труда</span>
+                                    <span class="ou-progress ou-progress--s ou-progress--success"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 81%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">81 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Инструктажи</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--success"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 86%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">86 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row wf-gap__row--tag">
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Средства защиты</span>
+                                    <span class="ou-progress ou-progress--xs ou-progress--neutral"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 75%"></span></span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">75 % верных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 58 прохождениям</span>
+                                  </div>
+
+                                  <div class="wf-gap__row">
+                                    <span class="ou-text ou-text--body-s ou-text--tone-muted">Информационная безопасность</span>
+                                    <span></span>
+                                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">мало данных</span>
+                                    <span class="ou-text ou-text--end ou-text--body-xs ou-text--tone-muted">по 6 прохождениям</span>
+                                  </div>
+                                </div>
+
+                                <div class="ou-stack ou-stack--row ou-stack--gap-1">
+                                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'reg-filtered')"><span>Открыть прохождения</span></button>
+                                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'compare')"><span>Сравнить с другим срезом</span></button>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slices')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong is-muted">Без группы</td>
+                          <td class="is-numeric is-muted">—</td>
+                          <td class="is-numeric">16</td>
+                          <td class="is-numeric">15</td>
+                          <td class="is-numeric">73 %</td>
+                          <td class="is-numeric">72 %</td>
+                          <td class="is-muted">Управление командой · 66 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+
+    <!-- ════════════════ Срезы: режим сравнения ════════════════ -->
+    <div id="wf-compare" class="wf-state" data-tab="slices" data-scope-dated>
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div data-wf-slices-scope></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Сравнение срезов</h2>
+                <p class="ou-card__subtitle">Два набора условий на одном тесте и периоде: «Розница, первый поток» — 163 прохождения, «Отдел продаж» — 58</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'slices')"><span>Список срезов</span></button>
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Сравнение</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-4">
+                <div class="ou-lgrid ou-lgrid--auto ou-lgrid--min-md ou-lgrid--gap-4 wf-slots">
+          <div class="ou-stack ou-stack--gap-4 wf-slot">
+            <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 1</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">163 прохождения</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+              <div class="ou-select ou-field--s" data-ou-options="— не выбран —|Розница, первый поток|Подрядчики|Поток 2026 Q1|Пересдачи">
+                <button type="button" class="ou-select__trigger"><span class="ou-select__value">Розница, первый поток</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+              </div>
+            </div>
+            <div class="ou-acc ou-acc--plain">
+              <div class="ou-acc__item is-open">
+                <button type="button" class="ou-acc__trigger" aria-expanded="true">
+                  <span class="ou-acc__trigger-text">
+                    <span class="ou-acc__title">Условия отбора · 5</span>
+                  </span>
+                  <span class="ou-acc__chev"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-acc__body" role="region">
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Группа</span><span class="ou-text ou-text--body-xs">Розница</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Попытка</span><span class="ou-text ou-text--body-xs">Первая</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Период</span><span class="ou-text ou-text--body-xs">01.01.2026 — 30.06.2026</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Источник</span><span class="ou-text ou-text--body-xs">Веб</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Участники</span><span class="ou-text ou-text--body-xs">Внутренние сотрудники</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+            </div>
+          </div>
+          <div class="ou-stack ou-stack--gap-4 wf-slot">
+            <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 2</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">58 прохождений</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+              <div class="ou-select ou-field--s" data-ou-options="— не выбран —|Розница, первый поток|Подрядчики|Поток 2026 Q1|Пересдачи">
+                <button type="button" class="ou-select__trigger"><span class="ou-select__value">— не выбран —</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+              </div>
+            </div>
+            <div class="ou-acc ou-acc--plain">
+              <div class="ou-acc__item">
+                <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                  <span class="ou-acc__trigger-text">
+                    <span class="ou-acc__title">Условия отбора · 1</span>
+                  </span>
+                  <span class="ou-acc__chev"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-acc__body" role="region">
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Группа</span><span class="ou-text ou-text--body-xs">Отдел продаж</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Убрать</span></button>
+            </div>
+          </div>
+                  <button type="button" class="ou-box ou-box--border-dashed ou-box--radius-l ou-box--pad-6 wf-slot-add" onclick="showState(null, 'compare-many')">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium">+ Добавить срез</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">до четырёх срезов</span>
+                  </button>
+                </div>
+
+                <div class="ou-stack ou-stack--gap-1"><!-- подпись и её таблица — связанные: 4 px (решение владельца 2026-09-26) -->
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Прохождения и результат</span>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <colgroup>
+                        <col style="width: 40%" />
+                        <col style="width: 22%" />
+                        <col style="width: 22%" />
+                        <col style="width: 16%" />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th><div class="ou-grid__th">Показатель</div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Розница, первый поток</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Розница · Попытка: первая · ещё 3</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Отдел продаж</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Отдел продаж</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end">Разница</div></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Назначено</td>
+                          <td class="is-numeric">168</td>
+                          <td class="is-numeric">64</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                        </tr>
+                        <tr>
+                          <td>Начато</td>
+                          <td class="is-numeric">166</td>
+                          <td class="is-numeric">61</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                        </tr>
+                        <tr>
+                          <td>Завершено</td>
+                          <td class="is-numeric">163</td>
+                          <td class="is-numeric">58</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                        </tr>
+                        <tr>
+                          <td>Сдали</td>
+                          <td class="is-numeric">85 %</td>
+                          <td class="is-numeric">71 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−14 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td>Средний результат</td>
+                          <td class="is-numeric">81 %</td>
+                          <td class="is-numeric">68 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−13 п.п.</span></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                </div>
+
+                <div class="ou-stack ou-stack--gap-1"><!-- подпись и её таблица — связанные: 4 px (решение владельца 2026-09-26) -->
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Доля верных ответов</span>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <colgroup>
+                        <col style="width: 40%" />
+                        <col style="width: 22%" />
+                        <col style="width: 22%" />
+                        <col style="width: 16%" />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th><div class="ou-grid__th">Тема / подтема</div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Розница, первый поток</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Розница · Попытка: первая · ещё 3</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Отдел продаж</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Отдел продаж</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end">Разница</div></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Право и комплаенс</td>
+                          <td class="is-numeric">78 %</td>
+                          <td class="is-numeric">54 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−24 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Антикоррупция</span></td>
+                          <td class="is-numeric is-muted">74 %</td>
+                          <td class="is-numeric is-muted">41 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−33 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Персональные данные</span></td>
+                          <td class="is-numeric is-muted">79 %</td>
+                          <td class="is-numeric is-muted">52 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−27 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Договорная работа</span></td>
+                          <td class="is-numeric is-muted">81 %</td>
+                          <td class="is-numeric is-muted">69 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-warning">−12 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td>Управление командой</td>
+                          <td class="is-numeric">71 %</td>
+                          <td class="is-numeric">63 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-warning">−8 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Обратная связь</span></td>
+                          <td class="is-numeric is-muted">68 %</td>
+                          <td class="is-numeric is-muted">58 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-warning">−10 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Делегирование</span></td>
+                          <td class="is-numeric is-muted">74 %</td>
+                          <td class="is-numeric is-muted">68 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">−6 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td>Документооборот</td>
+                          <td class="is-numeric">74 %</td>
+                          <td class="is-numeric">70 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">−4 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td>Охрана труда</td>
+                          <td class="is-numeric">83 %</td>
+                          <td class="is-numeric">81 %</td>
+                          <td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">−2 п.п.</span></td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted">Информационная безопасность</td>
+                          <td class="is-numeric">64 %</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-numeric is-muted">—</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                </div>
+
+                <div class="ou-stack ou-stack--row ou-stack--gap-1">
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'reg-filtered')"><span>Прохождения: Розница, первый поток</span></button>
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'reg-filtered')"><span>Прохождения: Отдел продаж</span></button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+
+    <!-- ════════════════ Срезы: предел сравнения ════════════════ -->
+    <div id="wf-compare-many" class="wf-state" data-tab="slices" data-scope-dated>
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div data-wf-slices-scope></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Сравнение срезов</h2>
+                <p class="ou-card__subtitle">Четыре набора условий на одном тесте и периоде</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'slices')"><span>Список срезов</span></button>
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Сравнение</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-4">
+                <div class="ou-lgrid ou-lgrid--auto ou-lgrid--min-md ou-lgrid--gap-4 wf-slots">
+          <div class="ou-stack ou-stack--gap-4 wf-slot">
+            <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 1</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">163 прохождения</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+              <div class="ou-select ou-field--s" data-ou-options="— не выбран —|Розница, первый поток|Подрядчики|Поток 2026 Q1|Пересдачи">
+                <button type="button" class="ou-select__trigger"><span class="ou-select__value">Розница, первый поток</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+              </div>
+            </div>
+            <div class="ou-acc ou-acc--plain">
+              <div class="ou-acc__item is-open">
+                <button type="button" class="ou-acc__trigger" aria-expanded="true">
+                  <span class="ou-acc__trigger-text">
+                    <span class="ou-acc__title">Условия отбора · 5</span>
+                  </span>
+                  <span class="ou-acc__chev"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-acc__body" role="region">
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Группа</span><span class="ou-text ou-text--body-xs">Розница</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Попытка</span><span class="ou-text ou-text--body-xs">Первая</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Период</span><span class="ou-text ou-text--body-xs">01.01.2026 — 30.06.2026</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Источник</span><span class="ou-text ou-text--body-xs">Веб</span></div>
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Участники</span><span class="ou-text ou-text--body-xs">Внутренние сотрудники</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+            </div>
+          </div>
+          <div class="ou-stack ou-stack--gap-4 wf-slot">
+            <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 2</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">58 прохождений</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+              <div class="ou-select ou-field--s" data-ou-options="— не выбран —|Розница, первый поток|Подрядчики|Поток 2026 Q1|Пересдачи">
+                <button type="button" class="ou-select__trigger"><span class="ou-select__value">— не выбран —</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+              </div>
+            </div>
+            <div class="ou-acc ou-acc--plain">
+              <div class="ou-acc__item">
+                <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                  <span class="ou-acc__trigger-text">
+                    <span class="ou-acc__title">Условия отбора · 1</span>
+                  </span>
+                  <span class="ou-acc__chev"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-acc__body" role="region">
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Группа</span><span class="ou-text ou-text--body-xs">Отдел продаж</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Убрать</span></button>
+            </div>
+          </div>
+          <div class="ou-stack ou-stack--gap-4 wf-slot">
+            <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 3</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">41 прохождение</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+              <div class="ou-select ou-field--s" data-ou-options="— не выбран —|Розница, первый поток|Подрядчики|Поток 2026 Q1|Пересдачи">
+                <button type="button" class="ou-select__trigger"><span class="ou-select__value">— не выбран —</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+              </div>
+            </div>
+            <div class="ou-acc ou-acc--plain">
+              <div class="ou-acc__item">
+                <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                  <span class="ou-acc__trigger-text">
+                    <span class="ou-acc__title">Условия отбора · 1</span>
+                  </span>
+                  <span class="ou-acc__chev"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-acc__body" role="region">
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Группа</span><span class="ou-text ou-text--body-xs">Логистика</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Убрать</span></button>
+            </div>
+          </div>
+          <div class="ou-stack ou-stack--gap-4 wf-slot">
+            <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 4</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">206 прохождений</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+              <div class="ou-select ou-field--s" data-ou-options="— не выбран —|Розница, первый поток|Подрядчики|Поток 2026 Q1|Пересдачи">
+                <button type="button" class="ou-select__trigger"><span class="ou-select__value">— не выбран —</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+              </div>
+            </div>
+            <div class="ou-acc ou-acc--plain">
+              <div class="ou-acc__item">
+                <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                  <span class="ou-acc__trigger-text">
+                    <span class="ou-acc__title">Условия отбора · 1</span>
+                  </span>
+                  <span class="ou-acc__chev"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-acc__body" role="region">
+              <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--gap-1"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Группа</span><span class="ou-text ou-text--body-xs">Сервисные центры</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" onclick="showState(null, 'filter-form')"><span>Изменить условия</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Убрать</span></button>
+            </div>
+          </div>
+                </div>
+                <span class="ou-text ou-text--body-xs ou-text--tone-muted">Добавить пятый срез нельзя: сравнение держит четыре</span>
+
+                <div class="ou-stack ou-stack--gap-1"><!-- подпись и её таблица — связанные: 4 px (решение владельца 2026-09-26) -->
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Прохождения и результат</span>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <colgroup>
+                        <col style="width: 28%" />
+                        <col style="width: 18%" />
+                        <col style="width: 18%" />
+                        <col style="width: 18%" />
+                        <col style="width: 18%" />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th><div class="ou-grid__th">Показатель</div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Розница, первый поток</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Розница · Попытка: первая · ещё 3</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Отдел продаж</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Отдел продаж</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Логистика</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Логистика</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Сервисные центры</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Сервисные центры</span></span></div></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Назначено</td>
+                          <td class="is-numeric">168</td>
+                          <td class="is-numeric">64</td>
+                          <td class="is-numeric">46</td>
+                          <td class="is-numeric">216</td>
+                        </tr>
+                        <tr>
+                          <td>Начато</td>
+                          <td class="is-numeric">166</td>
+                          <td class="is-numeric">61</td>
+                          <td class="is-numeric">44</td>
+                          <td class="is-numeric">210</td>
+                        </tr>
+                        <tr>
+                          <td>Завершено</td>
+                          <td class="is-numeric">163</td>
+                          <td class="is-numeric">58</td>
+                          <td class="is-numeric">41</td>
+                          <td class="is-numeric">206</td>
+                        </tr>
+                        <tr>
+                          <td>Сдали</td>
+                          <td class="is-numeric">85 %</td>
+                          <td class="is-numeric">71 %</td>
+                          <td class="is-numeric">74 %</td>
+                          <td class="is-numeric">80 %</td>
+                        </tr>
+                        <tr>
+                          <td>Средний результат</td>
+                          <td class="is-numeric">81 %</td>
+                          <td class="is-numeric">68 %</td>
+                          <td class="is-numeric">70 %</td>
+                          <td class="is-numeric">77 %</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                </div>
+
+                <div class="ou-stack ou-stack--gap-1"><!-- подпись и её таблица — связанные: 4 px (решение владельца 2026-09-26) -->
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Доля верных ответов</span>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <colgroup>
+                        <col style="width: 28%" />
+                        <col style="width: 18%" />
+                        <col style="width: 18%" />
+                        <col style="width: 18%" />
+                        <col style="width: 18%" />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th><div class="ou-grid__th">Тема / подтема</div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Розница, первый поток</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Розница · Попытка: первая · ещё 3</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Отдел продаж</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Отдел продаж</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Логистика</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Логистика</span></span></div></th>
+                          <th><div class="ou-grid__th wf-th-end"><span class="ou-stack ou-stack--gap-1"><span>Сервисные центры</span><span class="ou-text ou-text--body-xs ou-text--tone-muted ou-text--w-regular">Группа: Сервисные центры</span></span></div></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Право и комплаенс</td>
+                          <td class="is-numeric">78 %</td>
+                          <td class="is-numeric">54 %</td>
+                          <td class="is-numeric">61 %</td>
+                          <td class="is-numeric">69 %</td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Антикоррупция</span></td>
+                          <td class="is-numeric is-muted">74 %</td>
+                          <td class="is-numeric is-muted">41 %</td>
+                          <td class="is-numeric is-muted">52 %</td>
+                          <td class="is-numeric is-muted">66 %</td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Персональные данные</span></td>
+                          <td class="is-numeric is-muted">79 %</td>
+                          <td class="is-numeric is-muted">52 %</td>
+                          <td class="is-numeric is-muted">58 %</td>
+                          <td class="is-numeric is-muted">70 %</td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Договорная работа</span></td>
+                          <td class="is-numeric is-muted">81 %</td>
+                          <td class="is-numeric is-muted">69 %</td>
+                          <td class="is-numeric is-muted">73 %</td>
+                          <td class="is-numeric is-muted">71 %</td>
+                        </tr>
+                        <tr>
+                          <td>Управление командой</td>
+                          <td class="is-numeric">71 %</td>
+                          <td class="is-numeric">63 %</td>
+                          <td class="is-numeric">68 %</td>
+                          <td class="is-numeric">75 %</td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Обратная связь</span></td>
+                          <td class="is-numeric is-muted">68 %</td>
+                          <td class="is-numeric is-muted">58 %</td>
+                          <td class="is-numeric is-muted">64 %</td>
+                          <td class="is-numeric is-muted">72 %</td>
+                        </tr>
+                        <tr>
+                          <td class="is-muted"><span class="ou-box--pads-6">Делегирование</span></td>
+                          <td class="is-numeric is-muted">74 %</td>
+                          <td class="is-numeric is-muted">68 %</td>
+                          <td class="is-numeric is-muted">71 %</td>
+                          <td class="is-numeric is-muted">77 %</td>
+                        </tr>
+                        <tr>
+                          <td>Документооборот</td>
+                          <td class="is-numeric">74 %</td>
+                          <td class="is-numeric">70 %</td>
+                          <td class="is-numeric">72 %</td>
+                          <td class="is-numeric">76 %</td>
+                        </tr>
+                        <tr>
+                          <td>Охрана труда</td>
+                          <td class="is-numeric">83 %</td>
+                          <td class="is-numeric">81 %</td>
+                          <td class="is-numeric">79 %</td>
+                          <td class="is-numeric">84 %</td>
+                        </tr>
+                        <tr>
+                          <td>Информационная безопасность</td>
+                          <td class="is-numeric">64 %</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-numeric">70 %</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+
+    <!-- ════════════════ Форма отбора (она же — условия среза) ════════════════ -->
+    <div id="wf-filter-form" class="wf-state" data-tab="slices">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div data-wf-slices-scope></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Срез по группам</h2>
+                <p class="ou-card__subtitle">486 завершённых прохождений теста за всё время · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-skel-stack">
+                <div class="ou-skel ou-skel--line ou-skel--static ou-skel--w-full"></div>
+                <div class="ou-skel ou-skel--line ou-skel--static ou-skel--w-3"></div>
+                <div class="ou-skel ou-skel--line ou-skel--static ou-skel--w-2"></div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-filter-form-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="wf-filter-form-title">Условия отбора</h2>
+              <p class="ou-modal__desc">Та же форма открывается из фильтра реестра и из карточки среза</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'slices')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-stack ou-stack--gap-4">
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Период</span>
+                <div class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--wrap">
+                  <div class="ou-datepicker">
+                    <label class="ou-datepicker__lbl" for="wf-period-from">С</label>
+                    <button type="button" class="ou-datepicker__trigger" id="wf-period-from" aria-haspopup="dialog" aria-expanded="false">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                      <span class="ou-datepicker__value">01.01.2026</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                  </div>
+                  <div class="ou-datepicker">
+                    <label class="ou-datepicker__lbl" for="wf-period-to">По</label>
+                    <button type="button" class="ou-datepicker__trigger" id="wf-period-to" aria-haspopup="dialog" aria-expanded="false">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                      <span class="ou-datepicker__value">30.06.2026</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Группа</span>
+                <div class="ou-combo ou-combo--s">
+                  <div class="ou-combo__control">
+                    <span class="ou-combo__chip"><span class="ou-combo__chip-label">Розница</span><button type="button" class="ou-combo__chip-x" aria-label="Убрать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                    <input class="ou-combo__input" type="text" value="" autocomplete="off" role="combobox" aria-label="Группа" aria-expanded="false" aria-haspopup="listbox" placeholder="Добавить группу" />
+                    <span class="ou-combo__trail">
+                      <svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Источник</span>
+                <div class="ou-check-group ou-check-group--row">
+              <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Веб</span></span></label>
+              <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Телеметрия LMS</span></span></label>
+              <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Импорт</span></span></label>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Исход</span>
+                <div class="ou-check-group ou-check-group--row">
+              <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Сдал</span></span></label>
+              <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Не сдал</span></span></label>
+              <label class="ou-check ou-check--s"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Не завершено</span></span></label>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-1 wf-ctl">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Попытка</span>
+                <div class="ou-select ou-field--s" data-ou-options="Любая|Первая|Повторная|Последняя">
+                  <button type="button" class="ou-select__trigger"><span class="ou-select__value">Первая</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <footer class="ou-modal__foot ou-modal__foot--between">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span>Сбросить всё</span></button>
+            <div class="ou-stack ou-stack--row ou-stack--gap-1">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null, 'slices')"><span>Отмена</span></button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null, 'slices')"><span>Применить</span></button>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ ДЕЛЬТА 2026-09-28: срез по подразделениям ════════════════
+         Та же таблица, что у оси «Группа»; меняются ось и строки. Значение прохождения —
+         своё (импорт), иначе из профиля связанного пользователя (OQ-04). -->
+    <div id="wf-slices-unit" class="wf-state" data-tab="slices" data-axis="Подразделение">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <div data-wf-slices-scope></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Срез по подразделениям</h2>
+                <p class="ou-card__subtitle">486 завершённых прохождений теста за всё время · веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Список срезов</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'compare')"><span>Сравнение</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-4" data-wf-slice-controls>
+                <div class="ou-grid">
+                  <div class="ou-grid__scroll">
+                    <table class="ou-grid__table">
+                      <thead data-wf-slice-head></thead>
+                      <tbody>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Сервисный центр «Юг»</td>
+                          <td class="is-numeric">190</td>
+                          <td class="is-numeric">184</td>
+                          <td class="is-numeric">181</td>
+                          <td class="is-numeric">82 %</td>
+                          <td class="is-numeric">78 %</td>
+                          <td class="is-muted">Право и комплаенс · 70 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Отдел продаж</td>
+                          <td class="is-numeric">124</td>
+                          <td class="is-numeric">118</td>
+                          <td class="is-numeric">112</td>
+                          <td class="is-numeric">70 %</td>
+                          <td class="is-numeric">67 %</td>
+                          <td>Право и комплаенс · <span class="ou-tag ou-tag--error ou-tag--s">54 %</span></td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong">Логистика</td>
+                          <td class="is-numeric">96</td>
+                          <td class="is-numeric">92</td>
+                          <td class="is-numeric">88</td>
+                          <td class="is-numeric">75 %</td>
+                          <td class="is-numeric">71 %</td>
+                          <td>Право и комплаенс · <span class="ou-tag ou-tag--warning ou-tag--s">61 %</span></td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" onclick="showState(null, 'slice-gap')"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
+                          <td class="ou-grid__cell-strong is-muted">Не указано</td>
+                          <td class="is-numeric">71</td>
+                          <td class="is-numeric">68</td>
+                          <td class="is-numeric">65</td>
+                          <td class="is-numeric">76 %</td>
+                          <td class="is-numeric">74 %</td>
+                          <td class="is-muted">Управление командой · 67 %</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="ou-grid__control-cell"></td>
+                          <td class="ou-grid__cell-strong">Юридический отдел</td>
+                          <td class="is-numeric">9</td>
+                          <td class="is-numeric">8</td>
+                          <td class="is-numeric">7</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-muted">мало данных</td>
+                          <td class="is-muted">—</td>
+                          <td class="wf-rowmenu-cell">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ ДЕЛЬТА 2026-09-28: окно условий с оргполями ════════════════
+         Окно воспроизводит НЫНЕШНИЙ код (client/src/features/analytics/registry/filter-dialog.tsx),
+         а не состояние filter-form выше, которое от кода отстало: в коде есть «Тест», поля идут
+         в порядке Источник — Исход — Тест — Группа — Период. Дельта — три поля после группы. -->
+    <div id="wf-filter-org" class="wf-state" data-tab="reg">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <div class="ou-card__body">
+              <div class="ou-skel-stack">
+                <div class="ou-skel ou-skel--line ou-skel--static ou-skel--w-full"></div>
+                <div class="ou-skel ou-skel--line ou-skel--static ou-skel--w-3"></div>
+                <div class="ou-skel ou-skel--line ou-skel--static ou-skel--w-2"></div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-filter-org-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="wf-filter-org-title">Условия отбора</h2>
+              <p class="ou-modal__desc">Условия применяются вместе и попадают в адрес страницы — ссылку можно переслать</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'reg')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-stack ou-stack--gap-4">
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Источник</span>
+                <label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Веб</span></span></label>
+                <label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Телеметрия LMS</span></span></label>
+                <label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Импорт</span></span></label>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Исход</span>
+                <label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Сдал</span></span></label>
+                <label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Не сдал</span></span></label>
+                <label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Не завершено</span></span></label>
+              </div>
+
+              <div class="ou-combo ou-combo--full">
+                <label class="ou-combo__lbl" for="wf-fo-test">Тест</label>
+                <div class="ou-combo__control">
+                  <input class="ou-combo__input" id="wf-fo-test" type="text" value="" placeholder="Все тесты" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--full">
+                <label class="ou-combo__lbl" for="wf-fo-group">Группа</label>
+                <div class="ou-combo__control">
+                  <input class="ou-combo__input" id="wf-fo-group" type="text" value="" placeholder="Все группы" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <!-- ДЕЛЬТА: три оргполя, множественный выбор, как у группы -->
+              <div class="ou-combo ou-combo--full">
+                <label class="ou-combo__lbl" for="wf-fo-org">Организация</label>
+                <div class="ou-combo__control">
+                  <input class="ou-combo__input" id="wf-fo-org" type="text" value="" placeholder="Все организации" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--full">
+                <label class="ou-combo__lbl" for="wf-fo-unit">Подразделение</label>
+                <div class="ou-combo__control">
+                  <span class="ou-combo__chip"><span class="ou-combo__chip-label">Отдел продаж</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                  <span class="ou-combo__chip"><span class="ou-combo__chip-label">Логистика</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                  <input class="ou-combo__input" id="wf-fo-unit" type="text" value="" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail">
+                    <button type="button" class="ou-combo__clear" aria-label="Очистить всё"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+                    <svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                  </span>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--full">
+                <label class="ou-combo__lbl" for="wf-fo-pos">Должность</label>
+                <div class="ou-combo__control">
+                  <input class="ou-combo__input" id="wf-fo-pos" type="text" value="" placeholder="Все должности" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-1">
+                <span class="ou-text ou-text--body-s ou-text--w-medium">Период</span>
+                <div class="ou-field ou-field--m">
+                  <label class="ou-field__lbl" for="wf-fo-from">Период с</label>
+                  <div class="ou-field__box"><input class="ou-field__input" id="wf-fo-from" type="date" /></div>
+                </div>
+                <div class="ou-field ou-field--m">
+                  <label class="ou-field__lbl" for="wf-fo-to">Период по</label>
+                  <div class="ou-field__box"><input class="ou-field__input" id="wf-fo-to" type="date" /></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span>Сбросить</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null, 'reg')"><span>Отмена</span></button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null, 'reg')"><span>Применить</span></button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Требует внимания ════════════════ -->
+    <div id="wf-attention" class="wf-state" data-tab="attention">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+
+          <!-- ДЕЛЬТА 2026-09-25 (решение владельца): период вкладки. Каждая карточка режет по своей
+               дате — срок назначения, последняя попытка, начало брошенной попытки; по умолчанию
+               «За месяц». Бейдж на вкладке считает по выбранному периоду. -->
+          <div>
+            <div class="ou-seg ou-seg--s" role="group" aria-label="Период">
+              <button type="button" class="ou-seg__item" aria-pressed="false"><span>За неделю</span></button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>За месяц</span></button>
+              <button type="button" class="ou-seg__item" aria-pressed="false"><span>За квартал</span></button>
+            </div>
+          </div>
+
+          <div class="ou-stack ou-stack--gap-4" role="tabpanel">
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header">
+                <div class="ou-card__heading">
+                  <h2 class="ou-card__title">Не начали к сроку</h2>
+                  <p class="ou-card__subtitle">9 назначений за месяц · срок истёк, попытка не начиналась</p>
+                </div>
+                <div class="ou-card__trail"><span class="ou-tag ou-tag--warning ou-tag--s">9</span></div>
+              </header>
+              <div class="ou-card__body">
+                <div class="ou-stack ou-stack--gap-0">
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Ильин Роман · Сертификация руководителей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Срок 05.09.2026 · просрочено на 8 дней · Отдел продаж</span>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть назначение</span></button>
+                  </div>
+                  <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Савельева Дина · Охрана труда</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Срок 08.09.2026 · просрочено на 5 дней · Розница</span>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть назначение</span></button>
+                  </div>
+                  <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Панов Егор · Охрана труда</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Срок 11.09.2026 · просрочено на 2 дня · Логистика</span>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть назначение</span></button>
+                  </div>
+                </div>
+                <p class="ou-text ou-text--body-xs ou-text--tone-muted">Назначения без срока сюда не попадают.</p>
+              </div>
+              <div class="ou-card__footer">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Показать все 9</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button>
+              </div>
+            </section>
+
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header">
+                <div class="ou-card__heading">
+                  <h2 class="ou-card__title">Не сдали</h2>
+                  <p class="ou-card__subtitle">14 прохождений за месяц · попытки ещё остались</p>
+                </div>
+                <div class="ou-card__trail"><span class="ou-tag ou-tag--error ou-tag--s">14</span></div>
+              </header>
+              <div class="ou-card__body">
+                <div class="ou-stack ou-stack--gap-0">
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Гаврилов Сергей · Сертификация руководителей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">58 % при пороге 70 % · попытка 3 из 3 · 08.09.2026 · слабее всего «Право и комплаенс»</span>
+                    </div>
+                    <a class="ou-btn ou-btn--ghost ou-btn--s ou-link-reset" href="analytics-attempt-details.html"><span>Разбор прохождения</span></a>
+                  </div>
+                  <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Белкина Ольга · Сертификация руководителей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">61 % при пороге 70 % · попытка 1 из 3 · 05.09.2026 · слабее всего «Управление командой»</span>
+                    </div>
+                    <a class="ou-btn ou-btn--ghost ou-btn--s ou-link-reset" href="analytics-attempt-details.html"><span>Разбор прохождения</span></a>
+                  </div>
+                  <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Зуева Полина · Сертификация руководителей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">49 % при пороге 70 % · попытка 1 из 3 · 29.08.2026 · слабее всего «Право и комплаенс»</span>
+                    </div>
+                    <a class="ou-btn ou-btn--ghost ou-btn--s ou-link-reset" href="analytics-attempt-details.html"><span>Разбор прохождения</span></a>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-card__footer">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'reg-filtered')"><span>Показать все 14</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button>
+              </div>
+            </section>
+
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header">
+                <div class="ou-card__heading">
+                  <h2 class="ou-card__title">Брошенные попытки</h2>
+                  <p class="ou-card__subtitle">6 попыток за месяц · начаты и не завершены больше двух суток назад</p>
+                </div>
+                <div class="ou-card__trail"><span class="ou-tag ou-tag--warning ou-tag--s">6</span></div>
+              </header>
+              <div class="ou-card__body">
+                <div class="ou-stack ou-stack--gap-0">
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Кузнецов Павел · Охрана труда</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Начата 10.09.2026 09:12 · отвечено 4 задания из 20 · веб</span>
+                    </div>
+                    <a class="ou-btn ou-btn--ghost ou-btn--s ou-link-reset" href="analytics-attempt-details.html"><span>Разбор прохождения</span></a>
+                  </div>
+                  <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Юрченко Ника · Сертификация руководителей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Начата 09.09.2026 18:44 · отвечено 11 заданий из 30 · LMS</span>
+                    </div>
+                    <a class="ou-btn ou-btn--ghost ou-btn--s ou-link-reset" href="analytics-attempt-details.html"><span>Разбор прохождения</span></a>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-card__footer">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'reg-filtered')"><span>Показать все 6</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button>
+              </div>
+            </section>
+
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header">
+                <div class="ou-card__heading">
+                  <h2 class="ou-card__title">Исчерпан лимит попыток</h2>
+                  <p class="ou-card__subtitle">2 участника за месяц · лимит исчерпан, тест не сдан</p>
+                </div>
+                <div class="ou-card__trail"><span class="ou-tag ou-tag--error ou-tag--s">2</span></div>
+              </header>
+              <div class="ou-card__body">
+                <div class="ou-stack ou-stack--gap-0">
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Гаврилов Сергей · Сертификация руководителей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">3 попытки из 3 · лучший результат 62 % при пороге 70 %</span>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Дать попытку</span></button>
+                  </div>
+                  <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                  <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-4 ou-box--pady-4">
+                    <div class="ou-stack ou-stack--gap-1 ou-grow">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Мирошник Илья · Охрана труда</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">2 попытки из 2 · лучший результат 55 % при пороге 60 %</span>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Дать попытку</span></button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Пояснения ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="ou-shell">
+        <main class="ou-shell__main wf-doc">
+          <section class="wf-notes">
+            <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+            <table>
+              <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Анатомия страницы</td>
+                  <td><code>AppShell</code> + <code>AppSidebar</code> + карточки</td>
+                  <td>Каркас снят с работающей системы: оболочка с шапкой (тема и пользователь справа), боковое меню из восьми пунктов, заголовок страницы и содержимое карточками <code>Card</code>. Поля и вертикальный ритм даёт <code>ou-shell__main</code> — своего контейнера страницы эскиз не заводит</td>
+                </tr>
+                <tr>
+                  <td>Три вкладки вместо нынешних</td>
+                  <td>Прохождения / Срезы / Требует внимания</td>
+                  <td>Было: Обзор / Попытки / Экспорт. «Обзор» уходит целиком (FR-12): его плитки «Средний балл» и «Pass Rate» смешивали оцениваемые тесты с опросниками и разные пороги. «Экспорт» перестаёт быть вкладкой — выгрузка привязана к отобранному, а значит живёт там же, где фильтр (FR-04)</td>
+                </tr>
+                <tr>
+                  <td>Заголовок карточки — термин</td>
+                  <td>—</td>
+                  <td>Решение владельца 2026-09-13: риторических вопросов в заголовках нет. «Реестр прохождений», «Срез по группам», «Не сдали». FR-26 спеки требовал обратного — требование правится</td>
+                </tr>
+                <tr>
+                  <td>Подпись под заголовком карточки</td>
+                  <td>объём выборки и источники</td>
+                  <td>FR-27. В подписи стоят только числа и источники; правила расчёта и их обоснование живут здесь, в пояснениях, а не на экране</td>
+                </tr>
+                <tr>
+                  <td>Переход в разбор прохождения</td>
+                  <td>клик по строке реестра</td>
+                  <td>Так это устроено в работающем реестре (<code>Table onRowClick</code> плюс кнопка в колонке действий). Подчёркнутой ссылки в ячейке нет: компонента ссылки в ДС не существует вовсе, подчёркивание приходило из умолчания браузера. Строка получает <code>is-clickable</code> — курсор-указатель и подсветка при наведении. Отдельная колонка с кнопкой отклонена: её 66 px возвращали горизонтальный скролл, который раньше просили убрать. <code>DataGrid</code> клика по строке не умел — пропс <code>onRowClick</code> добавлен в ui-kit, клики из кнопок, ссылок и полей внутри ячеек до него не доходят</td>
+                </tr>
+                <tr>
+                  <td>Реестр — <code>DataGrid</code></td>
+                  <td><code>ou-grid</code>, сортировка по любому столбцу</td>
+                  <td>FR-01a. Решение владельца (OQ-03): записи сканируют глазами по колонкам и сортируют, карточки заставили бы сравнивать по вертикали то, что таблица выстраивает в столбец</td>
+                </tr>
+                <tr>
+                  <td>Выбор теста — <code>Combobox</code>, а не <code>Select</code></td>
+                  <td>поиск по названию, поле тянется по свободной ширине</td>
+                  <td>Решение владельца 2026-09-13. Названия тестов длинные («Определение ведущего стиля человекоцентричного лидерства»), а <code>Select</code> держал 280 px и резал их. Поле растягивается до 560 px, дальше — многоточие, полное имя видно в списке; поиск нужен и сам по себе — при сотне тестов список не пролистать. Потолок ширины чипа в 240 px (он нужен мультивыбору) в одиночном режиме снят правкой ui-kit: <code>Combobox</code> ставит класс <code>ou-combo--single</code>, у которого чип занимает всю ширину поля</td>
+                </tr>
+                <tr>
+                  <td>Ленивая подгрузка вместо страниц</td>
+                  <td>следующая порция — на прокрутке</td>
+                  <td>Решение владельца 2026-09-13. Постраничности у реестра нет: подвал говорит, сколько строк показано из скольких, следующие 25 приходят при прокрутке. FR-01a спеки называл постраничность — требование правится. ВНИМАНИЕ: у <code>DataGrid</code> ui-kit сегодня есть только страницы (<code>page</code>/<code>pageSize</code>/<code>onPageChange</code>); подгрузку надо добавлять в компонент (<code>hasMore</code> + <code>onLoadMore</code>) — отдельная работа по ui-kit</td>
+                </tr>
+                <tr>
+                  <td>Один поиск, а не два</td>
+                  <td><code>FilterBar.search</code></td>
+                  <td>У <code>DataGrid</code> есть СВОЙ поиск в панели; он не включается — FR-31 требует одного <code>FilterBar</code> на экран, и два поля поиска в полуметре друг от друга задавали бы вопрос «а это по чему ищет»</td>
+                </tr>
+                <tr>
+                  <td>Чипы применённых условий</td>
+                  <td><code>FilterBar.applied</code>, снимаются по одному</td>
+                  <td>FR-02. Счётчик на кнопке «Фильтр» показывает, сколько условий скрыто в окне отбора</td>
+                </tr>
+                <tr>
+                  <td>Состояние фильтра в адресе</td>
+                  <td><code>?test=…&amp;group=…&amp;from=…&amp;to=…&amp;outcome=failed</code></td>
+                  <td>FR-03. Ссылку на выборку пересылают коллеге, и он видит ровно ту же. Приёмка: открыть ссылку под другим пользователем</td>
+                </tr>
+                <tr>
+                  <td>Столбец «Результат» у опросника</td>
+                  <td>тест измерительный — эталона нет</td>
+                  <td>FR-22. Ни процента, ни «0 % верных»: в ячейке результата стоит «профиль по шкалам». Исход у такого прохождения — «Завершено», а не «Сдал / Не сдал»</td>
+                </tr>
+                <tr>
+                  <td>Прочерк вместо нуля</td>
+                  <td>попытка не завершена</td>
+                  <td>FR-27. Ноль здесь означал бы «ответил и получил ноль», а человек просто не дошёл до конца</td>
+                </tr>
+                <tr>
+                  <td>Псевдоним участника</td>
+                  <td><code>scorm_attempts.participant_key</code>, <code>origin = 'import'</code></td>
+                  <td>FR-05. Правило PRD-54 §12 не меняется: либо связанный по <code>external_key</code> пользователь, либо псевдоним. Имя показывается только при выключенном обезличивании инстанса</td>
+                </tr>
+                <tr>
+                  <td>Экспорт — того, что отобрано</td>
+                  <td>тот же запрос, что у реестра</td>
+                  <td>FR-04. Выбор листов книги сохраняется, состав строк задаёт фильтр. Баннер в окне называет объём и условия, чтобы выгрузка не оказалась «всем журналом» по ошибке</td>
+                </tr>
+                <tr>
+                  <td>Пустая выборка</td>
+                  <td><code>rows.length === 0</code></td>
+                  <td>Пустое состояние показывается ВНУТРИ таблицы (<code>emptyMessage</code> компонента), фильтр остаётся на экране: его и надо ослабить. Кнопка экспорта в этом состоянии выключена — выгружать нечего</td>
+                </tr>
+                <tr>
+                  <td>Срез = ось + значение</td>
+                  <td>семь осей FR-06a</td>
+                  <td>Группа — лишь одна из осей. Оси: группа, поток, номер попытки, версия теста, вариант выдачи, источник, внутренние / внешние. Оси организации, подразделения и должности добавляются: исключение оргструктуры отменено 2026-09-28 (FR-06b), значение берётся у прохождения, иначе из профиля пользователя (OQ-04)</td>
+                </tr>
+                <tr>
+                  <td>Оси оргструктуры (дельта 2026-09-28)</td>
+                  <td><code>axis=unit|position|organization</code>; значение — <code>scorm_attempts.lms_user_*</code>, иначе <code>users.*</code> связанного</td>
+                  <td>Стоят сразу за группой. Значения сравниваются без учёта регистра и лишних пробелов: «ОТДЕЛ ПРОДАЖ» из выгрузки и «Отдел продаж» из профиля — один срез, подпись — самое частое написание. Подразделение — плоская ось без привязки к организации; разрез внутри одной организации — условие «Организация» плюс ось «Подразделение»</td>
+                </tr>
+                <tr>
+                  <td>Срез «Не указано»</td>
+                  <td>нет значения ни у прохождения, ни в профиле</td>
+                  <td>Строка есть всегда, когда такие прохождения есть: молча выбросить их значило бы показать меньшую выборку под видом полной. У обезличенного импорта организации нет (PRD-54), поэтому несвязанный участник попадает сюда по оси «Организация»</td>
+                </tr>
+                <tr>
+                  <td>«Назначено» по оргосям</td>
+                  <td>назначения пользователей, чей профиль несёт значение</td>
+                  <td>Считается по профилю, как у группы — по членству. У «Не указано» это назначенные без значения в профиле</td>
+                </tr>
+                <tr>
+                  <td>Оргполя в окне условий</td>
+                  <td><code>organizations</code>, <code>units</code>, <code>positions</code> в адресе, срезе и выгрузке</td>
+                  <td>Множественный выбор, как у группы; значения — из справочника профилей и прохождений. Чип условия: «Подразделение: Отдел продаж, Логистика». Переход «из строки среза в прохождения» переводит условие точно</td>
+                </tr>
+                <tr>
+                  <td>Выгрузка «Попытки»</td>
+                  <td>лист книги</td>
+                  <td>Три колонки после «Участник»: организация, подразделение, должность — значения по тому же правилу, что у оси</td>
+                </tr>
+                <tr>
+                  <td>Тест обязателен в срезах</td>
+                  <td>—</td>
+                  <td>Решение 3: средние законны только внутри одного теста. Поэтому тест здесь не фильтр, а условие расчёта, и стоит первым</td>
+                </tr>
+                <tr>
+                  <td>Понятия «база» в интерфейсе нет</td>
+                  <td>—</td>
+                  <td>Решение владельца 2026-09-13. Прежняя редакция считала «Δ к базе», где базой молча считались все прохождения теста. Термин непонятен, а сравнение получалось ни с чем: список показывал отклонение от среднего, которого на экране не видно. Список срезов теперь даёт только факты, сравнение вынесено в отдельный режим</td>
+                </tr>
+                <tr>
+                  <td>Режим «Сравнение»</td>
+                  <td>переключатель в шапке карточки</td>
+                  <td>Сравниваемые срезы задаются ЯВНО и ТЕМ ЖЕ языком, что фильтр реестра: набор условий чипами плюс кнопка «Условия» со счётчиком (решение владельца 2026-09-13). Срез может быть и в одно условие («Группа: Отдел продаж»), и в несколько («Группа: Розница» + «Попытка: первая»). Имя среза стоит в заголовке столбца. Третий срез добавляется кнопкой</td>
+                </tr>
+                <tr>
+                  <td>«Открыть прохождения в реестре»</td>
+                  <td>вкладка «Прохождения», фильтр = условия экрана + условия среза</td>
+                  <td>FR-08. Переход уносит на первую вкладку с готовым фильтром: тест, период и условия этого среза стоят чипами, их видно и можно ослабить. Стрелка в конце строки таблицы делает то же самое</td>
+                </tr>
+                <tr>
+                  <td>«Аналитика теста» (меню строки)</td>
+                  <td>экран аналитики теста, условия = условия среза</td>
+                  <td>FR-24, дельта 6.3 (2026-09-26). Второй пункт меню «⋯». Пункты меню условны: «Изменить условия» есть только у сохранённого среза, «Сохранить как срез» — только у среза по оси; остальные показываются всегда</td>
+                </tr>
+                <tr>
+                  <td>«Сравнить с другим срезом»</td>
+                  <td>режим «Сравнение», этот срез подставлен первым</td>
+                  <td>Открывает сравнение с уже заполненным Срезом 1 (условия строки) и пустым Срезом 2 — остаётся выбрать, с чем сравнивать. Экран не меняется: это тот же блок «Срезы», только другой режим</td>
+                </tr>
+                <tr>
+                  <td>Подтемы под темой</td>
+                  <td>теги вопросов (PRD-11), подытоги PRD-50</td>
+                  <td>Тема отвечает «чему доучить», подтема — «что именно в теме не знают»: «Право и комплаенс 54 %» раскрывается в «Антикоррупция 41 %», «Персональные данные 52 %», «Договорная работа 69 %». У подтемы свой объём выборки: тег стоит не у всех вопросов темы</td>
+                </tr>
+                <tr>
+                  <td>Срез = сохранённый фильтр</td>
+                  <td>те же условия, что в реестре</td>
+                  <td>Двух языков отбора в продукте не заводится: «Сохранённые» в панели фильтра и срезы — одно и то же. Из реестра срез создаётся кнопкой «Сохранить как срез» (при пустом фильтре выключена), в сравнении выбирается из списка сохранённых</td>
+                </tr>
+                <tr>
+                  <td>Над срезами — не фильтр</td>
+                  <td>тест обязателен, период — нет</td>
+                  <td>Решение владельца 2026-09-13. Панель фильтра тут была враньём: фильтровать нечего, эти поля задают рамку расчёта — в каком тесте и за какой отрезок времени считаются все срезы. Поэтому это два подписанных поля, а не чипы с кнопкой «Сбросить фильтры». Язык условий остаётся там, где он настоящий: в реестре и в самих срезах</td>
+                </tr>
+                <tr>
+                  <td>Период можно не задавать</td>
+                  <td>пустые поля = все прохождения</td>
+                  <td>По умолчанию период не ограничен: срезы считаются по всему, что накоплено, и подпись говорит «за всё время». Обязателен только тест — без него средние нельзя считать (решение 2). Даты сужают рамку, когда нужно сравнить потоки или отсечь старую версию теста</td>
+                </tr>
+                <tr>
+                  <td>Окна наблюдения нет</td>
+                  <td>период — интервал дат в условиях</td>
+                  <td>Решение владельца 2026-09-13. Отдельного «окна наблюдения» с относительными вариантами («последние 12 месяцев») не заводится: период задаётся датами «с» и «по» в тех же условиях и сохраняется вместе со срезом. Одна величина вместо двух</td>
+                </tr>
+                <tr>
+                  <td>Срез не консервирует состав</td>
+                  <td>пересчёт при каждом открытии</td>
+                  <td>Сохраняются УСЛОВИЯ, а не список прохождений: вчерашний срез «не сдали» завтра покажет других людей. Сказано прямо в окне сохранения, иначе срез примут за снимок</td>
+                </tr>
+                <tr>
+                  <td>Ось в списке срезов</td>
+                  <td>быстрое разбиение на много срезов</td>
+                  <td>Ось осталась там, где она полезна: «показать ВСЕ группы разом». Точечный срез задаётся условиями — так же, как фильтр</td>
+                </tr>
+                <tr>
+                  <td>Тест — общее условие сравнения</td>
+                  <td>стоит НАД срезами, в их условия не входит</td>
+                  <td>Сравнивать срезы разных тестов нельзя (решение 2 спеки: разные пороги и шкалы), поэтому тест задаётся один раз для всего сравнения. Если подставленный сохранённый срез нёс свой тест, он занимает общее поле; второй срез считается уже по нему</td>
+                </tr>
+                <tr>
+                  <td>Срезов больше, чем помещается в ряд</td>
+                  <td>предел — четыре среза</td>
+                  <td>Ряд карточек — сетка <code>ou-lgrid--auto</code> с колонкой не уже 240 px: ширину задаёт область, а не содержимое, поэтому за границы формы карточки не выходят ни при каком числе условий; на узком экране колонок становится меньше. «Добавить срез» выключается на четвёртом с подписью почему. Предел не про вёрстку: пятая колонка сравнения перестаёт читаться, а «сравнить все группы разом» — это не сравнение, а разбиение по оси, для него есть список срезов</td>
+                </tr>
+                <tr>
+                  <td>Условий больше, чем помещается</td>
+                  <td>три чипа и «ещё N»</td>
+                  <td>Карточка среза не растёт бесконечно: видны первые условия, остальные свёрнуты в чип «ещё N» с полным перечнем подсказкой; весь набор открывается кнопкой «Изменить условия». То же правило, что у чипов мультивыбора в <code>Combobox</code></td>
+                </tr>
+                <tr>
+                  <td>Кнопка «Изменить условия»</td>
+                  <td>открывает форму отбора среза</td>
+                  <td>Прежняя подпись «Условия 2» называла количество, а не действие, и читалась как счётчик неизвестно чего. Количество и так видно по чипам</td>
+                </tr>
+                <tr>
+                  <td>Столбец «Разница»</td>
+                  <td>только при ДВУХ срезах и только у долей</td>
+                  <td>У объёмов (назначено, начато, завершено) разницы нет — прочерк: 168 против 64 говорит о размере группы, а не о качестве. При трёх срезах столбец исчезает: «разница» между тремя значениями не определена</td>
+                </tr>
+                <tr>
+                  <td>Сравнение с тестом целиком</td>
+                  <td>ось «Весь тест (без разбиения)»</td>
+                  <td>Если надо сравнить группу со всем тестом, это делается тем же способом — срезом по оси «Весь тест». Отдельной сущности «эталон» не заводится</td>
+                </tr>
+                <tr>
+                  <td>«Мало данных» в сравнении</td>
+                  <td>прохождений по теме меньше порога</td>
+                  <td>Ячейка говорит «мало данных», разница не считается: сравнивать 6 прохождений со 163 нельзя, а показать их можно</td>
+                </tr>
+                <tr>
+                  <td>«Мало данных» вместо процента</td>
+                  <td>завершённых &lt; порога инсталляции (в эскизе 10)</td>
+                  <td>FR-06d. Показываются только абсолютные числа. «33 % сдали» на трёх людях — шум, на котором принимают неверные решения</td>
+                </tr>
+                <tr>
+                  <td>Темы в развороте строки</td>
+                  <td>подытоги PRD-50 по этому срезу</td>
+                  <td>Разворот показывает долю верных ответов среза по каждой теме и объём выборки. Ни с чем не сравнивает — за сравнением ведёт кнопка «Сравнить с другим срезом». Тема с объёмом ниже порога молчит</td>
+                </tr>
+                <tr>
+                  <td>Колонка «Слабейшая тема»</td>
+                  <td>тема с наименьшей долей верных В ЭТОМ срезе</td>
+                  <td>Показывается сама доля, а не отклонение от чего-либо: тон подсказывает, насколько всё плохо, а сравнение живёт в отдельном режиме</td>
+                </tr>
+                <tr>
+                  <td>Строка «Без группы»</td>
+                  <td>участник вне <code>user_groups</code>; у импорта — пустой <code>group_id</code></td>
+                  <td>FR-09. Такое прохождение не исчезает из подсчёта, иначе сумма срезов не сходится с базой и числам перестают верить. «Назначено» у этой строки — прочерк: назначение выдаётся на группу или лично, для строки «без группы» величина не определена</td>
+                </tr>
+                <tr>
+                  <td>Переход из любой строки</td>
+                  <td>стрелка в конце строки → реестр с предзаполненным фильтром</td>
+                  <td>FR-08, FR-30. У каждой тревожной величины есть переход к тем, кто её сформировал</td>
+                </tr>
+                <tr>
+                  <td>Очередь «требует внимания»</td>
+                  <td>четыре корзины</td>
+                  <td>FR-10. Единственный блок, который говорит «сделай», а не «посмотри». Значок на вкладке — сумма корзин</td>
+                </tr>
+                <tr>
+                  <td>Назначения без срока</td>
+                  <td><code>due_at IS NULL</code></td>
+                  <td>FR-10a, решение владельца (OQ-01). В очередь не попадают, и это сказано сноской прямо в корзине, иначе «девять» будет читаться как «всего девять просроченных на свете»</td>
+                </tr>
+                <tr>
+                  <td>«Дать попытку» в корзине лимита</td>
+                  <td>существующее действие назначения</td>
+                  <td>Действие, а не ссылка: у корзины «закончились попытки» единственный осмысленный исход — продлить лимит либо оставить как есть</td>
+                </tr>
+                <tr>
+                  <td>Мобильный вид реестра</td>
+                  <td>горизонтальная прокрутка внутри <code>ou-grid__scroll</code></td>
+                  <td>FR-01b. Таблица прокручивается внутри своего контейнера, страница вбок не едет. Полноценная мобильная адаптация — отдельный пункт работ, не повод вернуться к карточкам</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="wf-mapping wf-mt-4">
+            <h2 class="wf-mapping-title">DS Mapping</h2>
+            <table>
+              <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
+              <tbody>
+                <tr><td>Оболочка</td><td><code>AppShell</code>: <code>ou-shell__side</code> / <code>ou-shell__header</code> / <code>ou-shell__main</code></td><td>—</td><td>Разметка снята с <code>AuthorLayout</code>; дельты нет</td></tr>
+                <tr><td>Боковое меню</td><td><code>Sidebar</code> (<code>ou-side</code>)</td><td>—</td><td>Пункты и порядок — из <code>AppSidebar</code>, «Аналитика» активна</td></tr>
+                <tr><td>Шапка: тема и пользователь</td><td><code>AppShellActions</code> + <code>IconButton</code> + <code>AppShellUser</code></td><td>—</td><td>Как в системе: переключатель темы и запись пользователя у правого края</td></tr>
+                <tr><td>Заголовок страницы</td><td><code>Text</code> <code>ou-text--heading-l</code> + подпись <code>ou-text--tone-muted</code></td><td><code>--ou-space-1</code></td><td>Раскладка — <code>Stack</code>, как на «Главной»</td></tr>
+                <tr><td>Вкладки раздела</td><td><code>Tabs</code> <code>ou-tabs--underline ou-tabs--m</code></td><td>—</td><td>Тот же компонент, что сейчас; меняется только состав вкладок</td></tr>
+                <tr><td>Значок на вкладке</td><td><code>ou-tabs__badge</code></td><td><code>--ou-accent-container</code></td><td>Штатный элемент компонента</td></tr>
+                <tr><td>Блок содержимого</td><td><code>Card</code> <code>ou-card ou-card--outlined</code> + <code>ou-card__header</code></td><td><code>--ou-space-4</code></td><td>Как на «Главной» и на нынешней аналитике: заголовок-термин, подпись с объёмом выборки</td></tr>
+                <tr><td>Панель фильтра</td><td><code>FilterBar</code> (<code>ou-filterbar</code>)</td><td><code>--ou-space-2</code></td><td>FR-05: самодельной <code>FiltersBar</code> страницы не остаётся. Стоит НАД карточкой — фильтр относится ко всей вкладке</td></tr>
+                <tr><td>Поиск в панели</td><td><code>SearchField</code> <code>ou-field ou-field--s ou-searchfield</code></td><td>—</td><td>Слот <code>search</code> компонента</td></tr>
+                <tr><td>Чип условия</td><td><code>Chip</code> <code>ou-chip ou-chip--s ou-chip--removable</code></td><td>—</td><td>Подпись — во внутренней <code>ou-chip__action</code>, крестик — <code>ou-chip__close</code>: разметка компонента, не своя</td></tr>
+                <tr><td>Реестр и таблица срезов</td><td><code>DataGrid</code> (<code>ou-grid</code>)</td><td>—</td><td>Сортировка, разворот строки и пустое состояние — из компонента; ленивую подгрузку в компонент предстоит добавить</td></tr>
+                <tr><td>Разворот строки среза</td><td><code>ou-grid__expanded</code> + <code>ou-grid__expanded-inner</code></td><td>—</td><td>Штатный <code>renderExpanded</code>; своего аккордеона не заводим</td></tr>
+                <tr><td>Полосы разрыва по темам</td><td><code>ProgressBar</code> <code>ou-progress ou-progress--s</code></td><td><code>--ou-error-default</code>, <code>--ou-warning-default</code>, <code>--ou-success-default</code></td><td>Тон по знаку и величине разрыва</td></tr>
+                <tr><td>Исход прохождения</td><td><code>Tag</code> <code>ou-tag--success</code> / <code>--error</code> / <code>--neutral</code></td><td>—</td><td>Тон <code>error</code>, не <code>danger</code>; красится пропом <code>tone</code></td></tr>
+                <tr><td>Переключатель режима</td><td><code>SegmentedControl</code> <code>ou-seg ou-seg--s</code></td><td>—</td><td>«Список срезов» / «Сравнение» в <code>ou-card__trail</code></td></tr>
+                <tr><td>Блок сравниваемого среза</td><td><code>Stack</code> + <code>Select</code> + <code>Chip</code> в рамке (<code>wf-slot</code>)</td><td><code>--ou-space-3</code></td><td>Условия — те же чипы, что в <code>FilterBar</code>; кнопка «Условия» открывает то же окно отбора. В коде рамка — <code>Box</code> с <code>border</code></td></tr>
+                <tr><td>Окно «Сохранить как срез»</td><td><code>ModalDialog</code> <code>ou-modal ou-modal--s</code> + <code>Input</code> + <code>Chip</code></td><td>—</td><td>Условия показаны чипами только для чтения</td></tr>
+                <tr><td>Окно экспорта</td><td><code>ModalDialog</code> <code>ou-modal ou-modal--m</code></td><td>—</td><td>Листы книги — <code>Checkbox</code> <code>ou-check ou-check--s</code> в <code>ou-check-group</code></td></tr>
+                <tr><td>Подгрузка следующей порции</td><td><code>Spinner</code> <code>ou-spinner ou-spinner--xs</code> в <code>ou-grid__footer</code></td><td>—</td><td>Подвал компонента; пейджер не включается</td></tr>
+                <tr><td>Строка корзины внимания</td><td><code>Stack</code> + <code>Text</code> + <code>Separator</code></td><td><code>--ou-space-3</code></td><td>Тот же ряд, что в блоке «Мне назначено» на «Главной»; разделитель — <code>ou-separator</code></td></tr>
+                <tr><td>Выбор теста</td><td><code>Combobox</code> <code>ou-combo ou-combo--s</code></td><td>—</td><td>Разметка компонента: <code>ou-combo__control</code> + чип значения + <code>ou-combo__trail</code>. Одиночный режим компонент помечает классом <code>ou-combo--single</code> — чип занимает всю ширину поля (правка ui-kit 2026-09-13)</td></tr>
+                <tr><td>Две таблицы вместо одной</td><td><code>DataGrid</code> ×2</td><td>—</td><td>Показатели прохождения и доли верных по темам — разные сущности строк, поэтому это две таблицы с собственными шапками, а не одна со строкой-разделителем</td></tr>
+                <tr><td>Ряд темы в развороте</td><td><code>custom</code> — <code>wf-gap__row</code></td><td><code>--ou-space-3</code></td><td>В коде — <code>Cluster</code> с фиксированной колонкой имени темы</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * Повторяющиеся куски (оболочка, шапка, заголовок, вкладки, панель поиска,
+       * шапки таблиц, параметры среза) держим в <template> и подставляем, чтобы
+       * копии не расходились между состояниями. Активная вкладка — из `data-tab`.
+       */
+      (function () {
+        function fill(sel, tplId, mode) {
+          var tpl = document.getElementById(tplId);
+          if (!tpl) return;
+          document.querySelectorAll(sel).forEach(function (host) {
+            var node = tpl.content.cloneNode(true);
+            if (mode === 'prepend') host.insertBefore(node, host.firstChild);
+            else host.appendChild(node);
+          });
+        }
+        window.addEventListener('DOMContentLoaded', function () {
+          fill('[data-wf-side]', 'wf-side-tpl');
+          fill('[data-wf-header]', 'wf-header-tpl');
+          fill('[data-wf-head]', 'wf-head-tpl');
+          fill('[data-wf-search]', 'wf-search-tpl', 'prepend');
+          fill('[data-wf-reg-head]', 'wf-reg-head-tpl');
+          fill('[data-wf-slice-head]', 'wf-slice-head-tpl');
+          fill('[data-wf-slices-scope]', 'wf-slices-scope-tpl');
+          // Период необязателен: по умолчанию поля пусты и берутся все прохождения;
+          // состояния сравнения показывают случай с заданными датами.
+          document.querySelectorAll('[data-scope-dated] [data-wf-slices-scope]').forEach(function (host) {
+            var dates = ['01.01.2026', '12.09.2026'];
+            host.querySelectorAll('.ou-datepicker__value').forEach(function (el, i) {
+              el.textContent = dates[i];
+              el.classList.remove('is-empty');
+            });
+          });
+          fill('[data-wf-slice-controls]', 'wf-slice-controls-tpl', 'prepend');
+          // Выбранная ось состояния: по умолчанию шаблон показывает «Группа».
+          document.querySelectorAll('[data-axis]').forEach(function (state) {
+            state.querySelectorAll('[data-wf-slice-controls] .ou-select__value').forEach(function (el) {
+              el.textContent = state.getAttribute('data-axis');
+            });
+          });
+          document.querySelectorAll('[data-wf-tabs]').forEach(function (el) {
+            el.appendChild(document.getElementById('wf-tabs-tpl').content.cloneNode(true));
+            var state = el.closest('.wf-state');
+            var active = state && state.getAttribute('data-tab');
+            el.querySelectorAll('.ou-tabs__tab').forEach(function (tab) {
+              var on = tab.getAttribute('data-tab') === active;
+              tab.classList.toggle('is-active', on);
+              tab.setAttribute('aria-selected', String(on));
+            });
+          });
+          if (window.initOuSelects) window.initOuSelects(document);
+        });
+      }());
+
+      /**
+       * Начальное состояние из адреса: `?state=slices`, `?state=docs`, `?theme=dark`.
+       * Так состояние снимается скриншотом напрямую, без кликов по переключателю.
+       */
+      window.addEventListener('DOMContentLoaded', () => {
+        const want = new URLSearchParams(location.search).get('state');
+        if (want) {
+          var btn = [...document.querySelectorAll('.wf-nav button')]
+            .find((b) => (b.getAttribute('onclick') || '').includes("'" + want + "'")) || null;
+          showState(btn, want);
+        }
+        if (new URLSearchParams(location.search).get('theme') === 'dark') toggleTheme(null);
+      });
+
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="State"]').forEach(function (b) { b.classList.toggle('active', b === btn); });
+        window.scrollTo(0, 0);
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.classList.toggle('light', !dark);
+        if (btn) { btn.textContent = dark ? 'Light' : 'Dark'; btn.classList.toggle('active', dark); }
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

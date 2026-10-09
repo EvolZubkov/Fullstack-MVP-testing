@@ -317,6 +317,16 @@ describe("buildTestJson — standard mode", () => {
     expect(data.adaptiveTopics).toBeUndefined();
   });
 
+  it("печатает версию публикации, когда ассемблер её передал (PRD-56 FR-19a)", () => {
+    const d = { ...exportData, publicationVersion: 3 };
+    expect(JSON.parse(buildTestJson(d)).publicationVersion).toBe(3);
+  });
+
+  it("без версии публикации ключа в TEST_DATA нет", () => {
+    // Пакет теста-черновика обязан остаться байт-в-байт прежним (FR-02).
+    expect("publicationVersion" in JSON.parse(buildTestJson(exportData))).toBe(false);
+  });
+
   it("includes timeLimitMinutes when set", () => {
     const d = { ...exportData, test: { ...exportData.test, timeLimitMinutes: 30 } };
     const data = JSON.parse(buildTestJson(d));

@@ -196,15 +196,59 @@ export function findBand(bands: InterpretationBand[], value: number): Interpreta
   return null;
 }
 
-/** The outcome a string/boolean value maps to, matched by exact code. */
+/**
+ * Ключ сопоставления кода: набор ключей, приведённый к порядко-независимому виду.
+ *
+ * Сортировка АЛФАВИТНАЯ, а не авторская, и это намеренно: модулю толкования порядок шкал теста
+ * неизвестен, а для сравнения важно лишь, чтобы обе стороны нормализовались одинаково.
+ * Отображаемый код при этом остаётся авторским — его строит `shared/formula/scale-group`.
+ *
+ * Код без «+» нормализуется сам в себя, поэтому правило безопасно для показателей, к профилям
+ * отношения не имеющих: сравнение вырождается в прежнее точное равенство.
+ */
+export function outcomeMatchKey(code: string): string {
+  if (!code.includes("+")) return code;
+  return code
+    .split("+")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .sort()
+    .join("+");
+}
+
+/**
+ * The outcome a string/boolean value maps to.
+ *
+ * Три шага, в порядке убывания точности (PRD-53 §4.3): точное равенство кода, равенство НАБОРОВ
+ * (порядок ключей не важен) и запасной исход `count:<N>` по размеру набора. Последний существует
+ * потому, что число сочетаний растёт как 2ⁿ−1: при шести шкалах их 63, и заполнять столько текстов
+ * никто не станет.
+ *
+ * Пустое значение не ищется вовсе: {@link asOutcomes} отбрасывает исход без кода, поэтому пустой
+ * код в списке не выживает и совпасть ни с чем не может.
+ */
 export function findOutcome(
   outcomes: InterpretationOutcome[],
   value: string | boolean | null | undefined,
 ): InterpretationOutcome | null {
   if (value === null || value === undefined) return null;
   const code = String(value);
+  if (code === "") return null;
+
   for (const outcome of outcomes) {
     if (outcome.code === code) return outcome;
+  }
+
+  const key = outcomeMatchKey(code);
+  if (key !== code) {
+    for (const outcome of outcomes) {
+      if (outcomeMatchKey(outcome.code) === key) return outcome;
+    }
+  }
+
+  const fallback = `count:${code.split("+").filter(Boolean).length}`;
+  for (const outcome of outcomes) {
+    if (outcome.code === fallback) return outcome;
   }
   return null;
 }

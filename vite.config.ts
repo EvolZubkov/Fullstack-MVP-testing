@@ -42,9 +42,9 @@ export default defineConfig({
       // Vendored design-system source (no sibling-repo mount). The app consumes the
       // TS source directly via this alias — Vite compiles it in-tree. The `/css`
       // entry MUST precede the bare one (alias prefix-matching, first match wins).
-      "@universityrt/ui-kit/css": path.resolve(import.meta.dirname, "vendor", "ui-kit", "css", "university-rt.css"),
-      "@universityrt/ui-kit": path.resolve(import.meta.dirname, "vendor", "ui-kit", "src", "index.ts"),
-      // Force `@universityrt/ui-kit` and any nested deps to resolve `react` /
+      "@skillum/ui-kit/css": path.resolve(import.meta.dirname, "vendor", "ui-kit", "css", "skillum-ds.css"),
+      "@skillum/ui-kit": path.resolve(import.meta.dirname, "vendor", "ui-kit", "src", "index.ts"),
+      // Force `@skillum/ui-kit` and any nested deps to resolve `react` /
       // `react-dom` from this project's node_modules — otherwise a stray React
       // copy makes hooks fail with «Cannot read properties of null (reading 'useId')».
       react: path.resolve(import.meta.dirname, "node_modules", "react"),

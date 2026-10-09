@@ -210,12 +210,20 @@ function sliceSection(
   // есть: напечатать что-нибудь лучше, чем не напечатать ничего.
   const tail = to - top;
   if (slices.length && minTail > 0 && tail < minTail) {
-    let moved = 0;
-    for (const line of safeLines) {
-      if (line > slices[slices.length - 1].top + MIN_SLICE_PX && to - line >= minTail && line > moved) {
-        moved = line;
+    const lastTop = slices[slices.length - 1].top;
+    const back = (lines: number[]) => {
+      let best = 0;
+      for (const line of lines) {
+        if (line > lastTop + MIN_SLICE_PX && to - line >= minTail && line > best) best = line;
       }
-    }
+      return best;
+    };
+    // Отступать назад тоже лучше по ГРАНИЦЕ вложенного блока: строка текста, подходящая
+    // по арифметике, может лежать ВНУТРИ карточки — и тогда подтягивание хвоста само
+    // рассекает её пополам, ровно то, от чего разрез выше и уходил. Отчёт РТК ловил это
+    // на списке тем: черта между темами лежала в трёх десятках пикселей выше выбранной
+    // строки. Границы нет — отступаем по строке, как раньше.
+    const moved = back(blockLines) || back(safeLines);
     if (moved) {
       const last = slices[slices.length - 1];
       last.height = moved - last.top;
@@ -234,9 +242,18 @@ function sliceSection(
  *   полей страницы отчёта). Ноль или отрицательная величина означает «разделить нечем» —
  *   так приходит из среды, которая раскладку не считает (jsdom в тестах), и тогда
  *   документ остаётся одной страницей, каким был до постраничной выдачи.
+ * @param breakBefore Индексы блоков, ПЕРЕД которыми страница обязана кончиться, — метки
+ *   `[data-page-break]` верхнего уровня. Приказ верстальщика шаблона старше высоты: раздел
+ *   за меткой набирается заново, с чистого листа, поэтому его заголовок и первая карточка
+ *   остаются вместе. Метка перед пустой страницей игнорируется — пустых листов механика не
+ *   даёт. Метку ВНУТРИ блока эта половина не видит: её отрабатывает {@link sliceBySafeLines}.
  * @returns План страниц; пустой список для пустого входа.
  */
-export function paginateBlocks(boxes: ReportBlockBox[], usableHeight: number): ReportPagePlan[] {
+export function paginateBlocks(
+  boxes: ReportBlockBox[],
+  usableHeight: number,
+  breakBefore: ReadonlySet<number> = new Set<number>(),
+): ReportPagePlan[] {
   if (!boxes.length) return [];
   const contentBottom = Math.max(...boxes.map((b) => b.bottom));
   if (!(usableHeight > 0)) {
@@ -253,6 +270,18 @@ export function paginateBlocks(boxes: ReportBlockBox[], usableHeight: number): R
   };
 
   boxes.forEach((box, i) => {
+    // ПРИНУДИТЕЛЬНЫЙ РАЗРЫВ решается ЗДЕСЬ, до высоты. Пока он применялся уже внутри
+    // набранного листа, страница набиралась по высоте, а разрыв резал набранное надвое —
+    // и всё, что по высоте не поместилось, было отдано СЛЕДУЮЩЕМУ листу ещё до разреза.
+    // Заголовок раздела, оказавшийся сразу за меткой, оставался на странице один, а его
+    // карточка уходила на другую: ровно та висячая шапка, ради которой правило и есть.
+    // Считается СОДЕРЖИМОЕ, а не число блоков: сама метка — блок нулевой высоты, и две
+    // метки подряд иначе развели бы между собой пустой лист.
+    if (breakBefore.has(i) && current.some((idx) => !breakBefore.has(idx))) {
+      flush(boxes[current[current.length - 1]].bottom);
+      current = [];
+      offset = box.top;
+    }
     // Переносится только та карточка, которой новый лист ПОМОЖЕТ, — та, что целиком на
     // лист помещается. Карточке выше листа он не поможет ничем: разрез внутри неё всё
     // равно неизбежен, а перенос стоил остатка текущего листа — шапка отчёта и семь сотен

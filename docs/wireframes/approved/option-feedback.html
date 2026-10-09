@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: обратная связь по выбранному варианту ответа (одиночный выбор).
+    Файл: docs/wireframes/approved/option-feedback.html
+    План: docs/plans/2026-10-06-option-feedback.md
+    Статус: СОГЛАСОВАН 2026-10-06. Владелец выбрал вариант А (значок у строки
+    варианта) и потребовал подпись у поля; вариант Б (подблок внутри «Обратной связи»)
+    отклонён и из эскиза убран. Затем значок заменён переключателем под полем
+    варианта: значок без подписи был непонятен.
+
+    Объём, согласованный с владельцем 2026-10-06:
+      - только тип «Один ответ»;
+      - у варианта ответа необязательный текст обратной связи, хранится у ВОПРОСА;
+      - текст выбранного варианта ЗАМЕНЯЕТ обратную связь вопроса; если у варианта
+        текста нет — действует обратная связь вопроса (общая или условная);
+      - вердикт и тон плашки после ответа не меняются;
+      - переопределения на уровне теста нет (отдельная будущая задача).
+
+    Источники разметки:
+      - ящик вопроса — approved/content-bank-explorer.html, состояние s-q-drawer,
+        дословно (поля «Тема», «Сложность», «Медиа», «Теги» опущены: дельты в них нет);
+      - блок «Обратная связь» — по действующему коду
+        client/src/features/questions/question-editor-drawer.tsx (эскиза у блока нет);
+      - реестр «Обратная связь вопросов» — editor-settings-target.html, классы таблицы —
+        действующие tb-qfeedback-* из tb-components.css.
+
+    Состояния (переключатель в навбаре):
+      s-row       — редактор вопроса: под полем варианта переключатель «Переопределить
+                    обратную связь», включённый открывает поле с подписью
+      s-registry  — реестр «Обратная связь вопросов» в редакторе теста
+      s-notes     — пояснения и DS Mapping
+  -->
+  <title>Обратная связь по варианту ответа</title>
+
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    :root {
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: отступ поля под строкой варианта = ручка (14) + радио (20) +
+         два промежутка строки. В ДС нет токена ширины этих элементов. */
+      --wf-optfb-grip-radio: calc(14px + 20px);
+      --wf-size-52: 52px;
+      --wf-size-960: 960px;
+      /* gate-skip-end */
+    }
+    .wf-state.active { display: block; }
+    .wf-state > .ou-drawer-root { top: var(--wf-nav-offset, var(--wf-size-52)); bottom: 0; height: auto; }
+    .wf-state > .ou-drawer-root > .ou-drawer { height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+
+    /* Раскладка ящика вопроса — дословно из approved/content-bank-explorer.html. */
+    .qd-stack { display: flex; flex-direction: column; gap: var(--ou-space-6); }
+    .qd-stack--tight { gap: var(--ou-space-2); }
+    .qd-opt { display: flex; align-items: center; gap: var(--ou-space-3); }
+    .qd-opt .ou-field { flex: 1; }
+    .qd-grip { flex: none; color: var(--ou-fg-muted); display: inline-flex; cursor: grab; }
+    .qd-shuffle { margin-top: var(--ou-space-2); }
+    .qd-addrow { margin-top: var(--ou-space-2); }
+    .qd-spacer { flex: 1; }
+
+    /* Дельта: переключатель и поле текста варианта под его строкой, по левому краю поля варианта. */
+    .qd-optfb { display: flex; flex-direction: column; gap: var(--ou-space-2); padding-left: calc(var(--wf-optfb-grip-radio) + var(--ou-space-3) * 2); }
+
+    /* Блок «Обратная связь» по действующему коду: заголовок и переключатель режима
+       в одну строку (Cluster justify=between), поля — стопкой (Stack gap=3). */
+    .qd-fbhead { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-2); }
+    .qd-fbmode { display: inline-flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+    .qd-fbstack { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+
+
+    /* Подстроки реестра — классы tb-qfeedback-row--has-sub / --sub / tb-qfeedback-sub
+       из tb-components.css (обе копии). */
+
+    /* Страница-подложка реестра. */
+    .wf-pagewrap { max-width: var(--wf-size-960); margin: 0 auto; padding: var(--ou-space-6); }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-corner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevrons-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></symbol>
+  <symbol id="i-chevrons-down-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Обратная связь по варианту:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-row')">Редактор вопроса</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-registry')">Реестр в тесте</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-notes')">Пояснения</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- ════ s-row: переключатель под полем варианта, поле под переключателем ════ -->
+<div class="wf-state active" id="s-row">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="qa-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="qa-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Финансовая грамотность</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qa-type">Тип вопроса</label>
+            <select class="ou-select ou-field--m" id="qa-type">
+              <option selected>Один ответ</option>
+              <option>Несколько ответов</option>
+            </select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qa-prompt">Текст вопроса</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="qa-prompt" rows="2">Что такое НДФЛ и кто обязан его платить?</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Варианты ответа · отметьте правильный</span>
+            <div class="qd-stack qd-stack--tight">
+              <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14"><use href="#i-grip"/></svg></span>
+                <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qa-correct" class="ou-radio__input" checked aria-label="Правильный вариант 1" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на доходы физических лиц" aria-label="Текст варианта 1" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-optfb">
+                <label class="ou-switch-field"><span class="ou-switch ou-switch--s"><input type="checkbox" class="ou-switch__input" aria-label="Переопределить обратную связь для варианта 1" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Переопределить обратную связь</span></span></label>
+              </div>
+              <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14"><use href="#i-grip"/></svg></span>
+                <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qa-correct" class="ou-radio__input" aria-label="Правильный вариант 2" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на добавленную стоимость" aria-label="Текст варианта 2" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-optfb">
+                <label class="ou-switch-field"><span class="ou-switch ou-switch--s is-on"><input type="checkbox" class="ou-switch__input" checked aria-label="Переопределить обратную связь для варианта 2" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Переопределить обратную связь</span></span></label>
+                <label class="ou-textarea ou-textarea--s ou-textarea--full">
+                  <span class="ou-textarea__lbl">Обратная связь при выборе варианта</span>
+                  <div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="2" placeholder="Показывается, если выбран этот вариант">НДС платит продавец с добавленной стоимости, а НДФЛ — человек со своего дохода. Перечитайте раздел 2.</textarea></div>
+                </label>
+              </div>
+              <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14"><use href="#i-grip"/></svg></span>
+                <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qa-correct" class="ou-radio__input" aria-label="Правильный вариант 3" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на имущество организаций" aria-label="Текст варианта 3" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-optfb">
+                <label class="ou-switch-field"><span class="ou-switch ou-switch--s"><input type="checkbox" class="ou-switch__input" aria-label="Переопределить обратную связь для варианта 3" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Переопределить обратную связь</span></span></label>
+              </div>
+            </div>
+            <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus"/></svg> Добавить вариант</button></div>
+            <label class="ou-switch-field qd-shuffle"><span class="ou-switch ou-switch--m is-on"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Случайный порядок вариантов</span></span></label>
+          </div>
+          <div class="qd-fbstack">
+            <div class="qd-fbhead">
+              <span class="ou-formfield__lbl">Обратная связь</span>
+              <span class="qd-fbmode">Общая
+                <span class="ou-switch ou-switch--m"><input type="checkbox" class="ou-switch__input" aria-label="Условная обратная связь" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                Условная</span>
+            </div>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full">
+              <div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="2" aria-label="Обратная связь" placeholder="Комментарий к вопросу (показывается после ответа)">НДФЛ — налог на доходы физических лиц. Платят его сами получатели дохода.</textarea></div>
+              <span class="ou-textarea__msg">Текст показывается после ответа на вопрос в SCORM</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-registry: реестр «Обратная связь вопросов» редактора теста ════ -->
+<div class="wf-state" id="s-registry">
+  <div class="wf-pagewrap">
+    <div class="ou-formsection ou-formsection--stacked">
+      <div class="ou-formsection__intro tb-section-head">
+        <h3 class="ou-formsection__title">Обратная связь вопросов</h3>
+        <div class="tb-fold-toolbar">
+          <span class="tb-fold-actions">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+          </span>
+        </div>
+      </div>
+      <div class="ou-formsection__body">
+        <div class="ou-acc ou-acc--separated">
+          <div class="ou-acc__item is-open">
+            <button type="button" class="ou-acc__trigger" aria-expanded="true">
+              <span class="ou-acc__trigger-text">
+                <span class="ou-acc__title">1. Финансовая грамотность</span>
+                <span class="ou-acc__subtitle">4 вопроса · у 4 задана обратная связь</span>
+              </span>
+              <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+            </button>
+            <div class="ou-acc__body" role="region">
+              <table class="tb-table tb-table--mb tb-qfeedback-table" aria-label="Обратная связь вопросов темы «Финансовая грамотность»">
+                <thead><tr><th class="tb-qfeedback-table__q">Вопрос</th><th class="tb-qfeedback-table__mode">Режим</th><th>Текст</th><th class="tb-qfeedback-table__act" aria-label="Действия"></th></tr></thead>
+                <tbody>
+                  <tr class="tb-qfeedback-row--has-sub">
+                    <td>Что такое НДФЛ и кто обязан его платить?</td>
+                    <td>Общая</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text">НДФЛ — налог на доходы физических лиц. Платят его сами получатели дохода.</span></div></td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>К вопросу</span><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-right" /></svg></span></button></td>
+                  </tr>
+                  <tr class="tb-qfeedback-row--sub">
+                    <td><span class="tb-qfeedback-sub"><svg width="14" height="14" aria-hidden="true"><use href="#i-corner"/></svg><span>Налог на добавленную стоимость</span></span></td>
+                    <td>Вариант</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text">НДС платит продавец с добавленной стоимости, а НДФЛ — человек со своего дохода. Перечитайте раздел 2.</span></div></td>
+                    <td></td>
+                  </tr>
+                  <tr class="tb-qfeedback-row--sub is-last">
+                    <td><span class="tb-qfeedback-sub"><svg width="14" height="14" aria-hidden="true"><use href="#i-corner"/></svg><span>Налог на имущество организаций</span></span></td>
+                    <td>Вариант</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text">Этот налог платят организации, а не люди.</span></div></td>
+                    <td></td>
+                  </tr>
+                  <tr class="tb-qfeedback-row--has-sub">
+                    <td>Какой вычет положен при покупке жилья?</td>
+                    <td>Условная</td>
+                    <td>
+                      <div class="tb-qfeedback__line"><span class="tb-qfeedback__line-lbl">Верно</span><span class="tb-qfeedback__line-text">Точно так.</span></div>
+                      <div class="tb-qfeedback__line"><span class="tb-qfeedback__line-lbl">Неверно</span><span class="tb-qfeedback__line-text">Загляните в раздел «Вычеты».</span></div>
+                    </td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>К вопросу</span><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-right" /></svg></span></button></td>
+                  </tr>
+                  <tr class="tb-qfeedback-row--sub is-last">
+                    <td><span class="tb-qfeedback-sub"><svg width="14" height="14" aria-hidden="true"><use href="#i-corner"/></svg><span>Социальный</span></span></td>
+                    <td>Вариант</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text">Социальный вычет — за лечение и обучение, не за жильё.</span></div></td>
+                    <td></td>
+                  </tr>
+                  <tr>
+                    <td>Сколько процентов составляет базовая ставка НДФЛ?</td>
+                    <td>Общая</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text">Базовая ставка — 13 процентов.</span></div></td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>К вопросу</span><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-right" /></svg></span></button></td>
+                  </tr>
+                  <tr class="tb-qfeedback-row--has-sub">
+                    <td>Кто платит налог на имущество физических лиц?</td>
+                    <td>Общая</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text is-empty">не задано</span></div></td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>К вопросу</span><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-right" /></svg></span></button></td>
+                  </tr>
+                  <tr class="tb-qfeedback-row--sub is-last">
+                    <td><span class="tb-qfeedback-sub"><svg width="14" height="14" aria-hidden="true"><use href="#i-corner"/></svg><span>Арендатор</span></span></td>
+                    <td>Вариант</td>
+                    <td><div class="tb-qfeedback__line"><span class="tb-qfeedback__line-text">Налог платит собственник, а не тот, кто живёт в квартире.</span></div></td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-notes: пояснения и DS Mapping ════ -->
+<div class="wf-state" id="s-notes">
+  <div class="wf-pagewrap">
+    <section class="wf-notes">
+      <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+      <table>
+        <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr><td>Текст варианта</td><td><code>questions.option_feedback_json</code>: массив строк или <code>null</code>, позиция = позиция варианта в <code>dataJson.options</code></td><td>Только тип «Один ответ». У остальных типов переключателя нет. Пустая строка = текста нет.</td></tr>
+          <tr><td>Какой текст видит ученик</td><td><code>feedbackTextFor(q, isCorrect, chosenIndex)</code></td><td>Текст выбранного варианта, если он задан; иначе обратная связь вопроса по текущему правилу (общая или ветка «верно / неверно»). Заголовок и тон плашки не меняются. Экран ученика внешне не меняется, поэтому его в эскизе нет.</td></tr>
+          <tr><td>Переключатель «Переопределить обратную связь»</td><td>включён, если у варианта есть текст</td><td>Включение открывает поле под переключателем. Выключение прячет поле; при сохранении текст выключенного варианта не хранится.</td></tr>
+          <tr><td>Перестановка и удаление варианта</td><td>массив переставляется вместе с <code>options</code></td><td>Текст едет за своим вариантом при перетаскивании; удаление варианта удаляет и его текст. Пустые варианты, отброшенные при сохранении, уносят свои тексты.</td></tr>
+          <tr><td>Смена типа вопроса</td><td>при сохранении не-«Один ответ» поле пишется <code>null</code></td><td>Как уже сейчас с текстом общей обратной связи в условном режиме: неприменимое не хранится.</td></tr>
+          <tr><td>Реестр: строки вариантов</td><td>подпись — текст варианта в кавычках</td><td>Каждый вариант с текстом — отдельная подстрока под своим вопросом: в колонке «Вопрос» значок <code>CornerDownRight</code> и текст варианта, в «Режиме» — «Вариант», в «Тексте» — текст варианта. Между вопросом и подстроками линии нет (модификаторы <code>tb-qfeedback-row--has-sub</code>, <code>tb-qfeedback-row--sub</code>). Счётчик «у N задана обратная связь» учитывает и тексты вариантов. Реестр остаётся только для чтения.</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="wf-mapping">
+      <h2 class="wf-mapping-title">DS Mapping</h2>
+      <table>
+        <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
+        <tbody>
+          <tr><td>Переключатель у варианта</td><td><code>Switch</code> size=s с подписью (<code>ou-switch-field</code>)</td><td><code>--ou-space-2</code></td><td><code>aria-label</code> с номером варианта.</td></tr>
+          <tr><td>Поле текста варианта</td><td><code>Textarea</code> size=s fullWidth, <code>label</code>=«Обратная связь при выборе варианта»</td><td><code>--ou-space-3</code></td><td>Отступ слева по краю поля варианта — композиция строки, не компонент.</td></tr>
+          <tr><td>Подстрока варианта в реестре</td><td>строка той же таблицы <code>tb-table</code>, иконка <code>CornerDownRight</code> (lucide-react)</td><td><code>--ou-space-1</code>, <code>--ou-space-2</code>, <code>--ou-space-4</code></td><td>Новые модификаторы строки в обеих копиях <code>tb-components.css</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+</body>
+</html>

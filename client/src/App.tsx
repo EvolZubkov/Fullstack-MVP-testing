@@ -1,14 +1,13 @@
 import { useSyncExternalStore } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
-import { ToastProvider } from "@universityrt/ui-kit";
+import { ToastProvider } from "@skillum/ui-kit";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ToastBridge } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
 import { isScopeViolation, subscribeScopeViolation } from "@/lib/magic-scope";
-import type { Capability } from "@shared/access";
+import { IMPORT_CAPABILITIES, type Capability } from "@shared/access";
 import NotFound from "@/pages/not-found";
 import NoAccessPage from "@/pages/no-access";
 import LoginPage from "@/pages/login";
@@ -21,7 +20,9 @@ import TestsPage from "@/pages/author/tests";
 import AuthorTemplatesPage from "@/pages/author/templates";
 import AnalyticsPage from "@/pages/author/analytics";
 import TestAnalyticsPage from "@/pages/author/test-analytics";
+import BankQuestionAnalyticsPage from "@/pages/author/bank-question-analytics";
 import DebugPlayerPage from "@/features/tests/debug-player/debug-player-page";
+import ReviewPlayerPage from "@/pages/review/review-player-page";
 import UsersPage from "@/pages/author/users";
 import GroupsPage from "@/pages/author/groups";
 import ImportPage from "@/pages/author/import";
@@ -32,13 +33,25 @@ import ResultPage from "@/pages/learner/result";
 import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
 import LogsPage from "@/pages/author/logs";
+import {
+  ANALYTICS_BANK_QUESTION_ROUTE,
+  ANALYTICS_QUESTION_ROUTE,
+  ANALYTICS_ROUTE,
+  ANALYTICS_TEST_ROUTE,
+  LEGACY_TEST_ANALYTICS_ROUTE,
+} from "@/features/analytics/levels/analytics-routes";
+import { LegacyTestAnalyticsRedirect } from "@/features/analytics/levels/legacy-test-analytics-redirect";
 
 export function ProtectedRoute({
   children,
   requiredPermission,
 }: {
   children: React.ReactNode;
-  requiredPermission?: Capability;
+  /**
+   * The capability the route needs; a list means ANY of them — the «Импорт» section opens with
+   * any import right and then offers only the file kinds the user may load (stage E6).
+   */
+  requiredPermission?: Capability | readonly Capability[];
 }) {
   const { user, isLoading, can } = useAuth();
   const [location] = useLocation();
@@ -59,13 +72,19 @@ export function ProtectedRoute({
   // test is a full authentication — so send the learner straight to the login form
   // instead of an intermediate "you cannot go there" screen.
   if (user.magicScope) {
-    const testPath = `/learner/test/${user.magicScope.testId}`;
+    // PRD-52: ревью-ссылка открывает ОДИН экран — окно рецензирования своего теста;
+    // ссылка на прохождение, как и раньше, только сам тест и страницу результата.
+    const testPath = user.magicScope.purpose === "review"
+      ? `/review/tests/${user.magicScope.testId}`
+      : `/learner/test/${user.magicScope.testId}`;
     // Wouter matches a route with an optional trailing slash, so `/learner/test/t1/`
     // is the same page as `/learner/test/t1` — compare without it, or the learner
     // gets bounced to the login form while standing on their own test.
     const path = location.replace(/\/+$/, "") || "/";
-    const insideScope =
-      !scopeViolated && (path === testPath || path.startsWith("/learner/result/"));
+    const insideScope = !scopeViolated && (
+      path === testPath
+      || (user.magicScope.purpose !== "review" && path.startsWith("/learner/result/"))
+    );
     if (!insideScope) return <Redirect to="/login" />;
     return <>{children}</>;
   }
@@ -81,7 +100,10 @@ export function ProtectedRoute({
   // рисовать экран «нет доступа», иначе редирект зациклился бы. Теперь у любого
   // аутентифицированного пользователя есть куда приземлиться: главная сама
   // покажет «нет доступа», если ей нечего показать (FR-18).
-  if (requiredPermission && !can(requiredPermission)) {
+  const required: readonly Capability[] = requiredPermission === undefined
+    ? []
+    : typeof requiredPermission === "string" ? [requiredPermission] : requiredPermission;
+  if (required.length > 0 && !required.some((capability) => can(capability))) {
     return location === "/" ? <NoAccessPage /> : <Redirect to="/" />;
   }
 
@@ -130,7 +152,34 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/author/analytics">
+      {/* Э2: три уровня аналитики — общая, тест, вопрос в тесте. Вопрос — та же страница теста:
+          разбор вопроса пока живёт в ней (отдельную страницу уровня делает Э3). */}
+      {/* PRD-70 FR-40: вопрос банка — по всем тестам читателя. */}
+      <Route path={ANALYTICS_BANK_QUESTION_ROUTE}>
+        <ProtectedRoute requiredPermission="analytics.read">
+          <AuthorLayout>
+            <BankQuestionAnalyticsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path={ANALYTICS_QUESTION_ROUTE}>
+        <ProtectedRoute requiredPermission="analytics.read">
+          <AuthorLayout>
+            <TestAnalyticsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path={ANALYTICS_TEST_ROUTE}>
+        <ProtectedRoute requiredPermission="analytics.read">
+          <AuthorLayout>
+            <TestAnalyticsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path={ANALYTICS_ROUTE}>
         <ProtectedRoute requiredPermission="analytics.read">
           <AuthorLayout>
             <AnalyticsPage />
@@ -138,11 +187,18 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/author/tests/:testId/analytics">
+      <Route path={LEGACY_TEST_ANALYTICS_ROUTE}>
         <ProtectedRoute requiredPermission="analytics.read">
-          <AuthorLayout>
-            <TestAnalyticsPage />
-          </AuthorLayout>
+          <LegacyTestAnalyticsRedirect />
+        </ProtectedRoute>
+      </Route>
+
+      {/* PRD-52: окно рецензента — полноэкранное, без авторской оболочки. Права
+          решает сервер по гранту `review`, поэтому capability здесь не требуется:
+          у внешнего рецензента её и не будет. */}
+      <Route path="/review/tests/:testId">
+        <ProtectedRoute>
+          <ReviewPlayerPage />
         </ProtectedRoute>
       </Route>
 
@@ -170,7 +226,7 @@ function Router() {
       </Route>
 
       <Route path="/author/import">
-        <ProtectedRoute requiredPermission="questions.importExport">
+        <ProtectedRoute requiredPermission={IMPORT_CAPABILITIES}>
           <AuthorLayout>
             <ImportPage />
           </AuthorLayout>
@@ -225,7 +281,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <ToastProvider>
-          <ToastBridge />
           <AuthProvider>
             <Router />
           </AuthProvider>

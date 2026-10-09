@@ -47,6 +47,8 @@ export type TestListEntry = {
    * the run says so; the list is where the author learns a decision is pending.
    */
   unmappedPageCount?: number;
+  /** PRD-52 FR-32: открытых комментариев рецензентов у этого теста. */
+  openReviewComments?: number;
 };
 
 export type FolderEntry = {

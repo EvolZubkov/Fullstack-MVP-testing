@@ -19,7 +19,18 @@
  */
 
 /** Every question type the product supports. Mirrors the `questions.type` enum. */
-export const QUESTION_TYPES = ["single", "multiple", "matching", "ranking", "scale", "allocation"] as const;
+export const QUESTION_TYPES = [
+  "single",
+  "multiple",
+  "matching",
+  "ranking",
+  "scale",
+  "allocation",
+  "short",
+  "blanks",
+  "long",
+  "simulation",
+] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
@@ -65,6 +76,68 @@ export function hasFixedOptionOrder(type: string): boolean {
 }
 
 /**
+ * Answered by TYPING — the learner's answer is a string, not an index (PRD-57 §6.5).
+ *
+ * This is the trait behind every «is there an answer key to compare against?» branch the
+ * open answer adds. Consumers ask it instead of `type === "short"`, so the blanks type
+ * of Э8 joins by declaring the trait here and nothing downstream changes.
+ */
+export function isTextEntry(type: string): boolean {
+  return type === "short";
+}
+
+/**
+ * Заполнение пропусков (PRD-57 §6, FR-24): текст задания несёт поля ввода, и у КАЖДОГО
+ * пропуска свой набор правил.
+ *
+ * Отдельный признак, а не расширение {@link isTextEntry}, и причина конкретная: у
+ * короткого ответа один набор правил на задание, у пропусков — по набору на пропуск.
+ * Места, где «текстовый ввод» означает одно поле и один эталон, не перестали бы
+ * компилироваться — они начали бы молча брать первый набор.
+ */
+export function hasBlanks(type: string): boolean {
+  return type === "blanks";
+}
+
+/**
+ * Развёрнутый ответ (PRD-57 §5): многострочный текст БЕЗ эталона и без автопроверки.
+ *
+ * Отдельный признак, а не расширение {@link isTextEntry}, и различие принципиальное: у
+ * короткого ответа есть правила и он оценивается, у развёрнутого правил нет и он ЖДЁТ
+ * оценки. Тип не «неоцениваемый навсегда», а «неоценённый пока» (FR-13, FR-14).
+ */
+export function isOpenText(type: string): boolean {
+  return type === "long";
+}
+
+/**
+ * «Сценарий в ИС» (docs/specs/sim-scenario): the learner performs a task in a simulated
+ * information system, played full-screen by `shared/sim`. The whole content is the scenario
+ * contract in `dataJson.scenario`; there are no options and no answer key — the outcome is
+ * judged by the scenario's own goal checks.
+ */
+export function isSimulation(type: string): boolean {
+  return type === "simulation";
+}
+
+/** How a test hands questions out: drawn sections or the adaptive level walk. */
+export type DeliveryMode = "standard" | "adaptive";
+
+/**
+ * Can a test host hand this question to a learner in a test of this mode?
+ *
+ * A standard section delivers every type, the scenario included (owner decision 2026-10-06,
+ * sim-scenario tech debt №5): the section draws scenarios of its topic like any other question,
+ * and both hosts play them from a cover on the question screen. The adaptive walk does NOT: its
+ * screen and its level logic know nothing of a run played full-screen, so a scenario there would
+ * reach a learner as a question the host cannot show. The adaptive delivery paths — the web start
+ * and the SCORM bake — filter through this predicate.
+ */
+export function isDeliverable(type: string, mode: DeliveryMode = "standard"): boolean {
+  return mode === "standard" || !isSimulation(type);
+}
+
+/**
  * The question shape these predicates read — every consumer passes its own object.
  * The answer key travels under two different names: `correctJson` on the server (the
  * DB column) and `correct` in the baked SCORM payload and the aggregate input. Both
@@ -92,6 +165,28 @@ export interface TypedQuestion {
  */
 export function isMeasurementOnly(question: TypedQuestion): boolean {
   if (distributesBudget(question.type)) return true;
+  // PRD-57 §5.3: развёрнутый ответ не приносит баллов, пока его никто не проверил. В
+  // ЗНАМЕНАТЕЛЬ он не идёт по той же причине; отличается он исходом — «ждёт проверки»
+  // вместо «не требует оценки» (FR-35), и это различие живёт в агрегате.
+  if (isOpenText(question.type)) return true;
+  // PRD-57 §5.3: a typed answer with NO rules collects text and earns nothing. The
+  // absence of rules IS the switch, exactly as the absence of `correctIndex` is for a
+  // scale — so an author who has not written the check yet cannot silently drag the
+  // percent down.
+  if (isTextEntry(question.type)) {
+    const set = (question.correctJson ?? question.correct) as { rules?: unknown } | null | undefined;
+    return !set || !Array.isArray(set.rules) || set.rules.length === 0;
+  }
+  // PRD-57 FR-24c: то же правило у пропусков, только наборов несколько. Хватает ОДНОГО
+  // пропуска с правилами: задание с ним уже что-то проверяет, а пропуск без правил
+  // просто не идёт в знаменатель.
+  if (hasBlanks(question.type)) {
+    const key = (question.correctJson ?? question.correct) as { blanks?: unknown } | null | undefined;
+    const blanks = key && Array.isArray(key.blanks) ? key.blanks : [];
+    return !blanks.some(
+      (set) => set && Array.isArray((set as { rules?: unknown }).rules) && (set as { rules: unknown[] }).rules.length > 0,
+    );
+  }
   if (question.type !== "scale") return false;
   const key = (question.correctJson ?? question.correct) as
     | { correctIndex?: unknown }

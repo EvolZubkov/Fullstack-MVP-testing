@@ -35,6 +35,11 @@ describe("formatTimerValue", () => {
     expect(formatTimerValue(5)).toBe("0:05");
     expect(formatTimerValue(-3)).toBe("0:00");
   });
+
+  it("добавляет часы и дни на длинном лимите", () => {
+    expect(formatTimerValue(9000)).toBe("2:30:00");
+    expect(formatTimerValue(1209600)).toBe("14 д 0:00:00");
+  });
 });
 
 describe("paintSceneTimers", () => {

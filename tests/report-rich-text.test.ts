@@ -13,6 +13,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { templateRoot } from "./helpers/template-roots";
 import { richTextToHtml } from "../shared/template/rich-text";
 import { buildResultContext } from "../shared/template/result-context";
 import { buildReportContext } from "../shared/report/report-context";
@@ -60,7 +61,14 @@ const measures = (format?: "plain" | "richText" | "html") => ({
         displayMax: null,
         valence: "none" as const,
         bands: [],
-        outcomes: [{ code: "ok", label: "Устойчивый", text: LEVEL_TEXT }],
+        outcomes: [{
+          code: "ok",
+          label: "Устойчивый",
+          text: LEVEL_TEXT,
+          // PRD-61 §10: обратная связь ТЕСТА снята, и источником форматированного совета
+          // в блоке рекомендаций остался показатель. Формат едет вместе с текстом.
+          ...(format ? { feedback: { format, text: "<b>Совет</b>", links: [], events: [], assets: [] } } : {}),
+        }],
       },
     },
   ],
@@ -93,23 +101,26 @@ describe("контекст несёт разметку рядом с текст�
     expect(card.textHtml).toBe("Первая строка<br>Вторая строка");
   });
 
-  it("формат обратной связи теста доезжает до блока рекомендаций", () => {
-    const rich = buildReportContext(withFeedback("richText", "<b>Совет</b>"));
-    const texts = (rich.result.recommendations?.texts ?? []) as unknown[];
-    const html = (rich.result.recommendations?.textsHtml ?? []) as unknown[];
-    expect(texts).toEqual(["<b>Совет</b>"]);
-    expect(html).toEqual(["<b>Совет</b>"]);
+  it("формат обратной связи ПОКАЗАТЕЛЯ доезжает до блока рекомендаций", () => {
+    // До PRD-61 §10 это проверялось на обратной связи ТЕСТА — её сняли, и носителем
+    // формата остались измерения: тексты тем приходят строками и формата не несут.
+    const ctx = (format: "plain" | "richText") =>
+      buildReportContext(withFeedback(format, "x"), { measures: measures(format) } as never);
+
+    const rich = ctx("richText");
+    expect(rich.result.recommendations?.texts).toEqual(["<b>Совет</b>"]);
+    expect(rich.result.recommendations?.textsHtml).toEqual(["<b>Совет</b>"]);
 
     // Тот же текст, объявленный обычным, разметкой НЕ становится.
-    const plain = buildReportContext(withFeedback("plain", "<b>Совет</b>"));
+    const plain = ctx("plain");
     expect((plain.result.recommendations?.textsHtml ?? [])[0]).toBe("&lt;b&gt;Совет&lt;/b&gt;");
   });
 });
 
 describe("макеты печатают разметку, а не её исходник", () => {
   const layouts: Array<[string, string]> = [
-    ["default", path.resolve(process.cwd(), "server", "scorm", "templates", "default")],
-    ["certification", path.resolve(process.cwd(), "templates", "certification")],
+    ["default", templateRoot("default")],
+    ["certification", templateRoot("certification")],
   ];
 
   for (const [templateId, dir] of layouts) {
@@ -117,7 +128,7 @@ describe("макеты печатают разметку, а не её исхо�
       const root = document.createElement("div");
       renderScreenInto(root, {
         layout: fs.readFileSync(path.join(dir, "layouts", "report.html"), "utf8"),
-        context: buildReportContext(withFeedback("richText", "<b>Совет</b>")),
+        context: buildReportContext(withFeedback("richText", "x"), { measures: measures("richText") } as never),
       });
       const card = root.querySelector(".tb-report__event");
       // Тег стал разметкой: в узле лежит <b>, а не текст «<b>Совет</b>».
@@ -129,7 +140,7 @@ describe("макеты печатают разметку, а не её исхо�
       const root = document.createElement("div");
       renderScreenInto(root, {
         layout: fs.readFileSync(path.join(dir, "layouts", "report.html"), "utf8"),
-        context: buildReportContext(withFeedback("plain", "<b>Совет</b>")),
+        context: buildReportContext(withFeedback("plain", "x"), { measures: measures("plain") } as never),
       });
       const card = root.querySelector(".tb-report__event");
       expect(card?.querySelector("b")).toBeNull();

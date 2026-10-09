@@ -8,12 +8,23 @@
  * returns data only.
  */
 
+import { config } from "../config";
+import { logger } from "../logger";
+import { storage } from "../storage";
 import { drawnScaleKeys, isTestIpsative } from "../services/scale-composition";
-import { exportSourceForTest, liveDataSource } from "../services/test-snapshot";
+import {
+  deliverySectionName,
+  exportSourceForTest,
+  ExportVersionUnavailableError,
+  isScenarioSection,
+  liveDataSource,
+  type ExportVersion,
+} from "../services/test-snapshot";
 import { resolveTemplateDir } from "../services/template-dir";
 import { readResultsDeclarations } from "../services/template-render";
 import { resolveScreenLabels } from "../services/result-context";
 import { templateBlockOrder } from "@shared/template/results-order";
+import { isDeliverable } from "@shared/questions/question-type";
 import type { DesignSettings } from "@shared/schema";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import type { ExportData } from "./builders/test-json";
@@ -30,6 +41,11 @@ export interface BuildScormExportDataOptions {
    * never a snapshot).
    */
   source: "export" | "debug";
+  /**
+   * Stage E5: the version an `export` bakes — published snapshot or working draft. Omitted —
+   * the snapshot-aware default. Ignored by `debug`, which is always live.
+   */
+  version?: ExportVersion;
 }
 
 /**
@@ -41,7 +57,7 @@ export interface BuildScormExportDataOptions {
 export class ScormBuildError extends Error {
   constructor(
     message: string,
-    readonly status: 404 | 422,
+    readonly status: 404 | 409 | 422,
     readonly field?: string,
   ) {
     super(message);
@@ -57,17 +73,71 @@ export async function buildScormExportData(
   testId: string,
   opts: BuildScormExportDataOptions,
 ): Promise<ScormExportData> {
-  const src = opts.source === "debug" ? liveDataSource() : await exportSourceForTest(testId);
+  // PRD-56 FR-19a: вместе с источником состава берётся и снимок, из которого он собран —
+  // его номер уезжает в пакет. У отладочной сборки снимка нет по определению (PRD-18 D-4:
+  // живое состояние, а не версия), поэтому её путь снимок и не спрашивает.
+  const { src, snapshot } = opts.source === "debug"
+    ? { src: liveDataSource(), snapshot: null }
+    : await exportSourceForTest(testId, opts.version).catch((error: unknown) => {
+      // A published version asked for and absent is the caller's conflict, not a server fault.
+      if (error instanceof ExportVersionUnavailableError) throw new ScormBuildError(error.message, 409);
+      throw error;
+    });
   const test = await src.getTest(testId);
   if (!test) {
     throw new ScormBuildError("Test not found", 404);
   }
 
   const sections = await src.getTestSections(test.id);
+
+  /**
+   * PRD-56 FR-17a: задания, снятые с выдачи ЭТОГО теста.
+   *
+   * Только для ЖИВОЙ сборки — черновика и отладочного прогона. Пакет по снимку состав не
+   * меняет: снимок уже отфильтрован публикацией, и применять к нему сегодняшние настройки
+   * значило бы переписать опубликованную версию задним числом (PRD-15). То же правило и та
+   * же оговорка, что на старте попытки.
+   */
+  const excludedFromDelivery = new Set<string>();
+  if (snapshot === null) {
+    for (const row of await src.getTestQuestionScoring(test.id)) {
+      if (row.excludedFromDelivery) excludedFromDelivery.add(row.questionId);
+    }
+  }
+
   const exportSections = await Promise.all(
     sections.map(async (s) => {
+      // «Сценарий в ИС»: раздел пункта-сценария (тест «Сценарий» или пункт роутера). Тема у
+      // него — тема-банк под ИМЕНЕМ пункта и с ключом пункта вместо идентификатора: под этим
+      // ключом раздел живёт в хабе, в правилах разблокировки и в итогах, как на вебе. Пул —
+      // сценарии темы (или один фиксированный); пакет несёт его весь, с весами экспозиции, и
+      // выбирает один тем же отбором, что и раздел темы. Своих текстов и материалов у пункта
+      // нет — тексты темы-банка относятся к ней, а не к заданию.
+      if (isScenarioSection(s)) {
+        const bank = await src.getTopic(s.scenarioItem.topicId);
+        const questions = (await src.getScenarioPool(s.scenarioItem))
+          .filter((question) => !excludedFromDelivery.has(question.id));
+        const name = deliverySectionName(s, () => bank?.name);
+        if (!bank || questions.length === 0) {
+          throw new ScormBuildError(`В пункте «${name}» нет сценариев: пакет без задания не собирается`, 422);
+        }
+        const topic = {
+          ...bank,
+          id: s.topicId,
+          name,
+          code: null,
+          description: null,
+          feedback: null,
+          feedbackJson: null,
+          interpretationJson: null,
+        };
+        return { ...s, topic, questions, courses: [], events: [] };
+      }
       const topic = await src.getTopic(s.topicId);
-      const questions = await src.getQuestionsByTopic(s.topicId);
+      const questions = (await src.getQuestionsByTopic(s.topicId))
+        .filter((question) => !excludedFromDelivery.has(question.id))
+        // «Сценарий в ИС»: обычный раздел сценарии выдаёт, адаптивный обход — нет (`isDeliverable`).
+        .filter((question) => isDeliverable(question.type, test.mode === "adaptive" ? "adaptive" : "standard"));
       const courses = await src.getTopicCourses(s.topicId);
       const events = await src.getTopicEvents(s.topicId);
       return { ...s, topic: topic!, questions, courses, events };
@@ -155,6 +225,13 @@ export async function buildScormExportData(
     : { templateId: "default", params: {}, ...prd49 };
 
   const contentPages = await src.getContentPages(test.id);
+  // PRD-51: строки документа отчёта. Идут ЧЕРЕЗ источник, а не мимо него: снапшот
+  // публикации морозит их вместе с рядом теста, и живой экспорт черновика обязан брать
+  // их из того же места, откуда берёт остальной состав.
+  const reportBlocks = await src.getReportBlocks(
+    test.id,
+    test.mode === "adaptive" ? "adaptive" : "standard",
+  );
   const resultVariables = await src.getResultVariables(test.id);
   const scales = await src.getScales(test.id);
   const measurements = await src.getQuestionMeasurements(test.id);
@@ -181,6 +258,22 @@ export async function buildScormExportData(
   // frozen rows; drafts/debug read live.
   const questionScoring = await src.getTestQuestionScoring(test.id);
 
+  // PRD-55 (FR-27/FR-29): накопленные выдачи на момент СБОРКИ пакета. Берутся всегда живыми, в
+  // том числе для снимка публикации: экспозиция — СТАТИСТИКА, а не содержание, поэтому она не
+  // замораживается вместе с версией и не делает снимок устаревшим. Сбой чтения не имеет права
+  // сорвать экспорт: без счётчиков веса равны, и пакет собирается как до PRD-55.
+  let exposureCounts = new Map<string, number>();
+  try {
+    const windowStart = new Date();
+    windowStart.setMonth(windowStart.getMonth() - config.delivery.exposureWindowMonths);
+    exposureCounts = await storage.getDeliveryCounts(
+      exportSections.flatMap((s) => s.questions.map((q) => q.id)),
+      windowStart,
+    );
+  } catch (error) {
+    logger.warn("PRD-55: счётчики выдач не прочитаны при сборке пакета — " + (error as Error).message);
+  }
+
   let adaptiveSettings = null;
   if (test.mode === "adaptive") {
     const topicSettings = await src.getAdaptiveTopicSettingsByTest(test.id);
@@ -196,14 +289,21 @@ export async function buildScormExportData(
 
   return {
     test,
+    // PRD-56 FR-19a: НОМЕР версии, а не идентификатор снимка — он уникален внутри теста
+    // (`test_snapshots_test_version_idx`), читается человеком в отчёте LMS и не выносит
+    // наружу внутренних ключей. Ключа нет вовсе, когда версии нет: черновик и отладочная
+    // сборка обязаны дать прежний пакет до байта.
+    ...(snapshot ? { publicationVersion: snapshot.version } : {}),
     sections: exportSections,
     questionScoring,
     adaptiveSettings,
     contentPages,
+    reportBlocks,
     resultVariables,
     scales,
     measurements,
     ipsativeScales,
+    exposureCounts,
     designSettings,
     templateDir,
     // PRD-34 (FR-26): признак сборки едет в бейк — отладочный пакет запекается с

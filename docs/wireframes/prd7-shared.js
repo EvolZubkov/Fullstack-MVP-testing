@@ -109,7 +109,7 @@
       trigger && trigger.addEventListener('click', function (e) {
         e.stopPropagation();
         var opening = !sel.classList.contains('is-open');
-        document.querySelectorAll('.ou-select.is-open').forEach(function (s) {
+        document.querySelectorAll('.ou-select.is-open:not(.wf-open-static)').forEach(function (s) {
           s.classList.remove('is-open');
         });
         sel.classList.toggle('is-open', opening);
@@ -117,7 +117,7 @@
     });
 
     document.addEventListener('click', function () {
-      document.querySelectorAll('.ou-select.is-open').forEach(function (s) {
+      document.querySelectorAll('.ou-select.is-open:not(.wf-open-static)').forEach(function (s) {
         s.classList.remove('is-open');
       });
     }, { capture: false });

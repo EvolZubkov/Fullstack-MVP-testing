@@ -14,7 +14,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
-import { Button, Card, CardBody, CardHeader, Stack } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Stack } from "@skillum/ui-kit";
 import type { QuickAction } from "@shared/home/contract";
 
 /** Icon per action id (`server/services/home/quick-actions.ts`), as in the wireframe. */

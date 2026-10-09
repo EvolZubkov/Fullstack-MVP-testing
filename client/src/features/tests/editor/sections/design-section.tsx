@@ -19,22 +19,23 @@
  *     params for that section.
  *
  * Save flow:
- *   - Design has its own endpoint (`PUT /api/tests/:id/design`) separate from
- *     the main editor save. A pane-local «Сохранить оформление» button drives
- *     the mutation; the Drawer footer's primary save stays bound to the test
- *     settings as in the rest of the editor.
+ *   - Design has its own endpoint (`PUT /api/tests/:id/design`), separate from the
+ *     test-settings PUT, but NOT its own button: the Drawer footer's «Сохранить»
+ *     drives both (and the content-page commit) in one action, so the author never
+ *     has to save the same drawer twice. The pane only surfaces the save ERROR of
+ *     that endpoint (`DesignSaveError`), since a failing design PUT must not be
+ *     masked by the settings one having succeeded.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Download,
   Eye,
   ExternalLink,
   Image as ImageIcon,
-  Layout,
   Paperclip,
   RotateCcw,
-  Trash2,
+  SquareOff,
   Upload,
   X,
 } from "lucide-react";
@@ -55,12 +56,11 @@ import {
   Table,
   Tag,
   type TableColumn,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import type { TestTheme } from "@shared/template/themes";
 import {
   useDesignSettings,
   type MediaParamValue,
-  type ParamSection,
   type TemplateParam,
   type UseDesignSettingsResult,
 } from "../use-design-settings";
@@ -69,18 +69,21 @@ import { extractThemeTokens } from "@shared/template/theme-tokens";
 import { useTemplateBundle } from "./use-template-bundle";
 import { DEFAULT_PARAM_CSS_VARS } from "@shared/template/params-css";
 import { resolveLabels, type LabelDeclaration, type LabelValues } from "@shared/template/labels";
-import { templateBlockOrder } from "@shared/template/results-order";
 import { ResultsLabelsPane } from "./results-labels-pane";
 import { TemplatePreviewModal } from "./template-preview-modal";
 import { TemplateGalleryModal } from "./template-gallery-modal";
-import { TemplateThumb } from "./template-thumb";
+import { TemplateThumb, templateAssetUrl } from "./template-thumb";
 import { ReportSettingsCard } from "./report-settings-card";
 import type { TestEditorModel } from "../test-editor.types";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type DesignSectionProps = {
-  /** Test id is required to fetch design settings; `undefined` in create mode. */
+  /**
+   * Тест, чьё оформление грузить самостоятельно; `undefined` в режиме создания.
+   * Раздел о режиме НЕ знает: у нового теста черновик приходит готовым в `design`,
+   * и панели работают одинаково до первого сохранения и после.
+   */
   testId: string | undefined;
   /**
    * Optional pre-hoisted design hook instance. When provided, the section
@@ -104,30 +107,35 @@ export type DesignSectionProps = {
 
 type DesignRailKey =
   | "template"
+  | "layout"
   | "branding"
   | "colors"
-  | "layout"
-  | "progress"
-  | "results"
+  | "charts"
   | "report";
 
 const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "template", label: "Шаблон" },
-  { key: "branding", label: "Брендирование" },
-  // PRD-23: colours have logic the other params do not — inheritance from the
-  // template's palette, a storage format, a value per theme — so they get their
-  // own section instead of sitting between the font and the logo.
-  { key: "colors", label: "Цвета" },
   { key: "layout", label: "Макет" },
-  { key: "progress", label: "Прогресс и шапка" },
-  // PRD-49 §7: заголовки блоков итогов и порядок подблоков. Надписи объявляет шаблон, и
-  // пункт есть только у шаблона, который их объявил, — ровно как у секций параметров.
-  { key: "results", label: "Итоги" },
+  { key: "branding", label: "Брендирование" },
+  // PRD-23: у цветов есть логика, которой нет у прочих параметров — наследование от
+  // палитры шаблона, формат хранения, значение на тему, — поэтому у них свой пункт.
+  { key: "colors", label: "Цвета" },
+  // Э3.7: вид диаграмм шкал и показателей — тоже облик, но разговор отдельный: автор
+  // выбирает ФОРМУ печати измерения, а не цвет и не шрифт. Пункт собирается по ТИПУ
+  // параметра, как и цвета: иначе пришлось бы перевыпускать каждый уже залитый шаблон.
+  { key: "charts", label: "Вид диаграмм" },
   // PRD-47 §6.2: отчёт — часть шаблона, его поля объявляет манифест ровно как параметры
-  // оформления. Место им здесь, а не в общих настройках теста. Хранение при этом НЕ
-  // переезжает: поля отчёта остаются своей колонкой (PRD-27 §4.2).
-  { key: "report", label: "Отчёт о результатах" },
+  // оформления. Здесь только ОБЛИК документа: что в нём печатать, автор задаёт во вкладке
+  // «Обратная связь и итоги» (решение 18).
+  { key: "report", label: "Облик отчёта" },
 ];
+
+/**
+ * Что может нарисовать {@link SectionPane}: пункт рейла «Оформления» либо секция
+ * «Прогресс и шапка» — её параметры объявляет тот же манифест, но рисует их вкладка
+ * «Правила прохождения»: это не облик, а то, что участник видит по ходу (решение 18).
+ */
+export type ParamPaneKey = Exclude<DesignRailKey, "template"> | "progress";
 
 /**
  * Params a rail section shows. Colours are picked by TYPE, not by the `section`
@@ -137,13 +145,25 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
  */
 function paramsForRail(
   params: TemplateParam[] | undefined,
-  key: Exclude<DesignRailKey, "template">,
+  key: ParamPaneKey,
 ): TemplateParam[] {
   const all = params ?? [];
   if (key === "colors") return all.filter((p) => p.type === "color");
+  if (key === "charts") return all.filter(isChartParam);
   return all.filter(
-    (p) => (p.section ?? "branding") === key && !(key === "branding" && p.type === "color"),
+    (p) =>
+      (p.section ?? "branding") === key &&
+      !(key === "branding" && (p.type === "color" || isChartParam(p))),
   );
+}
+
+/**
+ * Параметр вида диаграмм: тот, что шаблон объявил группой «Итоги». Пункт рейла собирается
+ * по ОБЪЯВЛЕНИЮ манифеста, а не по перечню ключей: у другого шаблона диаграммы свои, и
+ * список ключей в редакторе устарел бы с первым же новым шаблоном (решение 19).
+ */
+function isChartParam(p: TemplateParam): boolean {
+  return p.group === "Итоги";
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -172,9 +192,6 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
     return RAIL_ITEMS.filter(
       (item) =>
         item.key === "template" ||
-        // PRD-49 §9: шаблон без `labels[]` печатает свои жёсткие строки — настраивать
-        // нечего, и подраздел ему не показывается.
-        (item.key === "results" && (design.template?.manifest.labels?.length ?? 0) > 0) ||
         // PRD-47 §6.2: отчёт есть у любого теста. Даже когда шаблон не объявил видов,
         // карточка объясняет, что отчёт соберётся видом «Стандартный», — спрятать пункт
         // значит спрятать это объяснение. Остальные пункты без параметров бессмысленны.
@@ -227,7 +244,7 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
                 {item.label}
                 {showError && (
                   <span
-                    className="status-dot error"
+                    className="tb-status-dot tb-status-dot--err"
                     aria-label="Шаблон недоступен"
                     data-testid="design-rail-template-error-dot"
                   />
@@ -237,9 +254,7 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
           })}
         </nav>
         <div className="tb-settings-content" data-testid={`design-pane-${effectiveActive}`}>
-          {testId === undefined ? (
-            <CreateModeNotice />
-          ) : design.isLoading ? (
+          {design.isLoading ? (
             <LoadingNotice />
           ) : design.templateMissing ? (
             <TemplateIncompatibleBanner
@@ -265,24 +280,6 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
             />
           ) : effectiveActive === "colors" ? (
             <ColorsPane design={design} onPreview={() => setPreviewOpen(true)} />
-          ) : effectiveActive === "results" ? (
-            <div data-testid="design-results-pane">
-              <ResultsLabelsPane
-                declarations={design.template?.manifest.labels ?? []}
-                labels={design.draft.labels ?? {}}
-                onChange={design.setLabels}
-                order={design.draft.resultsBlockOrder}
-                // Состав и порядок объявляет ШАБЛОН, и берётся объявление ЭКРАНА ИТОГОВ:
-                // настройка одна на все экраны, а адаптивные итоги, например, сводки
-                // баллов не печатают вовсе.
-                templateOrder={templateBlockOrder(
-                  design.template?.manifest.resultsBlockOrder,
-                  "results",
-                )}
-                onOrderChange={design.setResultsBlockOrder}
-              />
-              <DesignSaveError design={design} />
-            </div>
           ) : effectiveActive === "report" ? (
             // PRD-47 §6.2: переезд, а не переработка — состав карточки тот же, что стоял
             // в «Настройки → Основное». Черновые шаблон и брендинг теперь СВОИ, этой же
@@ -293,11 +290,20 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
                 // Здесь только облик документа: что в нём показывать, автор задаёт в
                 // «Настройках», рядом с обратной связью (PRD-27 §7.1).
                 scope="appearance"
-                mode={model.mode}
+                mode={model.mode === "adaptive" ? "adaptive" : "standard"}
                 draftTemplateId={design.draft.templateId}
                 designParams={design.draft.params}
                 value={model.report ?? {}}
                 onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+                // PRD-51: список блоков здесь не рисуется (это облик, а не содержание), но
+                // ПРЕДПРОСМОТР обязан показать тот же документ, что и в «Настройках»: два
+                // окна с одной кнопкой, показывающие разное, — это не выбор, а ошибка.
+                savedDocument={
+                  model.reportDocument?.saved?.[model.mode === "adaptive" ? "adaptive" : "standard"]
+                }
+                document={
+                  model.reportDocument?.draft?.[model.mode === "adaptive" ? "adaptive" : "standard"]
+                }
                 // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
                 // его названии и разделах; демонстрационные только числа и вердикты.
                 testName={model.basic.title}
@@ -314,12 +320,11 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
                     : undefined
                 }
               />
-              {/* PRD-49 §7: тот же перечень надписей, но слоем ПЕРЕОПРЕДЕЛЕНИЙ. Пустая
-                  строка значит «как на экране итогов», поэтому подсказкой поля стоит уже
-                  разрешённый текст итогов, а не умолчание шаблона. Перечень — только те
-                  надписи, которые печатает ДОКУМЕНТ (`reportLabelKeys`): у него своя
-                  фиксированная структура, и строка про заголовок, которого в нём нет,
-                  включалась бы вхолостую. */}
+              {/* PRD-49 §7: слой ПЕРЕОПРЕДЕЛЕНИЙ надписей для документа. Он здесь, а не
+                  в «Обратной связи»: там задают, ЧТО показывать в отчёте, а формулировка
+                  заголовка — это КАК он выглядит. Перечень — только те надписи, которые
+                  печатает документ (`reportLabelKeys`): структура у него своя, и строка
+                  про заголовок, которого в нём нет, включалась бы вхолостую. */}
               {reportLabelDeclarations.length > 0 && (
                 <ReportLabelsCard
                   declarations={reportLabelDeclarations}
@@ -341,10 +346,10 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
           ) : (
             <SectionPane
               design={design}
-              section="progress"
-              emptyTitle="В шаблоне нет настроек прогресса"
-              emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Прогресс и шапка» не объявлено ни одного параметра.`}
-              testId="design-progress-pane"
+              section="charts"
+              emptyTitle="В шаблоне нет настроек вида диаграмм"
+              emptyDesc={`Шаблон «${design.template?.manifest.name ?? ""}» не объявил, чем рисовать шкалы и показатели, — он печатает их своим встроенным видом.`}
+              testId="design-charts-pane"
             />
           )}
         </div>
@@ -372,17 +377,6 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
 }
 
 // ─── Sub-panes ────────────────────────────────────────────────────────────────
-
-function CreateModeNotice() {
-  return (
-    <Banner
-      tone="info"
-      title="Сначала сохраните черновик"
-      description="Настройки оформления привязаны к существующему тесту. Заполните обязательные поля во вкладке «Настройки», сохраните черновик — после этого вкладка «Оформление» станет доступна для редактирования."
-      data-testid="design-create-notice"
-    />
-  );
-}
 
 function LoadingNotice() {
   return (
@@ -456,7 +450,10 @@ function TemplatePane({
   const tpl = design.template;
   if (!tpl) return null;
   return (
-    <div data-testid="design-template-pane">
+    // Баннер — ПРЯМОЙ ребёнок колонки настроек, а не карточки панели: полноширинным и
+    // липким его делает правило `.tb-settings-content > .ou-banner`, и внутри обёртки
+    // оно не срабатывало — сообщение об устаревшем шаблоне уезжало вверх при прокрутке.
+    <>
       {design.templateOutdated && (
         <Banner
           tone="warning"
@@ -479,6 +476,7 @@ function TemplatePane({
           data-testid="design-template-outdated"
         />
       )}
+      <div data-testid="design-template-pane">
       <div className="tpl-block" data-testid="design-template-card">
         <button
           type="button"
@@ -547,7 +545,6 @@ function TemplatePane({
             <Button
               variant="secondary"
               size="s"
-              leadingIcon={<Layout size={12} aria-hidden="true" />}
               data-testid="design-template-replace"
               onClick={onOpenGallery}
             >
@@ -565,7 +562,8 @@ function TemplatePane({
         </div>
       </div>
       <DesignSaveError design={design} />
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -577,7 +575,7 @@ function TemplatePane({
  * природа — их объявляет `manifest.labels[]`, а не `settings[]` выбранного вида, и живут
  * они на всех экранах сразу. Значения кладутся в `report_settings_json.labels`.
  */
-function ReportLabelsCard({
+export function ReportLabelsCard({
   declarations,
   sharedLabels,
   report,
@@ -627,7 +625,7 @@ function ReportLabelsCard({
  * Generic pane that renders template params for a given `ParamSection`.
  * When no params are declared for the section an informational Banner is shown.
  */
-function SectionPane({
+export function SectionPane({
   design,
   section,
   emptyTitle,
@@ -635,7 +633,11 @@ function SectionPane({
   testId,
 }: {
   design: UseDesignSettingsResult;
-  section: ParamSection;
+  /**
+   * Пункт рейла, чьи параметры рисуются. Не `ParamSection`: «Цвета» и «Вид диаграмм»
+   * собираются по типу и по объявленной группе, а не по секции манифеста.
+   */
+  section: ParamPaneKey;
   emptyTitle: string;
   emptyDesc: string;
   testId: string;
@@ -685,6 +687,7 @@ function SectionPane({
           onClear={() => design.clearParam(p.key)}
           inheritedColor={tokens.light[cssVarOf(p)] ?? null}
           colorFormat={colorFormat}
+          templateId={tpl.id}
         />
       ))}
       <DesignSaveError design={design} />
@@ -790,6 +793,7 @@ function ColorsPane({
         </label>
         <div className="design-theme-head">
           <SegmentedControl<TestTheme>
+            size="s"
             items={themeItems}
             value={design.theme}
             onChange={(v) => design.setTheme(v)}
@@ -885,6 +889,8 @@ function ParamRow(props: {
   onChange: (v: unknown) => void;
   /** Drop the override, handing the param back to the template. */
   onClear?: () => void;
+  /** Template whose own files back a param's option previews. */
+  templateId?: string;
   /** Template's own value for this colour, read from its stylesheet. */
   inheritedColor?: string | null;
   /** Storage format this template's colours use. */
@@ -902,6 +908,42 @@ function ParamRow(props: {
   );
 }
 
+/**
+ * Which picture of an option preview to show: a template may ship one path or a pair
+ * per interface theme (spec §6). A lockup drawn for a light ground is unreadable on
+ * the dark editor, so the card follows the theme the AUTHOR is looking at — not the
+ * theme of the test being edited.
+ */
+function previewForTheme(
+  spec: string | { light?: string; dark?: string } | undefined,
+  dark: boolean,
+): string | undefined {
+  if (!spec) return undefined;
+  if (typeof spec === "string") return spec;
+  return (dark ? spec.dark ?? spec.light : spec.light ?? spec.dark) ?? undefined;
+}
+
+/**
+ * Is the INTERFACE dark right now? Read from the body class the theme provider paints
+ * (`.ou--dark`), not from its context: this control is rendered in component tests
+ * without the provider, and `useTheme` throws there. The observer keeps the cards in
+ * step when the author flips the theme with the drawer open.
+ */
+function useDarkInterface(): boolean {
+  const [dark, setDark] = useState(() =>
+    typeof document !== "undefined" && document.body.classList.contains("ou--dark"),
+  );
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof MutationObserver === "undefined") return;
+    const read = () => setDark(document.body.classList.contains("ou--dark"));
+    read();
+    const mo = new MutationObserver(read);
+    mo.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => mo.disconnect();
+  }, []);
+  return dark;
+}
+
 /** CSS custom property a param feeds, via its own `cssVar` or the shared map. */
 function cssVarOf(param: TemplateParam): string {
   return (param as { cssVar?: string }).cssVar ?? DEFAULT_PARAM_CSS_VARS[param.key] ?? "";
@@ -914,6 +956,7 @@ function ParamControl({
   onClear,
   inheritedColor,
   colorFormat = "hsl",
+  templateId,
 }: {
   param: TemplateParam;
   value: unknown;
@@ -921,8 +964,11 @@ function ParamControl({
   onClear?: () => void;
   inheritedColor?: string | null;
   colorFormat?: ColorFormat;
+  /** Whose files the option previews belong to; absent ⇒ the plain dropdown. */
+  templateId?: string;
 }) {
   const fieldId = `design-param-${param.key}`;
+  const dark = useDarkInterface();
   if (param.type === "text") {
     const v = typeof value === "string" ? value : "";
     return (
@@ -1005,6 +1051,53 @@ function ParamControl({
   if (param.type === "select") {
     const opts = param.options ?? [];
     const v = typeof value === "string" ? value : (param.default as string) ?? opts[0] ?? "";
+    // A template may ship a picture per option (`optionPreviews`). Then the choice is
+    // between LOOKS, and a dropdown of words cannot show it — the author would pick
+    // «B2O» blind and check the result in a preview. Cards instead, styled like the
+    // template gallery so one visual choice reads the same across the tab.
+    const previews = param.optionPreviews;
+    if (previews && templateId && opts.some((o) => previews[o])) {
+      return (
+        <fieldset className="tpl-choice" data-testid={`design-param-input-${param.key}`}>
+          <legend className="tpl-choice__legend">{param.label}</legend>
+          <div className="tpl-choice__grid">
+            {opts.map((o) => {
+              const url = templateAssetUrl(templateId, previewForTheme(previews[o], dark));
+              const label = param.optionLabels?.[o] ?? o;
+              return (
+                <label
+                  key={o}
+                  className={`tpl-gallery-card tpl-choice__card${v === o ? " is-selected" : ""}`}
+                  data-testid={`design-param-option-${param.key}-${o}`}
+                >
+                  <input
+                    type="radio"
+                    className="tpl-choice__input"
+                    name={fieldId}
+                    value={o}
+                    checked={v === o}
+                    onChange={() => onChange(o)}
+                  />
+                  <span className="tpl-choice__thumb">
+                    {url ? (
+                      <img className="tpl-choice__img" src={url} alt="" loading="lazy" />
+                    ) : (
+                      // Вариант без картинки — «ничего не показывать» и есть его смысл
+                      // («Без логотипа»). Пустая плитка читалась бы как незагрузившееся
+                      // изображение, поэтому в ней стоит перечёркнутый квадрат.
+                      <SquareOff className="tpl-choice__empty" size={28} aria-hidden="true" />
+                    )}
+                  </span>
+                  <span className="tpl-gallery-card__body">
+                    <span className="tpl-gallery-card__name">{label}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      );
+    }
     return (
         <Select<string>
           id={fieldId}

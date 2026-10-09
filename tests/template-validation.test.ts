@@ -6,7 +6,7 @@
  * `default` built-in passes its own validator (export-as-starter round trip).
  */
 import { describe, it, expect } from "vitest";
-import path from "node:path";
+import { templateRoot } from "./helpers/template-roots";
 import {
   validateTemplatePackage,
   MAX_TEMPLATE_ZIP_BYTES,
@@ -344,7 +344,7 @@ describe("validateTemplatePackage — theme declaration (PRD-23)", () => {
 
 describe("the shipping `default` built-in passes its own validator", () => {
   it("validates with no blocking issues (export-as-starter contract)", async () => {
-    const dir = path.resolve(process.cwd(), "server", "scorm", "templates", "default");
+    const dir = templateRoot("default");
     const entries = await readDirEntries(dir);
     const r = validateTemplatePackage(entries, { mode: "create" });
     if (!r.ok) {
@@ -357,7 +357,7 @@ describe("the shipping `default` built-in passes its own validator", () => {
 
 describe("the in-repo `certification` template passes the validator", () => {
   it("validates with no blocking issues", async () => {
-    const dir = path.resolve(process.cwd(), "templates", "certification");
+    const dir = templateRoot("certification");
     const entries = await readDirEntries(dir);
     const r = validateTemplatePackage(entries, { mode: "create" });
     if (!r.ok) {
@@ -370,7 +370,7 @@ describe("the in-repo `certification` template passes the validator", () => {
   // can pick a theme and colour each one. The advisory that fired before Э7 (a
   // dark palette nobody declared) must be gone.
   it("declares both palettes and draws no theme advisory", async () => {
-    const dir = path.resolve(process.cwd(), "templates", "certification");
+    const dir = templateRoot("certification");
     const entries = await readDirEntries(dir);
     const r = validateTemplatePackage(entries, { mode: "create" });
     expect(r.warnings.map((w) => w.code)).not.toContain("THEME_ADVISORY");
@@ -378,5 +378,78 @@ describe("the in-repo `certification` template passes the validator", () => {
     const manifest = JSON.parse(entries.get("manifest.json")!.toString("utf8")) as unknown;
     expect(declaredThemes(manifest).map((t) => t.id)).toEqual(["light", "dark"]);
     expect(supportsThemes(manifest)).toBe(true);
+  });
+});
+
+// ─── §6: параметр с картинками вариантов и атрибутом сцены ───────────────────
+//
+// Две добавки контракта, обе необязательные: `optionPreviews` — картинка на вариант
+// (редактор рисует их вместо списка), `dataAttr` — имя атрибута, в который хосты
+// кладут выбранное значение, чтобы CSS шаблона мог по нему ВЫБИРАТЬ.
+describe("validateTemplatePackage — превью вариантов и атрибут сцены (§6)", () => {
+  const logoParam = {
+    key: "brandLogo",
+    type: "select",
+    label: "Логотип",
+    options: ["plain", "b2b"],
+    optionLabels: { plain: "Без направления", b2b: "B2B" },
+    optionPreviews: { plain: "assets/logos/plain.png", b2b: "assets/logos/b2b.png" },
+    dataAttr: "data-brand-logo",
+    default: "plain",
+  };
+  const logoFiles = {
+    "assets/logos/plain.png": "png",
+    "assets/logos/b2b.png": "png",
+  };
+
+  it("принимает параметр с превью и атрибутом, файлы превью не считаются лишними", () => {
+    const r = validateTemplatePackage(
+      validPackage({ manifest: { params: [logoParam] }, files: logoFiles }),
+      { mode: "create" },
+    );
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings.map((w) => w.ref)).not.toContain("assets/logos/plain.png");
+  });
+
+  it("отсутствующий файл превью — блокирующая ошибка, а не тихо пустая карточка", () => {
+    const r = validateTemplatePackage(
+      validPackage({ manifest: { params: [logoParam] }, files: { "assets/logos/plain.png": "png" } }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(false);
+    const miss = r.blocking.find((i) => i.code === "FILE_MISSING" && String(i.ref).includes("optionPreviews"));
+    expect(miss?.ref).toBe("params[brandLogo].optionPreviews.b2b");
+  });
+
+  it("внешний URL в превью запрещён так же, как в любой ссылке манифеста", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: { params: [{ ...logoParam, optionPreviews: { plain: "https://cdn.example/logo.png" } }] },
+        files: logoFiles,
+      }),
+      { mode: "create" },
+    );
+    expect(r.blocking.map((i) => i.code)).toContain("EXTERNAL_URL");
+  });
+
+  it("кривое имя атрибута блокирует импорт: хост его молча пропустит", () => {
+    const r = validateTemplatePackage(
+      validPackage({ manifest: { params: [{ ...logoParam, dataAttr: "onclick" }] }, files: logoFiles }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.blocking.map((i) => i.code)).toContain("PARAM_DATA_ATTR_INVALID");
+  });
+
+  it("превью для несуществующего варианта — предупреждение, выбор от этого не ломается", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: { params: [{ ...logoParam, optionPreviews: { ...logoParam.optionPreviews, b2c: "assets/logos/plain.png" } }] },
+        files: logoFiles,
+      }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map((w) => w.code)).toContain("PARAM_PREVIEWS_INVALID");
   });
 });

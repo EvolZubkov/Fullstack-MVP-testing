@@ -26,6 +26,30 @@ function renderStartPage() {
 }
 
 /**
+ * Скрыт ли экран этого вида автором (решение владельца 2026-09-20).
+ *
+ * Спрашивает ОБЩИЙ хелпер — тот же, которым пользуется веб-хост: разойдясь здесь,
+ * пакет показал бы экран, которого в вебе нет. Локальная проверка остаётся запасной —
+ * пакет, собранный старой сборкой без этой функции в бандле, не должен падать.
+ */
+function screenHidden(kind) {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var pages = TEST_DATA.contentPages || [];
+  if (TB && typeof TB.isSystemScreenHidden === 'function') {
+    return TB.isSystemScreenHidden(pages, kind);
+  }
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i] && pages[i].kind === kind) return pages[i].hidden === true;
+  }
+  return false;
+}
+
+/** Скрыт ли стартовый экран — прохождение тогда начинается сразу. */
+function startScreenHidden() {
+  return screenHidden('start');
+}
+
+/**
  * Resolve the start screen's layout HTML, honouring the author's chosen start
  * VARIANT (PRD-1 §4.3). The `start` content page's `templateKey` selects a
  * contentTemplate whose own `layoutFile` (e.g. `start.image-right`) is preferred
@@ -48,6 +72,38 @@ function resolveStartLayout() {
   return base;
 }
 
+/** «11.10.2026» — the calendar day barrier A reopens (the cooldown is counted in days). */
+function fmtIsoDateHuman(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  return m ? (m[3] + '.' + m[2] + '.' + m[1]) : '';
+}
+
+/**
+ * The wait card of the start screen, or null when nothing holds the next attempt back.
+ * The shared builder renders one card for both barriers:
+ *   - barrier A (between assignments) is decided by the retake gate before the course
+ *     runs and lands in `state.retake`; a calendar date and a «через N дн.» countdown;
+ *   - barrier B (hours inside one assignment) is decided here, post-Initialize, from
+ *     suspend_data; a moment with a time and no day countdown. It only matters while
+ *     attempts remain — with the limit spent there is nothing to wait for.
+ * Reading the gate's verdict HERE is what makes the blocked screen the ordinary one:
+ * the gate no longer assembles a copy of its own.
+ */
+function startCooldownCard(attemptsLeft) {
+  var retake = (typeof state !== 'undefined' && state) ? state.retake : null;
+  if (retake && retake.checked && retake.allowed === false) {
+    return {
+      availableDateHuman: fmtIsoDateHuman(retake.availableDate),
+      daysUntil: (typeof EligibilityEngine !== 'undefined')
+        ? EligibilityEngine.daysUntilDate(retake.availableDate, retake.effectiveToday || retake.todayDate)
+        : null
+    };
+  }
+  if (!attemptsLeft) return null;
+  var interval = attemptIntervalState();
+  return interval.allowed ? null : { availableDateHuman: fmtInstantHuman(interval.availableAt), daysUntil: null };
+}
+
 /**
  * Gathers the SCORM start facts (incl. resume eligibility — session staleness /
  * time-limit / adaptive checks) and delegates the action-flag assembly to the
@@ -57,13 +113,11 @@ function resolveStartLayout() {
 function buildScormStartContext() {
   var used = getAttemptsUsed();
   var hasLimit = !!TEST_DATA.maxAttempts;
-  var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
-  // PRD-31 barrier B: the hour interval between attempts INSIDE this assignment.
-  // Decided here, post-Initialize, because its source is suspend_data — the gate
-  // could not read it before Initialize. An open interval leaves the screen exactly
-  // as it was; a closed one disables the start and shows the moment it reopens.
-  var interval = attemptIntervalState();
-  var canStartNew = hasAttemptsLeft() && interval.allowed;
+  // PRD-36 FR-03: «есть завершённые» — это счётчик, а не длина списка: списка больше нет.
+  var hasCompleted = hasCompletedAttempts();
+  var attemptsLeft = hasAttemptsLeft();
+  var cooldown = startCooldownCard(attemptsLeft);
+  var canStartNew = attemptsLeft && !cooldown;
   // PRD-19 FR-19 «повтор: можно»: prior-attempt summary + downloadable report from
   // the best saved attempt. Runs post-Initialize (suspend_data available); the
   // pre-Initialize cooldown gate builds its own minimal context without this.
@@ -71,12 +125,16 @@ function buildScormStartContext() {
 
   var suspendObj = readSuspendObj();
   var pendingSession = suspendObj.currentSession;
+  // PRD-36 FR-10: the checkpoint stores the delivery as POSITIONS, so «есть что продолжать»
+  // is the length of that row — the question objects it used to carry are gone.
+  var pendingCount = pendingSession
+    ? TBRunState.decodeDelivery(pendingSession.dl || '').length
+    : 0;
   var canResume = !!(
     pendingSession &&
     !TEST_DATA.timeLimitMinutes &&
     TEST_DATA.mode !== 'adaptive' &&
-    pendingSession.flatQuestions &&
-    pendingSession.flatQuestions.length > 0 &&
+    pendingCount > 0 &&
     !isSessionStale(pendingSession)
   );
 
@@ -84,28 +142,34 @@ function buildScormStartContext() {
     info: {
       title: TEST_DATA.title,
       description: TEST_DATA.description || '',
-      questionCount: TEST_DATA.totalQuestions,
+      // PRD-59: absent in every package built before the field existed — the shared
+      // builder reads that as 'plain', which is those packages' current behaviour.
+      descriptionFormat: TEST_DATA.descriptionFormat,
+      // «Сценарий в ИС»: у теста «Сценарий» задание одно — число вопросов не показывается, как на вебе.
+      questionCount: TEST_DATA.mode === 'scenario' ? undefined : TEST_DATA.totalQuestions,
       passPercent: TEST_DATA.passPercent,
       // Absent in every package built before the flag existed, and in every package
       // of a test that does grade — `!== false` is what keeps both showing it.
       hasGradedContent: TEST_DATA.hasGradedContent !== false,
+      // «Тест пройден, если»: when the topics decide, the overall threshold is not shown.
+      passDecisionPolicy: TEST_DATA.passDecisionPolicy,
+      // …and the cover names the topic condition instead, counted from the same rules.
+      overallPassRule: TEST_DATA.overallPassRule,
+      // An adaptive test passes by its levels, not by topic thresholds.
+      sections: TEST_DATA.mode === 'adaptive' ? [] : (TEST_DATA.sections || []),
       timeLimitMinutes: TEST_DATA.timeLimitMinutes,
       maxAttempts: TEST_DATA.maxAttempts,
       // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.
-      startPageContent: ''
+      startPageContent: '',
+      // PRD-67: `course.closesOnLeave` for a layout that warns before the start.
+      closesOnLeave: (typeof packageClosesOnLeave === 'function') ? packageClosesOnLeave() : false
     },
     maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null,
     completedAttempts: used,
-    resume: canResume ? { index: (pendingSession.currentIndex || 0), total: pendingSession.flatQuestions.length } : null,
+    resume: canResume ? { index: (pendingSession.i || 0), total: pendingCount } : null,
     hasCompletedResults: hasCompleted,
     canStartNew: canStartNew,
-    // The shared builder renders the same cooldown card for both barriers; barrier B
-    // carries a moment with a time, and no day countdown — «через N дн.» is
-    // meaningless for an interval measured in hours.
-    cooldown: interval.allowed ? null : {
-      availableDateHuman: fmtInstantHuman(interval.availableAt),
-      daysUntil: null
-    },
+    cooldown: cooldown,
     priorResult: best ? {
       percent: best.percent,
       passed: best.passed,
@@ -217,6 +281,10 @@ function startTest() {
     return;
   }
 
+  // «Сценарий в ИС»: у теста «Сценарий» за «Начать» сразу идёт задание во весь экран, а полный
+  // экран браузер даёт только в самом щелчке — позже, после отрисовки плеера, просьба опоздала бы.
+  if (TEST_DATA.mode === 'scenario' && typeof TBSimRun !== 'undefined') TBSimRun.requestFullscreen();
+
   // ===== СОХРАНЯЕМ ПРЕДЫДУЩУЮ ПОПЫТКУ ЕСЛИ ПОЛЬЗОВАТЕЛЬ РЕАЛЬНО ОТВЕЧАЛ =====
   // Проверяем что:
   // 1. Есть вопросы в текущем варианте
@@ -236,6 +304,8 @@ function startTest() {
     var currentAttemptNum = Telemetry.getAttemptNumber();
 
     // ===== ОТПРАВЛЯЕМ ТЕЛЕМЕТРИЮ FINISH ДЛЯ ЭТОЙ ПОПЫТКИ =====
+    // PA-12f: прерванная попытка уходит с тем же нулём за неотвеченное, что и в её баллы.
+    if (typeof reportPendingAnswerTelemetry === 'function') reportPendingAnswerTelemetry();
     Telemetry.finish({
       percent: results.percent,
       passed: results.passed,
@@ -267,6 +337,8 @@ function startTest() {
     showToast('Попытки закончились', 'warn');
     return;
   }
+  // A new attempt starts with clean section budgets and no closed sections (PRD-67).
+  if (typeof resetSectionRunState === 'function') resetSectionRunState();
 
   // Send telemetry start
   Telemetry.start();
@@ -302,6 +374,8 @@ function restart() {
     var currentAttemptNum = Telemetry.getAttemptNumber();
 
     // Отправляем телеметрию finish с явным номером попытки
+    // PA-12f: прерванная попытка уходит с тем же нулём за неотвеченное, что и в её баллы.
+    if (typeof reportPendingAnswerTelemetry === 'function') reportPendingAnswerTelemetry();
     Telemetry.finish({
       percent: results.percent,
       passed: results.passed,
@@ -359,6 +433,8 @@ function restart() {
     showToast('Попытки закончились', 'warn');
     return;
   }
+  // A new attempt starts with clean section budgets and no closed sections (PRD-67).
+  if (typeof resetSectionRunState === 'function') resetSectionRunState();
 
   // ===== ЗАПУСК ТЕСТА =====
   if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);

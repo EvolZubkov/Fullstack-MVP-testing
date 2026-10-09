@@ -16,10 +16,10 @@ export const Welcome: Story = {
   render: () => (
     <div className="ou-story-intro">
       <h1 className="ou-story-intro-title">
-        UniversityRT · React UI Kit
+        Skillum · React UI Kit
       </h1>
       <p className="ou-story-intro-lead">
-        Storybook собран на базе дизайн-системы UniversityRT. Каждый компонент
+        Storybook собран на базе дизайн-системы Skillum. Каждый компонент
         — обёртка над CSS-классами из <code>tokens/components/*.css</code> с
         строгой типизацией, <code>forwardRef</code> и a11y.
       </p>
@@ -33,8 +33,8 @@ export const Welcome: Story = {
       </ul>
 
       <h2 className="ou-story-intro-heading">Как пользоваться</h2>
-      <pre className="ou-story-intro-code">{`import { Button, Card, Modal } from '@universityrt/ui-kit';
-import '@universityrt/ui-kit/css';
+      <pre className="ou-story-intro-code">{`import { Button, Card, Modal } from '@skillum/ui-kit';
+import '@skillum/ui-kit/css';
 
 <Button variant="primary" size="m">Применить</Button>`}</pre>
     </div>

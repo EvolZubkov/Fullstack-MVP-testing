@@ -9,20 +9,46 @@
  * in the repositories). This file holds no query logic of its own — it exists so
  * routes depend only on `IStorage`, never on the concrete repositories.
  */
-import { UsersRepository } from "./storage/users-repository";
+import { UsersRepository, type ImportedExternalUserInput } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
 import { TopicsRepository, type TopicDeletionResult, type TopicsBulkDeletionResult } from "./storage/topics-repository";
 import { QuestionsRepository } from "./storage/questions-repository";
-import { ScormRepository } from "./storage/scorm-repository";
+import {
+  ScormRepository,
+  type ImportedAttemptInput,
+  type ImportedAttemptKeyRow,
+  type LmsImportCounts,
+} from "./storage/scorm-repository";
 import { AdaptiveRepository } from "./storage/adaptive-repository";
+import { ExposureRepository } from "./storage/exposure-repository";
+import {
+  AnalyticsRepository,
+  type ObservationQuery,
+  type ObservationRows,
+  type TestAnswerRow,
+  type ScaleValuesRow,
+  type IndicatorValuesRow,
+} from "./storage/analytics-repository";
+import { SlicesRepository } from "./storage/slices-repository";
+import { SavedFiltersRepository } from "./storage/saved-filters-repository";
 import { AttemptsRepository } from "./storage/attempts-repository";
 import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
-import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
+import { TestsRepository, type TestUsageRef, type TestDeleteImpact } from "./storage/tests-repository";
 import { ContentPagesRepository, type ContentPageBinding } from "./storage/content-pages-repository";
 import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
 import { MediaRepository, type MediaUsageRef } from "./storage/media-repository";
+import {
+  ReportBlocksRepository,
+  type ReportBlockInput,
+  type ReportDocumentMode,
+} from "./storage/report-blocks-repository";
+import {
+  ReviewCommentsRepository,
+  type ReviewCommentInput,
+  type ReviewThread,
+} from "./storage/review-comments-repository";
 import {
   TestTransferRepository,
   type ImportWriteResult,
@@ -48,6 +74,7 @@ import type {
   Question, InsertQuestion,
   Test, InsertTest,
   TestSection,
+  TestScenario,
   Attempt, InsertAttempt,
   AdaptiveTopicSettings, InsertAdaptiveTopicSettings,
   AdaptiveLevel, InsertAdaptiveLevel,
@@ -55,6 +82,9 @@ import type {
   ScormPackage, InsertScormPackage,
   ScormAttempt, InsertScormAttempt,
   ScormAnswer, InsertScormAnswer,
+  LmsImportBatch, InsertLmsImportBatch,
+  AnalyticsSlice, InsertAnalyticsSlice,
+  SavedListFilter, InsertSavedListFilter, SavedFilterScope,
   Group, InsertGroup,
   UserGroup,
   TestAccessGrant, InsertTestAccessGrant,
@@ -69,13 +99,23 @@ import type {
   QuestionMeasurement, InsertQuestionMeasurement,
   TestQuestionScoring, InsertTestQuestionScoring,
   MediaAsset, InsertMediaAsset, MediaUsage, MediaEntityType,
+  ReportBlockRow,
+  TestReviewComment,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
+import type { OrgField, OrgValueCount } from "@shared/org-fields";
 import { type ValidationResult, type ValueType } from "@shared/formula";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  /** PRD-54: поиск по внешнему ключу для связывания импортированных прохождений. */
+  getUserByExternalKey(key: string): Promise<User | undefined>;
+  createImportedExternalUser(input: ImportedExternalUserInput): Promise<User>;
+  /** PRD-54 BR-54-31: пользователь по идентификатору обучающегося в LMS. */
+  getUserByLmsLearnerId(learnerId: string): Promise<User | undefined>;
+  /** Org-structure values in use (profiles and passages), folded per field. */
+  getOrgValues(): Promise<Record<OrgField, OrgValueCount[]>>;
   createUser(user: InsertUser): Promise<User>;
   validatePassword(email: string, password: string): Promise<User | null>;
   updateUserLastLogin(id: string): Promise<void>;
@@ -98,6 +138,8 @@ export interface IStorage {
   getUserGroups(userId: string): Promise<Group[]>;
   getGroupUsers(groupId: string): Promise<User[]>;
   addUserToGroup(userId: string, groupId: string): Promise<UserGroup>;
+  ensureGroupMember(userId: string, groupId: string): Promise<boolean>;
+  getGroupImportSummary(groupId: string): Promise<{ attempts: number; batches: number }>;
   removeUserFromGroup(userId: string, groupId: string): Promise<boolean>;
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
 
@@ -128,6 +170,8 @@ export interface IStorage {
     publishedBy: string | null;
   }): Promise<TestSnapshot>;
   getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined>;
+  /** PRD-56 FR-19a: снимок по номеру версии — так прохождение из LMS находит свою версию. */
+  getSnapshotByVersion(testId: string, version: number): Promise<TestSnapshot | undefined>;
   getSnapshot(id: string): Promise<TestSnapshot | undefined>;
   getSnapshotsForTest(testId: string): Promise<TestSnapshot[]>;
   /** Every snapshot in the database, for the media re-sync (Медиатека). */
@@ -158,10 +202,11 @@ export interface IStorage {
   getRecentTokensCount(userId: string, hours: number): Promise<number>;
 
   // Assignment Access Tokens (magic links)
-  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken>;
+  createAssignmentAccessToken(data: { assignmentId: string | null; userId: string; testId: string; tokenHash: string; expiresAt: Date; purpose?: "attempt" | "review" }): Promise<AssignmentAccessToken>;
   getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined>;
   getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]>;
   revokeAssignmentAccessToken(id: string): Promise<void>;
+  revokeReviewLinks(testId: string, userId: string): Promise<void>;
   revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void>;
   revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void>;
 
@@ -260,11 +305,20 @@ export interface IStorage {
   /** Updates only the status field without bumping the version counter (PRD-7 §9). */
   patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
+  /** PRD-15 FR-07a: what `deleteTest` would take with the test — numbers for the delete dialog. */
+  getTestDeleteImpact(id: string): Promise<TestDeleteImpact>;
   getTestSections(testId: string): Promise<TestSection[]>;
+  /** «Сценарий в ИС»: пункты-сценарии теста в порядке автора. */
+  getTestScenarios(testId: string): Promise<TestScenario[]>;
+  /** Пункты-сценарии, для которых тема служит банком. */
+  getTestScenariosByTopic(topicId: string): Promise<TestScenario[]>;
+  /** PRD-54: разделы сразу по нескольким темам — определение теста по вопросам выгрузки. */
+  getTestSectionsByTopicIds(topicIds: string[]): Promise<TestSection[]>;
 
   createAttempt(attempt: InsertAttempt): Promise<Attempt>;
   getAttempt(id: string): Promise<Attempt | undefined>;
   updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined>;
+  getAttemptsByIds(ids: string[]): Promise<Attempt[]>;
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
   deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void>;
@@ -274,6 +328,8 @@ export interface IStorage {
    */
   annulInProgressAttempts(testId: string, userId?: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
+  /** PRD-70 FR-01: attempts of the given tests, read by query (an empty list reads nothing). */
+  getAttemptsByTests(testIds: string[]): Promise<Attempt[]>;
 
   // Adaptive testing
   getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined>;
@@ -299,16 +355,94 @@ export interface IStorage {
   getScormPackages(): Promise<ScormPackage[]>;
   updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined>;
   
+  /**
+   * PRD-55 (FR-07): плюс одна выдача каждому заданию в корзине месяца. Зовётся на старте
+   * веб-попытки и при создании прохождения телеметрии — двух однократных событиях.
+   */
+  recordDeliveries(questionIds: string[], testId: string, at: Date): Promise<void>;
+  /**
+   * PRD-55 (FR-08): пересчитать вклад импортированных выгрузок в счётчик теста — после загрузки
+   * и после отката партии. Пересчёт, а не инкремент: повторная загрузка идемпотентна.
+   */
+  rebuildImportExposure(testId: string): Promise<void>;
+  /** PRD-55 (FR-04): сумма выдач заданий за окно, по всем тестам. Задание без выдач в карту не входит. */
+  getDeliveryCounts(questionIds: string[], since: Date): Promise<Map<string, number>>;
+  /** PRD-55 (FR-31): сумма выдач заданий в ОДНОМ тесте — доля показов для отчёта автору. */
+  getDeliveryCountsForTest(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>>;
+  /** PRD-55 (FR-32): в скольких ДРУГИХ тестах задание выдавалось за окно. */
+  getOtherTestsCount(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>>;
+  /** Э3.3: другие тесты, где задание выдавалось за окно, — поимённо, с числом выдач. */
+  getOtherTests(questionId: string, testId: string, since: Date): Promise<Array<{ testId: string; delivered: number }>>;
+  /** PRD-55 (FR-31a): медиана времени на задание и СВОЙ объём выборки (веб времени не даёт). */
+  getLatencyStats(questionIds: string[], testId: string, since: Date): Promise<Map<string, { medianMs: number; sampleSize: number }>>;
+  /** PRD-56 FR-33: страница прохождений веба, телеметрии и импорта одной выборкой. */
+  selectObservations(query: ObservationQuery): Promise<ObservationRows>;
+  /** План оргструктуры: все хранящиеся написания оргполей — профили и прохождения. */
+  selectOrgSpellings(): Promise<Record<OrgField, string[]>>;
+  /** PRD-56 FR-25: ответы прохождений теста, пришедших из LMS. */
+  selectAnswersForTest(testId: string): Promise<TestAnswerRow[]>;
+  selectAnswersForAttempts(attemptIds: string[]): Promise<TestAnswerRow[]>;
+  /** PA-12f: выданный состав прохождений из LMS; прохождение без состава в карту не попадает. */
+  selectDeliveredQuestionIds(attemptIds: string[]): Promise<Map<string, string[]>>;
+  selectGroupsOfUsers(userIds: string[]): Promise<Map<string, string[]>>;
+  /** PRD-56 FR-02: все прохождения участников по тестам — для номера попытки в реестре. */
+  selectAttemptOrder(testIds: string[], userIds: string[], participantKeys: string[]): Promise<Array<{ id: string; testId: string | null; participantId: string; startedAt: Date | null }>>;
+  /** PRD-56 FR-21: значения шкал прохождений теста — оба источника одной выборкой. */
+  selectScaleValuesForTest(testId: string): Promise<ScaleValuesRow[]>;
+  /** PRD-56 FR-21c: stored indicator values of a test's runs, both sources, as stored. */
+  selectIndicatorValuesForTest(testId: string): Promise<IndicatorValuesRow[]>;
+  /** PRD-56 FR-07b: срезы — сохранённые наборы условий отбора. */
+  /** Записи владельца одной роли; `testId` — только срезы этого теста (Э3). */
+  getSlices(ownerId: string, kind?: "slice" | "filter", testId?: string): Promise<AnalyticsSlice[]>;
+  getSlice(id: string, ownerId: string): Promise<AnalyticsSlice | undefined>;
+  createSlice(input: InsertAnalyticsSlice): Promise<AnalyticsSlice>;
+  updateSlice(
+    id: string,
+    ownerId: string,
+    patch: Partial<Pick<AnalyticsSlice, "name" | "testId" | "conditionsJson">>,
+  ): Promise<AnalyticsSlice | undefined>;
+  deleteSlice(id: string, ownerId: string): Promise<boolean>;
+
+  /** Сохранённые фильтры списков: банк, «Тесты», «Пользователи» — личные наборы владельца. */
+  getSavedFilters(ownerId: string, scope: SavedFilterScope): Promise<SavedListFilter[]>;
+  createSavedFilter(input: InsertSavedListFilter): Promise<SavedListFilter>;
+  updateSavedFilter(
+    id: string,
+    ownerId: string,
+    patch: Partial<Pick<SavedListFilter, "name" | "conditionsJson">>,
+  ): Promise<SavedListFilter | undefined>;
+  deleteSavedFilter(id: string, ownerId: string): Promise<boolean>;
+
   createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt>;
   getScormAttempt(id: string): Promise<ScormAttempt | undefined>;
   getScormAttemptBySession(packageId: string, sessionId: string, attemptNumber?: number): Promise<ScormAttempt | undefined>;
   getNextAttemptNumber(packageId: string, sessionId: string): Promise<number>;
   getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]>;
+  /** Уровни и курсы проваленных тем прохождений LMS — для листов книги выгрузки. */
+  getScormAttemptOutcomes(ids: string[]): Promise<Array<{ id: string; achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>>;
+  /** PRD-56 FR-21h: stored scale and indicator values of LMS runs. */
+  getScormAttemptMeasures(ids: string[]): Promise<Array<{ id: string; scalesJson: unknown; variablesJson: unknown }>>;
   updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined>;
   getAllScormAttempts(): Promise<ScormAttempt[]>;
   
   createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer>;
   getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]>;
+
+  // PRD-54: импорт выгрузок отчётов LMS — второй источник прохождений наравне с телеметрией.
+  upsertImportedAttempt(data: ImportedAttemptInput): Promise<{ id: string; created: boolean }>;
+  listImportedAttemptKeys(testId: string): Promise<ImportedAttemptKeyRow[]>;
+  setImportedAttemptKey(id: string, attemptKey: string): Promise<void>;
+  replaceImportedAnswers(attemptId: string, answers: (InsertScormAnswer & { id: string })[]): Promise<void>;
+  createLmsImportBatch(batch: InsertLmsImportBatch & { id: string }): Promise<{ id: string }>;
+  updateLmsImportBatch(id: string, counts: LmsImportCounts): Promise<void>;
+  getLmsImportBatchById(id: string): Promise<LmsImportBatch | undefined>;
+  getLmsImportBatches(testId: string): Promise<LmsImportBatch[]>;
+  deleteLmsImportBatch(id: string): Promise<void>;
+  recordImportBatchUser(
+    batchId: string,
+    userId: string,
+    flags: { createdUser: boolean; addedToGroup: boolean },
+  ): Promise<void>;
 
   // Content Pages (PRD-1)
   /** PRD-22: variant bindings of many tests in ONE query (tests-list audit). */
@@ -355,6 +489,12 @@ export interface IStorage {
     values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
   ): Promise<TestQuestionScoring>;
   deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean>;
+  /** PRD-56 FR-17a: включить или снять состояние «исключён из выдачи» у задания теста. */
+  setQuestionDelivery(
+    testId: string,
+    questionId: string,
+    excluded: boolean,
+  ): Promise<TestQuestionScoring>;
   replaceTestQuestionScoring(
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
@@ -373,6 +513,29 @@ export interface IStorage {
   listOrphanMediaAssets(): Promise<MediaAsset[]>;
   deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void>;
 
+  // PRD-51: документ отчёта — упорядоченный список блоков теста, по ветви на режим.
+  // Читается и пишется ЦЕЛИКОМ: порядок и состав осмысленны только вместе.
+  // PRD-52: комментарии рецензирования
+  listReviewThreads(testId: string): Promise<ReviewThread[]>;
+  getReviewComment(id: string): Promise<TestReviewComment | undefined>;
+  hasReviewReplies(rootId: string): Promise<boolean>;
+  createReviewComment(input: ReviewCommentInput): Promise<TestReviewComment>;
+  updateReviewCommentBody(id: string, body: string): Promise<TestReviewComment | undefined>;
+  deleteReviewComment(id: string): Promise<boolean>;
+  resolveReviewComment(
+    id: string,
+    outcome: { status: "accepted" | "rejected"; resolvedBy: string },
+  ): Promise<TestReviewComment | undefined>;
+  reopenReviewComment(id: string): Promise<TestReviewComment | undefined>;
+  countOpenReviewComments(testId: string): Promise<number>;
+  countOpenReviewCommentsByTests(testIds: string[]): Promise<Record<string, number>>;
+  listReportBlocks(testId: string, mode: ReportDocumentMode): Promise<ReportBlockRow[]>;
+  replaceReportBlocks(
+    testId: string,
+    mode: ReportDocumentMode,
+    blocks: readonly ReportBlockInput[],
+  ): Promise<void>;
+
   // Перенос теста между инсталляциями (.tbtest): запись уже перенумерованного графа
   // одной транзакцией. Идентификаторы приходят готовыми — см. services/test-transfer/plan.
   writeImportedTest(content: TestSnapshotContent): Promise<ImportWriteResult>;
@@ -390,6 +553,10 @@ export class DatabaseStorage implements IStorage {
   private readonly questionsRepo = new QuestionsRepository();
   private readonly scormRepo = new ScormRepository();
   private readonly adaptiveRepo = new AdaptiveRepository();
+  private readonly exposureRepo = new ExposureRepository();
+  private readonly analyticsRepo = new AnalyticsRepository();
+  private readonly slicesRepo = new SlicesRepository();
+  private readonly savedFiltersRepo = new SavedFiltersRepository();
   private readonly attemptsRepo = new AttemptsRepository();
   private readonly scalesVariablesRepo = new ScalesVariablesRepository();
   private readonly testsRepo = new TestsRepository();
@@ -397,6 +564,8 @@ export class DatabaseStorage implements IStorage {
   private readonly assignmentsRepo = new AssignmentsRepository();
   private readonly foldersRepo = new FoldersRepository();
   private readonly mediaRepo = new MediaRepository();
+  private readonly reportBlocksRepo = new ReportBlocksRepository();
+  private readonly reviewCommentsRepo = new ReviewCommentsRepository();
   private readonly transferRepo = new TestTransferRepository();
 
   // ============================================
@@ -405,6 +574,22 @@ export class DatabaseStorage implements IStorage {
 
   getUser(id: string): Promise<User | undefined> {
     return this.usersRepo.getUser(id);
+  }
+
+  getUserByLmsLearnerId(learnerId: string): Promise<User | undefined> {
+    return this.usersRepo.getUserByLmsLearnerId(learnerId);
+  }
+
+  getOrgValues(): Promise<Record<OrgField, OrgValueCount[]>> {
+    return this.usersRepo.getOrgValues();
+  }
+
+  getUserByExternalKey(key: string): Promise<User | undefined> {
+    return this.usersRepo.getUserByExternalKey(key);
+  }
+
+  createImportedExternalUser(input: ImportedExternalUserInput): Promise<User> {
+    return this.usersRepo.createImportedExternalUser(input);
   }
 
   getUserByEmail(email: string): Promise<User | undefined> {
@@ -479,6 +664,14 @@ export class DatabaseStorage implements IStorage {
     return this.groupsRepo.getGroupUsers(groupId);
   }
 
+  ensureGroupMember(userId: string, groupId: string): Promise<boolean> {
+    return this.groupsRepo.ensureGroupMember(userId, groupId);
+  }
+
+  getGroupImportSummary(groupId: string): Promise<{ attempts: number; batches: number }> {
+    return this.groupsRepo.getGroupImportSummary(groupId);
+  }
+
   addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
     return this.groupsRepo.addUserToGroup(userId, groupId);
   }
@@ -542,6 +735,10 @@ export class DatabaseStorage implements IStorage {
 
   getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined> {
     return this.testsRepo.getLatestSnapshot(testId);
+  }
+
+  getSnapshotByVersion(testId: string, version: number): Promise<TestSnapshot | undefined> {
+    return this.testsRepo.getSnapshotByVersion(testId, version);
   }
 
   getSnapshot(id: string): Promise<TestSnapshot | undefined> {
@@ -654,7 +851,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── Assignment Access Tokens (magic links) (delegated to AssignmentsRepository) ─
 
-  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
+  createAssignmentAccessToken(data: { assignmentId: string | null; userId: string; testId: string; tokenHash: string; expiresAt: Date; purpose?: "attempt" | "review" }): Promise<AssignmentAccessToken> {
     return this.assignmentsRepo.createAssignmentAccessToken(data);
   }
 
@@ -668,6 +865,10 @@ export class DatabaseStorage implements IStorage {
 
   revokeAssignmentAccessToken(id: string): Promise<void> {
     return this.assignmentsRepo.revokeAssignmentAccessToken(id);
+  }
+
+  revokeReviewLinks(testId: string, userId: string): Promise<void> {
+    return this.assignmentsRepo.revokeReviewLinks(testId, userId);
   }
 
   revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
@@ -910,12 +1111,28 @@ export class DatabaseStorage implements IStorage {
     return this.testsRepo.deleteTest(id);
   }
 
+  getTestDeleteImpact(id: string): Promise<TestDeleteImpact> {
+    return this.testsRepo.getTestDeleteImpact(id);
+  }
+
   getTestSections(testId: string): Promise<TestSection[]> {
     return this.testsRepo.getTestSections(testId);
   }
 
   getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
     return this.testsRepo.getTestSectionsByTopic(topicId);
+  }
+
+  getTestScenarios(testId: string): Promise<TestScenario[]> {
+    return this.testsRepo.getTestScenarios(testId);
+  }
+
+  getTestScenariosByTopic(topicId: string): Promise<TestScenario[]> {
+    return this.testsRepo.getTestScenariosByTopic(topicId);
+  }
+
+  getTestSectionsByTopicIds(topicIds: string[]): Promise<TestSection[]> {
+    return this.testsRepo.getTestSectionsByTopicIds(topicIds);
   }
 
   getMeasurementsForQuestions(
@@ -944,6 +1161,10 @@ export class DatabaseStorage implements IStorage {
     return this.attemptsRepo.updateAttempt(id, updates);
   }
 
+  getAttemptsByIds(ids: string[]): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByIds(ids);
+  }
+
   getAttemptsByUser(userId: string): Promise<Attempt[]> {
     return this.attemptsRepo.getAttemptsByUser(userId);
   }
@@ -962,6 +1183,10 @@ export class DatabaseStorage implements IStorage {
 
   getAllAttempts(): Promise<Attempt[]> {
     return this.attemptsRepo.getAllAttempts();
+  }
+
+  getAttemptsByTests(testIds: string[]): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByTests(testIds);
   }
 
   // ============================================
@@ -1048,6 +1273,114 @@ export class DatabaseStorage implements IStorage {
     return this.scormRepo.updateScormPackage(id, data);
   }
 
+  recordDeliveries(questionIds: string[], testId: string, at: Date): Promise<void> {
+    return this.exposureRepo.recordDeliveries(questionIds, testId, at);
+  }
+
+  rebuildImportExposure(testId: string): Promise<void> {
+    return this.exposureRepo.rebuildImportExposure(testId);
+  }
+
+  getDeliveryCounts(questionIds: string[], since: Date): Promise<Map<string, number>> {
+    return this.exposureRepo.getDeliveryCounts(questionIds, since);
+  }
+
+  getDeliveryCountsForTest(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>> {
+    return this.exposureRepo.getDeliveryCountsForTest(questionIds, testId, since);
+  }
+
+  getOtherTestsCount(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>> {
+    return this.exposureRepo.getOtherTestsCount(questionIds, testId, since);
+  }
+
+  getOtherTests(questionId: string, testId: string, since: Date): Promise<Array<{ testId: string; delivered: number }>> {
+    return this.exposureRepo.getOtherTests(questionId, testId, since);
+  }
+
+  selectObservations(query: ObservationQuery): Promise<ObservationRows> {
+    return this.analyticsRepo.selectObservations(query);
+  }
+
+  selectOrgSpellings(): Promise<Record<OrgField, string[]>> {
+    return this.analyticsRepo.selectOrgSpellings();
+  }
+
+  selectScaleValuesForTest(testId: string): Promise<ScaleValuesRow[]> {
+    return this.analyticsRepo.selectScaleValuesForTest(testId);
+  }
+
+  selectIndicatorValuesForTest(testId: string): Promise<IndicatorValuesRow[]> {
+    return this.analyticsRepo.selectIndicatorValuesForTest(testId);
+  }
+
+  selectAnswersForTest(testId: string): Promise<TestAnswerRow[]> {
+    return this.analyticsRepo.selectAnswersForTest(testId);
+  }
+
+  selectAnswersForAttempts(attemptIds: string[]): Promise<TestAnswerRow[]> {
+    return this.analyticsRepo.selectAnswersForAttempts(attemptIds);
+  }
+
+  selectDeliveredQuestionIds(attemptIds: string[]): Promise<Map<string, string[]>> {
+    return this.analyticsRepo.selectDeliveredQuestionIds(attemptIds);
+  }
+
+  selectAttemptOrder(testIds: string[], userIds: string[], participantKeys: string[]) {
+    return this.analyticsRepo.selectAttemptOrder(testIds, userIds, participantKeys);
+  }
+
+  selectGroupsOfUsers(userIds: string[]): Promise<Map<string, string[]>> {
+    return this.analyticsRepo.selectGroupsOfUsers(userIds);
+  }
+
+  getSlices(ownerId: string, kind?: "slice" | "filter", testId?: string): Promise<AnalyticsSlice[]> {
+    return this.slicesRepo.getSlices(ownerId, kind, testId);
+  }
+
+  getSlice(id: string, ownerId: string): Promise<AnalyticsSlice | undefined> {
+    return this.slicesRepo.getSlice(id, ownerId);
+  }
+
+  createSlice(input: InsertAnalyticsSlice): Promise<AnalyticsSlice> {
+    return this.slicesRepo.createSlice(input);
+  }
+
+  updateSlice(
+    id: string,
+    ownerId: string,
+    patch: Partial<Pick<AnalyticsSlice, "name" | "testId" | "conditionsJson">>,
+  ): Promise<AnalyticsSlice | undefined> {
+    return this.slicesRepo.updateSlice(id, ownerId, patch);
+  }
+
+  deleteSlice(id: string, ownerId: string): Promise<boolean> {
+    return this.slicesRepo.deleteSlice(id, ownerId);
+  }
+
+  getSavedFilters(ownerId: string, scope: SavedFilterScope): Promise<SavedListFilter[]> {
+    return this.savedFiltersRepo.getSavedFilters(ownerId, scope);
+  }
+
+  createSavedFilter(input: InsertSavedListFilter): Promise<SavedListFilter> {
+    return this.savedFiltersRepo.createSavedFilter(input);
+  }
+
+  updateSavedFilter(
+    id: string,
+    ownerId: string,
+    patch: Partial<Pick<SavedListFilter, "name" | "conditionsJson">>,
+  ): Promise<SavedListFilter | undefined> {
+    return this.savedFiltersRepo.updateSavedFilter(id, ownerId, patch);
+  }
+
+  deleteSavedFilter(id: string, ownerId: string): Promise<boolean> {
+    return this.savedFiltersRepo.deleteSavedFilter(id, ownerId);
+  }
+
+  getLatencyStats(questionIds: string[], testId: string, since: Date): Promise<Map<string, { medianMs: number; sampleSize: number }>> {
+    return this.exposureRepo.getLatencyStats(questionIds, testId, since);
+  }
+
   createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
     return this.scormRepo.createScormAttempt(attempt);
   }
@@ -1072,6 +1405,14 @@ export class DatabaseStorage implements IStorage {
     return this.scormRepo.getScormAttemptsByPackage(packageId);
   }
 
+  getScormAttemptOutcomes(ids: string[]): Promise<Array<{ id: string; achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>> {
+    return this.scormRepo.getScormAttemptOutcomes(ids);
+  }
+
+  getScormAttemptMeasures(ids: string[]): Promise<Array<{ id: string; scalesJson: unknown; variablesJson: unknown }>> {
+    return this.scormRepo.getScormAttemptMeasures(ids);
+  }
+
   updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
     return this.scormRepo.updateScormAttempt(id, data);
   }
@@ -1086,6 +1427,51 @@ export class DatabaseStorage implements IStorage {
 
   getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
     return this.scormRepo.getScormAnswersByAttempt(attemptId);
+  }
+
+  upsertImportedAttempt(data: ImportedAttemptInput): Promise<{ id: string; created: boolean }> {
+    return this.scormRepo.upsertImportedAttempt(data);
+  }
+
+  listImportedAttemptKeys(testId: string): Promise<ImportedAttemptKeyRow[]> {
+    return this.scormRepo.listImportedAttemptKeys(testId);
+  }
+
+  setImportedAttemptKey(id: string, attemptKey: string): Promise<void> {
+    return this.scormRepo.setImportedAttemptKey(id, attemptKey);
+  }
+
+  replaceImportedAnswers(attemptId: string, answers: (InsertScormAnswer & { id: string })[]): Promise<void> {
+    return this.scormRepo.replaceImportedAnswers(attemptId, answers);
+  }
+
+  createLmsImportBatch(batch: InsertLmsImportBatch & { id: string }): Promise<{ id: string }> {
+    return this.scormRepo.createLmsImportBatch(batch);
+  }
+
+  updateLmsImportBatch(id: string, counts: LmsImportCounts): Promise<void> {
+    return this.scormRepo.updateLmsImportBatch(id, counts);
+  }
+
+
+  getLmsImportBatchById(id: string): Promise<LmsImportBatch | undefined> {
+    return this.scormRepo.getLmsImportBatchById(id);
+  }
+
+  getLmsImportBatches(testId: string): Promise<LmsImportBatch[]> {
+    return this.scormRepo.getLmsImportBatches(testId);
+  }
+
+  deleteLmsImportBatch(id: string): Promise<void> {
+    return this.scormRepo.deleteLmsImportBatch(id);
+  }
+
+  recordImportBatchUser(
+    batchId: string,
+    userId: string,
+    flags: { createdUser: boolean; addedToGroup: boolean },
+  ): Promise<void> {
+    return this.scormRepo.recordImportBatchUser(batchId, userId, flags);
   }
 
   // ============================================
@@ -1205,6 +1591,14 @@ export class DatabaseStorage implements IStorage {
     return this.scalesVariablesRepo.upsertTestQuestionScoring(testId, questionId, values);
   }
 
+  setQuestionDelivery(
+    testId: string,
+    questionId: string,
+    excluded: boolean,
+  ): Promise<TestQuestionScoring> {
+    return this.scalesVariablesRepo.setQuestionDelivery(testId, questionId, excluded);
+  }
+
   deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
     return this.scalesVariablesRepo.deleteTestQuestionScoring(testId, questionId);
   }
@@ -1214,6 +1608,69 @@ export class DatabaseStorage implements IStorage {
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
     return this.scalesVariablesRepo.replaceTestQuestionScoring(testId, rows);
+  }
+
+  // ============================================
+  // Документ отчёта (delegated to ReportBlocksRepository)
+  // ============================================
+
+  // ============================================
+  // Комментарии рецензирования (delegated to ReviewCommentsRepository)
+  // ============================================
+
+  listReviewThreads(testId: string): Promise<ReviewThread[]> {
+    return this.reviewCommentsRepo.listReviewThreads(testId);
+  }
+
+  getReviewComment(id: string): Promise<TestReviewComment | undefined> {
+    return this.reviewCommentsRepo.getReviewComment(id);
+  }
+
+  hasReviewReplies(rootId: string): Promise<boolean> {
+    return this.reviewCommentsRepo.hasReviewReplies(rootId);
+  }
+
+  createReviewComment(input: ReviewCommentInput): Promise<TestReviewComment> {
+    return this.reviewCommentsRepo.createReviewComment(input);
+  }
+
+  updateReviewCommentBody(id: string, body: string): Promise<TestReviewComment | undefined> {
+    return this.reviewCommentsRepo.updateReviewCommentBody(id, body);
+  }
+
+  deleteReviewComment(id: string): Promise<boolean> {
+    return this.reviewCommentsRepo.deleteReviewComment(id);
+  }
+
+  resolveReviewComment(
+    id: string,
+    outcome: { status: "accepted" | "rejected"; resolvedBy: string },
+  ): Promise<TestReviewComment | undefined> {
+    return this.reviewCommentsRepo.resolveReviewComment(id, outcome);
+  }
+
+  reopenReviewComment(id: string): Promise<TestReviewComment | undefined> {
+    return this.reviewCommentsRepo.reopenReviewComment(id);
+  }
+
+  countOpenReviewComments(testId: string): Promise<number> {
+    return this.reviewCommentsRepo.countOpenReviewComments(testId);
+  }
+
+  countOpenReviewCommentsByTests(testIds: string[]): Promise<Record<string, number>> {
+    return this.reviewCommentsRepo.countOpenReviewCommentsByTests(testIds);
+  }
+
+  listReportBlocks(testId: string, mode: ReportDocumentMode): Promise<ReportBlockRow[]> {
+    return this.reportBlocksRepo.listReportBlocks(testId, mode);
+  }
+
+  replaceReportBlocks(
+    testId: string,
+    mode: ReportDocumentMode,
+    blocks: readonly ReportBlockInput[],
+  ): Promise<void> {
+    return this.reportBlocksRepo.replaceReportBlocks(testId, mode, blocks);
   }
 
   // ============================================

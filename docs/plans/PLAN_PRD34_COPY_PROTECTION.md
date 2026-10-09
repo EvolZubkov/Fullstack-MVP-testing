@@ -16,7 +16,7 @@
 вешаются на корень сцены один раз, а единственное CSS-правило (печать) впрыскивается ядром в
 корень сцены — поэтому загруженный извне шаблон (PRD-3) получает защиту, ничего о ней не зная.
 
-**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@universityrt/ui-kit`,
+**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@skillum/ui-kit`,
 Vitest + jsdom (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm/**`), без внешних
 библиотек. Спецификация:
 [docs/specs/prd-34/copy-protection.md](../specs/prd-34/copy-protection.md).
@@ -39,7 +39,7 @@ Vitest + jsdom (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm
 - Разметка — только DS-классы (`ou-*`) и `tb-*` слоя проекта; проверенные в этом плане классы
   `ou-toast`, `ou-toast--info`, `ou-toast-stack`, `ou-toast__ico`, `ou-toast__body`,
   `ou-toast__title`, `ou-toast__desc`, `ou-empty`, `ou-empty--inline`, `ou-empty--horizontal`,
-  `ou-empty__art`, `ou-empty__content`, `ou-empty__title` есть в `client/src/styles/vendor/university-rt.css`. Баннер ДС
+  `ou-empty__art`, `ou-empty__content`, `ou-empty__title` есть в `client/src/styles/vendor/skillum-ds.css`. Баннер ДС
   объявлен inline-уведомлением и тостом НЕ является — брать его для сообщений нельзя.
 
 ## Roadmap (требования спецификации → задачи плана)

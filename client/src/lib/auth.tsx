@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { User } from "@shared/schema";
 import { hasPermission, type Role, type Capability } from "@shared/access";
+import { isScopeRefusalBody } from "./magic-scope";
 
 /**
  * User as returned by the auth API: DB fields plus the effective role set and
@@ -12,13 +13,21 @@ import { hasPermission, type Role, type Capability } from "@shared/access";
 export type AuthUser = User & {
   roles?: Role[];
   permissions?: Capability[];
-  magicScope?: { testId: string } | null;
+  magicScope?: { testId: string; purpose?: "attempt" | "review" } | null;
 };
+
+/**
+ * How a sign-in attempt ended. `link-scope` is its own answer on purpose: the
+ * server refuses a request that steps outside an invitation link with the same
+ * bluntness whatever the request was, and reporting that as `invalid-credentials`
+ * tells the person their password is wrong when it is not.
+ */
+export type LoginOutcome = "ok" | "invalid-credentials" | "link-scope";
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<LoginOutcome>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -54,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<LoginOutcome> => {
     setIsLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -66,11 +75,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-        return true;
+        return "ok";
       }
-      return false;
+      if (res.status === 403 && isScopeRefusalBody(await res.text())) return "link-scope";
+      return "invalid-credentials";
     } catch {
-      return false;
+      return "invalid-credentials";
     } finally {
       setIsLoading(false);
     }
@@ -121,4 +131,17 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+/**
+ * Текущий пользователь ИЛИ `null`, когда провайдера авторизации над деревом нет.
+ *
+ * Отдельно от {@link useAuth}, который на отсутствие провайдера бросает: тот контракт
+ * верен для экранов, где без пользователя делать нечего. Есть и другие — узел, которому
+ * пользователь нужен лишь чтобы отличить свои записи от чужих, и который собирают в
+ * компонентных тестах без всякого провайдера. Такому узлу падение вместо `null` не
+ * помогает: он и с `null` рисуется правильно, просто без подписи «Вы».
+ */
+export function useOptionalAuth(): AuthContextType | null {
+  return useContext(AuthContext);
 }

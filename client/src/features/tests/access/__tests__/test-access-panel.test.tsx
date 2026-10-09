@@ -14,7 +14,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
 const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastMock, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import { TestAccessPanel } from "../test-access-panel";
 
@@ -186,7 +189,7 @@ describe("<TestAccessPanel />", () => {
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     await waitFor(() =>
       expect(toastMock).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Владельца сменить нельзя" }),
+        expect.objectContaining({ tone: "error", description: "Владельца сменить нельзя" }),
       ),
     );
     expect(onClose).not.toHaveBeenCalled();

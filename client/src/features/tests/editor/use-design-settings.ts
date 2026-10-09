@@ -12,6 +12,10 @@
  *     own dirty flag.
  *   - Provide a `save()` mutation that resolves with the persisted settings
  *     and invalidates the design query.
+ *   - Serve the CREATE mode too ({@link DesignCreateBinding}): there is no test to
+ *     fetch and nothing to PUT, but the author still picks a template. The choice
+ *     then lives in the editor's own draft and travels with the create request; the
+ *     hook only loads that template's manifest so the card and the gallery work.
  *
  * Anti-goals:
  *   - This hook is intentionally scoped to ONE template at a time. The
@@ -30,6 +34,7 @@ import {
 } from "@shared/template/themes";
 import type { LabelDeclaration, LabelValues } from "@shared/template/labels";
 import type { ResultsBlockKey, TemplateBlockOrder } from "@shared/template/results-order";
+import type { TestDesignDraft } from "./test-editor.types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +83,23 @@ export type TemplateParam = {
    * choices (e.g. progress.mode `questions` → «По вопросам»).
    */
   optionLabels?: Record<string, string>;
+  /**
+   * Pictures for `options`, keyed by option value: paths to the template's OWN files,
+   * served by `GET /api/templates/:id/assets/*`. Present ⇒ the editor draws a grid of
+   * previews instead of a dropdown — a choice between LOOKS (a logo, a background) is
+   * not a choice a list of words can express (spec §6).
+   *
+   * A value may be one path, or a pair per interface theme: a lockup drawn for a light
+   * ground is unreadable on the dark editor, and vice versa, so the card shows the
+   * picture that matches the theme the author is looking at.
+   */
+  optionPreviews?: Record<string, string | { light?: string; dark?: string }>;
+  /**
+   * Data attribute the chosen value is written to on the scene root, so the template's
+   * CSS can select on it (`[data-brand-logo="b2b"] …`). See the shared
+   * {@link module:shared/template/params-css buildTemplateDataAttrs}.
+   */
+  dataAttr?: string;
   /** PRD-7 S12-G4 media params: client-side validation hint, mime/ext list. */
   accept?: string;
   /** PRD-7 S12-G4 media params: max upload size in kilobytes. */
@@ -155,23 +177,26 @@ export type TemplateRow = {
   reportLabelKeys?: string[];
 };
 
-export type DesignSettings = {
-  templateId: string;
-  templateVersion?: string;
-  templateApiVersion?: string;
-  params?: Record<string, unknown>;
-  /** PRD-23: palette pinned by the author; absent reads as «Авто». */
-  theme?: TestTheme;
-  /** PRD-23: colour overrides per palette. Only for a template with themes. */
-  paramsByTheme?: Partial<Record<ThemeId, Record<string, unknown>>>;
-  /**
-   * PRD-49 §4.2: the test's own wording of the labels the template declares — only the
-   * DEVIATIONS. A key that is absent means «the template's text stands», so the settings
-   * of a test nobody reworded keep exactly the shape they had before the PRD.
-   */
-  labels?: LabelValues;
-  /** PRD-49 §3: the author's order of the four sub-blocks under the results umbrella. */
-  resultsBlockOrder?: ResultsBlockKey[];
+/**
+ * Форма настроек оформления. Объявлена в модели редактора
+ * ({@link module:features/tests/editor/test-editor.types TestDesignDraft}), потому
+ * что у черновика НОВОГО теста этот срез принадлежит ей; здесь он живёт под своим
+ * историческим именем, которым пользуются панели и тесты.
+ */
+export type DesignSettings = TestDesignDraft;
+
+/**
+ * Режим СОЗДАНИЯ: теста ещё нет, и черновик оформления принадлежит модели
+ * редактора — он уедет вместе с созданием. Хук в этом режиме ничего не грузит по
+ * адресу теста и не сохраняет сам, но работает во всём остальном: тянет манифест
+ * выбранного шаблона и правит переданный черновик. Так у настроек оформления
+ * остаётся ОДНО место хранения и до первого сохранения, и после.
+ */
+export type DesignCreateBinding = {
+  /** Черновик автора; живёт в `TestEditorModel.design`. */
+  draft: DesignSettings;
+  /** Записать новое состояние туда же — вместо правки локального состояния хука. */
+  onChange: (next: DesignSettings) => void;
 };
 
 export type UseDesignSettingsResult = {
@@ -280,7 +305,13 @@ async function fetchTemplate(templateId: string): Promise<TemplateRow> {
   return res.json();
 }
 
-async function putDesign(
+/**
+ * Сохранение оформления. Экспортируется, потому что этим же маршрутом черновик
+ * НОВОГО теста дописывается сразу после его создания (`useTestEditor`): маршрут
+ * проверяет параметры против манифеста, темы, надписи и порядок блоков, и второй
+ * путь записи означал бы вторую, неизбежно расходящуюся проверку.
+ */
+export async function putDesign(
   testId: string,
   body: DesignSettings,
 ): Promise<DesignSettings> {
@@ -299,7 +330,10 @@ async function putDesign(
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useDesignSettings(testId: string | undefined): UseDesignSettingsResult {
+export function useDesignSettings(
+  testId: string | undefined,
+  createBinding?: DesignCreateBinding,
+): UseDesignSettingsResult {
   const queryClient = useQueryClient();
 
   const designQuery = useQuery({
@@ -310,7 +344,24 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
 
   const persisted: DesignSettings | undefined = designQuery.data;
 
-  const [draft, setDraft] = useState<DesignSettings>({ templateId: "default" });
+  const [localDraft, setLocalDraft] = useState<DesignSettings>({ templateId: "default" });
+
+  // В режиме создания черновик принадлежит модели редактора: сохранённых настроек
+  // нет, а набранное должно уехать вместе с созданием теста. Подмена делается ОДНОЙ
+  // парой «состояние + сеттер», поэтому все панели и все сеттеры ниже написаны
+  // одинаково для обоих режимов и второго места хранения не возникает.
+  const draft = createBinding ? createBinding.draft : localDraft;
+  const setDraft = (
+    next: DesignSettings | ((prev: DesignSettings) => DesignSettings),
+  ): void => {
+    if (createBinding) {
+      createBinding.onChange(
+        typeof next === "function" ? next(createBinding.draft) : next,
+      );
+      return;
+    }
+    setLocalDraft(next);
+  };
 
   // Sync the draft from the persisted settings as soon as they (re)load. Done
   // during render (React's "adjust state when a prop changes" pattern) rather than
@@ -329,9 +380,15 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
   const templateQuery = useQuery({
     queryKey: ["templates", draft.templateId],
     queryFn: () => fetchTemplate(draft.templateId),
-    enabled: Boolean(persisted) && Boolean(draft.templateId),
+    // В режиме создания сохранённых настроек нет и не будет, но манифест нужен: без
+    // него карточка шаблона пуста, и выбирать автору нечего.
+    enabled: (Boolean(persisted) || createBinding !== undefined) && Boolean(draft.templateId),
   });
 
+  // Режим создания остаётся ЧИСТЫМ намеренно: сохранённого снимка нет, сохранять по
+  // адресу теста нечего, а изменённость отслеживает сама модель редактора (срез
+  // `design` попадает в её сравнение с снимком). Подняв здесь флаг, мы заставили бы
+  // общее «Сохранить» слать PUT по адресу теста, которого ещё не существует.
   const isDirty = useMemo(() => {
     if (!persisted) return false;
     const norm = (s: DesignSettings) =>

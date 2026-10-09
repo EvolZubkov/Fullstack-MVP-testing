@@ -9,6 +9,7 @@ import testsRouter from "./tests";
 import attemptsRouter from "./attempts";
 import assignmentsRouter from "./assignments";
 import analyticsRouter from "./analytics/index";
+import savedFiltersRouter from "./saved-filters";
 import scormTelemetryRouter from "./scorm-telemetry";
 import logsRouter from "./logs";
 import accessRouter from "./access";
@@ -21,6 +22,7 @@ import testsWorkbookRouter from "./tests-workbook";
 import testTransferRouter from "./test-transfer";
 import workbookRouter from "./workbook";
 import debugPlayerRouter from "./debug-player";
+import reviewRouter from "./review";
 import homeRouter from "./home";
 import reportRouter from "./report";
 import mediaRouter from "./media";
@@ -53,6 +55,7 @@ export {
   homeRouter,
   reportRouter,
   mediaRouter,
+  savedFiltersRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -66,6 +69,7 @@ export const routerConfig = [
   { path: "/api/tests", router: testsWorkbookRouter },
   { path: "/api/tests", router: testTransferRouter }, // перенос теста между инсталляциями (.tbtest)
   { path: "/api/tests", router: debugPlayerRouter }, // PRD-18 debug player (session/play/delete)
+  { path: "/api/tests", router: reviewRouter }, // PRD-52 рецензирование: комментарии и прогон
   { path: "/api/workbook", router: workbookRouter },
   { path: "/api/folders", router: foldersRouter },
   { path: "/api/test-folders", router: testFoldersRouter },
@@ -82,6 +86,8 @@ export const routerConfig = [
   // Скачивание руководств («Материалы» на главной); право проверяется на каждый
   // документ отдельно. Префиксно — до общих "/api".
   { path: "/api/docs", router: docsRouter },
+  // Сохранённые фильтры списков (банк, «Тесты», «Пользователи»). Префиксно — до общих "/api".
+  { path: "/api/saved-filters", router: savedFiltersRouter },
   { path: "/api/users", router: usersRouter },
   { path: "/api/groups", router: groupsRouter },
   { path: "/api/questions", router: questionsRouter },

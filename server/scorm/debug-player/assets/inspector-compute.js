@@ -257,18 +257,102 @@
     return rows;
   }
 
-  function buildAttemptRows(att) {
-    return (att.flatQuestions || []).map(function (fq) {
-      return { q: fq.question, topicName: fq.topicName, answer: (att.answers || {})[fq.question.id], levelName: null };
+  /**
+   * PRD-36: строки прошлой попытки. В формате 2 попытка несёт РЯДЫ, а вопросы разворачиваются
+   * из `TEST_DATA` пакета по позициям; запись пакета, собранного до PRD-36, по-прежнему несёт
+   * объекты вопросов, и обе формы показывает одна вкладка.
+   */
+  function buildAttemptRows(att, pkg) {
+    if (att.flatQuestions) {
+      return att.flatQuestions.map(function (fq) {
+        return { q: fq.question, topicName: fq.topicName, answer: (att.answers || {})[fq.question.id], levelName: null };
+      });
+    }
+    var detail = att.d;
+    var data = pkg && pkg.TEST_DATA;
+    // Кодек живёт в окне ПАКЕТА (плоский бандл рантайма), а инспектор — в окне плеера.
+    var RS = (pkg && pkg.w && pkg.w.TBRunState) || null;
+    if (!detail || !data || !RS) return [];
+    var positions = RS.decodeDelivery(detail.dl || "");
+    var questions = [], rows = [];
+    positions.forEach(function (p) {
+      var sec = (data.sections || [])[p.s];
+      var q = (sec && sec.questions) ? sec.questions[p.q] : null;
+      if (!q) return;
+      questions.push(q);
+      rows.push({ q: q, topicName: sec.topicName, answer: undefined, levelName: null });
     });
+    var answers = RS.decodeAnswers(detail.an || "", questions);
+    rows.forEach(function (row, i) { row.answer = answers[i]; });
+    return rows;
   }
 
+  /**
+   * PRD-36 FR-03: показываемые попытки. Списка в состоянии больше нет — есть лучшая и
+   * последняя; когда они совпали (`last: 0`), показывается одна. Легаси-состояние отдаёт
+   * свой массив как прежде.
+   */
   function getSuspendAttempts(cmi) {
-    try { var s = JSON.parse((cmi && cmi["cmi.suspend_data"]) || "null"); return (s && s.attempts) || []; } catch (e) { return []; }
+    try {
+      var s = JSON.parse((cmi && cmi["cmi.suspend_data"]) || "null");
+      if (!s) return [];
+      if (s.attempts) return s.attempts;
+      var out = [];
+      if (s.best) out.push(s.best);
+      if (s.last && typeof s.last === "object") out.push(s.last);
+      return out;
+    } catch (e) { return []; }
   }
 
   // ── Протокол: per-question structured records (drawn question, answer,
   // correctness, price PRD-10, scale contributions PRD-5). HTML/JSX is the host's. ──
+
+  /**
+   * PRD-52 FR-16/FR-17: уровень вопроса по диапазонам сложности темы.
+   *
+   * В обычном адаптивном прогоне уровень известен от самой лестницы, но в режиме
+   * полной выдачи её нет — вопросы идут подряд. Тогда уровень вычисляется здесь и
+   * показывается СПРАВОЧНО: на какой ступени вопрос выдавался бы ученику.
+   *
+   * `outsideLevels` — вопрос темы с лестницей, не попавший ни в один диапазон:
+   * ученику он не выдастся никогда, и увидеть это можно только тут.
+   */
+  function questionLevel(topics, topicId, difficulty) {
+    var list = topics || [];
+    var topic = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].topicId === topicId) { topic = list[i]; break; }
+    }
+    var levels = (topic && topic.levels) || [];
+    if (!levels.length) return { levelName: null, outsideLevels: false };
+    if (difficulty == null) return { levelName: null, outsideLevels: true };
+    for (var j = 0; j < levels.length; j++) {
+      var lv = levels[j];
+      if (difficulty >= lv.minDifficulty && difficulty <= lv.maxDifficulty) {
+        return { levelName: lv.levelName || null, outsideLevels: false };
+      }
+    }
+    return { levelName: null, outsideLevels: true };
+  }
+
+  /**
+   * PRD-52 FR-12: идёт ли прогон в режиме полной выдачи. Читается там же, где его
+   * ставит окно рецензента, — в хеше launch-URL пакета; в проде хеша нет.
+   */
+  function isFullDrawRun(pkg) {
+    try {
+      var h = (pkg && pkg.w && pkg.w.location && pkg.w.location.hash) || "";
+      return /(?:^#|[#&])tbfa=1(?:&|$)/.test(h);
+    } catch (e) { return false; }
+  }
+
+
+  /** Уровень строки протокола в адаптивном тесте (см. questionLevel). */
+  function adaptiveLevel(pkg, row, q) {
+    var topics = (pkg && pkg.TEST_DATA && pkg.TEST_DATA.adaptiveTopics) || [];
+    return questionLevel(topics, row.topicId || (q && q.topicId), q && q.difficulty);
+  }
+
   function buildProtocolRows(pkg, cmi, mode) {
     mode = mode || "live";
     var rows, note = "", total = 0;
@@ -283,7 +367,7 @@
       total = (pst && pkg.mode !== "adaptive" && pst.flatQuestions) ? pst.flatQuestions.length : rows.length;
     } else {
       var att = getSuspendAttempts(cmi)[parseInt(mode.slice(4), 10)];
-      rows = att ? buildAttemptRows(att) : [];
+      rows = att ? buildAttemptRows(att, pkg) : [];
       total = rows.length;
       if (att && (!att.flatQuestions || !att.flatQuestions.length)) note = "Для этой попытки детальный состав не сохранён (адаптивный режим).";
     }
@@ -327,7 +411,10 @@
         priceNote: measure ? "цена: не начисляется — измерительный вопрос" : priceNote(pr),
         earned: Math.round(earned * 100) / 100, points: points,
         difficulty: (showDiff && q.difficulty != null) ? q.difficulty : null,
-        levelName: row.levelName || null,
+        // Уровень: из самой лестницы, а если её в этом прогоне нет (полная выдача) —
+        // вычисленный по диапазонам сложности темы.
+        levelName: row.levelName || (showDiff ? adaptiveLevel(pkg, row, q).levelName : null),
+        outsideLevels: showDiff && !row.levelName ? adaptiveLevel(pkg, row, q).outsideLevels : false,
         contribs: pkg ? contributionsFor(pkg, q, ans) : [],
       };
     });
@@ -504,11 +591,25 @@
     if (id.indexOf("_course_") !== -1) return { kind: "status", text: "🔗 Рекомендованный курс (object_id " + resp + ")", sub: desc };
     return { kind: "muted", text: "• " + id + " → " + resp, sub: "" };
   }
+  /** PRD-36 FR-17: доля бюджета 4096 в подписи события записи состояния. */
+  function budgetSuffix(value) {
+    var used = String(value || "").length;
+    return " · " + Math.round((used / 4096) * 100) + "% бюджета";
+  }
+
+  /** Сводка ПОСЛЕДНЕЙ попытки формата 2: `last: 0` значит «та же, что лучшая». */
+  function lastSummaryOf(stateObj) {
+    if (!stateObj || !stateObj.best) return null;
+    return (stateObj.last === 0 || !stateObj.last) ? stateObj.best : stateObj.last;
+  }
+
   function describeSuspendWrite(value, prevRaw) {
     var sizeStr = fmtBytes(byteLen(value));
     var cur = null, prev = null;
     try { cur = JSON.parse(value || "null"); } catch (e) {}
     try { prev = JSON.parse(prevRaw || "null"); } catch (e) {}
+    // PRD-36: в формате 2 попытка не дописывается в список, а обновляет лучшую и последнюю,
+    // поэтому «сохранена попытка» видно по СМЕНЕ сводки, а не по росту длины массива.
     var pa = (prev && prev.attempts) ? prev.attempts.length : 0;
     var ca = (cur && cur.attempts) ? cur.attempts.length : 0;
     var pu = (prev && prev.attemptsUsed) || 0, cu = (cur && cur.attemptsUsed) || 0;
@@ -516,11 +617,19 @@
       var a = cur.attempts[ca - 1];
       return { kind: "suspend", text: "💾 Результат попытки #" + a.attemptNumber + " сохранён: " + Math.round(a.percent) + "% — " + (a.passed ? "зачёт" : "незачёт"), sub: "suspend_data: " + sizeStr };
     }
-    if (cur && cu > pu) return { kind: "suspend", text: "▶ Старт попытки " + cu + " зарегистрирован", sub: "suspend_data: " + sizeStr };
+    var curLast = lastSummaryOf(cur), prevLast = lastSummaryOf(prev);
+    if (curLast && (!prevLast || curLast.at !== prevLast.at)) {
+      return { kind: "suspend", text: "💾 Результат попытки #" + curLast.n + " сохранён: " + Math.round(curLast.pc) + "% — " + (curLast.ok ? "зачёт" : "незачёт"), sub: "suspend_data: " + sizeStr + budgetSuffix(value) };
+    }
+    if (cur && cu > pu) return { kind: "suspend", text: "▶ Старт попытки " + cu + " зарегистрирован", sub: "suspend_data: " + sizeStr + budgetSuffix(value) };
     if (cur && cur.currentSession) {
       var cs = cur.currentSession;
-      var n = cs.answers ? Object.keys(cs.answers).length : 0;
-      return { kind: "suspend", text: "💾 Прогресс сохранён: вопрос " + ((cs.currentIndex || 0) + 1) + " (ответов: " + n + ")", sub: "suspend_data: " + sizeStr };
+      // Формат 2 хранит ответы РЯДОМ, а не словарём: их число — непустые ячейки ряда.
+      var n = cs.answers
+        ? Object.keys(cs.answers).length
+        : String(cs.an || "").split(",").filter(function (c) { return c !== ""; }).length;
+      var at = (cs.currentIndex !== undefined ? cs.currentIndex : (cs.i || 0)) + 1;
+      return { kind: "suspend", text: "💾 Прогресс сохранён: вопрос " + at + " (ответов: " + n + ")", sub: "suspend_data: " + sizeStr + budgetSuffix(value) };
     }
     return { kind: "suspend", text: "💾 suspend_data записан", sub: "размер: " + sizeStr };
   }
@@ -728,6 +837,17 @@
     var r = null;
     try { if (typeof pkg.w.calculateResults === "function") r = pkg.w.calculateResults(); } catch (e) {}
     if (!r) return { available: false, adaptive: false };
+    // PRD-52 FR-14: в режиме полной выдачи выдан весь банк, а порог настроен на
+    // выборку — балл, процент и вердикт были бы недостоверны, поэтому их здесь нет
+    // вовсе. Протокол при этом работает: верность отдельного ответа от полноты
+    // выдачи не зависит.
+    if (isFullDrawRun(pkg)) {
+      return {
+        available: true, adaptive: false, suppressed: true,
+        earnedPoints: null, possiblePoints: null, percent: null, passed: null,
+        rule: null, sections: [],
+      };
+    }
     // Sectioned flow (linear_by_topics / router_by_topics) drives the status-bar
     // «Прогресс · разделы» lane; flat flow shows «вопрос i из N». Default flat.
     var flowMode = (pkg.TEST_DATA && pkg.TEST_DATA.flowPolicy && pkg.TEST_DATA.flowPolicy.mode) || "linear_flat";
@@ -753,7 +873,7 @@
       });
     }
     return {
-      available: true, adaptive: false,
+      available: true, adaptive: false, suppressed: false,
       sectioned: flowMode !== "linear_flat",
       earnedPoints: round2(r.earnedPoints), possiblePoints: round2(r.possiblePoints),
       correct: r.correct, totalQuestions: r.totalQuestions,
@@ -1087,7 +1207,16 @@
 
   window.TBInspector = {
     fmtNum: fmtNum, trunc: trunc, byteLen: byteLen, fmtBytes: fmtBytes,
-    buildScore: buildScore, buildDraw: buildDraw,
+    buildScore: buildScore, buildDraw: buildDraw, questionLevel: questionLevel,
+    // PRD-52: какой вопрос сейчас на экране — по нему панель подставляет место
+    // комментария. Тот же резолвер, что рисует эталон, поэтому «место» и подсветка
+    // всегда говорят об одном и том же вопросе.
+    currentScreenQuestion: function (iframeWin) {
+      try {
+        var st = (iframeWin && iframeWin.state) || null;
+        return currentScreenQuestion(iframeWin, st);
+      } catch (e) { return null; }
+    },
     applyReference: applyReference, clearReference: clearReference, guardFinishButton: guardFinishButton,
     readPkg: readPkg, parseInteractions: parseInteractions, interactionById: interactionById,
     typeLabel: typeLabel, humanAnswer: humanAnswer, isActiveMeasure: isActiveMeasure,

@@ -23,8 +23,8 @@ import {
   Input,
   Stack,
   Text,
-} from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+  useToast,
+} from "@skillum/ui-kit";
 import { t } from "@/lib/i18n";
 
 const forgotPasswordSchema = z.object({
@@ -34,7 +34,7 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -60,7 +60,7 @@ export default function ForgotPasswordPage() {
 
       if (res.status === 429) {
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.auth.tooManyRequests,
           description: t.auth.tooManyRequestsDescription,
         });
@@ -72,7 +72,7 @@ export default function ForgotPasswordPage() {
       setIsSuccess(true);
     } catch (error) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.auth.somethingWentWrong,
       });

@@ -159,9 +159,15 @@ describe("выбор варианта запекается в пакет (FR-22)
     // Картинки варианта — файлы шаблона, а он лежит в пакете под `template/` (FR-05),
     // поэтому ожидание строится с той же базой, с какой запекает сборщик.
     const expected = resolveReportBake(defaultManifest(), "report", null, "template/");
+    // PRD-51: рядом с выбором вида сборщик кладёт ещё и ДОКУМЕНТ — состав блоков. Он
+    // проверяется своим гардом (`tests/scorm-report-document.test.ts`), а здесь снимается
+    // с ожидания: предмет этого теста — запекание ВЫБРАННОГО ВАРИАНТА, и сравнение всего
+    // объекта целиком ломалось бы на каждом изменении соседнего среза.
+    const { document, ...bakedVariant } = td.designSettings.report as Record<string, unknown>;
+    expect(document, "документ рядом с видом обязан быть").toBeTruthy();
     // `enabled` добавляет сборщик поверх выбора вида: выдавать ли документ — общая
     // настройка теста, и рантайму она нужна там же, где макет (PRD-27 §7.1).
-    expect(td.designSettings.report).toEqual({ ...expected, enabled: true });
+    expect(bakedVariant).toEqual({ ...expected, enabled: true });
     // Не «какой-нибудь report.css по имени файла», а именно объявленный вариантом.
     expect(td.designSettings.report.styleFile).toBe(expected.styleFile);
   });

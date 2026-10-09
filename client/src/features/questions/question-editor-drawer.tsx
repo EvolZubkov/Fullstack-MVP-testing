@@ -1,10 +1,11 @@
 /**
  * @module features/questions/question-editor-drawer
- * @description Reusable question editor mounted in a UniversityRT design-system
+ * @description Reusable question editor mounted in a Skillum design-system
  * Drawer, used by both the question bank and the `/author/content` section.
  * The field layout follows the approved wireframe
  * (docs/wireframes/approved/content-bank-explorer.html, state s-q-drawer):
- * Тема -> Тип (SegmentedControl) -> Текст -> Варианты (per-type builder with
+ * Тема (Select with `searchable` + a reset button — the bank holds hundreds of
+ * topics) -> Тип (Select) -> Текст -> Варианты (per-type builder with
  * drag-reorder handles) -> «Случайный порядок вариантов» -> Сложность
  * (nullable, PRD-16) -> Медиа -> Теги, with the additive (non-wireframe)
  * blocks — conditional feedback and the PRD-15 price-moved hint — appended
@@ -18,8 +19,22 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isAllocationFeasible } from "@shared/questions/allocation";
-import { useMutation } from "@tanstack/react-query";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { isSimulation, isTextEntry } from "@shared/questions/question-type";
+import { ScenarioBlock, type ScenarioData } from "./scenario/scenario-block";
+import { AnswerRulesBlock } from "./answer-rules/answer-rules-block";
+import { BlanksBlock } from "./answer-rules/blanks-block";
+import type { BlankRuleSet } from "@shared/questions/blanks-render";
+import {
+  createDraft as createAnswerRulesDraft,
+  isDirty as answerRulesDirty,
+  toCorrectJson as answerRulesToCorrectJson,
+  type AnswerRulesDraft,
+} from "./answer-rules/answer-rules-model";
+import type { AnswerRuleSet } from "@shared/answer-check";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { BarChart3, Braces, Code, Plus, Sigma, Trash2, GripVertical } from "lucide-react";
+import { useLocation } from "wouter";
+import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -35,6 +50,9 @@ import {
   IconButton,
   Input,
   Label,
+  MenuItem,
+  MenuTrigger,
+  ModalDialog,
   NumberInput,
   Radio,
   SegmentedControl,
@@ -42,17 +60,52 @@ import {
   Slider,
   Stack,
   Switch,
+  Tag,
   Text,
   Textarea,
-} from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+  useToast,
+} from "@skillum/ui-kit";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { t } from "@/lib/i18n";
 import { handleMarkdownPaste } from "./paste-markdown";
+import { insertMarkup, CODE_LANGUAGES, type MarkupKind } from "./insert-markup";
+import { promptFormatOf, type PromptFormat } from "@shared/questions/prompt-format";
+import { describeModeSwitch, convertPrompt, type ModeSwitchReport } from "@shared/text/mode-switch";
+import { QuestionPreviewModal } from "./question-preview-modal";
+import { removalPhrases } from "./sanitize-report";
+import type { SanitizeRemoval } from "@shared/security/html-sanitize";
+import { RichPromptEditor } from "./rich-prompt-editor";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
 import { TagsInput } from "@/pages/author/tags-input";
+import { useOptionalAuth } from "@/lib/auth";
+import {
+  draftAt,
+  draftsFromStored,
+  moveDraft,
+  removeDraft,
+  storedFromDrafts,
+  updateDraft,
+  type OptionFeedbackDraft,
+} from "./option-feedback-draft";
+
+/** PRD-70 FR-13: ориентир сложности «По ответам» — свод наблюдаемой сложности по тестам. */
+interface DifficultyLandmark {
+  hardness: number;
+  tests: number;
+  observations: number;
+}
+
+/** Русская форма числительного: формы для 1, 2–4 и 5+. */
+function pluralForm(n: number, [one, few, many]: [string, string, string]): string {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
 
 const questionTypes = [
   { value: "single", label: t.questions.singleChoice },
@@ -61,6 +114,10 @@ const questionTypes = [
   { value: "ranking", label: t.questions.ranking },
   { value: "scale", label: t.questions.scaleChoice },
   { value: "allocation", label: t.questions.allocation },
+  { value: "short", label: t.questions.shortAnswer },
+  { value: "blanks", label: t.questions.blanks },
+  { value: "long", label: t.questions.longAnswer },
+  { value: "simulation", label: t.questions.simulation },
 ] as const;
 
 type QuestionType = typeof questionTypes[number]["value"];
@@ -69,7 +126,7 @@ type QuestionType = typeof questionTypes[number]["value"];
 // and the graded config are configured per test («Оценка» tab of the editor).
 const baseQuestionSchema = z.object({
   topicId: z.string().min(1, t.questions.topicRequired),
-  type: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
+  type: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long", "simulation"]),
   prompt: z.string().min(1, t.questions.textRequired),
 });
 
@@ -88,6 +145,11 @@ export interface QuestionEditorDrawerProps {
   onClose: () => void;
   /** Called after a successful create/update (e.g. to invalidate + toast). */
   onSaved?: () => void;
+  /**
+   * PRD-70 FR-30: «Статистика» — переход на страницу вопроса банка. Задан — переходом владеет
+   * экран (дерево банка кладёт в него путь для крошки возврата); не задан — простой переход.
+   */
+  onOpenStatistics?: (questionId: string) => void;
 }
 
 /**
@@ -102,14 +164,107 @@ export function QuestionEditorDrawer({
   tagSuggestions = [],
   onClose,
   onSaved,
+  onOpenStatistics,
 }: QuestionEditorDrawerProps) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const contentGuard = useContentGuard();
+  // PRD-70 FR-31: ориентир «По ответам» над шкалой сложности — у сохранённого вопроса и только
+  // с правом на аналитику: он из неё.
+  const auth = useOptionalAuth();
+  const canAnalytics = Boolean(question?.id) && (auth?.can("analytics.read") ?? false);
+  const { data: landmarkData } = useQuery<{ landmark: DifficultyLandmark | null }>({
+    queryKey: [`/api/analytics/questions/${question?.id}/difficulty-landmark`],
+    enabled: open && canAnalytics,
+  });
+  const landmark = landmarkData?.landmark ?? null;
+  const [, navigate] = useLocation();
 
   const [selectedType, setSelectedType] = useState<QuestionType>("single");
+  // PRD-57 §6.1: черновик набора правил держит ОБА вида ответа, поэтому он живёт
+  // здесь, а не внутри блока — иначе переключение вида пересоздавало бы состояние.
+  const [answerRules, setAnswerRules] = useState<AnswerRulesDraft>(() => createAnswerRulesDraft(null));
+  // PRD-57 FR-28v: предел длины — свойство ВОПРОСА, поэтому он рядом с черновиком правил,
+  // а не внутри него. `undefined` означает «системный предел».
+  const [shortMaxLength, setShortMaxLength] = useState<number | undefined>(undefined);
+  // PRD-57 FR-24: наборы правил ПО ПРОПУСКАМ. Список строится из текста задания, поэтому
+  // здесь лежат только правила — имена приходят из `prompt`.
+  const [blanks, setBlanks] = useState<BlankRuleSet[]>([]);
+  // PRD-57 FR-12: автор задаёт подсказку-заполнитель, предел длины и обязательность.
+  const [longPlaceholder, setLongPlaceholder] = useState<string>("");
+  const [longMaxLength, setLongMaxLength] = useState<number | undefined>(undefined);
+  const [longRequired, setLongRequired] = useState<boolean>(false);
+  /** «Сценарий в ИС»: принятый сценарий — всё содержимое вопроса этого типа. */
+  const [scenarioData, setScenarioData] = useState<ScenarioData | null>(null);
+  /** Поле текста задания: вставка разметки идёт В ПОЗИЦИЮ КУРСОРА. */
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  /** FR-24g: предпросмотр — окно по кнопке подвала, а не постоянный блок в ящике. */
+  const [previewOpen, setPreviewOpen] = useState(false);
+  /** PRD-57 §4.3: режим, в котором автор набирает текст задания. */
+  const [promptFormat, setPromptFormat] = useState<PromptFormat>("markdown");
+  /**
+   * Ключ перепривязки визуального поля: растёт, когда текст заменили НЕ набором —
+   * переключением режима, вставкой кнопкой или открытием другого задания.
+   */
+  const [promptSyncKey, setPromptSyncKey] = useState(0);
+  /** Переход, о котором спрашивают автора: отчёт считается ДО перевода (FR-09c). */
+  const [modeSwitch, setModeSwitch] = useState<{ to: PromptFormat; report: ModeSwitchReport } | null>(null);
+  /**
+   * PRD-57, согласованный эскиз `prd57-question-text.html` (состояние `s-diag`): что
+   * санитайзер вырезал из текста при последнем сохранении, и каким текст после этого стал.
+   *
+   * Пока находки есть, ящик НЕ закрывается: сохранение уже состоялось, но закрытие
+   * оставило бы автора с единственным наблюдением — «текст изменился сам». Текст держится
+   * рядом, чтобы баннер погас, как только автор начнёт править: он говорит о ТОМ
+   * сохранении, а не о том, что в поле сейчас.
+   */
+  const [sanitizeReport, setSanitizeReport] = useState<{ removed: SanitizeRemoval[]; prompt: string } | null>(null);
+  /**
+   * Вопрос, СОЗДАННЫЙ этим ящиком и оставленный открытым ради диагностики. Следующее
+   * сохранение обязано быть правкой его: иначе одно нажатие «Создать» завело бы в банке
+   * два задания с одним текстом.
+   */
+  const [createdQuestion, setCreatedQuestion] = useState<Question | null>(null);
+  /**
+   * Сохранение состоялось, а список ещё не обновляли: ящик задержан баннером. Два из трёх
+   * мест монтирования закрывают ящик прямо в `onSaved`, поэтому обновление откладывается
+   * до закрытия, а не зовётся сразу.
+   */
+  const [savedPending, setSavedPending] = useState(false);
+  /**
+   * Баннер диагностики стоит первым в теле ящика, а тело к моменту сохранения прокручено
+   * туда, где автор работал: в приёмке 2026-09-20 находки оказались на 145 пикселей выше
+   * видимого. Ссылка нужна, чтобы подвести их к глазам, — иначе показ ничем не отличается
+   * от молчания, ради снятия которого всё и делалось.
+   */
+  const sanitizeBannerRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Вставить разметку кнопкой панели — листинг, формулу или пропуск (FR-09a, FR-24b).
+   *
+   * Что именно вставляется и где остаётся курсор, решает {@link insertMarkup}: здесь
+   * только чтение положения курсора и запись результата в форму. Курсор ставится
+   * СЛЕДУЮЩИМ тиком: React вернёт значение из формы, и позиция, выставленная до
+   * перерисовки, потерялась бы.
+   */
+  const insertAt = (kind: MarkupKind, language?: string) => {
+    const field = promptRef.current;
+    const value = form.getValues("prompt") ?? "";
+    const from = field?.selectionStart ?? value.length;
+    const to = field?.selectionEnd ?? from;
+    const result = insertMarkup({ kind, language, value, from, to });
+    form.setValue("prompt", result.value, { shouldDirty: true });
+    setPromptSyncKey((key) => key + 1);
+    window.setTimeout(() => {
+      field?.focus();
+      field?.setSelectionRange(result.caret, result.caret);
+    }, 0);
+  };
 
   const [singleOptions, setSingleOptions] = useState<string[]>(["", "", "", ""]);
   const [singleCorrect, setSingleCorrect] = useState<number>(0);
+  // Per-option feedback texts of a single-choice question, aligned with `singleOptions`
+  // (see option-feedback-draft). Saved for the single type only.
+  const [singleOptionFeedback, setSingleOptionFeedback] = useState<OptionFeedbackDraft[]>([]);
 
   // PRD-26: шкала переиспользует состояние одиночного выбора (dataJson у них
   // идентичен), поэтому смена типа single <-> scale сохраняет и подписи, и отметку.
@@ -156,23 +311,63 @@ export function QuestionEditorDrawer({
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/questions", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.questions.questionCreated, description: t.questions.questionCreatedDescription });
+  /**
+   * Разобрать ответ состоявшегося сохранения (PRD-57, эскиз `prd57-question-text.html`).
+   *
+   * Обычный исход прежний: обновить списки, сказать об успехе и закрыть ящик. Но если
+   * санитайзер что-то вырезал, ящик ОСТАЁТСЯ открытым с баннером и сохранённым текстом в
+   * поле — только так автор увидит, что именно исчезло и что его текст теперь другой.
+   * Обновление списка при этом откладывается до закрытия: часть хозяев ящика закрывает его
+   * прямо в `onSaved`, и вызвать его здесь значило бы погасить баннер, не показав.
+   *
+   * @param payload Тело успешного ответа маршрута.
+   * @param created Сохранение было созданием, а не правкой.
+   */
+  const settleSave = (payload: unknown, created: boolean) => {
+    const saved = (payload ?? {}) as Question & { promptSanitizeRemoved?: SanitizeRemoval[] };
+    const removed = Array.isArray(saved.promptSanitizeRemoved) ? saved.promptSanitizeRemoved : [];
+    queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+    toast(
+      created
+        ? { tone: "success", title: t.questions.questionCreated, description: t.questions.questionCreatedDescription }
+        : { tone: "success", title: t.questions.questionUpdated, description: t.questions.questionUpdatedDescription },
+    );
+    if (removed.length === 0) {
       onSaved?.();
       onClose();
+      return;
+    }
+    const storedPrompt = typeof saved.prompt === "string" ? saved.prompt : (form.getValues("prompt") ?? "");
+    form.setValue("prompt", storedPrompt);
+    setPromptSyncKey((key) => key + 1);
+    setSanitizeReport({ removed, prompt: storedPrompt });
+    if (created && saved.id) setCreatedQuestion(saved);
+    setSavedPending(true);
+  };
+
+  /**
+   * Закрыть ящик, не потеряв обновление списка, отложенное баннером диагностики.
+   */
+  const closeDrawer = () => {
+    if (savedPending) onSaved?.();
+    onClose();
+  };
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/questions", data),
+    onSuccess: async (res: Response) => {
+      settleSave(await res.json().catch(() => undefined), true);
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.questions.failedToCreate });
+      toast({ tone: "error", title: t.common.error, description: t.questions.failedToCreate });
     },
   });
 
   const resetQuestionData = () => {
     setSingleOptions(["", "", "", ""]);
     setSingleCorrect(0);
+    setSingleOptionFeedback([]);
     setScaleHasCorrect(false);
     setMultipleOptions(["", "", "", ""]);
     setMultipleCorrect([]);
@@ -191,13 +386,33 @@ export function QuestionEditorDrawer({
     setFeedbackIncorrect("");
     setTags([]);
     setMediaFileName("");
+    setAnswerRules(createAnswerRulesDraft(null));
+    setBlanks([]);
+    setLongPlaceholder("");
+    setLongMaxLength(undefined);
+    setLongRequired(false);
+    setShortMaxLength(undefined);
+    setScenarioData(null);
   };
+
+  // Находки показываются там, где автор смотрит: тело ящика подводится к баннеру.
+  // `scrollIntoView` вызывается через `?.` — в jsdom метода нет, и прямой вызов уронил бы
+  // набор, ничего не проверив.
+  useEffect(() => {
+    if (!sanitizeReport) return;
+    sanitizeBannerRef.current?.scrollIntoView?.({ block: "start" });
+  }, [sanitizeReport]);
 
   // Initialize the draft when the Drawer opens: from `question` (edit) or as an
   // empty draft seeded with `defaultTopicId` (create). Mirrors the old
   // handleOpenCreate / handleOpenEdit handlers exactly.
   useEffect(() => {
     if (!open) return;
+    // Диагностика прошлого сохранения принадлежит прошлому заданию: открытие ящика
+    // начинает всё заново, иначе баннер пережил бы вопрос, о котором говорил.
+    setSanitizeReport(null);
+    setCreatedQuestion(null);
+    setSavedPending(false);
     if (question) {
       form.reset({
         topicId: question.topicId,
@@ -205,9 +420,12 @@ export function QuestionEditorDrawer({
         prompt: question.prompt,
       });
       setSelectedType(question.type as QuestionType);
+      setPromptFormat(promptFormatOf(question as { promptFormat?: unknown }));
+      setPromptSyncKey((key) => key + 1);
 
       const data = question.dataJson as any;
       const correct = question.correctJson as any;
+      setSingleOptionFeedback(draftsFromStored(question.optionFeedbackJson));
 
       if (question.type === "single") {
         setSingleOptions(data.options || ["", "", "", ""]);
@@ -226,6 +444,19 @@ export function QuestionEditorDrawer({
         setAllocBudget(String(data.budget ?? 7));
         setAllocMin(data.minPerOption === undefined || data.minPerOption === null ? "" : String(data.minPerOption));
         setAllocMax(data.maxPerOption === undefined || data.maxPerOption === null ? "" : String(data.maxPerOption));
+      } else if (question.type === "long") {
+        const data = (question.dataJson ?? {}) as { placeholder?: string; maxLength?: number; required?: boolean };
+        setLongPlaceholder(typeof data.placeholder === "string" ? data.placeholder : "");
+        setLongMaxLength(typeof data.maxLength === "number" ? data.maxLength : undefined);
+        setLongRequired(data.required === true);
+      } else if (question.type === "blanks") {
+        const key = (question.correctJson ?? {}) as { blanks?: BlankRuleSet[] };
+        setBlanks(Array.isArray(key.blanks) ? key.blanks : []);
+      } else if (question.type === "short") {
+        setAnswerRules(createAnswerRulesDraft(correct as AnswerRuleSet));
+        setShortMaxLength(typeof data?.maxLength === "number" ? data.maxLength : undefined);
+      } else if (isSimulation(question.type)) {
+        setScenarioData(data?.scenario ? (data as ScenarioData) : null);
       } else if (question.type === "scale") {
         setSingleOptions(data.options || ["", "", "", ""]);
         // Наличие correctIndex И ЕСТЬ положение переключателя (FR-03).
@@ -246,6 +477,8 @@ export function QuestionEditorDrawer({
     } else {
       form.reset({ topicId: defaultTopicId ?? "", type: "single", prompt: "" });
       setSelectedType("single");
+      setPromptFormat("markdown");
+      setPromptSyncKey((key) => key + 1);
       resetQuestionData();
     }
     // Re-init only when (re)opening or switching the target question.
@@ -270,12 +503,12 @@ export function QuestionEditorDrawer({
   const uploadMediaFile = async (file: File) => {
     const MAX_MB = 200;
     if (file.size > MAX_MB * 1024 * 1024) {
-      toast({ variant: "destructive", title: t.common.error, description: `Файл слишком большой (>${MAX_MB}MB).` });
+      toast({ tone: "error", title: t.common.error, description: `Файл слишком большой (>${MAX_MB}MB).` });
       return;
     }
     const mt = guessMediaType(file.type);
     if (!mt) {
-      toast({ variant: "destructive", title: t.common.error, description: "Поддерживаются только image/audio/video." });
+      toast({ tone: "error", title: t.common.error, description: "Поддерживаются только image/audio/video." });
       return;
     }
     setIsUploadingMedia(true);
@@ -290,7 +523,7 @@ export function QuestionEditorDrawer({
       setMediaFileName(file.name);
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось загрузить файл. Проверь права (author) и размер." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось загрузить файл. Проверь права (author) и размер." });
     } finally {
       setIsUploadingMedia(false);
     }
@@ -334,6 +567,33 @@ export function QuestionEditorDrawer({
         correctJson = {};
         break;
       }
+      case "short":
+        // У текстового ввода нет вариантов: всё содержимое задания — предел длины ответа
+        // (FR-28v), а эталон — набор правил сравнения (§6.1).
+        dataJson = shortMaxLength === undefined ? {} : { maxLength: shortMaxLength };
+        correctJson = answerRulesToCorrectJson(answerRules);
+        break;
+      case "long":
+        // PRD-57 §5: содержимое — подсказка, предел длины и обязательность; эталона у
+        // типа нет ВООБЩЕ, поэтому `correct_json` пуст (FR-13).
+        dataJson = {
+          ...(longPlaceholder.trim() ? { placeholder: longPlaceholder.trim() } : {}),
+          ...(longMaxLength === undefined ? {} : { maxLength: longMaxLength }),
+          ...(longRequired ? { required: true } : {}),
+        };
+        correctJson = {};
+        break;
+      case "blanks":
+        // Содержимого у задания нет: текст с пропусками ЕСТЬ содержимое, а эталон —
+        // наборы правил по пропускам (FR-24c).
+        dataJson = {};
+        correctJson = { blanks };
+        break;
+      case "simulation":
+        // Всё содержимое — сценарий; эталона нет: исход судят проверки цели самого сценария.
+        dataJson = scenarioData ?? {};
+        correctJson = {};
+        break;
       case "scale":
         dataJson = { options: singleOptions.filter((o) => o.trim()) };
         // Переключатель выключен — измерительный режим: ПУСТОЙ объект, а не null
@@ -345,11 +605,36 @@ export function QuestionEditorDrawer({
     return { dataJson, correctJson };
   };
 
+  /**
+   * Сменить режим ввода (FR-09c).
+   *
+   * Молча не переводит: сначала считается отчёт, и если ему есть что сказать — автор
+   * решает сам. Перевод и отчёт делает ОДИН модуль, поэтому обещанное и случившееся
+   * совпадают по построению.
+   */
+  const requestModeSwitch = (next: PromptFormat) => {
+    if (next === promptFormat) return;
+    const report = describeModeSwitch(promptFormat, next, form.getValues("prompt") ?? "");
+    if (report.losses.length === 0 && report.notes.length === 0) {
+      applyModeSwitch(next);
+      return;
+    }
+    setModeSwitch({ to: next, report });
+  };
+
+  const applyModeSwitch = (next: PromptFormat) => {
+    const converted = convertPrompt(promptFormat, next, form.getValues("prompt") ?? "");
+    form.setValue("prompt", converted, { shouldDirty: true });
+    setPromptSyncKey((key) => key + 1);
+    setPromptFormat(next);
+    setModeSwitch(null);
+  };
+
   const onSubmit = (formData: any) => {
     const { dataJson, correctJson } = buildQuestionData();
     if (isUploadingMedia) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: "Дождись окончания загрузки медиа.",
       });
@@ -358,7 +643,7 @@ export function QuestionEditorDrawer({
 
     if (mediaUrl && isDataUrl(mediaUrl)) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: "Нельзя сохранять медиа как base64 в JSON. Используй кнопку \"Загрузить файл\".",
       });
@@ -366,10 +651,14 @@ export function QuestionEditorDrawer({
     }
     const data = {
       ...formData,
+      // PRD-57 §4.3: формат едет вместе с текстом — иначе набранное тегами прочитается
+      // как разметка, и участник увидит теги.
+      promptFormat,
       dataJson,
       correctJson,
-      mediaUrl: mediaUrl.trim() || null,
-      mediaType: mediaType || null,
+      // У сценария своего медиа нет: остаток от прежнего типа не должен уехать в вопрос.
+      mediaUrl: isSimulation(selectedType) ? null : mediaUrl.trim() || null,
+      mediaType: isSimulation(selectedType) ? null : mediaType || null,
       shuffleAnswers,
       difficulty,
       // PRD-30 FR-01: null CLEARS the index — «не задано» is a value.
@@ -378,15 +667,22 @@ export function QuestionEditorDrawer({
       feedback: feedbackMode === "general" ? (feedback.trim() || null) : null,
       feedbackCorrect: feedbackMode === "conditional" ? (feedbackCorrect.trim() || null) : null,
       feedbackIncorrect: feedbackMode === "conditional" ? (feedbackIncorrect.trim() || null) : null,
+      // Texts of individual options exist for single choice only; filtered with the same
+      // mask as the options, so a blank option cannot shift a text onto its neighbour.
+      optionFeedbackJson:
+        selectedType === "single" ? storedFromDrafts(singleOptions, singleOptionFeedback) : null,
       tags,
     };
 
-    if (question) {
+    // Вопрос, созданный этим же ящиком и оставленный открытым ради диагностики, дальше
+    // ПРАВИТСЯ: второе «Создать» завело бы в банке дубль с тем же текстом.
+    const target = question ?? createdQuestion;
+    if (target) {
       // PRD-15 T-12: edits that affect delivery/grading of published tests are
       // gated by the content guard (dry-run first). A clean edit saves directly;
       // a warning-only edit asks for confirmation; a blocking one shows the 409.
       contentGuard.guard({
-        url: `/api/questions/${question.id}`,
+        url: `/api/questions/${target.id}`,
         method: "PUT",
         body: data,
         blockTitle: "Вопрос нельзя изменить: правка ломает опубликованные тесты",
@@ -396,16 +692,7 @@ export function QuestionEditorDrawer({
         warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
         confirmLabel: "Сохранить изменения",
         confirmVariant: "primary",
-        onDone: () => {
-          queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-          toast({
-            title: t.questions.questionUpdated,
-            description: t.questions.questionUpdatedDescription,
-          });
-          onSaved?.();
-          onClose();
-        },
+        onDone: (result) => settleSave(result, false),
       });
     } else {
       createMutation.mutate(data);
@@ -418,7 +705,9 @@ export function QuestionEditorDrawer({
   const validationErrors = useMemo(() => {
     const errs: string[] = [];
     if (!watchedTopicId) errs.push(t.questions.topicRequired);
-    if (!watchedPrompt || !watchedPrompt.trim()) errs.push(t.questions.textRequired);
+    if (!watchedPrompt || !watchedPrompt.trim()) {
+      errs.push(isSimulation(selectedType) ? "Текст задания обязателен" : t.questions.textRequired);
+    }
     if (selectedType === "single") {
       if (singleOptions.filter((o) => o.trim()).length < 2) errs.push("Добавьте не менее двух вариантов ответа");
       else if (!singleOptions[singleCorrect]?.trim()) errs.push("Отметьте правильный вариант");
@@ -461,6 +750,8 @@ export function QuestionEditorDrawer({
           }
         }
       }
+    } else if (selectedType === "simulation") {
+      if (!scenarioData) errs.push("Загрузите архив сценария");
     } else if (selectedType === "scale") {
       // Правильная градация обязательна ТОЛЬКО когда включён переключатель:
       // измерительный опросник валиден и без неё.
@@ -468,7 +759,7 @@ export function QuestionEditorDrawer({
       else if (scaleHasCorrect && !singleOptions[singleCorrect]?.trim()) errs.push(t.questions.scaleErrorNoCorrect);
     }
     return errs;
-  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, scaleHasCorrect, allocBudget, allocMin, allocMax, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
+  }, [watchedTopicId, watchedPrompt, selectedType, scenarioData, singleOptions, singleCorrect, scaleHasCorrect, allocBudget, allocMin, allocMax, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
 
   /** Option/item texts of the active type — the list carried across type changes. */
   const currentOptionTexts = (): string[] => {
@@ -539,25 +830,96 @@ export function QuestionEditorDrawer({
           (Controller on the Selects, register on the prompt Textarea). */}
       <Drawer
         open={open}
-        onClose={onClose}
+        onClose={closeDrawer}
         side="right"
         size="xl"
-        title={question ? t.questions.editQuestion : t.questions.createQuestion}
+        title={question || createdQuestion ? t.questions.editQuestion : t.questions.createQuestion}
         footer={
           <Cluster justify="end" gap={2} wrap={false}>
-            <Button variant="secondary" onClick={onClose}>{t.common.cancel}</Button>
+            {/* PRD-57 FR-28d: обещание «переключение вида не теряет работу» автору нечем
+                проверить, пока ящик молчит. Группа показывает, что набранное цело и
+                отличается от сохранённого, и даёт вернуть его одним действием. */}
+            {isTextEntry(selectedType) && answerRulesDirty(answerRules) ? (
+              <div className="tb-dirty" data-testid="answer-rules-dirty">
+                <Tag tone="warning" size="s">Изменения не сохранены</Tag>
+                <Button
+                  variant="ghost"
+                  size="s"
+                  onClick={() => setAnswerRules(createAnswerRulesDraft(answerRules.initial))}
+                  data-testid="answer-rules-revert"
+                >
+                  Вернуть изменения
+                </Button>
+              </div>
+            ) : null}
+            {/*
+              FR-24g: предпросмотр смотрят в момент проверки, а не всё время правки,
+              поэтому он окно по кнопке. Кнопка стоит слева от «Отмены» — тем же приёмом,
+              что у предпросмотра страницы: действие над содержимым, а не над формой.
+            */}
+            {/* PRD-70 FR-30: «Статистика» — у сохранённого вопроса; ведёт на страницу вопроса банка.
+                Слева от «Предпросмотр» — та же группа «действие над содержимым». */}
+            {canAnalytics && question && (
+              <Button
+                variant="ghost"
+                leadingIcon={<BarChart3 size={16} aria-hidden="true" />}
+                onClick={() => (onOpenStatistics ? onOpenStatistics(question.id) : navigate(bankQuestionHref(question.id)))}
+                data-testid="button-question-statistics"
+              >
+                Статистика
+              </Button>
+            )}
+            {/* У сценария проверка — «Сыграть» в его блоке: окно предпросмотра его не покажет. */}
+            {!isSimulation(selectedType) && (
+              <Button
+                variant="ghost"
+                onClick={() => setPreviewOpen(true)}
+                data-testid="button-preview-question"
+              >
+                Предпросмотр
+              </Button>
+            )}
+            <Button variant="secondary" onClick={closeDrawer}>{t.common.cancel}</Button>
             <Button
               onClick={form.handleSubmit(onSubmit)}
               disabled={isUploadingMedia || validationErrors.length > 0}
               loading={createMutation.isPending}
               data-testid="button-submit-question"
             >
-              {question ? t.common.update : t.common.create}
+              {question || createdQuestion ? t.common.update : t.common.create}
             </Button>
           </Cluster>
         }
       >
         <Stack gap={6}>
+          {/*
+            PRD-57, согласованный эскиз `prd57-question-text.html` (`s-diag`): что санитайзер
+            вырезал из текста при сохранении. Баннер стоит первым в теле ящика — он говорит
+            о тексте, который автор сейчас увидит в поле изменившимся, и объясняет, почему.
+            Гаснет сам, как только текст правят: находки принадлежат ТОМУ сохранению.
+          */}
+          {sanitizeReport && sanitizeReport.prompt === watchedPrompt && (
+            <Banner
+              ref={sanitizeBannerRef}
+              tone="warning"
+              variant="subtle"
+              title="Часть разметки удалена при сохранении"
+              data-testid="banner-prompt-sanitized"
+              description={
+                <>
+                  Удалено:{" "}
+                  {removalPhrases(sanitizeReport.removed).map((phrase, i) => (
+                    <span key={`${phrase.prefix}-${phrase.code}`}>
+                      {i > 0 ? ", " : ""}
+                      {phrase.prefix ? `${phrase.prefix} ` : ""}
+                      <code>{phrase.code}</code> — {phrase.count}
+                    </span>
+                  ))}
+                  . Остальная разметка сохранена без изменений.
+                </>
+              }
+            />
+          )}
           {validationErrors.length > 0 && (
             <Banner tone="error" variant="subtle" title="Проверьте форму" data-testid="banner-question-validation">
               {validationErrors.map((e, i) => (
@@ -565,6 +927,14 @@ export function QuestionEditorDrawer({
               ))}
             </Banner>
           )}
+          {/*
+            The topic is a searchable Select: the bank holds hundreds of topics, and
+            finding one by eye in a flat list is the slow path. The control stays a
+            plain single-value picker — no chips, no checkbox-looking marks — and the
+            menu simply grows a search row that filters by a substring of the name.
+            The reset button hands the form an empty string, which is what «no topic»
+            means to the schema (and what the validation banner reports).
+          */}
           <Controller
             control={form.control}
             name="topicId"
@@ -573,45 +943,225 @@ export function QuestionEditorDrawer({
                 label={t.questions.topic}
                 value={field.value}
                 onChange={field.onChange}
+                onClear={() => field.onChange("")}
+                clearLabel={t.questions.clearTopic}
                 placeholder={t.questions.selectTopic}
                 error={fieldState.error?.message}
                 fullWidth
+                searchable
+                searchPlaceholder={t.questions.topicSearchPlaceholder}
+                emptyMessage={t.questions.topicSearchEmpty}
                 data-testid="select-question-topic"
                 options={topics?.map((topic) => ({ value: topic.id, label: topic.name })) ?? []}
               />
             )}
           />
 
-          {/* PRD-16: type is a SegmentedControl (matches the approved wireframe s-q-drawer). */}
+          {/*
+            The type is a Select — the approved wireframe (content-bank-explorer.html,
+            state s-q-drawer) and PRD-26 FR-28 / PRD-44 FR-44 («выпадающий список типов»).
+            It used to be a SegmentedControl back when the model had four types; with nine
+            the strip overflowed the drawer and cut the trailing types off.
+          */}
           <Controller
             control={form.control}
             name="type"
             render={({ field }) => (
-              <Stack gap={2}>
-                <Label>{t.questions.questionType}</Label>
-                <SegmentedControl<QuestionType>
-                  value={field.value as QuestionType}
-                  onChange={(next) => applyTypeChange(next)}
-                  items={questionTypes.map((type) => ({ value: type.value, label: type.label }))}
-                  data-testid="seg-question-type"
-                />
-              </Stack>
+              <Select<QuestionType>
+                label={t.questions.questionType}
+                value={field.value as QuestionType}
+                onChange={(next) => applyTypeChange(next)}
+                fullWidth
+                data-testid="select-question-type"
+                options={questionTypes.map((type) => ({ value: type.value, label: type.label }))}
+              />
             )}
           />
 
+          {/*
+            FR-09a: панель вставки — обязательная часть редактора, а не удобство. Без неё
+            автор обязан помнить три обратные кавычки с языком и два доллара, а это ровно
+            тот барьер, из-за которого механикой не пользуются. Состав и порядок кнопок —
+            согласованный эскиз `prd57-question-text.html`.
+          */}
+          {/*
+            PRD-57 §4.3: режим ввода переключается НАД полем — согласованный эскиз
+            `prd57-question-text.html`. Режим меняет способ набора, а не набор
+            возможностей: листинг, формула и пропуск работают во всех (FR-09a).
+          */}
+          <Cluster gap={3} wrap align="center">
+            <SegmentedControl<PromptFormat>
+              value={promptFormat}
+              onChange={(next) => requestModeSwitch(next)}
+              items={[
+                { value: "markdown", label: "Разметка" },
+                { value: "richText", label: "Форматированный" },
+                { value: "html", label: "HTML" },
+              ]}
+              data-testid="seg-prompt-format"
+            />
+            {promptFormat === "html" && (
+              <Text variant="body-s" tone="muted">
+                Текст сохраняется тегами. Небезопасное снимается при сохранении.
+              </Text>
+            )}
+          </Cluster>
+
+          <Cluster gap={2} wrap data-testid="prompt-insert-bar">
+            <MenuTrigger
+              size="sm"
+              placement="bottom-start"
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  leadingIcon={<Code width={16} height={16} aria-hidden="true" />}
+                  data-testid="insert-code"
+                >
+                  Листинг
+                </Button>
+              }
+            >
+              {/* Язык спрашивается ПРИ вставке: он часть открывающей строки, и дописывать
+                  его потом руками — тот же барьер, ради снятия которого кнопка заведена. */}
+              {CODE_LANGUAGES.map((language) => (
+                <MenuItem
+                  key={language.value || "plain"}
+                  onClick={() => insertAt("code", language.value)}
+                  data-testid={`insert-code-${language.value || "plain"}`}
+                >
+                  {language.label}
+                </MenuItem>
+              ))}
+            </MenuTrigger>
+            <Button
+              variant="ghost"
+              size="xs"
+              leadingIcon={<Sigma width={16} height={16} aria-hidden="true" />}
+              onClick={() => insertAt("formula")}
+              data-testid="insert-formula"
+            >
+              Формула
+            </Button>
+            {/*
+              Пропуск предлагается ТОЛЬКО своему типу: в остальных двойные скобки полем не
+              станут, и кнопка обещала бы механику, которой там нет. Имя за автора НЕ
+              придумывается: придуманное по соседнему слову всё равно приходится читать и
+              чаще всего менять (FR-24b).
+            */}
+            {selectedType === "blanks" && (
+              <Button
+                variant="ghost"
+                size="xs"
+                leadingIcon={<Braces width={16} height={16} aria-hidden="true" />}
+                onClick={() => insertAt("blank")}
+                data-testid="insert-blank"
+              >
+                Пропуск
+              </Button>
+            )}
+            <Text variant="body-s" tone="muted">
+              {selectedType === "blanks"
+                ? "Ставится в позицию курсора; у пропуска курсор остаётся внутри скобок — введите имя пропуска."
+                : "Ставится в позицию курсора; выделенный текст оборачивается."}
+            </Text>
+          </Cluster>
+
+          {promptFormat === "richText" ? (
+            <RichPromptEditor
+              label={isSimulation(selectedType) ? "Текст задания" : t.questions.questionText}
+              value={form.watch("prompt") ?? ""}
+              onChange={(next) => form.setValue("prompt", next, { shouldDirty: true })}
+              // Перепривязка только на внешнюю замену текста: набор в поле её не трогает,
+              // иначе курсор уезжал бы в начало на каждом символе.
+              syncKey={promptSyncKey}
+            />
+          ) : (
           <Textarea
-            label={t.questions.questionText}
-            placeholder={t.questions.questionTextPlaceholder}
-            hint={t.questions.markdownHint}
-            rows={2}
+            label={isSimulation(selectedType) ? "Текст задания" : t.questions.questionText}
+            placeholder={isSimulation(selectedType) ? "Что участник должен сделать в системе" : t.questions.questionTextPlaceholder}
+            hint={promptFormat === "html"
+              ? "Теги пишутся как есть. Листинг — <pre><code class=\"language-sql\">, формула — двумя долларами, пропуск — двойными фигурными скобками."
+              : t.questions.markdownHint}
+            rows={promptFormat === "html" ? 8 : 2}
             fullWidth
             error={form.formState.errors.prompt?.message}
             data-testid="input-question-prompt"
             {...form.register("prompt")}
+            ref={(node: HTMLTextAreaElement | null) => {
+              promptRef.current = node;
+              form.register("prompt").ref(node);
+            }}
             onPaste={(e) =>
               handleMarkdownPaste(e, (v) => form.setValue("prompt", v, { shouldDirty: true }))
             }
           />
+          )}
+
+          {isSimulation(selectedType) && (
+            <ScenarioBlock
+              value={scenarioData}
+              onChange={(next) => {
+                setScenarioData(next);
+                // Задание сценария — подсказка для пустого текста задания; набранное автором
+                // не перетирается.
+                if (next && !(form.getValues("prompt") ?? "").trim()) {
+                  form.setValue("prompt", next.scenario.meta.task, { shouldDirty: true });
+                  setPromptSyncKey((key) => key + 1);
+                }
+              }}
+              downloadHref={
+                question && isSimulation(question.type) && scenarioData === (question.dataJson as unknown)
+                  ? `/api/questions/${question.id}/scenario-archive`
+                  : null
+              }
+            />
+          )}
+
+          {selectedType === "long" && (
+            <Stack gap={4} data-testid="long-answer-block">
+              <Input
+                label="Подсказка в поле"
+                value={longPlaceholder}
+                onChange={(e) => setLongPlaceholder(e.target.value)}
+                fullWidth
+                hint="Что участник увидит в пустом поле. Например: «Ответьте своими словами»."
+                data-testid="input-long-placeholder"
+              />
+              <Input
+                label="Предел длины ответа"
+                value={longMaxLength === undefined ? "" : String(longMaxLength)}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  if (raw === "") return setLongMaxLength(undefined);
+                  const parsed = Number(raw);
+                  setLongMaxLength(Number.isInteger(parsed) && parsed > 0 ? parsed : undefined);
+                }}
+                hint="До скольких символов участник может ответить. Пусто — системный предел."
+                data-testid="input-long-maxlength"
+              />
+              <Switch
+                checked={longRequired}
+                onChange={(e) => setLongRequired(e.target.checked)}
+                label="Ответ обязателен"
+                description="Без ответа участник не сможет пойти дальше"
+                data-testid="switch-long-required"
+              />
+              <Text variant="body-s" tone="muted">
+                Автоматической проверки у этого типа нет: ответ собирается и уезжает в отчёт,
+                баллов не приносит и на вердикт не влияет.
+              </Text>
+            </Stack>
+          )}
+
+          {selectedType === "blanks" && (
+            <BlanksBlock
+              prompt={form.watch("prompt") ?? ""}
+              blanks={blanks}
+              onChange={setBlanks}
+              onRestorePrompt={(value) => form.setValue("prompt", value, { shouldDirty: true })}
+            />
+          )}
 
           {selectedType === "single" && (
             <SingleChoiceBuilder
@@ -619,6 +1169,8 @@ export function QuestionEditorDrawer({
               setOptions={setSingleOptions}
               correctIndex={singleCorrect}
               setCorrectIndex={setSingleCorrect}
+              optionFeedback={singleOptionFeedback}
+              setOptionFeedback={setSingleOptionFeedback}
             />
           )}
 
@@ -673,6 +1225,18 @@ export function QuestionEditorDrawer({
             </Stack>
           )}
 
+          {/* PRD-57 §6.5: у текстового ввода вариантов нет — вместо их списка стоит
+             набор правил сравнения. Ветка по ПРИЗНАКУ типа, а не по литералу: пропуски
+             (Э8) войдут сюда же, объявив тот же признак. */}
+          {isTextEntry(selectedType) && (
+            <AnswerRulesBlock
+              draft={answerRules}
+              onChange={setAnswerRules}
+              maxLength={shortMaxLength}
+              onMaxLength={setShortMaxLength}
+            />
+          )}
+
           {/* PRD-44: распределение баллов. Список утверждений — тот же редактор, что у
              одиночного выбора, но БЕЗ отметки верного варианта: правильного
              распределения не существует, поэтому блока верного ответа здесь нет.
@@ -724,7 +1288,7 @@ export function QuestionEditorDrawer({
           {/* PRD-16 FR-41/42: per-question shuffle (ranking is always shuffled — no toggle).
              Rendered as a Switch to match the approved wireframe (state s-q-drawer).
              PRD-26: a scale has no toggle either — its graduation order is content. */}
-          {selectedType !== "ranking" && selectedType !== "scale" && (
+          {selectedType !== "ranking" && selectedType !== "scale" && !isSimulation(selectedType) && (
             <Switch
               label={t.questions.shuffleAnswers}
               checked={shuffleAnswers}
@@ -735,37 +1299,49 @@ export function QuestionEditorDrawer({
 
           <Stack gap={2}>
             <Label>{t.questions.difficulty}</Label>
-            <Switch
-              label={t.questions.difficultyUnset}
-              checked={difficulty === null}
-              onChange={(e) => setDifficulty(e.target.checked ? null : 50)}
-              data-testid="switch-question-difficulty-unset"
-            />
-            {difficulty !== null && (
-              <>
-                <Cluster gap={4} wrap={false}>
-                  <Box grow>
-                    <Slider
-                      value={difficulty}
-                      onChange={(v) => setDifficulty(v as number)}
-                      min={0}
-                      max={100}
-                      step={1}
-                      ariaLabel={t.questions.difficulty}
-                      data-testid="slider-question-difficulty"
-                    />
-                  </Box>
+            {/* PRD-70 FR-32 (эскиз e7-question-bank): переключатель, шкала и поле — одной строкой по
+                средней линии шкалы, от шкалы — 6x; над шкалой — ориентир «По ответам» (FR-31). */}
+            <div className="tb-qdiff-row">
+              <Switch
+                label={t.questions.difficultyUnset}
+                checked={difficulty === null}
+                onChange={(e) => setDifficulty(e.target.checked ? null : 50)}
+                data-testid="switch-question-difficulty-unset"
+              />
+              {difficulty !== null && (
+                <>
+                  <Slider
+                    className="tb-qdiff-row__slider"
+                    value={difficulty}
+                    onChange={(v) => setDifficulty(v as number)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    marks={[0, 50, 100]}
+                    landmarks={landmark ? [{
+                      value: landmark.hardness,
+                      label: `Сложность по ответам: ${landmark.hardness}`,
+                      title: `По ответам: ${landmark.hardness}`,
+                      hint: `Какой сложность оказалась у участников — сводно по ${landmark.tests} ${pluralForm(landmark.tests, ["тесту", "тестам", "тестам"])}, ${landmark.observations} ${pluralForm(landmark.observations, ["прохождение", "прохождения", "прохождений"])}. Ориентир для заданной сложности; по каждому тесту — в «Статистике».`,
+                    }] : undefined}
+                    ariaLabel={t.questions.difficulty}
+                    data-testid="slider-question-difficulty"
+                  />
                   <Input
+                    className="tb-qdiff-row__num"
                     type="number"
                     min={0}
                     max={100}
                     value={difficulty}
+                    aria-label={`${t.questions.difficulty} (число)`}
                     onChange={(e) => setDifficulty(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
                     data-testid="input-question-difficulty"
                   />
-                </Cluster>
-                <Text as="p" variant="body-xs" tone="muted">{t.questions.difficultyHint}</Text>
-              </>
+                </>
+              )}
+            </div>
+            {difficulty !== null && (
+              <Text as="p" variant="body-xs" tone="muted">{t.questions.difficultyHint}</Text>
             )}
           </Stack>
 
@@ -794,6 +1370,8 @@ export function QuestionEditorDrawer({
             <Text as="p" variant="body-xs" tone="muted">{t.questions.orderIndexHint}</Text>
           </Stack>
 
+          {/* Медиа вопроса у сценария нет: его изображения — в самом сценарии. */}
+          {!isSimulation(selectedType) && (
           <Stack gap={4}>
             <Label>{t.questions.mediaOptional}</Label>
             <FileUploader
@@ -836,6 +1414,7 @@ export function QuestionEditorDrawer({
               </Box>
             )}
           </Stack>
+          )}
 
           <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
 
@@ -898,6 +1477,65 @@ export function QuestionEditorDrawer({
         </Stack>
       </Drawer>
 
+      {/*
+        FR-09c: переключение режима не переводит текст молча. Окно называет находки
+        числами и отдаёт решение автору: соглашаться ли терять таблицу — не наш выбор.
+      */}
+      <ModalDialog
+        open={modeSwitch !== null}
+        onClose={() => setModeSwitch(null)}
+        size="m"
+        title={modeSwitch?.to === "html" ? "Перевести текст в HTML?" : "Перевести текст в разметку?"}
+        description="Перевод меняет сам текст задания. Отменить его можно только вручную."
+        footer={
+          <>
+            <Button variant="ghost" size="m" onClick={() => setModeSwitch(null)}>Отмена</Button>
+            <Button
+              variant="primary"
+              size="m"
+              onClick={() => modeSwitch && applyModeSwitch(modeSwitch.to)}
+              data-testid="confirm-mode-switch"
+            >
+              Перевести
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={3}>
+          {(modeSwitch?.report.losses.length ?? 0) > 0 && (
+            <Stack gap={1} data-testid="mode-switch-losses">
+              <Text variant="body-s" weight="medium">Найдено в тексте</Text>
+              {modeSwitch?.report.losses.map((loss) => (
+                <Text key={loss.what} variant="body-s">
+                  {loss.what} — {loss.count} — {loss.becomes}
+                </Text>
+              ))}
+            </Stack>
+          )}
+          {modeSwitch?.report.notes.map((note) => (
+            <Text key={note} variant="body-s" tone="muted">{note}</Text>
+          ))}
+        </Stack>
+      </ModalDialog>
+
+      {/*
+        FR-24g: предпросмотр собирается из ТЕКУЩЕГО черновика, а не из сохранённого
+        вопроса — смотреть на вчерашнее состояние незачем. Содержимое и эталон берутся
+        тем же сборщиком, что и сохранение, поэтому окно показывает ровно то, что уедет.
+      */}
+      <QuestionPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        topicName={topics.find((topic) => topic.id === form.watch("topicId"))?.name}
+        question={{
+          ...(question ?? {}),
+          type: selectedType,
+          prompt: form.watch("prompt") ?? "",
+          promptFormat,
+          ...buildQuestionData(),
+        }}
+      />
+
       {/* PRD-15 T-12: content-impact dialog for edits affecting other tests */}
       <ContentImpactDialog {...contentGuard.dialogProps} />
     </>
@@ -932,6 +1570,11 @@ function remapIndexAfterMove(idx: number, from: number, to: number): number {
  * single choice and the PRD-26 scale. The scale reuses it rather than getting a copy,
  * so the two cannot drift apart in markup; it only overrides the wording and, in
  * measurement mode, hides the correct-answer radio column (`showCorrect={false}`).
+ *
+ * Single choice also passes `optionFeedback`: under every option a switch
+ * «Переопределить обратную связь» opens a text field whose text replaces the question's
+ * feedback for a learner who picked that option. The scale does not pass it, so it gets
+ * no switches. Moves and removals are mirrored into the texts so each stays with its option.
  */
 function SingleChoiceBuilder({
   options,
@@ -941,6 +1584,8 @@ function SingleChoiceBuilder({
   label = t.questions.answerOptionsSingle,
   itemPlaceholder = t.questions.optionPlaceholder,
   showCorrect = true,
+  optionFeedback,
+  setOptionFeedback,
 }: {
   options: string[];
   setOptions: (opts: string[]) => void;
@@ -949,6 +1594,8 @@ function SingleChoiceBuilder({
   label?: string;
   itemPlaceholder?: string;
   showCorrect?: boolean;
+  optionFeedback?: OptionFeedbackDraft[];
+  setOptionFeedback?: (drafts: OptionFeedbackDraft[]) => void;
 }) {
   const groupName = useId();
   const dragIndex = useRef<number | null>(null);
@@ -958,6 +1605,7 @@ function SingleChoiceBuilder({
     if (from === null || from === to) return;
     setOptions(moveInArray(options, from, to));
     setCorrectIndex(remapIndexAfterMove(correctIndex, from, to));
+    if (optionFeedback && setOptionFeedback) setOptionFeedback(moveDraft(optionFeedback, options.length, from, to));
   };
   const updateOption = (idx: number, value: string) => {
     const newOpts = [...options];
@@ -970,6 +1618,7 @@ function SingleChoiceBuilder({
     if (options.length <= 2) return;
     const newOpts = options.filter((_, i) => i !== idx);
     setOptions(newOpts);
+    if (optionFeedback && setOptionFeedback) setOptionFeedback(removeDraft(optionFeedback, idx));
     if (correctIndex >= newOpts.length) setCorrectIndex(newOpts.length - 1);
     else if (correctIndex > idx) setCorrectIndex(correctIndex - 1);
   };
@@ -1012,6 +1661,30 @@ function SingleChoiceBuilder({
                 />
               )}
             </Cluster>
+            {optionFeedback && setOptionFeedback && (
+              <div className="tb-option-feedback">
+                <Switch
+                  size="s"
+                  label={t.questions.optionFeedbackSwitch}
+                  aria-label={`${t.questions.optionFeedbackSwitch}: вариант ${i + 1}`}
+                  checked={draftAt(optionFeedback, i).on}
+                  onChange={(e) => setOptionFeedback(updateDraft(optionFeedback, i, { on: e.target.checked }))}
+                  data-testid={`switch-option-feedback-${i}`}
+                />
+                {draftAt(optionFeedback, i).on && (
+                  <Textarea
+                    size="s"
+                    label={t.questions.optionFeedbackLabel}
+                    value={draftAt(optionFeedback, i).text}
+                    onChange={(e) => setOptionFeedback(updateDraft(optionFeedback, i, { text: e.target.value }))}
+                    placeholder={t.questions.optionFeedbackPlaceholder}
+                    rows={2}
+                    fullWidth
+                    data-testid={`input-option-feedback-${i}`}
+                  />
+                )}
+              </div>
+            )}
           </div>
         ))}
       </Stack>

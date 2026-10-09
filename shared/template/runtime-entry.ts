@@ -38,6 +38,11 @@ export {
 export { attachPointerDnd } from "./dnd/pointer-dnd";
 // PRD-38: single question-media renderer + fullscreen overlay, shared by both hosts.
 export { renderQuestionMedia, attachQuestionMediaFullscreen, openQuestionMediaOverlay } from "./question-media";
+// PRD-66 FR-37: ONE stopwatch for both hosts. The package used to carry its own plain-JS
+// copy and the web host measured nothing at all; two hosts counting «time on question»
+// differently make the two sources incomparable — and comparing them is the whole point of
+// the psychometric layer.
+export { createQuestionTime } from "../questions/question-time";
 export { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext, buildSectionIntroContext } from "./result-context";
 // PRD-29: the package assembles the measures input for the results screen ITSELF,
 // to the very shape `server/services/result-context` assembles on the web host —
@@ -48,13 +53,29 @@ export { buildResultContext, buildAdaptiveResultContext, buildSectionResultConte
 // harmless (a normalised asset keeps its address in `url`), but the block is still
 // normalised in exactly ONE place so the rule lives in a single copy.
 export { normalizeFeedback } from "./result-context";
-export { LEVEL_SCHEMES } from "./level-ramp";
+export { LEVEL_SCHEMES, rampFromParams } from "./level-ramp";
+// Окраска полос подтем: пакет разрешает её из тех же параметров оформления, что и веб.
+export { barFillFromParams } from "./bar-fill";
 export { parseScaleInterpretation, parseIndicatorInterpretation } from "../scales/interpretation";
 // PRD-18: the SINGLE standard result-aggregation + pass-rule engine shared by the
 // SCORM runtime (resultsPage.js) and the web grader (attempts.ts).
 export { aggregateStandardResult, aggregateAdaptiveResult, adaptiveResultAsStandard } from "../scoring/aggregate";
 export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/pass-rule";
+export { lmsScoreFor } from "../scoring/lms-score";
+// PRD-57 FR-28s: the open-answer comparison, shipped to the package instead of copied
+// into it. The ES5 scoring twin (app/scoring/engine.js) calls `TBTemplate.checkRuleSet`
+// rather than carrying its own matcher, so the rule the author saved is the rule the
+// learner is checked against.
+export { checkRuleSet, hasRules, normalizeForCompare } from "../answer-check";
+export { computeBreakdowns, sectionScope, TEST_SCOPE } from "../breakdown/compute";
 export { buildStartState } from "./start-state";
+// Условие прохождения на обложке и на вводной раздела: одна формулировка на оба хоста.
+export {
+  buildCoursePassCondition,
+  sectionPassConditionText,
+  sectionIsRequiredForVerdict,
+  sectionTimerWarningText,
+} from "./pass-condition";
 // PRD-22: the start illustration is a property of the START PAGE, with the branding
 // param as the fallback. Exported so the package resolves it through the SAME rule
 // the web host and the editor previews use.
@@ -66,8 +87,12 @@ export {
   START_IMAGE_KEY,
 } from "./start-image";
 export { buildCourseSubtitle } from "./course-subtitle";
+// Время в тексте: и статичный лимит на обложке/во введении раздела, и бегущий
+// отсчёт в шапке считает ОДИН модуль, поэтому пакет и веб не расходятся в том,
+// как выглядит двухнедельный бюджет («14 дней», а не «20160 мин» / «20160:00»).
+export { formatMinutesHuman, formatCountdown } from "./duration";
 export { buildTransitionContext } from "./transition-context";
-export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
+export { buildTemplateCssVars, buildTemplateDataAttrs, DEFAULT_PARAM_CSS_VARS, withParamDefaults } from "./params-css";
 // Ревизия «Стандартный» на ui-kit: мост палитры теста в токены DS — оба хоста
 // выводят DS-акцент из --primary теста, поэтому ученические экраны на .ou-разметке
 // брендируются палитрой теста одинаково в вебе и в пакете.
@@ -100,6 +125,17 @@ export {
   setAllocationValue,
 } from "../questions/allocation";
 export { renderAllocation } from "./question-interaction";
+// PRD-57 FR-30: the typed-answer field is rendered and wired from the SAME code on both
+// hosts — no separate in-package implementation.
+export { renderShortAnswer, type ShortAnswerOptions } from "./question-interaction";
+// PRD-57 §5: поле развёрнутого ответа — тот же рендер на обоих хостах.
+export { renderLongAnswer, type LongAnswerOptions } from "./question-interaction";
+// PRD-57 FR-24: пропуски — тот же рендер на обоих хостах. В пакет уезжают и разбор
+// разметки, и подстановка: экран участника ставит поля, а итоги печатают ответ и эталон.
+export { renderBlanksPrompt, type BlanksPromptOptions } from "./question-interaction";
+export { parseBlanks, blankIds } from "../questions/blanks";
+export { renderBlanksText, referenceAnswer, BLANK_DASH, type BlankRuleSet } from "../questions/blanks-render";
+export { attachShortAnswer, type ShortAnswerHost, type DetachShortAnswer } from "./short-answer-dom";
 // Живой ввод группы: жест правит DOM на месте, ответ уходит хосту по завершении.
 export { attachAllocation, syncAllocationDom, allocIndexOf } from "./allocation-dom";
 export {
@@ -168,6 +204,7 @@ export {
   buildPageContextFor,
   collectSequenceIds,
   sequenceIdOf,
+  passConditionShownOf,
   SEQUENCE_SETTING_KEY,
 } from "./page-sequences";
 // PRD-22 FR-36: relative links in author content resolve against the template's
@@ -202,6 +239,7 @@ export {
   contentPagesFor,
   questionIndicesByTopic,
   isFlowContentPage,
+  isSystemScreenHidden,
 } from "../flow/page-sequence";
 // The attempt REPORT (PDF): one markup source and one export pipeline for both hosts.
 // The package reaches them through this bundle; the web host imports them directly.
@@ -214,3 +252,14 @@ export { buildReportMeasures } from "../report/report-measures";
 // Переключатель «вводный блок отчёта = текст экрана» (PRD-27 FR-27): пакет решает его
 // тем же правилом, что веб.
 export { resolveReportIntro } from "../report/report-intro";
+
+// «Сценарий в ИС» (этап Э4): плеер сценария и оценка прогона — тот же код, что у веба. Пакет
+// монтирует плеер на месте экрана вопроса и считает долю цены тем же `simulationRatio`.
+export { mountPlayer } from "../sim/player";
+export { simulationRatio } from "../sim/scoring";
+// Протокол прогона в отчёт LMS — псевдо-взаимодействия `sim_<questionId>_<n>` (Э5б, требование
+// владельца: всё, что аналитика берёт из телеметрии, приходит и выгрузкой отчёта).
+export { encodeProtocol as encodeSimProtocol, protocolChunks as simProtocolChunks } from "../sim/protocol-codec";
+// Сценарий в обычном разделе (техдолг №5): обложка в области ответа и окно правил — одна разметка
+// для веба и пакета.
+export { renderSimCover, renderSimRulesDialog, simCoverShot, simCoverState, simRules, simRunReplaces } from "../sim/cover";

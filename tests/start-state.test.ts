@@ -91,6 +91,46 @@ describe("buildStartState", () => {
     expect(state.canViewResults).toBe(false);
   });
 
+  it("attempts exhausted: the header names the last spent attempt, never one past the limit", () => {
+    const { course } = buildStartState({
+      info: { ...info, maxAttempts: 1 },
+      maxAttempts: 1,
+      completedAttempts: 1,
+      resume: null,
+      hasCompletedResults: true,
+      canStartNew: false,
+    });
+    // Used to read «Попытка 2 из 1»: the upcoming attempt that no longer exists.
+    expect(course.subtitle).toBe("Попытка 1 из 1");
+  });
+
+  it("attempts remain: the header names the upcoming attempt", () => {
+    const { course } = buildStartState({
+      info,
+      maxAttempts: 3,
+      completedAttempts: 1,
+      resume: null,
+      hasCompletedResults: true,
+      canStartNew: true,
+    });
+    expect(course.subtitle).toBe("Попытка 2 из 3");
+  });
+
+  it("attempts exhausted: a wait card is not shown — there is nothing to wait for", () => {
+    const { state } = buildStartState({
+      info: { ...info, maxAttempts: 1 },
+      maxAttempts: 1,
+      completedAttempts: 1,
+      resume: null,
+      hasCompletedResults: true,
+      canStartNew: false,
+      cooldown: { availableDateHuman: "30.09.2026 в 18:23", daysUntil: null },
+    });
+    expect(state.cooldown).toBeUndefined();
+    expect(state.canViewResults).toBe(true);
+    expect(state.canStart).toBe(false);
+  });
+
   it("unlimited attempts: never exhausted", () => {
     const { state } = buildStartState({
       info: { title: "T" },
@@ -107,6 +147,111 @@ describe("buildStartState", () => {
   it("showBack flag is passed through (web vs SCORM)", () => {
     expect(buildStartState({ info, maxAttempts: null, completedAttempts: 0, hasCompletedResults: false, canStartNew: true, showBack: true }).state.showBack).toBe(true);
     expect(buildStartState({ info, maxAttempts: null, completedAttempts: 0, hasCompletedResults: false, canStartNew: true }).state.showBack).toBe(false);
+  });
+
+  describe("описание и его формат (PRD-59)", () => {
+    const base = {
+      maxAttempts: null,
+      completedAttempts: 0,
+      hasCompletedResults: false,
+      canStartNew: true,
+    };
+
+    it("печатает плоское описание экранированным, с переводами строк", () => {
+      const { course } = buildStartState({
+        info: { title: "Т", description: "Первая\nВторая" },
+        ...base,
+      });
+      expect(course.description).toBe("Первая\nВторая");
+      expect(course.descriptionHtml).toBe("Первая<br>Вторая");
+    });
+
+    it("печатает размеченное описание как есть", () => {
+      const { course } = buildStartState({
+        info: { title: "Т", description: "<p>Курс</p>", descriptionFormat: "richText" },
+        ...base,
+      });
+      expect(course.descriptionHtml).toBe("<p>Курс</p>");
+      expect(course.description).toBe("<p>Курс</p>");
+    });
+
+    it("не даёт разметки, когда описания нет", () => {
+      const { course } = buildStartState({ info: { title: "Т" }, ...base });
+      expect(course.description).toBe("");
+      expect(course.descriptionHtml).toBe("");
+    });
+  });
+
+  describe("лимит времени печатается человеческой строкой", () => {
+    const base = {
+      maxAttempts: null,
+      completedAttempts: 0,
+      hasCompletedResults: false,
+      canStartNew: true,
+    };
+
+    it("раскладывает длинный лимит в дни", () => {
+      const { course } = buildStartState({
+        info: { title: "Т", timeLimitMinutes: 20160 },
+        ...base,
+      });
+      expect(course.timeLimitLabel).toBe("14 дней");
+      // Число остаётся в контексте: шаблон реестра, знающий только его, не ломается.
+      expect(course.timeLimitMinutes).toBe(20160);
+    });
+
+    it("оставляет короткий лимит минутами", () => {
+      const { course } = buildStartState({
+        info: { title: "Т", timeLimitMinutes: 45 },
+        ...base,
+      });
+      expect(course.timeLimitLabel).toBe("45 мин");
+    });
+
+    it("не даёт строки, когда лимита нет", () => {
+      const { course } = buildStartState({ info: { title: "Т" }, ...base });
+      expect(course.timeLimitLabel).toBe("");
+    });
+  });
+
+  describe("PRD-67: course.closesOnLeave", () => {
+    const base = { maxAttempts: null, completedAttempts: 0, hasCompletedResults: false, canStartNew: true };
+
+    it("есть в контексте, когда хост сообщил о настройке", () => {
+      const { course } = buildStartState({ info: { title: "Т", closesOnLeave: true }, ...base });
+      expect(course.closesOnLeave).toBe(true);
+    });
+
+    it("тест без настройки получает прежний контекст — без поля", () => {
+      const { course } = buildStartState({ info: { title: "Т" }, ...base });
+      expect("closesOnLeave" in course).toBe(false);
+    });
+  });
+
+  describe("общий проходной на обложке — только когда он решает исход", () => {
+    // «Тест пройден, если»: при «только обязательные темы» и «все темы» общий процент
+    // справочный. Показанный на обложке как «проходной балл», он называл бы условие,
+    // которого у теста нет (так ставят ненулевой порог ради LMS, 2026-09-30).
+    const base = { maxAttempts: 1, completedAttempts: 0, resume: null, hasCompletedResults: false, canStartNew: true };
+
+    it("решает общий результат — процент показывается", () => {
+      for (const policy of ["overall_only", "overall_and_required_topics"]) {
+        const { course } = buildStartState({ info: { ...info, passPercent: 80, passDecisionPolicy: policy }, ...base });
+        expect(course.passPercent).toBe(80);
+      }
+    });
+
+    it("решают темы — процент не показывается", () => {
+      for (const policy of ["required_topics_only", "all_topics_passed"]) {
+        const { course } = buildStartState({ info: { ...info, passPercent: 80, passDecisionPolicy: policy }, ...base });
+        expect(course.passPercent).toBeNull();
+      }
+    });
+
+    it("политика не передана (старый хост, старый тест) — как раньше", () => {
+      const { course } = buildStartState({ info: { ...info, passPercent: 80 }, ...base });
+      expect(course.passPercent).toBe(80);
+    });
   });
 
   describe("PRD-29 §6.7 на обложке — порог только у теста, который оценивает", () => {

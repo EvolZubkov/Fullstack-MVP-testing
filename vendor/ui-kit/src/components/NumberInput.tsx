@@ -1,13 +1,13 @@
-import React, { forwardRef, useId } from 'react';
+import React, { forwardRef, useEffect, useId, useState } from 'react';
 import { cn, cssStyleClass, type Size } from '../utils';
 
 export type StepperLayout = 'split' | 'right' | 'inline';
 
-export interface NumberInputProps
+/**
+ * Всё, кроме значения: обе разновидности поля — с пустым и без — делят один набор.
+ */
+export interface NumberInputBaseProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'onChange' | 'value' | 'prefix'> {
-  /** Текущее значение. Контролируемое поле. */
-  value: number;
-  onChange?: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
@@ -30,6 +30,28 @@ export interface NumberInputProps
   /** Подписи для кнопок (a11y). */
   decLabel?: string;
   incLabel?: string;
+}
+
+/** Обычное числовое поле: значение есть всегда. */
+export interface NumberInputProps extends NumberInputBaseProps {
+  allowEmpty?: false;
+  /** Текущее значение. Контролируемое поле. */
+  value: number;
+  onChange?: (value: number) => void;
+}
+
+/**
+ * Поле, у которого ПУСТО — самостоятельное значение, а не ноль.
+ *
+ * Нужно там, где «значения нет» и «значение равно нулю» — разные утверждения:
+ * вклад вопроса в шкалу, необязательный порог, переопределение цены. Разновидность
+ * заведена отдельным типом, а не расширением обычного: иначе каждому из уже
+ * существующих полей пришлось бы разбирать `null`, которого оно никогда не получит.
+ */
+export interface NumberInputEmptyProps extends NumberInputBaseProps {
+  allowEmpty: true;
+  value: number | null;
+  onChange?: (value: number | null) => void;
 }
 
 const IconMinus = () => (
@@ -57,9 +79,16 @@ const IconChevDown = () => (
   </svg>
 );
 
-export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
+/** Внутренняя разновидность: реализация одна на оба типа выше. */
+type NumberInputAnyProps = NumberInputBaseProps & {
+  allowEmpty?: boolean;
+  value: number | null;
+  onChange?: (value: never) => void;
+};
+
+const NumberInputImpl = forwardRef<HTMLInputElement, NumberInputAnyProps>(
   ({
-    value, onChange, min = -Infinity, max = Infinity, step = 1,
+    value, onChange, allowEmpty, min = -Infinity, max = Infinity, step = 1,
     size = 'm', layout = 'split', pill, label, hint, error, suffix,
     disabled, invalid, fullWidth, boxWidth, className, id,
     decLabel = 'Уменьшить', incLabel = 'Увеличить',
@@ -69,12 +98,38 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
     const fieldId = id || `ou-number-${autoId}`;
     const resolvedInvalid = invalid || !!error;
     const clamp = (v: number) => Math.min(max, Math.max(min, v));
+    const emit = onChange as ((value: number | null) => void) | undefined;
+    const empty = value === null || value === undefined;
     const set = (v: number) => {
       if (Number.isNaN(v)) return;
-      onChange?.(clamp(v));
+      emit?.(clamp(v));
     };
-    const atMin = value <= min;
-    const atMax = value >= max;
+    // Шаг от пустого поля начинает с нижней границы, а без неё — с нуля: иначе первое
+    // нажатие «Больше» не имеет от чего отсчитывать.
+    const base = empty ? (Number.isFinite(min) ? min : 0) : (value as number);
+    const atMin = !empty && (value as number) <= min;
+    const atMax = !empty && (value as number) >= max;
+
+    // Живой текст набора. Без него поле, управляемое ЧИСЛОМ, невозможно набрать: «1,»
+    // разбирается в 1, число возвращается в поле и стирает запятую, а «-» разбирается
+    // в NaN и стирается целиком. Черновик держит ровно то, что человек напечатал, а
+    // наружу уходит только разобранное число.
+    const [draft, setDraft] = useState<string | null>(null);
+    const parseText = (text: string): number | null | undefined => {
+      if (text.trim() === '') return null;
+      const n = Number(text.replace(',', '.'));
+      return Number.isNaN(n) ? undefined : n;
+    };
+    useEffect(() => {
+      if (draft === null) return;
+      // Значение пришло со стороны и разошлось с набранным — черновик больше не про него.
+      const shownValue = parseText(draft);
+      const target = empty ? null : (value as number);
+      if (shownValue !== target) setDraft(null);
+      // Пересинхронизацию задаёт только `value`: `draft` здесь — то, что мы защищаем.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [value]);
+    const shown = draft ?? (empty ? '' : String(value));
 
     return (
       <div className={cn(
@@ -94,7 +149,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
               type="button" className="ou-number__btn"
               aria-label={decLabel}
               disabled={disabled || atMin}
-              onClick={() => set(value - step)}
+              onClick={() => set(base - step)}
             ><IconMinus /></button>
           )}
           <input
@@ -103,22 +158,36 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
             className="ou-number__input"
             type="text"
             inputMode="numeric"
-            value={value}
+            value={shown}
             aria-label={ariaLabel || (typeof label === 'string' ? label : undefined)}
             aria-invalid={resolvedInvalid || undefined}
             aria-describedby={(error || hint) ? `${fieldId}-msg` : undefined}
             disabled={disabled}
             onChange={(e) => {
-              const n = Number(e.target.value.replace(',', '.'));
-              if (!Number.isNaN(n)) set(n);
+              const text = e.target.value;
+              setDraft(text);
+              const parsed = parseText(text);
+              // Пустое поле — значение, а не полпути к числу: сообщаем его сразу, иначе
+              // очистить поле невозможно. Незаконченный набор («-», «1,») не сообщаем:
+              // числа в нём ещё нет, а черновик его сохранит.
+              if (parsed === null) {
+                // Поле без пустого значения обязано остаться числом: очистка приводит его
+                // к нижней границе — так оно вело себя и до появления черновика.
+                if (allowEmpty) emit?.(null);
+                else set(0);
+                return;
+              }
+              if (parsed !== undefined) set(parsed);
             }}
             onBlur={(e) => {
               // Re-clamp on blur to ensure value is within bounds.
-              const n = Number(e.target.value.replace(',', '.'));
-              if (!Number.isNaN(n)) {
-                const c = clamp(n);
-                if (c !== value) onChange?.(c);
+              const parsed = parseText(e.target.value);
+              if (typeof parsed === 'number') {
+                const c = clamp(parsed);
+                if (c !== value) emit?.(c);
               }
+              // Набор закончен — дальше поле снова показывает значение, а не текст.
+              setDraft(null);
               onBlur?.(e);
             }}
             {...rest}
@@ -129,7 +198,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
               type="button" className="ou-number__btn"
               aria-label={incLabel}
               disabled={disabled || atMax}
-              onClick={() => set(value + step)}
+              onClick={() => set(base + step)}
             ><IconPlus /></button>
           )}
           {layout === 'right' && (
@@ -138,13 +207,13 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
                 type="button" className="ou-number__btn ou-number__btn--stack"
                 aria-label={incLabel}
                 disabled={disabled || atMax}
-                onClick={() => set(value + step)}
+                onClick={() => set(base + step)}
               ><IconChevUp /></button>
               <button
                 type="button" className="ou-number__btn ou-number__btn--stack"
                 aria-label={decLabel}
                 disabled={disabled || atMin}
-                onClick={() => set(value - step)}
+                onClick={() => set(base - step)}
               ><IconChevDown /></button>
             </span>
           )}
@@ -154,13 +223,13 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
                 type="button" className="ou-number__btn ou-number__btn--ghost"
                 aria-label={decLabel}
                 disabled={disabled || atMin}
-                onClick={() => set(value - step)}
+                onClick={() => set(base - step)}
               ><IconMinus /></button>
               <button
                 type="button" className="ou-number__btn ou-number__btn--ghost"
                 aria-label={incLabel}
                 disabled={disabled || atMax}
-                onClick={() => set(value + step)}
+                onClick={() => set(base + step)}
               ><IconPlus /></button>
             </>
           )}
@@ -174,4 +243,15 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
     );
   },
 );
-NumberInput.displayName = 'NumberInput';
+NumberInputImpl.displayName = 'NumberInput';
+
+/**
+ * Поле принимает ЛИБО обычную пару «число + обработчик числа», ЛИБО, при `allowEmpty`,
+ * пару, где значением может быть `null`. Перегрузка нужна, чтобы уже написанные поля
+ * продолжали получать в обработчик число, а не `number | null`.
+ */
+export const NumberInput = NumberInputImpl as unknown as {
+  (props: NumberInputProps & React.RefAttributes<HTMLInputElement>): React.ReactElement | null;
+  (props: NumberInputEmptyProps & React.RefAttributes<HTMLInputElement>): React.ReactElement | null;
+  displayName?: string;
+};

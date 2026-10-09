@@ -1,0 +1,70 @@
+{
+  // =========================================================================
+  // Mirror-instance environment (NODE_ENV=mirror). Selected by the loader over
+  // config/config.jsonc; in a container CONFIG_FILE points at it explicitly.
+  //
+  // A "mirror" is a production-shaped instance raised FROM SCRATCH: same image,
+  // same compose file, same config mechanics as production — but its own empty
+  // database, its own secrets and its own third-level domain. Several mirrors can
+  // run side by side on one server, so nothing instance-specific may be written
+  // here: the values that differ per mirror come from the instance's env/.env,
+  // which scripts/deploy/deploy.sh generates from the deploy parameters.
+  //
+  //   APP_URL           -> server.appUrl        (https://<label>.<base domain>)
+  //   SUPERADMIN_EMAILS -> access.superadminEmails
+  //
+  // See config/config.jsonc for the fully-documented base.
+  // =========================================================================
+  "log": {
+    "fileName": "",
+    "level": { "common": "info", "console": "info", "file": "info", "objects": {} }
+  },
+  "server": {
+    "port": 5000,
+    // Public URL of THIS mirror, as seen by the learner. Per-instance, so it is an
+    // env reference rather than a literal: deploy.sh writes it into env/.env from
+    // the --domain argument. Used to build email links.
+    "appUrl": { "env": "APP_URL" },
+    // A mirror is a customer-facing copy of the product, not a labelled stand —
+    // it carries the product name unchanged.
+    "appName": "Skill'Ум",
+    // Always true: a mirror is only ever raised behind the nginx vhost deploy.sh
+    // writes, which terminates TLS and forwards X-Forwarded-Proto: https. This is
+    // why the deploy obtains the certificate BEFORE the first container start —
+    // a secure cookie over plain HTTP is dropped by the browser, and the failure
+    // looks exactly like a wrong password.
+    "cookieSecure": true
+  },
+  "database": { "url": { "env": "DATABASE_URL" } },
+  "session": { "secret": { "env": "SESSION_SECRET" } },
+  "encryption": {
+    "password": { "env": "ENCRYPTION_PASSWORD" },
+    "salt": { "env": "ENCRYPTION_SALT" }
+  },
+  "email": {
+    "host": "smtp.yandex.ru",
+    "port": 465,
+    "secure": true,
+    // Envelope "from" address. Empty -> falls back to the SMTP user.
+    "from": "skillum@yandex.com",
+    "auth": {
+      "user": { "env": "SMTP_USER" },
+      "pass": { "env": "SMTP_PASS" }
+    }
+  },
+  // Per-instance: deploy.sh writes the seeded administrator into env/.env, so the
+  // account provisioned on the first boot is the one the operator was handed.
+  "access": { "superadminEmails": { "env": "SUPERADMIN_EMAILS" } },
+  // PRD-54. Импорт выгрузок отчётов LMS.
+  "analytics": {
+    "lmsImport": {
+      // Хранить ли ФИО и организацию участника. true = в базе только псевдоним.
+      // Псевдоним считается в любом случае: на нём держится ключ повторной загрузки.
+      "anonymizeParticipants": true
+    }
+  },
+  // Пакет SCORM: адрес приёма телеметрии — см. config/config.jsonc. Пусто -> server.appUrl (APP_URL зеркала).
+  "scorm": { "telemetryBaseUrl": "" },
+  // Operational ceilings — see config/config.jsonc for what each one bounds.
+  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3, "shortAnswerMaxLength": 250, "answerCheckBudgetMs": 1000, "answerCheckWarnMs": 200 }
+}

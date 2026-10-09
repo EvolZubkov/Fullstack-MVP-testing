@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
-  BarChart, Chart, LineChart, ProgressRing,
+  BarChart, Chart, DonutChart, LineChart, ProgressRing,
   type BarChartProps, type LineChartProps,
 } from './Charts';
 
@@ -99,6 +99,49 @@ export const Ring: Story = {
     <div className="ou-story-row-lg">
       <ProgressRing value={62} label={<><strong>62%</strong><div className="ou-story-muted-small">прогресс</div></>} />
       <ProgressRing value={88} size={120} color="var(--ou-success-default)" label={<><strong>88%</strong></>} />
+    </div>
+  ),
+};
+
+export const Donut: Story = {
+  render: () => (
+    <div className="ou-story-row-lg">
+      <Chart
+        title="Сегменты"
+        subtitle="сегмент у подписчика ровно один — доли складываются в аудиторию"
+      >
+        <DonutChart
+          label={(
+            <>
+              <span className="ou-donut__value">1 010</span>
+              <span className="ou-donut__label">активная аудитория</span>
+            </>
+          )}
+          segments={[
+            { id: 'it', label: 'ИТ', value: 290, valueLabel: '290 · 28,7 %' },
+            { id: 'b2c', label: 'B2C', value: 245, valueLabel: '245 · 24,3 %' },
+            { id: 'bti', label: 'БТИ', value: 180, valueLabel: '180 · 17,8 %' },
+            { id: 'b2b', label: 'B2B/B2G', value: 130, valueLabel: '130 · 12,9 %' },
+            { id: 'back', label: 'Бэкофис', value: 95, valueLabel: '95 · 9,4 %' },
+            { id: 'b2o', label: 'B2O', value: 70, valueLabel: '70 · 6,9 %' },
+            { id: 'other', label: 'Другое', value: 0, valueLabel: '0 · 0,0 %' },
+          ]}
+        />
+      </Chart>
+
+      <Chart title="Роль" subtitle="цвета заданы вызывающим, легенды нет">
+        <DonutChart
+          size={140}
+          thickness={18}
+          showLegend={false}
+          aria-label="Руководители — 21 %, специалисты — 79 %"
+          label={<span className="ou-donut__value">1 010</span>}
+          segments={[
+            { id: 'lead', label: 'Руководители', value: 212, color: 'var(--ou-accent-default)' },
+            { id: 'spec', label: 'Специалисты', value: 798, color: 'var(--ou-accent-secondary)' },
+          ]}
+        />
+      </Chart>
     </div>
   ),
 };

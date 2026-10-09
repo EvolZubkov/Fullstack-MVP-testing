@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Зонд PRD-57: замеры на стенде</title>
+<style>
+  body { font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 24px; background: #f6f7f9; color: #16181d; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #5b6270; margin: 0 0 20px; }
+  section { background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  .verdict { font-weight: 600; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eceff3; }
+  th { color: #5b6270; font-weight: 600; }
+  td.ok { color: #1d7a41; }
+  td.bad { color: #b3261e; }
+  td.cut { color: #9a6700; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #16181d; background: #16181d; color: #fff; cursor: pointer; }
+  button.ghost { background: #fff; color: #16181d; }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  pre { background: #16181d; color: #e7eaee; padding: 12px; border-radius: 8px; overflow: auto; max-height: 320px; font-size: 12px; }
+  .formula { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+  .formula figure { margin: 0; text-align: center; }
+  .formula figcaption { font-size: 12px; color: #5b6270; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>Зонд PRD-57: замеры на стенде WebTutor</h1>
+<p class="sub">Задача #51. Зонд пишет в LMS заведомо неверные значения и показывает, что она ответила. Прохождением теста он не является и данных продукта не трогает.</p>
+
+<div class="row">
+  <button id="copy">Скопировать отчёт</button>
+  <button id="toggle" class="ghost">Показать JSON</button>
+  <span id="copied" class="sub"></span>
+</div>
+
+<div id="report"></div>
+
+<section>
+  <h2>Формула: одна и та же запись двумя способами</h2>
+  <p class="verdict" id="formula-verdict">Смотрите глазами: обе формулы должны быть видны и одинаковы по размеру.</p>
+  <div class="formula" id="formula"></div>
+</section>
+
+<section>
+  <h2>Отчёт целиком</h2>
+  <pre id="json" hidden></pre>
+</section>
+
+<script src="probe-runner.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /** Поиск SCORM 2004 API по стандартному правилу: вверх по родителям, затем по открывателю. */
+  function findApi(win, depth) {
+    var tries = 0;
+    while (win && tries < (depth || 12)) {
+      if (win.API_1484_11) return win.API_1484_11;
+      if (win.parent && win.parent !== win) { win = win.parent; tries += 1; continue; }
+      break;
+    }
+    if (window.opener && window.opener.API_1484_11) return window.opener.API_1484_11;
+    return null;
+  }
+
+  /** Заглушка: зонд должен что-то показать даже там, где API не нашёлся. */
+  function stubApi(log) {
+    var store = {};
+    var error = "0";
+    return {
+      Initialize: function () { return "true"; },
+      Terminate: function () { return "true"; },
+      Commit: function () { return "true"; },
+      GetLastError: function () { return error; },
+      GetErrorString: function (c) { return "err " + c; },
+      GetDiagnostic: function () { return ""; },
+      SetValue: function (k, v) { store[k] = v; error = "0"; log.push(k); return "true"; },
+      GetValue: function (k) { error = k in store ? "0" : "401"; return store[k] || ""; },
+    };
+  }
+
+  var apiLog = [];
+  var api = findApi(window) || stubApi(apiLog);
+  var usingStub = !findApi(window);
+
+  var env = {
+    hasWorker: typeof Worker !== "undefined" && typeof URL !== "undefined" && typeof URL.createObjectURL === "function",
+    userAgent: navigator.userAgent,
+    now: new Date().toISOString(),
+    makeWorker: function () {
+      var src = "self.onmessage=function(){ self.postMessage('жив'); };";
+      var url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      return new Worker(url);
+    },
+  };
+
+  var report = TBProbe.run(api, env);
+  report.environment.apiFound = !usingStub;
+
+  /** Ответ рабочего потока проверяется отдельно: это единственный асинхронный замер. */
+  (function askWorker() {
+    var worker = report.measurements.filter(function (m) { return m.id === "worker"; })[0];
+    if (!env.hasWorker) return;
+    try {
+      var w = env.makeWorker();
+      var answered = false;
+      w.onmessage = function (e) {
+        answered = true;
+        worker.rows.push({ step: "ответ потока", outcome: String(e.data) });
+        worker.verdict = "рабочий поток РАБОТАЕТ: ответ получен";
+        render();
+        w.terminate();
+      };
+      w.onerror = function (e) {
+        worker.rows.push({ step: "ответ потока", outcome: "ошибка: " + (e.message || "неизвестно") });
+        worker.verdict = "рабочий поток создан, но не отвечает: " + (e.message || "ошибка без текста");
+        render();
+      };
+      w.postMessage("пинг");
+      setTimeout(function () {
+        if (answered) return;
+        worker.rows.push({ step: "ответ потока", outcome: "молчит 2 секунды" });
+        worker.verdict = "рабочий поток создан, но ответа нет за 2 секунды";
+        render();
+      }, 2000);
+    } catch (e) {
+      worker.rows.push({ step: "ответ потока", outcome: "не запрошен: " + (e.message || String(e)) });
+      render();
+    }
+  })();
+
+  function cell(value) {
+    var text = value === undefined || value === null ? "" : String(value);
+    var klass = text === "принято" ? "ok" : text === "отказ" || text === "подменено" ? "bad" : text === "обрезано" ? "cut" : "";
+    return '<td class="' + klass + '">' + text.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</td>";
+  }
+
+  function table(rows) {
+    if (!rows.length) return "<p class='sub'>нет строк</p>";
+    var keys = [];
+    for (var i = 0; i < rows.length; i += 1) {
+      for (var k in rows[i]) if (rows[i].hasOwnProperty(k) && keys.indexOf(k) < 0) keys.push(k);
+    }
+    var head = "<tr>" + keys.map(function (k) { return "<th>" + k + "</th>"; }).join("") + "</tr>";
+    var body = rows.map(function (row) {
+      return "<tr>" + keys.map(function (k) { return cell(row[k]); }).join("") + "</tr>";
+    }).join("");
+    return "<table>" + head + body + "</table>";
+  }
+
+  function render() {
+    var out = [];
+    out.push("<section><h2>Среда</h2>" + table([report.environment]) + "</section>");
+    if (usingStub) {
+      out.push("<section><h2>ВНИМАНИЕ</h2><p class='verdict'>API LMS не найден — замеры сняты с заглушки и о стенде ничего не говорят. Запускайте зонд как учебный модуль внутри LMS.</p></section>");
+    }
+    for (var i = 0; i < report.measurements.length; i += 1) {
+      var m = report.measurements[i];
+      out.push("<section><h2>" + m.title + "</h2><p class='verdict'>" + m.verdict + "</p>" + table(m.rows) + "</section>");
+    }
+    document.getElementById("report").innerHTML = out.join("");
+    document.getElementById("json").textContent = JSON.stringify(report, null, 2);
+  }
+
+  /** Формула: та же запись инлайновым SVG и картинкой с data-URI, с размерами и без. */
+  function drawFormula() {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 70" width="220" height="70" role="img" aria-label="Квадратный корень из суммы дробей">'
+      + '<text x="4" y="44" font-family="Times New Roman, serif" font-size="30" font-style="italic">E = mc</text>'
+      + '<text x="120" y="30" font-family="Times New Roman, serif" font-size="18">2</text>'
+      + '<path d="M140 46 L150 60 L166 14 L214 14" fill="none" stroke="#16181d" stroke-width="2"/>'
+      + '<text x="170" y="44" font-family="Times New Roman, serif" font-size="24" font-style="italic">x</text>'
+      + "</svg>";
+    var encoded = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+    document.getElementById("formula").innerHTML =
+      '<figure>' + svg + '<figcaption>инлайн &lt;svg&gt; с размерами</figcaption></figure>'
+      + '<figure><img src="' + encoded + '" width="220" height="70" alt="формула"><figcaption>&lt;img&gt; data-URI с размерами</figcaption></figure>'
+      + '<figure><img src="' + encoded + '" alt="формула"><figcaption>&lt;img&gt; data-URI без размеров</figcaption></figure>';
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = JSON.stringify(report, null, 2);
+    var note = document.getElementById("copied");
+    function fallback() {
+      var area = document.createElement("textarea");
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      try { document.execCommand("copy"); note.textContent = "скопировано"; }
+      catch (e) { note.textContent = "скопировать не вышло — возьмите JSON ниже"; }
+      document.body.removeChild(area);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { note.textContent = "скопировано"; }, fallback);
+    } else fallback();
+  });
+
+  document.getElementById("toggle").addEventListener("click", function () {
+    var pre = document.getElementById("json");
+    pre.hidden = !pre.hidden;
+    this.textContent = pre.hidden ? "Показать JSON" : "Скрыть JSON";
+  });
+
+  render();
+  drawFormula();
+})();
+</script>
+</body>
+</html>

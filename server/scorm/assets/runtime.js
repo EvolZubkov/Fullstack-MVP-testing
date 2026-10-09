@@ -129,7 +129,15 @@ var SCORM = (function() {
       this.setValue(base + 'completion_status', objective.completion || 'completed');
     },
 
-    setInteraction: function(index, id, type, result, learnerResponse, correctPattern, description) {
+    /**
+     * Write ONE interaction.
+     *
+     * `latency` is the time the learner spent on the question, an ISO 8601 duration. Absent
+     * (empty) means «not measured» — a question that was never shown, or a package resumed
+     * mid-run — and is then SKIPPED rather than written as a zero, the same rule description
+     * and correct pattern already follow: «PT0S» would claim an instant answer.
+     */
+    setInteraction: function(index, id, type, result, learnerResponse, correctPattern, description, latency) {
       this.setValue('cmi.interactions.' + index + '.id', id);
       this.setValue('cmi.interactions.' + index + '.type', type);
       this.setValue('cmi.interactions.' + index + '.result', result);
@@ -147,15 +155,38 @@ var SCORM = (function() {
       if (description) {
         this.setValue('cmi.interactions.' + index + '.description', description);
       }
+
+      // Время на задании — колонка «Продолжительность (сек.)» отчёта LMS.
+      if (latency) {
+        this.setValue('cmi.interactions.' + index + '.latency', latency);
+      }
     },
 
 
+    /**
+     * Close the attempt: score, verdict, objectives, interactions.
+     *
+     * `earnedPoints === null` means the run had NOTHING to grade (a questionnaire, an
+     * allocation of points), and then no `cmi.score` is written at all — SCORM 2004 allows
+     * the element to be absent, whereas `raw = 0 / max = 100` would claim the learner scored
+     * nothing under a threshold that was never applied. The verdict is unaffected: such a run
+     * passes by construction. This is the same rule `setObjective` already follows one level
+     * down, for the objective of a measurement topic.
+     */
+    /**
+     * @param {boolean|null} passed `null` — оценка ещё не выставлена (PRD-57 FR-40):
+     *   в попытке есть ответ, который никто не проверял. SCORM 2004 предусматривает
+     *   `unknown` ровно для этого случая, и писать туда `failed` нельзя: «не сдал» в
+     *   отчёте LMS по непроверенной работе — это претензия участника, а не неточность.
+     */
     finish: function(earnedPoints, possiblePoints, passed, objectives, interactions) {
       // Report earned points as raw score, possible points as max, scaled as ratio
-      var scaled = possiblePoints > 0 ? earnedPoints / possiblePoints : 0;
-      this.setScore(earnedPoints, 0, possiblePoints, scaled);
+      if (earnedPoints !== null && earnedPoints !== undefined) {
+        var scaled = possiblePoints > 0 ? earnedPoints / possiblePoints : 0;
+        this.setScore(earnedPoints, 0, possiblePoints, scaled);
+      }
       this.setCompletion('completed');
-      this.setSuccess(passed ? 'passed' : 'failed');
+      this.setSuccess(passed === null ? 'unknown' : (passed ? 'passed' : 'failed'));
       if (passed) this.setValue('cmi.progress_measure', '1');
       this.setValue('cmi.exit', 'normal');
       this.setValue('cmi.location', '');
@@ -174,7 +205,8 @@ var SCORM = (function() {
           int.result,
           int.response,
           int.correct,      // ✅ новое поле
-          int.description   // ✅ новое поле
+          int.description,  // ✅ новое поле
+          int.latency       // время на задании, пусто = не измерялось
         );
       }
 

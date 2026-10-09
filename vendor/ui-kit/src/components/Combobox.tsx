@@ -120,7 +120,9 @@ function ComboboxInner<T extends string = string>(
     emptyTitle = 'Ничего не найдено',
     footerAction, footerHint,
     renderChip, maxVisibleChips, highlightMatches = true,
-    id, name, className, style, ...rest
+    id, name, className, style,
+    'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy,
+    ...rest
   }: ComboboxProps<T>,
   ref: React.Ref<HTMLInputElement>,
 ) {
@@ -131,6 +133,9 @@ function ComboboxInner<T extends string = string>(
   useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
   const [open, setOpen] = useState(false);
+  // Set by a single-mode pick right before focus goes back to the input, so
+  // that the input's `onFocus` does not reopen the list the pick has just closed.
+  const suppressFocusOpenRef = useRef(false);
   const [internalQuery, setInternalQuery] = useState('');
   const query = queryProp !== undefined ? queryProp : internalQuery;
   const setQuery = useCallback((v: string) => {
@@ -197,6 +202,12 @@ function ComboboxInner<T extends string = string>(
       onChange?.(opt.value);
       setQuery('');
       setOpen(false);
+      // A mouse pick moves focus out of the input, so returning it fires `onFocus`.
+      // A keyboard pick keeps focus in place: no event follows, and a flag left set
+      // would swallow the next genuine focus.
+      if (inputRef.current && document.activeElement !== inputRef.current) {
+        suppressFocusOpenRef.current = true;
+      }
     }
     inputRef.current?.focus();
   }, [multiple, selectedValues, onValuesChange, onChange, setQuery]);
@@ -230,6 +241,14 @@ function ComboboxInner<T extends string = string>(
     }
   };
 
+  const onInputFocus = () => {
+    if (suppressFocusOpenRef.current) {
+      suppressFocusOpenRef.current = false;
+      return;
+    }
+    setOpen(true);
+  };
+
   // Selected chips for multi-select.
   const visibleChips = multiple
     ? (maxVisibleChips ? selectedValues.slice(0, maxVisibleChips) : selectedValues)
@@ -248,7 +267,14 @@ function ComboboxInner<T extends string = string>(
   const activeOptionId = open && activeIdx >= 0 && flatList[activeIdx]
     ? `${fieldId}-opt-${flatList[activeIdx].value}`
     : undefined;
+  // Имя поля берётся у того, кто его дал: собственная подпись, `aria-label`
+  // или `aria-labelledby` от потребителя — например, когда подпись рисует
+  // обёртка вроде `FormField`. Запасное «Выбор значения» ставится, только
+  // когда имени нет вовсе: иначе оно перебивало бы внешнюю подпись, и поле
+  // переставало находиться по ней.
+  const hasExternalName = Boolean(ariaLabel || ariaLabelledBy);
   const inputLabel = typeof label === 'string' ? label : 'Выбор значения';
+  const inputAriaLabel = label || hasExternalName ? ariaLabel : inputLabel;
   const inputPlaceholder = (!multiple && singleSelected) ? '' : (placeholder ?? '');
 
   return (
@@ -256,6 +282,9 @@ function ComboboxInner<T extends string = string>(
       ref={wrapRef}
       className={cn(
         'ou-combo',
+        // Single select shows exactly one chip, so it may use the whole control;
+        // the chip width cap exists for multi-select, where chips share the row.
+        !multiple && 'ou-combo--single',
         size === 's' && 'ou-combo--s',
         size === 'l' && 'ou-combo--l',
         t === 'error' && 'ou-combo--error',
@@ -278,6 +307,8 @@ function ComboboxInner<T extends string = string>(
         onClick={(e) => {
           const target = e.target as HTMLElement;
           if (target.closest('.ou-combo__chip-x, .ou-combo__clear')) return;
+          // A deliberate click opens the list, whatever a previous pick left behind.
+          suppressFocusOpenRef.current = false;
           if (target.closest('.ou-combo__trail')) { setOpen(o => !o); return; }
           setOpen(true);
           inputRef.current?.focus();
@@ -334,14 +365,15 @@ function ComboboxInner<T extends string = string>(
             disabled={disabled}
             autoComplete="off"
             role="combobox"
-            aria-label={label ? undefined : inputLabel}
+            aria-label={inputAriaLabel}
+            aria-labelledby={ariaLabelledBy}
             aria-expanded="true"
             aria-haspopup="listbox"
             aria-autocomplete="list"
             aria-controls={listboxId}
             aria-activedescendant={activeOptionId}
             onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
-            onFocus={() => setOpen(true)}
+            onFocus={onInputFocus}
             onKeyDown={onKeyDown}
           />
         ) : (
@@ -355,12 +387,13 @@ function ComboboxInner<T extends string = string>(
             disabled={disabled}
             autoComplete="off"
             role="combobox"
-            aria-label={label ? undefined : inputLabel}
+            aria-label={inputAriaLabel}
+            aria-labelledby={ariaLabelledBy}
             aria-expanded="false"
             aria-haspopup="listbox"
             aria-autocomplete="list"
             onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
-            onFocus={() => setOpen(true)}
+            onFocus={onInputFocus}
             onKeyDown={onKeyDown}
           />
         )}

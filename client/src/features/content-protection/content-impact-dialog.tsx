@@ -12,18 +12,21 @@
  *   confirmation before the operation proceeds.
  * - `publish` — a test cannot be published (server 409 `publish_infeasible`):
  *   per-topic findings, with a shortcut into the test structure editor.
+ * - `advisory` — PRD-50 FR-45 - FR-47: the test WAS published; the listed delivery
+ *   traps do not block anything, they only change what the learner will see. The
+ *   deliberate opposite of `publish`: nothing failed, so nothing is offered to retry.
  *
  * Built on the DS `ModalDialog` + `Tag`/`Banner`/`Button`; the dependent-test
  * list is a token-only composition (no DS list component), matching the
  * approved wireframe.
  */
 import { AlertTriangle } from "lucide-react";
-import { Banner, Button, ModalDialog, Tag, type Tone, type ButtonVariant } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog, Tag, type Tone, type ButtonVariant } from "@skillum/ui-kit";
 import type { TestFeasibility, PublishCheckFinding } from "./types";
 import { describeIssue } from "./issue-text";
 import "./content-impact-dialog.css";
 
-export type ContentImpactMode = "block" | "warn" | "publish";
+export type ContentImpactMode = "block" | "warn" | "publish" | "advisory";
 
 export interface ContentImpactDialogProps {
   open: boolean;
@@ -34,6 +37,14 @@ export interface ContentImpactDialogProps {
   tests?: TestFeasibility[];
   /** Per-topic findings (publish mode). */
   findings?: PublishCheckFinding[];
+  /** Ready-made sentences (advisory mode) — one per publication warning. */
+  notes?: string[];
+  /**
+   * Замыкающая строка advisory-режима. Умолчание говорит про публикацию, потому что
+   * режим родился на ней (PRD-50 FR-45 - FR-47); тот же диалог показывает замечания
+   * СОХРАНЕНИЯ (PRD-15 FR-05), где про публикацию писать нельзя — её не было.
+   */
+  advisoryFooter?: string;
   /** Current user is an administrator/superadmin → may force a blocked op. */
   canForce?: boolean;
   /** Label of the warn-mode confirm action, e.g. «Удалить вопрос». */
@@ -95,6 +106,8 @@ export function ContentImpactDialog({
   description,
   tests = [],
   findings = [],
+  notes = [],
+  advisoryFooter,
   canForce = false,
   confirmLabel = "Продолжить",
   confirmVariant = "destructive",
@@ -132,6 +145,22 @@ export function ContentImpactDialog({
         </div>
       );
     }
+    // advisory mode: the publication SUCCEEDED — «Понятно» closes, and the shortcut
+    // into the structure editor is offered only when the caller can open it.
+    if (mode === "advisory") {
+      return (
+        <div className="cp-foot">
+          {onOpenStructure && (
+            <Button variant="ghost" size="m" onClick={onOpenStructure}>
+              Открыть структуру теста
+            </Button>
+          )}
+          <Button variant="primary" size="m" onClick={onClose}>
+            Понятно
+          </Button>
+        </div>
+      );
+    }
     // block mode
     if (canForce && onForce) {
       return (
@@ -158,14 +187,24 @@ export function ContentImpactDialog({
     <ModalDialog
       open={open}
       onClose={onClose}
-      size={mode === "warn" || mode === "publish" ? "m" : "l"}
+      size={mode === "warn" || mode === "publish" || mode === "advisory" ? "m" : "l"}
       icon={<AlertTriangle size={20} />}
-      iconTone={mode === "warn" ? "warning" : "danger"}
+      iconTone={mode === "warn" || mode === "advisory" ? "warning" : "danger"}
       title={title}
       description={description}
       closeOnBackdrop={!pending}
       footer={footer}
     >
+      {mode === "advisory" && (
+        <ul className="cp-dep-list" role="list" aria-label="Предупреждения публикации">
+          {notes.map((text, i) => (
+            <li className="cp-dep" role="listitem" key={i}>
+              <span className="cp-dep__title">{text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {mode === "publish" ? (
         <ul className="cp-dep-list" role="list" aria-label="Темы с невыполнимой выдачей">
           {findings.map((f) => (
@@ -181,7 +220,7 @@ export function ContentImpactDialog({
             </li>
           ))}
         </ul>
-      ) : (
+      ) : mode === "advisory" ? null : (
         <ul className="cp-dep-list" role="list" aria-label="Затронутые тесты">
           {tests.map((t) => (
             <DependentItem key={t.testId} test={t} currentUserId={currentUserId} />
@@ -204,6 +243,15 @@ export function ContentImpactDialog({
         <Banner
           tone="info"
           description="Уменьшите объём выдачи в настройках секций или добавьте вопросы в перечисленные темы, затем повторите публикацию."
+        />
+      )}
+      {mode === "advisory" && (
+        <Banner
+          tone="info"
+          description={
+            advisoryFooter ??
+            "Тест опубликован. Перечисленное не мешает публикации, но меняет то, что увидит слушатель."
+          }
         />
       )}
     </ModalDialog>

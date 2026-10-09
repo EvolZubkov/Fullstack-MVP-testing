@@ -9,7 +9,7 @@
  * without moving markup around (see PRD-45 §7).
  */
 
-import { SegmentedControl } from "@universityrt/ui-kit";
+import { SegmentedControl } from "@skillum/ui-kit";
 
 import type { LevelTone } from "@shared/scales/interpretation";
 
@@ -28,7 +28,7 @@ const AUTO = "auto";
  * a dot, a card's left rule — where only the hue matters. A ribbon stripe instead
  * carries TEXT on that hue, so it needs a background/foreground PAIR that the
  * caption survives. The two cannot be the same value: every pair below was measured
- * in a browser against the real `university-rt.css`, in both themes, and each clears
+ * in a browser against the real `skillum-ds.css`, in both themes, and each clears
  * WCAG AA 4.5:1 (the caption is `--ou-text-body-xs`, i.e. small text):
  *
  * | tone       | ratio light | ratio dark |

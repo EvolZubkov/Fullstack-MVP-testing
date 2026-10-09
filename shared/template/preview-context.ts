@@ -35,6 +35,8 @@ import {
   buildSequencePlacements,
   buildPageContext,
   nextLabelOf,
+  sectionSubtitleOf,
+  passConditionShownOf,
   type PageContext,
   type SequenceContentPage,
   type SequencePlacement,
@@ -502,7 +504,11 @@ type ScreenParts = Pick<ScreenSpec, "expectedSlots" | "input">;
  * The layout renders the instruction slot only under `{{#if sectionIntro.hasInstruction}}`,
  * so the slot is expected only when the demo supplies an instruction.
  */
-function buildSectionIntroParts(values: Record<string, unknown>, facts: SectionIntroFacts): ScreenParts {
+function buildSectionIntroParts(
+  values: Record<string, unknown>,
+  facts: SectionIntroFacts,
+  settings?: Record<string, unknown> | null,
+): ScreenParts {
   const instruction = typeof values.instruction === "string" ? values.instruction : "";
   const illoRaw = values.illustration;
   const illustration =
@@ -517,11 +523,21 @@ function buildSectionIntroParts(values: Record<string, unknown>, facts: SectionI
     timeLimitMinutes: facts.timeLimitMinutes ?? undefined,
     instruction,
     illustration,
+    passConditionShown: passConditionShownOf({ settingsJson: settings ?? null } as SequenceContentPage),
   });
   return {
     expectedSlots: built.sectionIntro.hasInstruction ? ["instruction"] : [],
     input: {
-      context: { course: built.course, sectionIntro: built.sectionIntro },
+      context: {
+        course: built.course,
+        sectionIntro: built.sectionIntro,
+        // PRD-22 FR-42: the same `page.*` block the runtime hands over. A demo dataset
+        // normally carries no page settings — then the template's own wording prints,
+        // exactly as on a page the author has not touched.
+        page: buildPageContext(null, {
+          sectionSubtitle: sectionSubtitleOf({ settingsJson: settings ?? null } as SequenceContentPage),
+        }),
+      },
       slots: { instruction },
     },
   };
@@ -643,13 +659,17 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
         ...base,
         id: screenId,
         ...variantRef,
-        ...buildSectionIntroParts(page?.values ?? {}, {
-          sectionNumber: 1,
-          topicName: topic?.title ?? "Раздел",
-          questionCount: c.questionCount ?? c.questions?.length ?? 0,
-          description: c.description,
-          timeLimitMinutes: c.timeLimitMinutes,
-        }),
+        ...buildSectionIntroParts(
+          page?.values ?? {},
+          {
+            sectionNumber: 1,
+            topicName: topic?.title ?? "Раздел",
+            questionCount: c.questionCount ?? c.questions?.length ?? 0,
+            description: c.description,
+            timeLimitMinutes: c.timeLimitMinutes,
+          },
+          (page as { settings?: Record<string, unknown> } | undefined)?.settings ?? null,
+        ),
       };
     }
 

@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, cleanup } from "@testing-library/react";
-import { TemplateScreen } from "../template-screen";
+import { TemplateScreen, extractFontFaces } from "../template-screen";
 
 function shadowOf(container: HTMLElement): ShadowRoot {
   const host = container.querySelector("[data-template-screen]") as HTMLElement;
@@ -144,6 +144,30 @@ describe("TemplateScreen — themes (PRD-23)", () => {
     const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} themed />);
     const host = container.querySelector("[data-template-screen]") as HTMLElement;
     expect(host.classList.contains("ou--light")).toBe(true);
+    cleanup();
+  });
+});
+
+describe("TemplateScreen — brand font faces", () => {
+  // Chromium ignores @font-face declared inside a shadow root, so a template's embedded
+  // brand font never loaded on the web host. The faces are lifted into the document.
+  const face = '@font-face { font-family: "ProbeBrand"; src: url("data:font/woff2;base64,AAAA"); font-weight: 700; }';
+
+  it("extracts every @font-face rule verbatim and nothing else", () => {
+    const css = `.a { color: red; }\n${face}\n.b { font-weight: 700; }`;
+    expect(extractFontFaces(css)).toEqual([face]);
+    expect(extractFontFaces(".a { color: red; }")).toEqual([]);
+  });
+
+  it("lifts the template's faces into the document head once, across re-renders", () => {
+    const css = `${face}\n.tb-scene { font-family: "ProbeBrand"; }`;
+    const { rerender } = render(<TemplateScreen layout="<div></div>" context={{ n: 1 }} css={css} />);
+    rerender(<TemplateScreen layout="<div></div>" context={{ n: 2 }} css={css} />);
+    const lifted = [...document.head.querySelectorAll("style[data-tb-font-face]")].filter((s) =>
+      s.textContent?.includes("ProbeBrand"),
+    );
+    expect(lifted).toHaveLength(1);
+    expect(lifted[0].textContent).toBe(face);
     cleanup();
   });
 });

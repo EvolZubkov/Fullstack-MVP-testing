@@ -1,4 +1,4 @@
-# UniversityRT UI Kit · Handoff Guide
+# Skillum UI Kit · Handoff Guide
 
 Гид как получить артефакты `ui-kit` из этого проекта и подключить их в свой репозиторий или продуктовый проект.
 
@@ -20,9 +20,9 @@ ui-kit/
 │   ├── main.ts               # Vite-builder + autodocs + аддоны
 │   └── preview.tsx           # Тема (light/dark) + плотность (normal/compact) toolbar
 ├── scripts/
-│   └── build-css.mjs         # Bundler для css/university-rt.css
+│   └── build-css.mjs         # Bundler для css/skillum-ds.css
 ├── css/
-│   └── university-rt.css     # Single-file бандл всех стилей (~275 KB)
+│   └── skillum-ds.css     # Single-file бандл всех стилей (~275 KB)
 └── src/
     ├── index.ts              # Реэкспорт всех 52 компонентов + типов
     ├── utils.ts              # cn(), shared типы
@@ -52,7 +52,7 @@ ui-kit/
 | `ui-kit/src/` | `<твой-репо>/ui-kit/src/` | 52 .tsx компонента + stories |
 | `ui-kit/.storybook/` | `<твой-репо>/ui-kit/.storybook/` | конфиг Storybook |
 | `ui-kit/scripts/build-css.mjs` | `<твой-репо>/ui-kit/scripts/` | bundler CSS |
-| `ui-kit/css/university-rt.css` | `<твой-репо>/ui-kit/css/` | готовый стилевой бандл |
+| `ui-kit/css/skillum-ds.css` | `<твой-репо>/ui-kit/css/` | готовый стилевой бандл |
 | `ui-kit/package.json` | `<твой-репо>/ui-kit/` | deps + scripts |
 | `ui-kit/vite.config.ts` | `<твой-репо>/ui-kit/` | библиотечная сборка |
 | `ui-kit/tsconfig.json` | `<твой-репо>/ui-kit/` | TS-конфиг |
@@ -88,7 +88,7 @@ npm run build              # build:css + build:lib
 #   dist/index.mjs         (ESM)
 #   dist/index.js          (CJS)
 #   dist/index.d.ts        (типы)
-#   css/university-rt.css  (стили, ~275 KB)
+#   css/skillum-ds.css  (стили, ~275 KB)
 ```
 
 Артефакт готов к публикации в npm-registry (внутренний Nexus / GitHub Packages / npmjs).
@@ -102,12 +102,12 @@ npm run build              # build:css + build:lib
 После `npm publish` в свой registry:
 
 ```bash
-npm install @universityrt/ui-kit
+npm install @skillum/ui-kit
 ```
 
 ```tsx
-import { Button, Modal, ToastProvider } from '@universityrt/ui-kit';
-import '@universityrt/ui-kit/css';
+import { Button, Modal, ToastProvider } from '@skillum/ui-kit';
+import '@skillum/ui-kit/css';
 
 export default function App() {
   return (
@@ -134,7 +134,7 @@ export default function App() {
 ```json
 {
   "dependencies": {
-    "@universityrt/ui-kit": "*"
+    "@skillum/ui-kit": "*"
   }
 }
 ```
@@ -154,7 +154,7 @@ resolve: {
 
 ```tsx
 import { Button } from '@ui-kit';
-import '/path/to/ui-kit/css/university-rt.css';
+import '/path/to/ui-kit/css/skillum-ds.css';
 ```
 
 ---
@@ -226,7 +226,7 @@ npm publish --access restricted
 
 ```bash
 cd ui-kit
-npm run build:css      # пересобирает css/university-rt.css
+npm run build:css      # пересобирает css/skillum-ds.css
 ```
 
 После этого либо коммитить артефакт (рекомендую — потребители получат стили сразу), либо собирать на CI перед публикацией.
@@ -272,3 +272,44 @@ npm run build:css      # пересобирает css/university-rt.css
 - React-компоненты — semver
 
 Если делаешь breaking change в любом из них — обязательно major-bump.
+
+---
+
+## 14. Известные дефекты
+
+### 14.1. `Combobox` в одиночном режиме открывает список заново сразу после выбора
+
+**Статус:** исправлено 2026-09-26. Замечено 2026-09-22, повторно подтверждено приёмкой
+аналитики 2026-09-26. Раздел оставлен как запись о причине и о тесте, который её сторожит.
+
+**Симптом.** Пользователь выбирает вариант — значение подставляется, но список тут же
+открывается снова и закрывает собой выбранное. Выглядит так, будто выбор не сработал, и список
+висит, пока пользователь не щёлкнет мимо.
+
+**Причина** (`src/components/Combobox.tsx`). Обработчик выбора в одиночном режиме закрывает
+список (`setOpen(false)`, строка 201), а затем возвращает фокус в поле ввода
+(`inputRef.current?.focus()`, строка 203). У поля ввода стоит `onFocus={() => setOpen(true)}`
+(строки 357 и 377) — возврат фокуса открывает список обратно.
+
+**Где проявляется в продукте** — во всех одиночных `Combobox`: выбор теста на вкладке «Срезы»
+раздела «Аналитика» (`client/src/features/analytics/slices/slices-tab.tsx`), доступ к тесту,
+оформление теста, стартовые страницы, гранты темы, групповые операции, импорт.
+
+**Как исправлено.**
+
+1. Ref-флаг `suppressFocusOpenRef` («выбор только что сделан») ставится в обработчике выбора в
+   одиночном режиме перед возвратом фокуса — и только если фокус из поля действительно ушёл
+   (выбор мышью). При выборе клавишей Enter фокус остаётся в поле, события `focus` не будет, и
+   невыставленный флаг не «съест» следующий честный заход фокусом (например, по Tab).
+2. Обработчик `onFocus` поля ввода: если флаг стоит — сбрасывает его и список НЕ открывает.
+3. Обработчик щелчка по `.ou-combo__control` флаг сбрасывает, поэтому осознанный щелчок
+   открывает список, как прежде.
+
+Множественный режим не тронут: там список после выбора остаётся открытым.
+
+**Как проверяется.** Тест `client/src/components/__tests__/combobox-single-close.test.tsx`.
+Щелчки в нём идут через `@testing-library/user-event`: дефект живёт в переносе фокуса, а
+`fireEvent.click` фокус не двигает и дефекта не видит. Тест проверяет, что после выбора мышью и
+клавишей `role="listbox"` отсутствует, что щелчок по полю снова открывает список, что заход по
+Tab открывает список и что множественный режим держит его открытым. В браузере проверено на
+вкладке «Срезы» раздела «Аналитика».

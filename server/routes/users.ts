@@ -11,13 +11,23 @@ import multer from "multer";
 import ExcelJS from "exceljs";
 import {
   addAoaSheet,
-  readWorkbookFromBuffer,
+  readTableFromBuffer,
   sheetToObjects,
   workbookToBuffer,
 } from "../utils/excel";
 import { randomBytes, createHash } from "crypto";
+import { ORG_FIELDS, normalizeOrgValue } from "@shared/org-fields";
+import { readOrgColumns, readLmsLearnerIdColumn } from "../utils/org-columns";
+import { detectUsersList, isZipUpload } from "../utils/users-list";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+/**
+ * Preview error of a users-list row whose role the uploader may not assign. A list carries only
+ * «author» or «learner», and «learner» is within every ceiling that opens the upload at all, so
+ * the refused role is always «Автор».
+ */
+export const ROLE_NOT_ASSIGNABLE_ERROR = "роль «Автор» вам назначать нельзя";
 
 /**
  * Lifetime of the password-setup token carried by an invitation letter. Longer
@@ -56,13 +66,15 @@ class PasswordEmailBudgetExceeded extends Error {
  * @param opts.rateLimit Whether the shared hourly budget applies (it does not on
  *   the conversion path: the letter is a consequence of an operator's one-off
  *   action on one account, not something the account holder can trigger).
- * @returns Whether the transport accepted the letter.
+ * @returns Whether the transport accepted the letter; `false` without a token for an account that
+ *   has no email (PRD-54 BR-54-42) — there is nowhere to send it.
  * @throws PasswordEmailBudgetExceeded When `rateLimit` is on and the budget is spent.
  */
 async function issuePasswordSetupInvite(
-  user: { id: string; email: string; name?: string | null },
+  user: { id: string; email: string | null; name?: string | null },
   opts: { reason: string; inviterName?: string; rateLimit: boolean },
 ): Promise<boolean> {
+  if (!user.email) return false;
   if (opts.rateLimit) {
     // Same anti-mail-bomb budget as POST /api/auth/forgot-password: both paths
     // mint rows in `password_reset_tokens`, so one shared counter covers both.
@@ -91,6 +103,24 @@ async function inviterNameOf(userId: string | undefined): Promise<string | undef
   return inviter?.name || undefined;
 }
 
+/**
+ * The account as the users API shows it: the stored row without its secrets.
+ *
+ * Every answer of this router used to spread the whole `users` row, so the
+ * password hash and the email hash reached any holder of `users.read`. One
+ * function for all of them, because the leak was four separate spreads and a
+ * fifth one added later would have leaked again.
+ *
+ * @param user Stored account row (or anything shaped like it).
+ * @returns The same fields minus `passwordHash` and `emailHash`.
+ */
+export function toUserResponse<T extends { passwordHash?: unknown; emailHash?: unknown }>(
+  user: T,
+): Omit<T, "passwordHash" | "emailHash"> {
+  const { passwordHash: _passwordHash, emailHash: _emailHash, ...visible } = user;
+  return visible;
+}
+
 const router = Router();
 
 // GET /api/users - Список пользователей
@@ -101,7 +131,7 @@ router.get("/", requirePermission("users.read"), async (req, res) => {
       users.map(async (user) => {
         const groups = await storage.getUserGroups(user.id);
         const roles = await storage.getUserRoles(user.id);
-        return { ...user, roles, groups };
+        return { ...toUserResponse(user), roles, groups };
       })
     );
     res.json(usersWithGroups);
@@ -114,15 +144,32 @@ router.get("/", requirePermission("users.read"), async (req, res) => {
 // GET /api/users/bulk-template — download CSV template (must be before /:id)
 router.get("/bulk-template", requirePermission("users.read"), async (_req, res) => {
   const wb = new ExcelJS.Workbook();
+  // PRD-54: колонка «Внешний ключ» — в шаблоне, иначе о ней не узнает никто, кроме читавших спеку.
+  // Она необязательна: пустая клетка не трогает уже проставленный ключ.
+  // Оргполя и идентификатор в LMS (план оргструктуры, BR-54-29): без них заведённые списком
+  // люди остаются без подразделения, и срезам аналитики нечем их делить.
   addAoaSheet(wb, "Users", [
-    ["email", "name", "role", "group"],
-    ["user@example.com", "Иван Иванов", "learner", "Группа А"],
-    ["manager@example.com", "Анна Петрова", "learner", ""],
+    ["email", "name", "role", "group", "external_key", "organization", "unit", "position", "lms_learner_id"],
+    ["user@example.com", "Иван Иванов", "learner", "Группа А", "TAB-1024",
+      "АО «Пример»", "Отдел продаж", "Менеджер по продажам", "ivanov_i"],
+    ["manager@example.com", "Анна Петрова", "learner", "", "", "", "", "", ""],
   ]);
   const buf = await workbookToBuffer(wb);
   res.setHeader("Content-Disposition", "attachment; filename=users-template.xlsx");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.send(buf);
+});
+
+// GET /api/users/org-values — org-structure values in use (must be before /:id).
+// Feeds the profile form (choose or create, plan Р-3) and the list filters; the
+// counts tell a spelling that came from an LMS export from one typed by hand.
+router.get("/org-values", requirePermission("users.read"), async (_req, res) => {
+  try {
+    res.json(await storage.getOrgValues());
+  } catch (error) {
+    logger.error("Get org values error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to get org values" });
+  }
 });
 
 // GET /api/users/:id - Получить пользователя
@@ -133,7 +180,7 @@ router.get("/:id", requirePermission("users.read"), async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
     const groups = await storage.getUserGroups(user.id);
-    res.json({ ...user, roles: await storage.getUserRoles(user.id), groups });
+    res.json({ ...toUserResponse(user), roles: await storage.getUserRoles(user.id), groups });
   } catch (error) {
     logger.error("Get user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get user" });
@@ -206,7 +253,14 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
       return res.status(400).json({ error: "User with this email already exists" });
     }
 
+    // Org fields and linking keys (org-structure plan, task 1): allowed for an
+    // external participant too — a contractor also works in some unit.
+    const profile = readProfileFields(req.body);
+    const conflict = await linkingKeyConflict(profile, null);
+    if (conflict) return res.status(409).json(conflict);
+
     const user = await storage.createUser({
+      ...profile,
       email,
       passwordHash: external ? null : password,
       isExternal: external,
@@ -229,7 +283,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(user.id);
-    audit.userCreate(user.email, requestedRoles.join("+"));
+    audit.userCreate(user.email ?? user.id, requestedRoles.join("+"));
 
     // The invitation letter, when the create form asked for one. The account is
     // already stored by now, so a mail failure must not fail the request: it is
@@ -252,7 +306,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
       logger.info(`Invite e-mail on create for user ${user.id} (delivered=${inviteSent})`, "users");
     }
 
-    res.status(201).json({ ...user, roles: requestedRoles, groups, inviteSent });
+    res.status(201).json({ ...toUserResponse(user), roles: requestedRoles, groups, inviteSent });
   } catch (error) {
     logger.error("Create user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create user" });
@@ -260,6 +314,106 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
 });
 
 // PUT /api/users/:id - Обновить пользователя
+/**
+ * Привести внешний ключ к хранимому виду (PRD-54 раздел 5.4).
+ *
+ * Регистр СОХРАНЯЕТСЯ: ключ показывают человеку в том виде, в каком он его ввёл. Нечувствительность
+ * при сверке обеспечивают уникальный индекс по `lower(external_key)` и `getUserByExternalKey`.
+ *
+ * Пустая строка приводится к `null`, а не хранится пустой: иначе она совпала бы с любой другой
+ * пустой и связала бы всех безымянных участников с одним пользователем.
+ *
+ * @param raw значение из формы или книги
+ * @returns ключ или `null`, если поле пустое
+ */
+export function normalizeExternalKey(raw: unknown): string | null {
+  const s = String(raw ?? "").trim();
+  return s === "" ? null : s;
+}
+
+/**
+ * Внешний ключ из строки книги массовой загрузки (PRD-54 раздел 11.4).
+ *
+ * Псевдонимы те же по духу, что у `email`/`ФИО`/`роль`/`группа` рядом: книгу заполняет человек, а
+ * не выгружает система, и требовать одно точное написание заголовка — верный способ получить
+ * молчаливо пропущенную колонку.
+ *
+ * @param row строка книги
+ * @returns ключ или `null`, если колонки нет или она пуста
+ */
+export function readExternalKeyColumn(row: Record<string, unknown>): string | null {
+  return normalizeExternalKey(
+    row["external_key"] ?? row["Внешний ключ"] ?? row["внешний ключ"] ?? row["ключ"] ?? "",
+  );
+}
+
+/** Profile fields a form or a list may set, besides name and email. */
+interface ProfileFields {
+  organization?: string | null;
+  unit?: string | null;
+  position?: string | null;
+  lmsLearnerId?: string | null;
+  externalKey?: string | null;
+}
+
+/**
+ * Read the optional profile fields of a request body (org-structure plan, task 1).
+ *
+ * A field ABSENT from the body is left out of the result — «do not touch»; a
+ * field present but empty becomes `null` — «clear». Without that difference
+ * every save of a form that does not show a field would wipe it. The org fields
+ * are normalised by the shared engine, the two linking keys by the key rule.
+ *
+ * @param body Request body.
+ * @returns Only the fields the body carries, normalised.
+ */
+function readProfileFields(body: Record<string, unknown>): ProfileFields {
+  const fields: ProfileFields = {};
+  for (const field of ORG_FIELDS) {
+    if (field in body) fields[field] = normalizeOrgValue(body[field]);
+  }
+  if ("lmsLearnerId" in body) fields.lmsLearnerId = normalizeExternalKey(body.lmsLearnerId);
+  if ("externalKey" in body) fields.externalKey = normalizeExternalKey(body.externalKey);
+  return fields;
+}
+
+/**
+ * The first linking key of `fields` that another account already holds.
+ *
+ * Both keys are unique per person (PRD-54 BR-54-26, BR-54-31; plan Р-6): a key
+ * with two owners makes linking a lottery. The check runs BEFORE the write to
+ * give an answer that names the owner; for the external key the unique index
+ * stays the real barrier against a race of two saves.
+ *
+ * @param fields Normalised fields about to be written.
+ * @param selfId The account being saved; it may keep its own keys.
+ * @returns The refusal to send, or `null` when both keys are free.
+ */
+async function linkingKeyConflict(
+  fields: ProfileFields,
+  selfId: string | null,
+): Promise<{ field: "lmsLearnerId" | "externalKey"; error: string } | null> {
+  if (fields.lmsLearnerId) {
+    const owner = await storage.getUserByLmsLearnerId(fields.lmsLearnerId);
+    if (owner && owner.id !== selfId) {
+      return {
+        field: "lmsLearnerId",
+        error: `Идентификатор в LMS «${fields.lmsLearnerId}» уже у пользователя ${owner.name ?? owner.id}`,
+      };
+    }
+  }
+  if (fields.externalKey) {
+    const owner = await storage.getUserByExternalKey(fields.externalKey);
+    if (owner && owner.id !== selfId) {
+      return {
+        field: "externalKey",
+        error: `Ключ «${fields.externalKey}» уже у пользователя ${owner.name ?? owner.id}`,
+      };
+    }
+  }
+  return null;
+}
+
 router.put("/:id", requirePermission("users.manage"), async (req, res) => {
   try {
     const { email, name, groupIds } = req.body;
@@ -278,7 +432,14 @@ router.put("/:id", requirePermission("users.manage"), async (req, res) => {
       }
     }
 
-    const updated = await storage.updateUser(userId, { email, name });
+    // PRD-54 и план оргструктуры: ключи связывания и оргполя. Все необязательны, поэтому
+    // «не передали» (не трогаем) отличается от «передали пустым» (снимаем) — иначе любое
+    // сохранение карточки стирало бы то, чего форма не показывает.
+    const profile = readProfileFields(req.body);
+    const conflict = await linkingKeyConflict(profile, userId);
+    if (conflict) return res.status(409).json(conflict);
+
+    const updated = await storage.updateUser(userId, { email, name, ...profile });
 
     // Обновляем группы если указаны
     if (groupIds && Array.isArray(groupIds)) {
@@ -286,7 +447,7 @@ router.put("/:id", requirePermission("users.manage"), async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(userId);
-    res.json({ ...updated, roles: await storage.getUserRoles(userId), groups });
+    res.json({ ...(updated ? toUserResponse(updated) : {}), roles: await storage.getUserRoles(userId), groups });
   } catch (error) {
     logger.error("Update user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update user" });
@@ -409,6 +570,9 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
     if (user.isExternal) {
       return res.status(400).json({ error: "An external participant cannot be invited to set a password" });
     }
+    if (!user.email) {
+      return res.status(400).json({ error: "Account has no email", field: "email" });
+    }
 
     if (user.status !== "pending") {
       return res.status(400).json({
@@ -444,6 +608,11 @@ router.post("/:id/promote", requirePermission("users.manage"), async (req, res) 
     if (!user) return res.status(404).json({ error: "User not found" });
     if (!user.isExternal) {
       return res.status(400).json({ error: "Account is not an external participant" });
+    }
+    // PRD-54 BR-54-42: the conversion sends a password-setup letter, and an account without email
+    // could never finish it — it would become an ordinary account that nobody can sign into.
+    if (!user.email) {
+      return res.status(400).json({ error: "Account has no email", field: "email" });
     }
 
     await storage.promoteExternalUser(user.id);
@@ -606,7 +775,12 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
   try {
     if (!req.file) return res.status(400).json({ error: "File required" });
 
-    const wb = await readWorkbookFromBuffer(req.file.buffer);
+    // .csv as well as .xlsx: the dialog has always promised both, the server read only the book.
+    const wb = await readTableFromBuffer(req.file.buffer);
+    // Any text reads as CSV, so a text that is not a users list keeps the "not an .xlsx" answer.
+    if (!isZipUpload(req.file.buffer) && detectUsersList(wb) === null) {
+      return res.status(400).json({ error: "Failed to read file", code: "not_a_zip" });
+    }
     const ws = wb.worksheets[0];
     if (!ws) return res.status(400).json({ error: "File is empty" });
     const rows: any[] = sheetToObjects(ws, { defval: "" });
@@ -632,6 +806,35 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
       const validRole = role === "author" ? "author" : "learner";
       const existing = await storage.getUserByEmail(email);
 
+      // Э6 (2026-10-02): a new row with a role above the uploader's ceiling is an error IN THE
+      // PREVIEW, not a surprise in the import report — a manager sees it before anything is written.
+      // An existing account's roles are never touched by a list, so only new rows are checked.
+      if (!existing && !validateRoleChange({
+        actorRoles: req.effectiveRoles ?? [],
+        currentRoles: [],
+        requestedRoles: [validRole],
+        atCreation: true,
+      }).ok) {
+        return {
+          idx, email, name, role: validRole, groupName, groupId: null, groupFound: false,
+          status: "error", error: ROLE_NOT_ASSIGNABLE_ERROR,
+        };
+      }
+
+      // PRD-54: ключ, занятый ДРУГИМ пользователем, — ошибка строки, а не повод перезаписать:
+      // на уникальности ключа держится связывание, и тихая перезапись порвала бы готовые связи.
+      // То же правило — у идентификатора в LMS (план оргструктуры, Р-6).
+      const externalKey = readExternalKeyColumn(row);
+      const lmsLearnerId = readLmsLearnerIdColumn(row);
+      const org = readOrgColumns(row);
+      const conflict = await linkingKeyConflict({ externalKey, lmsLearnerId }, existing?.id ?? null);
+      if (conflict) {
+        return {
+          idx, email, name, role: validRole, groupName, groupId: null, groupFound: false,
+          externalKey, lmsLearnerId, ...org, status: "error", error: conflict.error,
+        };
+      }
+
       // Resolve group
       let groupId: string | null = null;
       let groupFound = false;
@@ -647,7 +850,13 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
         groupName: groupName || null,
         groupId,
         groupFound,
-        status: existing ? "duplicate" : "new",
+        externalKey,
+        lmsLearnerId,
+        ...org,
+        // PRD-54: строка существующего пользователя с НЕПУСТЫМ ключом (внешним или идентификатором
+        // в LMS) не пропускается как дубль, а проставляет ключ. Иначе проставить ключи уже
+        // заведённой базе было бы нечем.
+        status: existing ? (externalKey || lmsLearnerId ? "keyUpdate" : "duplicate") : "new",
         existingId: existing?.id || null,
       };
     }));
@@ -681,7 +890,27 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
         email: string; name?: string; role?: string;
         groupId?: string | null; groupName?: string | null;
         duplicateAction?: "skip" | "update"; status: string; existingId?: string;
+        externalKey?: string | null; lmsLearnerId?: string | null;
+        organization?: string | null; unit?: string | null; position?: string | null;
       }[]
+    };
+
+    /**
+     * What a list row may write onto an EXISTING account: only non-empty cells.
+     *
+     * A list is not a form — an empty cell means «not given», and letting it wipe
+     * a unit someone filled in by hand would make every re-upload destructive.
+     * Clearing a field is the profile form's job.
+     */
+    const filledFieldsOf = (row: (typeof rows)[number]) => {
+      const fields: ProfileFields = {};
+      for (const field of ORG_FIELDS) {
+        const value = normalizeOrgValue(row[field]);
+        if (value) fields[field] = value;
+      }
+      const lmsLearnerId = normalizeExternalKey(row.lmsLearnerId);
+      if (lmsLearnerId) fields.lmsLearnerId = lmsLearnerId;
+      return fields;
     };
 
     logger.info(`bulk-import body keys: [${Object.keys(parsed || {}).join(",")}] rows type: ${typeof rows} rows length: ${Array.isArray(rows) ? rows.length : "N/A"} ct: ${req.headers["content-type"]}`);
@@ -714,10 +943,28 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
       try {
         if (row.status === "error") { skipped++; continue; }
 
+        // PRD-54: существующий пользователь с непустым ключом — не дубль, а проставление ключа.
+        if (row.status === "keyUpdate" && row.existingId) {
+          const externalKey = normalizeExternalKey(row.externalKey);
+          await storage.updateUser(row.existingId, {
+            // A key update may come from the LMS id alone; an empty external key
+            // cell then leaves the stored key as it is.
+            ...(externalKey ? { externalKey } : {}),
+            ...filledFieldsOf(row),
+            ...(row.name ? { name: row.name } : {}),
+          });
+          const gid = await resolveGroupId(row.groupId, row.groupName);
+          if (gid) await storage.addUserToGroup(row.existingId, gid).catch((e: Error) => {
+            logger.warn(`bulk-import: addUserToGroup failed for ${row.email} → group ${gid}: ${e.message}`);
+          });
+          updated++;
+          continue;
+        }
+
         if (row.status === "duplicate") {
           if (row.duplicateAction === "skip" || !row.duplicateAction) { skipped++; continue; }
           if (row.duplicateAction === "update" && row.existingId) {
-            await storage.updateUser(row.existingId, { name: row.name || undefined });
+            await storage.updateUser(row.existingId, { name: row.name || undefined, ...filledFieldsOf(row) });
             const gid = await resolveGroupId(row.groupId, row.groupName);
             if (gid) await storage.addUserToGroup(row.existingId, gid).catch((e: Error) => {
               logger.warn(`bulk-import: addUserToGroup failed for ${row.email} → group ${gid}: ${e.message}`);
@@ -749,6 +996,10 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
           status: "pending",
           mustChangePassword: true,
           gdprConsent: false,
+          // PRD-54: the preview shows the key of a new row, so the row must be
+          // created with it — without this the key was lost for every new person.
+          externalKey: normalizeExternalKey(row.externalKey),
+          ...filledFieldsOf(row),
           createdBy: req.session.userId,
         });
         await storage.setUserRoles(user.id, rowRoles as StoredRole[], req.session.userId ?? null);

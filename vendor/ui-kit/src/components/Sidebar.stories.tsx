@@ -53,7 +53,7 @@ export const Default: Story = {
           onSelect={(id, item) => { setActive(id); args.onSelect?.(id, item); }}
           brand={<>
             <span className="ou-story-brand-mark">U</span>
-            <span className="brand-text">UniversityRT</span>
+            <span className="brand-text">Skillum</span>
           </>}
           footer={
             <div className="ou-story-user-row">

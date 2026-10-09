@@ -6,7 +6,7 @@
  * one flags the template `invalid` and lists the blocking errors.
  */
 import { useEffect, useState } from "react";
-import { Banner, Button, FileUploader, ModalDialog } from "@universityrt/ui-kit";
+import { Banner, Button, FileUploader, ModalDialog } from "@skillum/ui-kit";
 import { AlertCircle } from "lucide-react";
 import { useUpdateTemplate, type AdminTemplate, type UploadOutcome } from "./use-admin-templates";
 

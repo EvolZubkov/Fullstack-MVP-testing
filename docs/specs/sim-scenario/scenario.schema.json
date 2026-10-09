@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skillum.local/schemas/sim-scenario/v1/scenario.schema.json",
+  "title": "Сценарий в информационной системе (формат обмена, версия 1)",
+  "description": "Содержимое файла scenario.json в архиве обмена. Описание и семантика — exchange-format.md рядом. Сценарий — граф сцен: сцена — холст с элементами-изображениями, зоны ведут к другим сценам.",
+  "type": "object",
+  "required": ["format", "version", "meta", "media", "start", "scenes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "skillum.sim-scenario" },
+    "version": { "const": 1 },
+    "meta": { "$ref": "#/$defs/meta" },
+    "settings": { "$ref": "#/$defs/settings" },
+    "media": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/media" }, "description": "Библиотека изображений сценария." },
+    "fields": { "type": "array", "items": { "$ref": "#/$defs/field" }, "description": "Поля: значения, общие на весь сценарий. Где поле стоит на сцене, задаёт сама сцена." },
+    "start": { "$ref": "#/$defs/id", "description": "Сцена, с которой начинается сценарий." },
+    "scenes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scene" } }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "description": "Идентификатор: латиница в нижнем регистре, цифры и дефис. Сцены, изображения библиотеки, поля, зоны и сочетания клавиш уникальны в сценарии; элементы — в своей сцене."
+    },
+    "box": {
+      "type": "object",
+      "description": "Прямоугольник в пикселях сцены: x и y — левый верхний угол.",
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "point": {
+      "type": "array",
+      "description": "Точка в пикселях сцены: [x, y].",
+      "prefixItems": [{ "type": "integer" }, { "type": "integer" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "zoneShape": {
+      "description": "Форма зоны. Прямоугольник по умолчанию (x, y, w, h; radius — скругление углов), ellipse — эллипс, вписанный в x, y, w, h (круг при w = h), polygon — многоугольник по points без x, y, w, h.",
+      "oneOf": [
+        {
+          "allOf": [{ "$ref": "#/$defs/box" }],
+          "properties": {
+            "shape": { "const": "rect" },
+            "radius": { "type": "integer", "minimum": 0, "description": "Радиус скругления углов; больше половины меньшей стороны — ошибка импорта." }
+          },
+          "not": { "required": ["points"] }
+        },
+        {
+          "allOf": [{ "$ref": "#/$defs/box" }],
+          "required": ["shape"],
+          "properties": { "shape": { "const": "ellipse" } },
+          "not": { "anyOf": [{ "required": ["points"] }, { "required": ["radius"] }] }
+        },
+        {
+          "required": ["shape", "points"],
+          "properties": {
+            "shape": { "const": "polygon" },
+            "points": { "type": "array", "items": { "$ref": "#/$defs/point" }, "minItems": 3, "description": "Вершины по порядку обхода; стороны не пересекаются, вершины не повторяются." }
+          },
+          "not": { "anyOf": [{ "required": ["x"] }, { "required": ["y"] }, { "required": ["w"] }, { "required": ["h"] }, { "required": ["radius"] }] }
+        }
+      ]
+    },
+    "size": {
+      "type": "object",
+      "required": ["w", "h"],
+      "additionalProperties": false,
+      "properties": { "w": { "type": "integer", "minimum": 1 }, "h": { "type": "integer", "minimum": 1 } }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["title", "task"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "task": { "type": "string", "minLength": 1, "description": "Текст задания для участника, простой текст." },
+        "language": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" },
+        "system": { "type": "string", "description": "Информационная система, к которой относится сценарий." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "tool": { "type": "object", "properties": { "name": { "type": "string" }, "version": { "type": "string" } } }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "stage": { "$ref": "#/$defs/size", "description": "Размер сцены по умолчанию в пикселях. Полный экран масштабирует сцену целиком." },
+        "normSeconds": { "type": "integer", "minimum": 1, "description": "Норма времени: превышение штрафуется по правилам оценки в тесте." },
+        "limitSeconds": { "type": ["integer", "null"], "minimum": 1, "description": "Жёсткий лимит: по его истечении сценарий завершается как невыполненный. null — без лимита." },
+        "minViewportWidth": { "type": "integer", "minimum": 320 },
+        "hints": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" }, "afterMisses": { "type": "integer", "minimum": 1 } }
+        },
+        "counters": {
+          "type": "object",
+          "description": "Какие счётчики видит участник. Решает разработчик сценария; по умолчанию все выключены.",
+          "additionalProperties": false,
+          "properties": { "actions": { "type": "boolean" }, "misses": { "type": "boolean" }, "detours": { "type": "boolean" } }
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "required": ["id", "file", "w", "h"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "file": { "type": "string", "pattern": "^media/[A-Za-z0-9._-]+\\.(png|jpg|jpeg|webp)$" },
+        "w": { "type": "integer", "minimum": 1, "description": "Ширина изображения в пикселях." },
+        "h": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "appear": {
+      "type": "object",
+      "description": "Появление элемента при входе на сцену, если на прошлой сцене его не было. Только простые эффекты.",
+      "properties": {
+        "mode": { "enum": ["with-previous", "after-previous"], "default": "with-previous" },
+        "delayMs": { "type": "integer", "minimum": 0, "default": 0 },
+        "effect": { "enum": ["none", "fade"], "default": "none" },
+        "durationMs": { "type": "integer", "minimum": 0, "maximum": 2000, "default": 200 }
+      }
+    },
+    "element": {
+      "type": "object",
+      "description": "Изображение из библиотеки на сцене. Порядок в массиве — порядок слоёв: последний сверху.",
+      "required": ["id", "media", "x", "y"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "media": { "$ref": "#/$defs/id" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "w": { "type": "integer", "minimum": 1, "description": "Нет — ширина изображения." },
+        "h": { "type": "integer", "minimum": 1 },
+        "hidden": { "type": "boolean", "default": false, "description": "Скрыт при первом появлении; показывается эффектом show или toggle." },
+        "autoHideMs": { "type": "integer", "minimum": 100, "description": "Показанный элемент скрывается сам через это время — сообщения системы." },
+        "appear": { "$ref": "#/$defs/appear" },
+        "scroll": {
+          "type": "object",
+          "description": "Элемент прокручивается внутри своей рамки w × h: длинный список, таблица. Зоны с полем in лежат в координатах изображения.",
+          "properties": { "direction": { "enum": ["vertical", "horizontal", "both"], "default": "vertical" } }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["id", "fill"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "fill": { "enum": ["keyboard", "effect"], "description": "keyboard — участник набирает; effect — значение вписывает эффект set." },
+        "initial": { "type": "string" },
+        "check": { "$ref": "#/$defs/ruleSet" },
+        "checkWhen": { "enum": ["input", "goal"], "description": "input — неверное значение при вводе сразу ошибка; goal — проверка только в цели." },
+        "tabIndex": { "type": "integer", "minimum": 0 },
+        "allowPaste": { "type": "boolean", "default": true },
+        "hint": { "type": "string" }
+      }
+    },
+    "fieldPlacement": {
+      "type": "object",
+      "description": "Где поле стоит на этой сцене и можно ли его здесь редактировать.",
+      "required": ["field", "x", "y", "w", "h"],
+      "properties": {
+        "field": { "$ref": "#/$defs/id" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 },
+        "editable": { "type": "boolean", "default": false }
+      }
+    },
+    "action": {
+      "type": "object",
+      "description": "Общая часть зоны и сочетания клавиш: роль, условие, эффекты.",
+      "properties": {
+        "title": { "type": "string", "description": "Название для автора и аналитики; участнику не показывается." },
+        "role": {
+          "enum": ["path", "alt", "detour", "trap", "neutral"],
+          "description": "path — основной путь; alt — другой верный путь; detour — допустимое лишнее действие; trap — правдоподобная ошибка с последствиями; neutral — ни действие, ни ошибка."
+        },
+        "error": { "type": "string", "description": "Только для trap: название ошибки для протокола и аналитики." },
+        "when": { "$ref": "#/$defs/condition" },
+        "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
+        "otherwise": { "type": "array", "items": { "$ref": "#/$defs/effect" }, "description": "Если when не выполнено. Такое действие — ошибка." },
+        "hint": { "type": "string" }
+      }
+    },
+    "zone": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/zoneShape" },
+        { "$ref": "#/$defs/action" },
+        { "if": { "properties": { "role": { "const": "neutral" } } }, "then": { "not": { "anyOf": [{ "required": ["effects"] }, { "required": ["when"] }] } } },
+        { "if": { "properties": { "role": { "enum": ["path", "alt", "detour", "trap"] } } }, "then": { "required": ["effects"] } },
+        { "if": { "properties": { "role": { "const": "trap" } } }, "then": { "required": ["error"] } },
+        { "if": { "required": ["otherwise"] }, "then": { "required": ["when"] } },
+        { "if": { "required": ["copyText"] }, "then": { "properties": { "role": { "const": "neutral" } } } },
+        { "if": { "properties": { "action": { "const": "drag" } }, "required": ["action"] }, "then": { "required": ["drop"] } }
+      ],
+      "required": ["id", "role"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "shape": { "enum": ["rect", "ellipse", "polygon"], "default": "rect" },
+        "action": { "enum": ["click", "dblclick", "rightclick", "hover", "drag"], "default": "click" },
+        "hoverMs": { "type": "integer", "minimum": 0, "default": 400 },
+        "drop": { "$ref": "#/$defs/box", "description": "Только для drag: куда отпустить." },
+        "in": { "$ref": "#/$defs/id", "description": "Элемент с прокруткой, в координатах изображения которого лежит зона." },
+        "copyText": { "type": "string", "minLength": 1, "description": "Копируемый текст нейтральной зоны." }
+      }
+    },
+    "keyBinding": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/action" },
+        { "if": { "properties": { "role": { "const": "trap" } } }, "then": { "required": ["error"] } }
+      ],
+      "required": ["id", "keys", "role", "effects"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "keys": {
+          "type": "string",
+          "pattern": "^((Ctrl|Alt|Shift|Meta)\\+)*([A-Z0-9]|F([1-9]|1[0-2])|Enter|Escape|Tab|Delete|Backspace|Space|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown)$",
+          "description": "Сочетание: Ctrl+S, Shift+F10, Escape. Буква — физическая клавиша, независимо от раскладки."
+        }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "required": ["id", "title", "elements"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "size": { "$ref": "#/$defs/size", "description": "Нет — settings.stage." },
+        "elements": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/element" } },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/fieldPlacement" } },
+        "zones": { "type": "array", "items": { "$ref": "#/$defs/zone" } },
+        "keys": { "type": "array", "items": { "$ref": "#/$defs/keyBinding" } },
+        "onMissGoto": { "$ref": "#/$defs/id", "description": "Клик мимо всех зон — ошибка и переход сюда: так закрывается раскрытое меню." },
+        "goal": { "$ref": "#/$defs/goal" },
+        "views": { "type": "array", "items": { "$ref": "#/$defs/view" }, "description": "Зарезервировано: раскладка сцены для телефона." }
+      }
+    },
+    "effect": {
+      "description": "Эффект действия. Выполняются по порядку.",
+      "oneOf": [
+        { "type": "object", "required": ["goto"], "additionalProperties": false, "properties": { "goto": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["show"], "additionalProperties": false, "properties": { "show": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["hide"], "additionalProperties": false, "properties": { "hide": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["toggle"], "additionalProperties": false, "properties": { "toggle": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["set", "value"], "additionalProperties": false, "properties": { "set": { "$ref": "#/$defs/id" }, "value": { "type": "string" } } },
+        { "type": "object", "required": ["clear"], "additionalProperties": false, "properties": { "clear": { "$ref": "#/$defs/id" } } }
+      ]
+    },
+    "condition": {
+      "oneOf": [
+        { "type": "object", "required": ["filled"], "additionalProperties": false, "properties": { "filled": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } } } },
+        { "type": "object", "required": ["field", "check"], "additionalProperties": false, "properties": { "field": { "$ref": "#/$defs/id" }, "check": { "$ref": "#/$defs/ruleSet" } } },
+        { "type": "object", "required": ["visible"], "additionalProperties": false, "properties": { "visible": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["all"], "additionalProperties": false, "properties": { "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/condition" } } } },
+        { "type": "object", "required": ["any"], "additionalProperties": false, "properties": { "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/condition" } } } },
+        { "type": "object", "required": ["not"], "additionalProperties": false, "properties": { "not": { "$ref": "#/$defs/condition" } } }
+      ]
+    },
+    "goal": {
+      "type": "object",
+      "description": "Сцена-цель: вход на неё завершает сценарий.",
+      "required": ["outcome"],
+      "properties": {
+        "outcome": { "enum": ["success", "fail"], "description": "success — исход решают проверки; fail — сцена-провал, цель не достигнута." },
+        "message": { "type": "string", "description": "Что случилось — для окна результата и протокола, прежде всего у провала." },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field"],
+            "additionalProperties": false,
+            "properties": {
+              "field": { "$ref": "#/$defs/id" },
+              "check": { "$ref": "#/$defs/ruleSet", "description": "Нет — проверка самого поля." },
+              "critical": { "type": "boolean", "default": true },
+              "weight": { "type": "number", "exclusiveMinimum": 0, "default": 1 }
+            }
+          }
+        }
+      }
+    },
+    "view": {
+      "type": "object",
+      "description": "Зарезервировано: раскладка сцены для другого устройства — свой размер и геометрия, общая логика.",
+      "required": ["device", "size"],
+      "properties": {
+        "device": { "enum": ["phone", "tablet"] },
+        "size": { "$ref": "#/$defs/size" },
+        "elements": { "type": "object", "additionalProperties": { "type": "object" }, "description": "Переопределение элементов по id: другое изображение, место." },
+        "geometry": { "type": "object", "additionalProperties": { "$ref": "#/$defs/box" }, "description": "Место полей и зон по id." },
+        "gestures": { "type": "object", "additionalProperties": { "enum": ["tap", "doubletap", "longpress", "swipe-left", "swipe-right", "swipe-up", "swipe-down"] } }
+      }
+    },
+    "ruleSet": {
+      "type": "object",
+      "description": "Набор правил ответа PRD-57 (AnswerRuleSet в shared/answer-check/rules.ts).",
+      "required": ["answerKind", "join", "rules"],
+      "properties": {
+        "answerKind": { "enum": ["text", "number"] },
+        "join": { "enum": ["any", "all"] },
+        "unit": { "type": "string" },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              { "type": "object", "required": ["kind", "match", "value"], "properties": { "kind": { "const": "text" }, "match": { "enum": ["wildcard", "regex"] }, "value": { "type": "string" }, "slow": { "type": "boolean" } } },
+              {
+                "type": "object",
+                "required": ["kind", "op", "value"],
+                "properties": {
+                  "kind": { "const": "number" },
+                  "op": { "enum": ["eq", "ne", "gt", "gte", "lt", "lte"] },
+                  "value": { "type": "number" },
+                  "tolerance": { "type": "object", "required": ["unit", "value"], "properties": { "unit": { "enum": ["abs", "pct"] }, "value": { "type": "number", "minimum": 0 } } }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

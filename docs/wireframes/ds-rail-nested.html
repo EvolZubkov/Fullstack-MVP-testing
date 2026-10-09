@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Wireframe: вложенный пункт рейла ящика — примитив дизайн-системы.
+      Файл: docs/wireframes/ds-rail-nested.html
+
+      Задача. У рейла ящика один уровень. Вкладке «Оценка результата» нужен второй:
+      пункт «Шкалы» — это НЕ один экран, а два: «Список шкал» и «Вклады вопросов».
+
+      Как это сделано сегодня: в стволе `ScalesSection` открывает СВОЙ `ou-drawer__split`
+      со своим рейлом внутри рейла вкладки — два рейла по 240px в ящике шириной 1040px.
+      Матрица вкладов при этом самая широкая на свете вещь в ящике: её ширина
+      `18rem + число_шкал × 7rem`, то есть 512px уже на двух шкалах, — и делить
+      оставшееся ей не с чем.
+
+      Каркас ящика, шапка, вкладки и сам рейл взяты из целевого эскиза
+      docs/wireframes/editor-settings-target.html без изменений: здесь решается
+      ТОЛЬКО устройство второго уровня.
+
+      Состояния: s-list, s-contributions, s-disabled, s-title, s-collapsible.
+    -->
+    <title>Вложенный пункт рейла — примитив ДС</title>
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <!-- ДС берётся из редактируемой зависимости, а не из копии в docs/wireframes/ds:
+         копия отстала и врала бы про облик компонентов. -->
+    <link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { position: absolute; width: 0; height: 0; }
+
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: var(--ou-space-1);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      }
+      .wf-state .ou-drawer { top: var(--ou-space-12); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+
+      /* Каркас ящика — те же две строки, что и в целевом эскизе: без них рейл не
+         растягивается на высоту тела, и сравнивать было бы не с чем. */
+      .ou-drawer__body { padding: 0; }
+      .ou-drawer__split .tb-settings-content { flex: 1 1 auto; min-width: 0; }
+
+      /* ─── Предмет эскиза: второй уровень рейла ──────────────────────────────
+
+         Отступ ребёнка — шаг вложенности 4x поверх левого поля пункта: 12 + 16 = 28px.
+         Ведущих иконок у пунктов рейла нет, выравнивать подпись не подо что, поэтому
+         работает правило сетки — разные уровни отбиты на 4x, а не на глазок. */
+      .ou-drawer__rail-group { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+      .ou-drawer__rail-item--child {
+        padding-left: calc(var(--ou-space-3) + var(--ou-space-4));
+        font-weight: 400;
+      }
+      .ou-drawer__rail-item--child.is-disabled {
+        color: var(--ou-fg-subtle);
+        cursor: not-allowed;
+      }
+      .ou-drawer__rail-item--child.is-disabled:hover { background: transparent; }
+
+      /* Родитель-заголовок: подпись, а не кнопка. Своего экрана у него нет, значит
+         нажимать не на что и подсвечивать нечего. */
+      .ou-drawer__rail-grouplbl {
+        display: flex; align-items: center; gap: var(--ou-space-3);
+        height: 36px; padding: 0 var(--ou-space-3);
+        color: var(--ou-fg-muted);
+        font: var(--ou-text-body-m); font-weight: 600;
+      }
+
+      /* Родитель-кнопка (запасная разновидность, s-collapsible): шеврон в хвосте —
+         ведущее место занято иконкой раздела, и менять их местами нельзя. */
+      .ou-drawer__rail-chev {
+        flex-shrink: 0; width: 16px; height: 16px;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: var(--ou-fg-subtle);
+      }
+      .ou-drawer__rail-item[aria-expanded="true"] .ou-drawer__rail-chev { transform: rotate(180deg); }
+
+      /* Подсказка под заблокированным пунктом: почему он заблокирован. */
+      .ou-drawer__rail-hint {
+        padding: 0 var(--ou-space-3) 0 calc(var(--ou-space-3) + var(--ou-space-4));
+        font: var(--ou-text-body-xs); color: var(--ou-fg-subtle);
+      }
+
+      /* Демонстрационная матрица: ради неё второй уровень и заводится. */
+      .wf-matrix { width: 100%; table-layout: fixed; border-collapse: collapse; font: var(--ou-text-body-s); }
+      .wf-matrix th, .wf-matrix td {
+        padding: var(--ou-space-2) var(--ou-space-2);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        text-align: left;
+      }
+      .wf-matrix th:first-child, .wf-matrix td:first-child { width: 18rem; }
+      .wf-matrix .ou-number { width: 100%; }
+
+      /* Панель примечаний под эскизом — НЕ часть интерфейса. */
+      .wf-notes {
+        margin: var(--ou-space-6) auto; max-width: 900px;
+        padding: var(--ou-space-6);
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l);
+        font: var(--ou-text-body-s); color: var(--ou-fg-default);
+      }
+      .wf-notes h2 { font: var(--ou-text-heading-s); margin: 0 0 var(--ou-space-4); }
+      .wf-notes h3 { font: var(--ou-text-body-m); font-weight: 600; margin: var(--ou-space-4) 0 var(--ou-space-1); }
+      .wf-notes ul { margin: 0; padding-left: var(--ou-space-5); }
+      .wf-notes li + li { margin-top: var(--ou-space-1); }
+      .wf-notes code { font: var(--ou-text-mono-s); background: var(--ou-bg-hover); padding: 0 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <nav class="wf-nav">
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s active" onclick="showState(this, 'list')">s-list</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'contributions')">s-contributions</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'disabled')">s-disabled</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'title')">s-title</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'collapsible')">s-collapsible</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="toggleTheme()">Тёмная</button>
+    </nav>
+
+    <!-- ═══════════ STATE: s-list — активен «Список шкал» ═══════════ -->
+    <div id="wf-list" class="wf-state active">
+      <div class="ou-drawer-root ou-drawer-root--right" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Определение ведущего стиля лидерства</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Разделы вкладки">
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Оценка ответа</span></button>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Вердикт</span></button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-scales-1">Шкалы</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-scales-1">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page"><span class="ou-drawer__rail-lbl">Список шкал</span></button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child"><span class="ou-drawer__rail-lbl">Вклады вопросов</span></button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Показатели</span></button>
+              </nav>
+              <div class="tb-settings-content">
+                <div class="ou-formsection ou-formsection--stacked">
+                  <div class="ou-formsection__intro"><h3 class="ou-formsection__title">Шкалы теста</h3></div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-formactions ou-formactions--between">
+                      <span class="ou-formactions__buttons">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить шкалу</span></button>
+                      </span>
+                    </div>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">ana — Аналитичность</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">сумма · без пересчёта · 4 уровня</p>
+                        </div>
+                      </header>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">com — Коммуникация</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 4 уровня</p>
+                        </div>
+                      </header>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-contributions — активны «Вклады вопросов» ═══════════ -->
+    <div id="wf-contributions" class="wf-state">
+      <div class="ou-drawer-root ou-drawer-root--right" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Определение ведущего стиля лидерства</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Разделы вкладки">
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Оценка ответа</span></button>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Вердикт</span></button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-scales-2">Шкалы</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-scales-2">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child"><span class="ou-drawer__rail-lbl">Список шкал</span></button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page"><span class="ou-drawer__rail-lbl">Вклады вопросов</span></button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Показатели</span></button>
+              </nav>
+              <div class="tb-settings-content">
+                <div class="ou-formsection ou-formsection--stacked">
+                  <div class="ou-formsection__intro"><h3 class="ou-formsection__title">Вклады вопросов</h3></div>
+                  <div class="ou-formsection__body">
+                    <div class="tb-fold-toolbar">
+                      <span class="tb-fold-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Развернуть все</span></button>
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Свернуть все</span></button>
+                      </span>
+                    </div>
+                    <!-- Ради этой таблицы всё и затевается: на своём экране она получает
+                         всю ширину панели, а не половину. -->
+                    <table class="wf-matrix" aria-label="Вклады вариантов ответа в шкалы">
+                      <thead>
+                        <tr>
+                          <th>Вариант ответа</th>
+                          <th>ANA</th>
+                          <th>COM</th>
+                          <th>ORG</th>
+                          <th>RES</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Слушаю и уточняю</td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="2" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="3" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="1" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                        </tr>
+                        <tr>
+                          <td>Сразу предлагаю решение</td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="3" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="2" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                          <td><div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button><input class="ou-number__input" type="text" value="3" aria-label="Вклад" /><button type="button" class="ou-number__btn" aria-label="Больше">+</button></div></div></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-disabled — шкал нет, вклады недоступны ═══════════ -->
+    <div id="wf-disabled" class="wf-state">
+      <div class="ou-drawer-root ou-drawer-root--right" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Новый тест</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Разделы вкладки">
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Оценка ответа</span></button>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Вердикт</span></button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-scales-3">Шкалы</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-scales-3">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page"><span class="ou-drawer__rail-lbl">Список шкал</span></button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-disabled" disabled aria-describedby="rail-contrib-hint"><span class="ou-drawer__rail-lbl">Вклады вопросов</span></button>
+                  <span class="ou-drawer__rail-hint" id="rail-contrib-hint">Появятся, когда будет хотя бы одна шкала.</span>
+                </div>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Показатели</span></button>
+              </nav>
+              <div class="tb-settings-content">
+                <div class="ou-empty ou-empty--well">
+                  <div class="ou-empty__body">
+                    <div class="ou-empty__title">Шкал пока нет</div>
+                    <div class="ou-empty__desc">Шкала собирает баллы по вкладам вопросов и превращает их в уровень с толкованием.</div>
+                    <div class="ou-empty__actions"><button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span>Добавить шкалу</span></button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-title — заголовком служит существующий rail-title ═══════════ -->
+    <div id="wf-title" class="wf-state">
+      <div class="ou-drawer-root ou-drawer-root--right" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Определение ведущего стиля лидерства</h2></div>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Разделы вкладки">
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Оценка ответа</span></button>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Вердикт</span></button>
+                <!-- Тот же смысл, но существующим классом дизайн-системы. -->
+                <span class="ou-drawer__rail-title" id="rail-scales-5">Шкалы</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-scales-5">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page"><span class="ou-drawer__rail-lbl">Список шкал</span></button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child"><span class="ou-drawer__rail-lbl">Вклады вопросов</span></button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Показатели</span></button>
+              </nav>
+              <div class="tb-settings-content">
+                <div class="ou-formsection ou-formsection--stacked">
+                  <div class="ou-formsection__intro"><h3 class="ou-formsection__title">Шкалы теста</h3></div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__desc">Заголовком группы служит существующий `ou-drawer__rail-title` — прописными, мелким. Нового класса не нужно, но группа читается как раздел рейла, а не как родитель двух пунктов.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-collapsible — запасная разновидность родителя ═══════════ -->
+    <div id="wf-collapsible" class="wf-state">
+      <div class="ou-drawer-root ou-drawer-root--right" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Определение ведущего стиля лидерства</h2></div>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Разделы вкладки">
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Оценка ответа</span></button>
+                <button type="button" class="ou-drawer__rail-item" id="rail-scales-4" aria-expanded="false" aria-controls="rail-scales-group-4">
+                  <span class="ou-drawer__rail-lbl">Шкалы</span>
+                  <span class="ou-drawer__rail-badge">2</span>
+                  <span class="ou-drawer__rail-chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                </button>
+                <div class="ou-drawer__rail-group" id="rail-scales-group-4" role="group" aria-labelledby="rail-scales-4" hidden></div>
+                <button type="button" class="ou-drawer__rail-item"><span class="ou-drawer__rail-lbl">Показатели</span></button>
+              </nav>
+              <div class="tb-settings-content">
+                <div class="ou-formsection ou-formsection--stacked">
+                  <div class="ou-formsection__intro"><h3 class="ou-formsection__title">Запасная разновидность</h3></div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__desc">Свёртываемый родитель со счётчиком детей. Нашему случаю не нужен: группа одна, детей два, прятать нечего. Показан, чтобы решить, закладывать ли его в примитив сразу.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <section class="wf-notes">
+      <h2>Что здесь решается</h2>
+      <p>
+        Пункт рейла «Шкалы» — это не один экран, а два: «Список шкал» и «Вклады
+        вопросов». В стволе это сделано рейлом ВНУТРИ рейла: панель шкал открывает свой
+        <code>ou-drawer__split</code> внутри того, что уже открыла вкладка. Два рейла по
+        240px съедают почти половину ящика, а матрица вкладов — самое широкое в нём
+        место: её ширина <code>18rem + число_шкал × 7rem</code>, то есть 512px уже на
+        двух шкалах. Второй уровень в ОДНОМ рейле даёт матрице отдельный экран во всю
+        ширину панели.
+      </p>
+
+      <h3>Родитель — заголовок, а не кнопка</h3>
+      <p>
+        У «Шкал» нет своего экрана: показывать под этим именем нечего. Поэтому
+        родитель — подпись <code>ou-drawer__rail-grouplbl</code>, нажимать на неё
+        не на что, дети видны всегда. Свёртываемый родитель-кнопка показан отдельным
+        состоянием (s-collapsible) как запасная разновидность на будущее.
+      </p>
+
+      <h3>Отступ ребёнка</h3>
+      <p>
+        <code>padding-left: 3x + 4x</code> = 12 + 16 = 28px: левое поле пункта плюс шаг
+        вложенности. Ведущих иконок у пунктов рейла в продукте нет, поэтому выравнивать
+        подпись ребёнка не подо что — работает правило сетки: разные уровни отбиты на 4x.
+      </p>
+
+      <h3>Заблокированный ребёнок</h3>
+      <p>
+        «Вклады вопросов» недоступны, пока в тесте нет ни одной шкалы: вносить вклад
+        не во что. Пункт остаётся ВИДИМЫМ и заблокированным, под ним — подсказка,
+        почему. Прятать его нельзя: исчезнувший пункт читается как «такой настройки
+        нет», а она есть и появится. Когда удалена последняя шкала, выбор
+        откатывается на «Список шкал».
+      </p>
+
+      <h3>Доступность</h3>
+      <ul>
+        <li>Группа детей: <code>role="group"</code> и <code>aria-labelledby</code> на подпись родителя.</li>
+        <li>Выбранный пункт любого уровня: <code>aria-current="page"</code>.</li>
+        <li>Заблокированный ребёнок: <code>disabled</code> и <code>aria-describedby</code> на подсказку — причина читается, а не только видится.</li>
+        <li>Свёртываемый родитель (запасная разновидность): <code>aria-expanded</code> и <code>aria-controls</code>.</li>
+      </ul>
+
+      <h3>Вопросы владельцу</h3>
+      <ul>
+        <li>
+          Чем подписывать группу: новым <code>rail-grouplbl</code> (s-list — тем же
+          кеглем, что пункты, полужирным) или существующим
+          <code>rail-title</code> (s-title — прописными, мелким)? Второй не требует
+          нового класса, но читается как разделитель рейла, а не как родитель двух
+          пунктов. Предлагаю первый.
+        </li>
+        <li>
+          Закладывать ли в примитив свёртываемого родителя (s-collapsible) сразу, или
+          сделать только заголовок-группу, а свёртывание добавить, когда появится
+          случай? Предлагаю второе: непроверенная разновидность живёт как долг.
+        </li>
+        <li>
+          Счётчик у родителя (<code>2</code> в s-collapsible) — нужен ли вообще?
+          Для группы из двух постоянных пунктов он не сообщает ничего.
+        </li>
+        <li>
+          Третий уровень не предусмотрен: рейл шириной 240px не выдержит третьего
+          отступа. Если понадобится — это отдельный разговор.
+        </li>
+      </ul>
+    </section>
+
+    <svg class="wf-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+    </svg>
+
+    <script>
+      function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.id === 'wf-' + id);
+        });
+        btn.closest('.wf-nav').querySelectorAll('button').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      }
+      function toggleTheme() {
+        document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light');
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: оргструктура в профиле пользователя — страница «Пользователи».
+    План docs/plans/2026-09-28-org-structure-slices.md, задачи 1-3;
+    спеки: PRD-56 FR-06b и OQ-04, PRD-54 BR-54-28 - BR-54-30.
+
+    Основа — client/src/pages/author/users.tsx как есть (и эскиз PRD-28
+    prd28-users-external.html, с которого снята разметка). Дельта:
+      1. список — подразделение и должность серой строкой под именем (решение владельца
+         2026-09-28: две колонки не поместились рядом с боковым меню);
+      2. ряд фильтров — три селектора: организация, подразделение, должность;
+      3. окно создания — поля «Организация», «Подразделение», «Должность» после имени,
+         «Идентификатор в LMS» и «Внешний ключ» в конце;
+      4. окно правки — те же поля; «Внешний ключ» там уже был (и не сохранялся);
+      5. массовая загрузка — колонки предпросмотра и строка описания.
+    Всё остальное — существующий экран без изменений.
+
+    Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
+    -->
+    <title>Оргструктура — Пользователи</title>
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/skillum-ds.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* Раскладка существующего экрана (Cluster justify="between" / Cluster gap align="end"),
+         перенесена из prd28-users-external.html без изменений. */
+      .tb-page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--ou-space-4); }
+      .tb-page-head__act { display: flex; gap: var(--ou-space-2); flex-shrink: 0; }
+      .tb-filters { display: flex; gap: var(--ou-space-4); align-items: flex-end; flex-wrap: wrap; }
+      .tb-filters__search { flex: 1; min-width: var(--wf-size-240); }
+      .tb-cell-stack { display: flex; align-items: center; gap: var(--ou-space-2); }
+
+      /* Панели и окно в продукте — фиксированный слой на весь экран. В эскизе они заперты
+         внутри своего состояния, иначе подложка накрыла бы пояснения под холстом. */
+      .wf-state[data-overlay] { position: relative; min-height: var(--wf-size-1200); }
+      .wf-state > .ou-drawer-root { position: absolute; top: var(--wf-nav-offset); bottom: 0; }
+      .wf-state > .ou-drawer-root > .ou-drawer { height: 100%; max-height: none; }
+      .wf-state > .ou-modal-root { position: absolute; top: var(--wf-nav-offset); bottom: 0; }
+
+      /* Открытый список Combobox в статичном эскизе: в продукте он лежит поверх формы,
+         здесь — в потоке, чтобы не перекрывать следующие поля. */
+      .wf-combo-open .ou-combo__menu { position: static; margin-top: var(--ou-space-1); }
+
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">Оргструктура · Пользователи:</span>
+      <button type="button" class="active" onclick="showState(this, 'list')">список и фильтры</button>
+      <button type="button" onclick="showState(this, 'create')">создание: выбор подразделения</button>
+      <button type="button" onclick="showState(this, 'edit')">правка: идентификатор занят</button>
+      <button type="button" onclick="showState(this, 'bulk')">загрузка списком</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <!-- ░░░ СОСТОЯНИЕ: список, колонки и фильтры оргструктуры ░░░ -->
+    <div class="wf-state active" data-state="list">
+      <div class="wf-page">
+        <div class="ou-stack ou-stack--gap-6">
+
+          <div class="tb-page-head">
+            <div class="ou-stack ou-stack--gap-1">
+              <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+              <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+            </div>
+            <div class="tb-page-head__act">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-upload" /></svg></span>
+                Загрузить CSV
+              </button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+                Создать пользователя
+              </button>
+            </div>
+          </div>
+
+          <div class="tb-filters">
+            <div class="ou-field ou-field--m ou-field--full tb-filters__search">
+              <div class="ou-field__box">
+                <span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span>
+                <input class="ou-field__input" type="text" placeholder="Поиск по email или имени..." aria-label="Поиск по email или имени" />
+              </div>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все роли|Администратор|Разработчик|Автор|Менеджер по обучению|Обычный пользователь">
+              <button type="button" class="ou-select__trigger" aria-label="Роль"><span class="ou-select__value">Все роли</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все статусы|Активен|Заблокирован|Ожидает">
+              <button type="button" class="ou-select__trigger" aria-label="Статус"><span class="ou-select__value">Все статусы</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все виды|Штатные|Внешние участники">
+              <button type="button" class="ou-select__trigger" aria-label="Вид учётной записи"><span class="ou-select__value">Все виды</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <!-- ДЕЛЬТА: три фильтра оргструктуры, значения — из профилей -->
+            <div class="ou-select ou-field--m" data-ou-options="Все организации|АО «Северсталь-Сервис»|ООО «Партнёр-Логистик»|Не указана">
+              <button type="button" class="ou-select__trigger" aria-label="Организация"><span class="ou-select__value">Все организации</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все подразделения|Отдел продаж|Логистика|Сервисный центр «Юг»|Не указано">
+              <button type="button" class="ou-select__trigger" aria-label="Подразделение"><span class="ou-select__value">Отдел продаж</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все должности|Менеджер по продажам|Руководитель отдела|Кладовщик|Не указана">
+              <button type="button" class="ou-select__trigger" aria-label="Должность"><span class="ou-select__value">Все должности</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="ou-tbl ou-tbl--normal">
+            <table>
+              <thead>
+                <tr>
+                  <th><span class="ou-tbl__th-inner">Email</span></th>
+                  <th><span class="ou-tbl__th-inner">Имя</span></th>
+                  <th><span class="ou-tbl__th-inner">Роль</span></th>
+                  <th><span class="ou-tbl__th-inner">Статус</span></th>
+                  <th><span class="ou-tbl__th-inner">Последний вход</span></th>
+                  <th><span class="ou-tbl__th-inner">Создан</span></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- ДЕЛЬТА (решение владельца 2026-09-28): подразделение и должность — серой строкой
+                     под именем, а не колонками. Две колонки на живой странице с боковым меню не
+                     поместились: DS-таблица обрезала «Создан» и меню строки. -->
+                <tr>
+                  <td><span class="tb-cell-stack"><span class="ou-text ou-text--body-s ou-text--w-medium">i.petrov@severstal-service.ru</span></span></td>
+                  <td>
+                    <div class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s">Петров Иван</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж · Менеджер по продажам</span>
+                    </div>
+                  </td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                  <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">12.09.2026, 09:41</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">03.02.2026, 11:02</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td><span class="tb-cell-stack"><span class="ou-text ou-text--body-s ou-text--w-medium">m.kovaleva@severstal-service.ru</span></span></td>
+                  <td>
+                    <div class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s">Ковалёва Мария</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж · Руководитель отдела</span>
+                    </div>
+                  </td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Менеджер по обучению</span></td>
+                  <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">11.09.2026, 17:05</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">14.01.2026, 09:30</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">a.frolova@partner-log.ru</span>
+                      <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                    </span>
+                  </td>
+                  <td>
+                    <div class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s">Фролова Анна</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж</span>
+                    </div>
+                  </td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                  <td><span class="ou-tag ou-tag--neutral">Ожидает</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">10.09.2026, 10:15</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: создание, открыт выбор подразделения ░░░ -->
+    <div class="wf-state" data-state="create" data-overlay>
+      <div class="wf-page">
+        <div class="tb-page-head">
+          <div class="ou-stack ou-stack--gap-1">
+            <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ou-drawer-root">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h2 class="ou-drawer__title">Создать пользователя</h2>
+              <p class="ou-drawer__desc">Заполните данные для создания нового пользователя.</p>
+            </div>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+
+          <div class="ou-drawer__body">
+            <div class="ou-stack ou-stack--gap-4">
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="c-email">Email<span class="ou-field__lbl-req"> *</span></label>
+                <div class="ou-field__box"><input class="ou-field__input" id="c-email" type="email" value="o.belkina@severstal-service.ru" /></div>
+              </div>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="c-name">Имя</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="c-name" type="text" value="Белкина Ольга" /></div>
+              </div>
+
+              <!-- ДЕЛЬТА: организация, подразделение, должность -->
+              <div class="ou-combo ou-combo--single ou-combo--full">
+                <label class="ou-combo__lbl" for="c-org">Организация</label>
+                <div class="ou-combo__control">
+                  <span class="ou-combo__chip ou-combo__chip--accent"><span class="ou-combo__chip-label">АО «Северсталь-Сервис»</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                  <input class="ou-combo__input" id="c-org" type="text" value="" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--single ou-combo--full is-open wf-combo-open">
+                <label class="ou-combo__lbl" for="c-unit">Подразделение</label>
+                <div class="ou-combo__control">
+                  <input class="ou-combo__input" id="c-unit" type="text" value="отдел прод" autocomplete="off" role="combobox" aria-expanded="true" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+                <div class="ou-combo__menu">
+                  <div class="ou-combo__list" role="listbox" aria-label="Варианты">
+                    <div class="ou-combo__group" role="group">
+                      <div class="ou-combo__option is-active" role="option" aria-selected="false">
+                        <span class="ou-combo__option-check"><svg width="14" height="14" aria-hidden="true"><use href="#i-check" /></svg></span>
+                        <span class="ou-combo__option-text">
+                          <span class="ou-combo__option-title">Отдел продаж</span>
+                          <span class="ou-combo__option-meta">14 пользователей · 212 прохождений</span>
+                        </span>
+                      </div>
+                      <div class="ou-combo__option" role="option" aria-selected="false">
+                        <span class="ou-combo__option-check"><svg width="14" height="14" aria-hidden="true"><use href="#i-check" /></svg></span>
+                        <span class="ou-combo__option-text">
+                          <span class="ou-combo__option-title">Отдел продаж корпоративным клиентам</span>
+                          <span class="ou-combo__option-meta">31 прохождение</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-combo__footer">
+                    <span></span>
+                    <button type="button" class="ou-combo__footer-action">+ Создать «отдел прод»</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--single ou-combo--full">
+                <label class="ou-combo__lbl" for="c-pos">Должность</label>
+                <div class="ou-combo__control">
+                  <input class="ou-combo__input" id="c-pos" type="text" value="" placeholder="Не указана" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <label class="ou-check" for="c-external">
+                <input class="ou-check__input" id="c-external" type="checkbox" />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text">
+                  <span class="ou-check__lbl">Внешний участник</span>
+                  <span class="ou-check__desc">Без пароля и без кабинета: единственный путь внутрь — ссылка-приглашение на назначенный тест. Признак можно только снять позже, вернуть нельзя.</span>
+                </span>
+              </label>
+
+              <div class="ou-stack ou-stack--gap-2">
+                <label class="ou-field__lbl" for="c-pass">Пароль<span class="ou-field__lbl-req"> *</span></label>
+                <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-stretch">
+                  <div class="ou-field ou-field--m ou-field--full ou-grow">
+                    <div class="ou-field__box"><input class="ou-field__input" id="c-pass" type="text" placeholder="Минимум 8 символов" /></div>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Сгенерировать</button>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-2">
+                <span class="ou-field__lbl">Роли<span class="ou-field__lbl-req"> *</span></span>
+                <div class="ou-stack ou-stack--gap-3" role="group" aria-label="Роли пользователя">
+                  <label class="ou-check" for="c-r-learner">
+                    <input class="ou-check__input" id="c-r-learner" type="checkbox" checked />
+                    <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                    <span class="ou-check__text"><span class="ou-check__lbl">Обычный пользователь</span><span class="ou-check__desc">Прохождение назначенных тестов, свои результаты.</span></span>
+                  </label>
+                  <label class="ou-check" for="c-r-author">
+                    <input class="ou-check__input" id="c-r-author" type="checkbox" />
+                    <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                    <span class="ou-check__text"><span class="ou-check__lbl">Автор</span><span class="ou-check__desc">Темы, вопросы, тесты и назначения</span></span>
+                  </label>
+                </div>
+              </div>
+
+              <label class="ou-check" for="c-mcp">
+                <input class="ou-check__input" id="c-mcp" type="checkbox" checked />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Требовать смену пароля при входе</span></span>
+              </label>
+
+              <label class="ou-check" for="c-invite">
+                <input class="ou-check__input" id="c-invite" type="checkbox" checked />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Отправить приглашение</span></span>
+              </label>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="c-exp">Срок действия</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="c-exp" type="date" /></div>
+              </div>
+
+              <!-- ДЕЛЬТА: ключи связывания, в конце формы -->
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="c-lms">Идентификатор в LMS</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="c-lms" type="text" /></div>
+                <div class="ou-field__msg ou-field__msg--default">По нему прохождения из LMS находят этого человека. Пустое поле — связи нет.</div>
+              </div>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="c-key">Внешний ключ</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="c-key" type="text" /></div>
+                <div class="ou-field__msg ou-field__msg--default">По нему импорт выгрузок LMS находит этого человека. Пустое поле — связи нет.</div>
+              </div>
+
+            </div>
+          </div>
+
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: правка, идентификатор в LMS уже занят ░░░ -->
+    <div class="wf-state" data-state="edit" data-overlay>
+      <div class="wf-page">
+        <div class="tb-page-head">
+          <div class="ou-stack ou-stack--gap-1">
+            <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ou-drawer-root">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h2 class="ou-drawer__title">Редактировать пользователя</h2>
+            </div>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+
+          <div class="ou-drawer__body">
+            <div class="ou-stack ou-stack--gap-4">
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="e-email">Email<span class="ou-field__lbl-req"> *</span></label>
+                <div class="ou-field__box"><input class="ou-field__input" id="e-email" type="email" value="i.petrov@severstal-service.ru" /></div>
+              </div>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="e-name">Имя</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="e-name" type="text" value="Петров Иван" /></div>
+              </div>
+
+              <!-- ДЕЛЬТА: организация, подразделение, должность -->
+              <div class="ou-combo ou-combo--single ou-combo--full">
+                <label class="ou-combo__lbl" for="e-org">Организация</label>
+                <div class="ou-combo__control">
+                  <span class="ou-combo__chip ou-combo__chip--accent"><span class="ou-combo__chip-label">АО «Северсталь-Сервис»</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                  <input class="ou-combo__input" id="e-org" type="text" value="" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--single ou-combo--full">
+                <label class="ou-combo__lbl" for="e-unit">Подразделение</label>
+                <div class="ou-combo__control">
+                  <span class="ou-combo__chip ou-combo__chip--accent"><span class="ou-combo__chip-label">Отдел продаж</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                  <input class="ou-combo__input" id="e-unit" type="text" value="" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-combo ou-combo--single ou-combo--full">
+                <label class="ou-combo__lbl" for="e-pos">Должность</label>
+                <div class="ou-combo__control">
+                  <span class="ou-combo__chip ou-combo__chip--accent"><span class="ou-combo__chip-label">Менеджер по продажам</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+                  <input class="ou-combo__input" id="e-pos" type="text" value="" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" />
+                  <span class="ou-combo__trail"><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+                </div>
+              </div>
+
+              <div class="ou-stack ou-stack--gap-2">
+                <span class="ou-field__lbl">Роли<span class="ou-field__lbl-req"> *</span></span>
+                <div class="ou-stack ou-stack--gap-3" role="group" aria-label="Роли пользователя">
+                  <label class="ou-check" for="e-r-learner">
+                    <input class="ou-check__input" id="e-r-learner" type="checkbox" checked />
+                    <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                    <span class="ou-check__text"><span class="ou-check__lbl">Обычный пользователь</span><span class="ou-check__desc">Прохождение назначенных тестов, свои результаты.</span></span>
+                  </label>
+                  <label class="ou-check" for="e-r-author">
+                    <input class="ou-check__input" id="e-r-author" type="checkbox" />
+                    <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                    <span class="ou-check__text"><span class="ou-check__lbl">Автор</span><span class="ou-check__desc">Темы, вопросы, тесты и назначения</span></span>
+                  </label>
+                </div>
+              </div>
+
+              <label class="ou-check" for="e-mcp">
+                <input class="ou-check__input" id="e-mcp" type="checkbox" />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Требовать смену пароля при входе</span></span>
+              </label>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="e-exp">Срок действия</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="e-exp" type="date" /></div>
+              </div>
+
+              <!-- ДЕЛЬТА: идентификатор в LMS; ответ 409 показан у поля -->
+              <div class="ou-field ou-field--m ou-field--error ou-field--full">
+                <label class="ou-field__lbl" for="e-lms">Идентификатор в LMS</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="e-lms" type="text" value="petrov_i" aria-invalid="true" /></div>
+                <div class="ou-field__msg ou-field__msg--error">Этот идентификатор уже у пользователя Петров Игорь (ig.petrov@severstal-service.ru)</div>
+              </div>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="e-key">Внешний ключ</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="e-key" type="text" value="SS-004812" /></div>
+                <div class="ou-field__msg ou-field__msg--default">По нему импорт выгрузок LMS находит этого человека. Пустое поле — связи нет.</div>
+              </div>
+
+            </div>
+          </div>
+
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: массовая загрузка, предпросмотр ░░░ -->
+    <div class="wf-state" data-state="bulk" data-overlay>
+      <div class="wf-page">
+        <div class="tb-page-head">
+          <div class="ou-stack ou-stack--gap-1">
+            <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="b-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="b-title">Предпросмотр: 4 строк</h2>
+              <p class="ou-modal__desc">Проверьте данные перед импортом. Для дублей выберите действие.</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-stack ou-stack--gap-4">
+              <div class="ou-stack ou-stack--row ou-stack--gap-3">
+                <span class="ou-tag ou-tag--success ou-tag--s"><span class="ou-tag__dot"></span>Новых: 2</span>
+                <span class="ou-tag ou-tag--warning ou-tag--s"><span class="ou-tag__dot"></span>Дублей: 1</span>
+                <span class="ou-tag ou-tag--error ou-tag--s"><span class="ou-tag__dot"></span>Ошибок: 1</span>
+              </div>
+
+              <div class="ou-tbl ou-tbl--normal">
+                <table>
+                  <thead>
+                    <tr>
+                      <th><span class="ou-tbl__th-inner">Email</span></th>
+                      <th><span class="ou-tbl__th-inner">Имя</span></th>
+                      <th><span class="ou-tbl__th-inner">Роль</span></th>
+                      <th><span class="ou-tbl__th-inner">Группа</span></th>
+                      <!-- ДЕЛЬТА: оргполя — одна колонка в две строки; «Внешний ключ» стал «Ключами
+                           связывания» с идентификатором в LMS первой строкой. Иначе колонок десять,
+                           и «Статус» с «Действием» уходят за край окна. -->
+                      <th><span class="ou-tbl__th-inner">Подразделение и должность</span></th>
+                      <th><span class="ou-tbl__th-inner">Ключи связывания</span></th>
+                      <th><span class="ou-tbl__th-inner">Статус</span></th>
+                      <th><span class="ou-tbl__th-inner">Действие</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="ou-text ou-text--mono-s">o.belkina@severstal-service.ru</span></td>
+                      <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Белкина Ольга</span></td>
+                      <td><span class="ou-tag ou-tag--outline ou-tag--s">learner</span></td>
+                      <td><span class="ou-tag ou-tag--success ou-tag--s">Розница</span></td>
+                      <td>
+                        <div class="ou-stack ou-stack--gap-1">
+                          <span class="ou-text ou-text--body-s">Отдел продаж</span>
+                          <span class="ou-text ou-text--body-xs ou-text--tone-muted">Менеджер по продажам · АО «Северсталь-Сервис»</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="ou-stack ou-stack--gap-1">
+                          <span class="ou-text ou-text--mono-s">LMS: belkina_o</span>
+                          <span class="ou-text ou-text--mono-s ou-text--tone-muted">Ключ: SS-005120</span>
+                        </div>
+                      </td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--w-medium ou-text--tone-success">Новый</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">Создать</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="ou-text ou-text--mono-s">p.egorov@severstal-service.ru</span></td>
+                      <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Егоров Павел</span></td>
+                      <td><span class="ou-tag ou-tag--outline ou-tag--s">learner</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">—</span></td>
+                      <td>
+                        <div class="ou-stack ou-stack--gap-1">
+                          <span class="ou-text ou-text--body-s">Логистика</span>
+                          <span class="ou-text ou-text--body-xs ou-text--tone-muted">Кладовщик · АО «Северсталь-Сервис»</span>
+                        </div>
+                      </td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">—</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--w-medium ou-text--tone-success">Новый</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">Создать</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="ou-text ou-text--mono-s">i.petrov@severstal-service.ru</span></td>
+                      <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Петров Иван</span></td>
+                      <td><span class="ou-tag ou-tag--outline ou-tag--s">learner</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">—</span></td>
+                      <td>
+                        <div class="ou-stack ou-stack--gap-1">
+                          <span class="ou-text ou-text--body-s">Отдел продаж</span>
+                          <span class="ou-text ou-text--body-xs ou-text--tone-muted">Старший менеджер по продажам · АО «Северсталь-Сервис»</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="ou-stack ou-stack--gap-1">
+                          <span class="ou-text ou-text--mono-s">LMS: petrov_i</span>
+                          <span class="ou-text ou-text--mono-s ou-text--tone-muted">Ключ: SS-004812</span>
+                        </div>
+                      </td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--w-medium ou-text--tone-warning">Дубль</span></td>
+                      <td>
+                        <div class="ou-select ou-field--s" data-ou-options="Пропустить|Обновить">
+                          <button type="button" class="ou-select__trigger" aria-label="Действие для дубля"><span class="ou-select__value">Обновить</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><span class="ou-text ou-text--mono-s">s.gavrilov@severstal-service.ru</span></td>
+                      <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Гаврилов Сергей</span></td>
+                      <td><span class="ou-tag ou-tag--outline ou-tag--s">learner</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">—</span></td>
+                      <td>
+                        <div class="ou-stack ou-stack--gap-1">
+                          <span class="ou-text ou-text--body-s">Отдел продаж</span>
+                          <span class="ou-text ou-text--body-xs ou-text--tone-muted">Менеджер по продажам · АО «Северсталь-Сервис»</span>
+                        </div>
+                      </td>
+                      <td><span class="ou-text ou-text--mono-s">LMS: petrov_i</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--w-medium ou-text--tone-error" title="Идентификатор в LMS petrov_i уже у пользователя Петров Иван">Ошибка</span></td>
+                      <td><span class="ou-text ou-text--body-xs ou-text--tone-muted">Пропустить</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <label class="ou-check" for="b-invites">
+                <input class="ou-check__input" id="b-invites" type="checkbox" checked />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Отправить письма-приглашения с ссылкой для установки пароля</span></span>
+              </label>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Назад</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Импортировать (3 строк)</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ ВНЕ ХОЛСТА: пояснения ░░░ -->
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Строка под именем</td><td><code>users.unit</code> · <code>users.position</code></td><td>Решение владельца 2026-09-28: вместо двух колонок. На живой странице с боковым меню они не поместились в 1440 px — DS-таблица обрезает лишнее, и «Создан» с меню строки уходили за край. Пустые части опускаются; нет ни того, ни другого — строки нет. Организация в списке не показывается: она в фильтре и в карточке, на большинстве инсталляций одна на всех</td></tr>
+            <tr><td>Поле поиска</td><td>класс <code>tb-users-search</code></td><td>Держит минимальную ширину (<code>--tb-input-w-md</code>): иначе семь элементов ряда сжимали его до «Поиск по email», а по эскизу поиск занимает первую строку</td></tr>
+            <tr><td>Фильтры оргструктуры</td><td>значения — различные значения профилей в списке</td><td>Сравнение без учёта регистра и лишних пробелов (план, Р-4). Пункт «Не указано» отбирает пустые. Отбор клиентский, как у остальных фильтров списка. Фильтры с поиском — у подразделений бывают сотни</td></tr>
+            <tr><td>Поля «Организация» / «Подразделение» / «Должность»</td><td><code>Combobox</code> одиночный; справочник <code>GET /api/users/org-values</code></td><td>Выбор из существующих значений или «+ Создать «…»»; свободного ввода нет (план, Р-3). Образец — поле «Последовательность» PRD-22. В подписи варианта — сколько раз значение встречается в профилях и в прохождениях: вариант «только в прохождениях» — написание, которое уже пришло из LMS</td></tr>
+            <tr><td>Порядок полей</td><td>—</td><td>Оргполя идут сразу за именем: они есть у всех. Ключи связывания — в конце формы, как уже стоит «Внешний ключ»: они нужны единицам</td></tr>
+            <tr><td>«Идентификатор в LMS»</td><td><code>users.lms_learner_id</code></td><td>BR-54-31: по нему телеметрия и импорт связывают прохождение с человеком. Уникален (план, Р-6): чужое значение — ответ 409, ошибка у поля называет владельца</td></tr>
+            <tr><td>«Внешний ключ» в окне правки</td><td><code>users.external_key</code></td><td>Поле уже было; сейчас окно не отправляет его на сервер, и правка теряется (план, задача 0)</td></tr>
+            <tr><td>Внешний участник</td><td><code>users.is_external</code></td><td>Оргполя у внешнего участника доступны: подрядчик тоже работает в каком-то подразделении своей организации, и разрез «внешние по организациям» — законный вопрос</td></tr>
+            <tr><td>Предпросмотр загрузки</td><td>колонки шаблона <code>organization</code>, <code>unit</code>, <code>position</code>, <code>lms_learner_id</code></td><td>Заголовки читаются и по-русски. Оргполя — одна колонка в две строки (подразделение; должность · организация), ключи — одна колонка «Ключи связывания» (идентификатор в LMS, внешний ключ): иначе колонок десять и «Статус» с «Действием» уходят за край окна. У дубля действие «Обновить» перезаписывает оргполя так же, как имя. Занятый идентификатор в LMS — ошибка строки, причина во всплывающей подсказке, как у остальных ошибок</td></tr>
+            <tr><td>Описание окна загрузки</td><td>шаг «upload»</td><td>Строка «Необязательные: name, role» устарела ещё до этой работы; перечень колонок в ней заменяется полным: name, role, group, external_key, organization, unit, position, lms_learner_id</td></tr>
+            <tr><td>Приглашение участников при назначении теста</td><td>шаблон <code>email, name</code> → плюс оргполя</td><td>BR-54-29. Вкладка «Списком» не меняет раскладку: колонки оргполей в предпросмотре появляются, только если они есть в файле. Существующему человеку заполняются лишь пустые поля — как сегодня с именем</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <table>
+          <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
+          <tbody>
+            <tr><td>Список</td><td><code>Table</code> (<code>ou-tbl</code>)</td><td>—</td><td>Существующий экран; ячейка подразделения — <code>Stack gap={1}</code> из двух <code>Text</code></td></tr>
+            <tr><td>Фильтры оргструктуры</td><td><code>Select</code> с поиском (<code>searchable</code>)</td><td>—</td><td>Тот же компонент, что у соседних фильтров ряда</td></tr>
+            <tr><td>Оргполя в форме</td><td><code>Combobox</code> (<code>ou-combo--single</code>) + <code>footerAction</code></td><td>—</td><td>Подпись варианта — <code>meta</code> опции; «+ Создать «…»» — <code>ou-combo__footer-action</code>, как в PRD-22</td></tr>
+            <tr><td>Ключи связывания</td><td><code>Input</code> с <code>hint</code> / <code>error</code></td><td>—</td><td>Ошибка 409 — проп <code>error</code>, тон поля <code>error</code></td></tr>
+            <tr><td>Предпросмотр загрузки</td><td><code>ModalDialog</code> xl + <code>Table</code> + <code>Tag</code></td><td>—</td><td>Существующий экран, добавлены колонки</td></tr>
+            <tr><td><code>tb-page-head</code>, <code>tb-filters</code>, <code>tb-cell-stack</code></td><td>—</td><td>—</td><td>Каркас эскиза: в коде это <code>Cluster</code> / <code>Stack</code></td></tr>
+            <tr><td><code>wf-combo-open</code></td><td>—</td><td>—</td><td>Каркас эскиза: открытый список в потоке вместо слоя поверх формы</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        if (btn) { btn.textContent = dark ? 'Light' : 'Dark'; btn.classList.toggle('active', dark); }
+      };
+      // Начальное состояние из адреса: `?state=create`, `?theme=dark` — для снимков без кликов.
+      window.addEventListener('DOMContentLoaded', function () {
+        var params = new URLSearchParams(location.search);
+        var want = params.get('state');
+        if (want) {
+          var btn = Array.prototype.find.call(document.querySelectorAll('.wf-nav button'), function (b) {
+            return (b.getAttribute('onclick') || '').indexOf("'" + want + "'") !== -1;
+          }) || null;
+          showState(btn, want);
+        }
+        if (params.get('theme') === 'dark') toggleTheme(null);
+      });
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

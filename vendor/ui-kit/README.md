@@ -1,36 +1,36 @@
-# @universityrt/ui-kit
+# @skillum/ui-kit
 
-React-компонентная библиотека на базе **UniversityRT Design System**.
+React-компонентная библиотека на базе **Skillum Design System**.
 
 - **52 компонента** — формы, оверлеи, данные, навигация, фидбэк, layout
 - **Storybook 10** с переключением темы (light/dark), плотности (normal/compact) и component tests
 - **TypeScript** строгий, дженерики, `forwardRef` + `displayName` везде
 - **A11y** — ARIA-роли, клавиатурная навигация, focus-visible
-- Один CSS-бандл (`css/university-rt.css`), никакого CSS-in-JS
+- Один CSS-бандл (`css/skillum-ds.css`), никакого CSS-in-JS
 
 ## Место в хэндбуке
 
 `ui-kit` входит в общий scope Engineering Handbook как локальная React-реализация
-UniversityRT Design System.
+Skillum Design System.
 
 - Правила дизайн-системы: [`../DESIGN_SYSTEM_RT.md`](../DESIGN_SYSTEM_RT.md)
 - API reference UI Kit: [`../DESIGN_SYSTEM_RT_API.md`](../DESIGN_SYSTEM_RT_API.md)
 - UI-правила разработки: [`../CODE_STYLE.md`](../CODE_STYLE.md#ui-разработка)
 - Передача и публикация пакета: [`./HANDOFF.md`](./HANDOFF.md)
 
-В продуктовых React-проектах сначала используется публичный API `@universityrt/ui-kit`.
+В продуктовых React-проектах сначала используется публичный API `@skillum/ui-kit`.
 Если нужного компонента или токена нет, расширяется этот пакет и его Storybook, а не создаётся
 одноразовый локальный компонент в продукте.
 
 ## Установка
 
 ```bash
-npm install @universityrt/ui-kit
+npm install @skillum/ui-kit
 ```
 
 ```tsx
-import { Button, Modal, ToastProvider } from '@universityrt/ui-kit';
-import '@universityrt/ui-kit/css';
+import { Button, Modal, ToastProvider } from '@skillum/ui-kit';
+import '@skillum/ui-kit/css';
 
 <body class="ou ou--light ou--normal">
   <Button variant="primary">Применить</Button>
@@ -221,13 +221,13 @@ npm run qa:report:strict
 
 ### CSS Bundle
 
-Итоговый CSS лежит в `css/university-rt.css` и экспортируется как:
+Итоговый CSS лежит в `css/skillum-ds.css` и экспортируется как:
 
 ```tsx
-import '@universityrt/ui-kit/css';
+import '@skillum/ui-kit/css';
 ```
 
-`npm run build:css` собирает bundle из `../tokens` при наличии исходников. Если `../tokens/components` отсутствует, скрипт сохраняет существующий `css/university-rt.css` и продолжает сборку, чтобы локальная сборка библиотеки не блокировалась отсутствующими token sources.
+`npm run build:css` собирает bundle из `../tokens` при наличии исходников. Если `../tokens/components` отсутствует, скрипт сохраняет существующий `css/skillum-ds.css` и продолжает сборку, чтобы локальная сборка библиотеки не блокировалась отсутствующими token sources.
 
 ### Полезные Команды
 

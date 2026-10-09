@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "lms_attempt_result" text DEFAULT 'best' NOT NULL;

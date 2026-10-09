@@ -1,7 +1,10 @@
-function showToast(message, kind) {
+function showToast(message, kind, durationMs) {
   // kind: 'warn' | 'info' | 'ok' (как раньше, можно использовать в className)
+  // durationMs (PRD-67): how long the notice stays; two-sentence notices need more
+  // than the default three seconds to be read.
   var id = 'center-toast';
   var existing = document.getElementById(id);
+  var showFor = (typeof durationMs === 'number' && durationMs > 0) ? durationMs : 3000;
 
   // если уже показано — обновим текст и перезапустим таймер
   if (existing) {
@@ -9,7 +12,9 @@ function showToast(message, kind) {
     existing.className = 'center-toast' + (kind ? (' ' + kind) : '');
     existing.style.display = 'flex';
     if (existing._timeout) clearTimeout(existing._timeout);
-    existing._timeout = setTimeout(hide, 3000);
+    // The hide() declared below belongs to THIS call, where `overlay` is still undefined —
+    // it would never hide a reused toast. Hide the existing element directly.
+    existing._timeout = setTimeout(function () { existing.style.display = 'none'; }, showFor);
     return;
   }
 
@@ -70,12 +75,18 @@ function showToast(message, kind) {
     }
   });
 
-  overlay._timeout = setTimeout(hide, 3000);
+  overlay._timeout = setTimeout(hide, showFor);
 }
 
 
 function hasAnswer(q, answer) {
   if (!q) return true;
+
+  // «Сценарий в ИС»: ответ — прогон; готов, когда у прогона есть исход (зеркало веба,
+  // `answer-gate.ts`). Ветка до прочих: объект без исхода ответом не считается.
+  if (typeof TBQType !== 'undefined' && TBQType.isSimulation(q.type)) {
+    return !!answer && typeof answer === 'object' && typeof answer.outcome === 'string';
+  }
 
   // A scale is answered by one graduation index, exactly like single choice — and
   // index 0 is a real answer, so the check is on the type of the value.
@@ -108,6 +119,21 @@ function hasAnswer(q, answer) {
     var TBa = (typeof window !== 'undefined') ? window.TBTemplate : null;
     if (!TBa || !TBa.isAllocationComplete || !TBa.allocationSpec) return false;
     return TBa.isAllocationComplete(TBa.allocationSpec(q.data), answer);
+  }
+
+  // PRD-57 FR-24: задание с пропусками отвечено, когда заполнены ВСЕ пропуска, у
+  // которых есть правила. Пропуск без правил ничего не проверяет и держать участника
+  // не вправе.
+  if (typeof TBQType !== 'undefined' && TBQType.hasBlanks(q.type)) {
+    var sets = (q.correct && Array.isArray(q.correct.blanks)) ? q.correct.blanks : [];
+    var written = (answer && typeof answer === 'object' && !Array.isArray(answer)) ? answer : {};
+    for (var bi = 0; bi < sets.length; bi++) {
+      var set = sets[bi];
+      if (!set || !Array.isArray(set.rules) || set.rules.length === 0) continue;
+      var v = written[set.id];
+      if (typeof v !== 'string' || v.replace(/^\s+|\s+$/g, '') === '') return false;
+    }
+    return true;
   }
 
   return answer !== undefined && answer !== null;
@@ -237,8 +263,10 @@ var __qInputClicksBound = false;
 function bindQuestionInputClicksOnce() {
   if (__qInputClicksBound) return;
   __qInputClicksBound = true;
-  // Распределение цепляется той же точкой входа: у хоста один момент «интерактив готов».
+  // Распределение и текстовый ввод цепляются той же точкой входа: у хоста один момент
+  // «интерактив готов», и заводить второй значит однажды забыть его позвать.
   bindAllocationInputOnce();
+  bindShortAnswerInputOnce();
   if (typeof document === 'undefined') return;
   document.addEventListener('click', function (e) {
     var el = (e.target && e.target.closest) ? e.target.closest('[data-action]') : null;
@@ -253,6 +281,12 @@ function bindQuestionInputClicksOnce() {
       // A scale answer is one index, so it goes through the single-choice path.
       else if (typeof TBQType !== 'undefined' && TBQType.isSingleIndexChoice(q.type)) selectSingle(q.id, idx);
       else if (q.type === 'single') selectSingle(q.id, idx);
+    } else if (a === 'sim-open') {
+      // «Сценарий в ИС» в обычном разделе: «Пройти» / «Пройти заново» на обложке — окно правил.
+      var fqSim = state.flatQuestions && state.flatQuestions[state.currentIndex];
+      if (!fqSim || typeof TBSimRun === 'undefined') return;
+      if (typeof isAnswerLocked === 'function' && isAnswerLocked(fqSim)) return;
+      TBSimRun.openRules(fqSim);
     } else if (a.indexOf('rank-up:') === 0 || a.indexOf('rank-down:') === 0) {
       var up = a.indexOf('rank-up:') === 0;
       var pos = parseInt(a.slice(a.indexOf(':') + 1), 10);
@@ -329,6 +363,52 @@ function bindAllocationInputOnce() {
   });
 }
 
+/**
+ * PRD-57 §6.5: живой ввод текстового ответа. Привязывается ОДИН раз к документу — как и
+ * остальные делегации, потому что узлы заменяются на каждой перерисовке.
+ *
+ * Ответ кладётся в состояние СЫРОЙ строкой: нормализация живёт в сравнении, а в отчёт
+ * LMS уходит ровно то, что набрал участник. Перерисовки здесь нет намеренно — она
+ * заменила бы поле под курсором и сбросила бы каретку на каждом нажатии.
+ */
+var __shortBound = false;
+function bindShortAnswerInputOnce() {
+  if (__shortBound) return;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.attachShortAnswer || typeof document === 'undefined') return;
+  __shortBound = true;
+
+  TB.attachShortAnswer(document, {
+    getAnswer: function () {
+      var q = __currentQuestionForInput();
+      var value = q ? state.answers[q.id] : '';
+      return typeof value === 'string' ? value : '';
+    },
+    isLocked: function () {
+      return isAnswerLocked(state.flatQuestions[state.currentIndex]);
+    },
+    setAnswer: function (value) {
+      var q = __currentQuestionForInput();
+      if (!q) return;
+      reopenIfCommitted(state.flatQuestions[state.currentIndex]);
+      state.answers[q.id] = value;
+      refreshSubmitEnabled();
+    },
+    // PRD-57 FR-24: ответ задания с пропусками — словарь «имя пропуска → набранное».
+    // Привязка к позиции поля поехала бы вся, стоило бы автору переставить пропуски.
+    setBlank: function (id, value) {
+      var q = __currentQuestionForInput();
+      if (!q) return;
+      reopenIfCommitted(state.flatQuestions[state.currentIndex]);
+      var current = state.answers[q.id];
+      var map = (current && typeof current === 'object' && !Array.isArray(current)) ? current : {};
+      map[id] = value;
+      state.answers[q.id] = map;
+      refreshSubmitEnabled();
+    }
+  });
+}
+
 function setMatch(qId, leftIdx, rightVal) {
   var fqMatch = state.flatQuestions[state.currentIndex];
   if (isAnswerLocked(fqMatch)) return;
@@ -360,6 +440,7 @@ function advanceAfterCommit() {
     saveSessionState();
     state.feedbackShown = false;
     advancePageSequence();
+    saveLandedPosition();
     return;
   }
 
@@ -368,7 +449,19 @@ function advanceAfterCommit() {
     state.currentIndex++;
     state.feedbackShown = false;
     render();
+    saveLandedPosition();
   }
+}
+
+/**
+ * The checkpoint above is written BEFORE the move — the answer must not wait for it. Written
+ * only then, it pointed a reload back at the question just answered instead of the one the
+ * learner was looking at; PRD-20 (5.12) asks for the exact position, and the web resumes on the
+ * next question. So the position is written again once the move landed on a question. Not
+ * after the run was submitted: a checkpoint then would bring a finished attempt back to life.
+ */
+function saveLandedPosition() {
+  if (!state.submitted && state.phase === 'question') saveSessionState();
 }
 
 function next() {
@@ -388,7 +481,16 @@ function next() {
   // «Отправить ответ»); confirmAnswer marks it too, so this is idempotent in
   // flexible mode but keeps questionStatuses reliable everywhere.
   var fqNext = state.flatQuestions[state.currentIndex];
-  if (fqNext && fqNext.question) state.questionStatuses[fqNext.question.id] = 'answered';
+  if (fqNext && fqNext.question) {
+    // Фиксация «Далее» — такая же точка ответа, как «Отправить ответ»: в строгом режиме с
+    // быстрым переходом (PRD-43) другой нет, и без отправки здесь телеметрия не получала ни
+    // одного ответа (PA-12f). Уже зафиксированный вопрос повторно не уходит.
+    var alreadyAnswered = state.questionStatuses[fqNext.question.id] === 'answered';
+    state.questionStatuses[fqNext.question.id] = 'answered';
+    if (!alreadyAnswered && typeof reportAnswerTelemetry === 'function') {
+      reportAnswerTelemetry(fqNext, state.answers[fqNext.question.id]);
+    }
+  }
 
   advanceAfterCommit();
 }

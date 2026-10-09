@@ -13,7 +13,7 @@ export interface ScrollAreaProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * UniversityRT · ScrollArea — an overflow container with a thin DS-styled
+ * Skillum · ScrollArea — an overflow container with a thin DS-styled
  * scrollbar (CSS-only: `scrollbar-width`/`scrollbar-color` + `::-webkit-scrollbar`).
  * Bound the viewport with the `maxH` preset; otherwise it fills its parent.
  */

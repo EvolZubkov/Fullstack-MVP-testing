@@ -109,7 +109,10 @@ function materials(app: HTMLElement): Array<{ title: string; href: string }> {
 
 /** Тексты консолидированного блока в порядке показа. */
 function recTexts(app: HTMLElement): string[] {
-  return Array.from(app.querySelectorAll("p.tb-recs-group__text")).map((p) => p.textContent?.trim() ?? "");
+  // Selector is tag-free on purpose: the layout carries the author's own markup, so the
+  // wrapper is a <div> since `f3833fcf` — a <p> inside a <p> was closed early by the
+  // browser and the author's paragraphs escaped the block's rules.
+  return Array.from(app.querySelectorAll(".tb-recs-group__text")).map((p) => p.textContent?.trim() ?? "");
 }
 
 const sectionWithBoth = [
@@ -132,7 +135,7 @@ describe("SCORM (адаптивный): консолидированный бл�
     ]);
   });
 
-  it("обратная связь ТЕСТА доезжает и идёт впереди материалов темы", () => {
+  it("обратная связь ТЕСТА не печатается, материалы темы печатаются (PRD-61 §10)", () => {
     const { rt, app } = makeRuntime(sectionWithBoth, {
       text: "Разберите ошибки.",
       links: [],
@@ -140,9 +143,8 @@ describe("SCORM (адаптивный): консолидированный бл�
       assets: [{ title: "Памятка теста", fileName: "p.pdf", mimeType: "application/pdf", url: "assets/media/cccc.pdf" }],
     });
     rt.renderAdaptiveResultsTemplated(app, adaptiveResult(null));
-    expect(recTexts(app)).toEqual(["Разберите ошибки.", "Текст темы", "Текст раздела"]);
+    expect(recTexts(app)).toEqual(["Текст темы", "Текст раздела"]);
     expect(materials(app)).toEqual([
-      { title: "Памятка теста", href: "assets/media/cccc.pdf" },
       { title: TOPIC_PDF.title, href: TOPIC_PDF.url },
       { title: SECTION_PDF.title, href: SECTION_PDF.url },
     ]);
@@ -162,7 +164,8 @@ describe("SCORM (адаптивный): консолидированный бл�
     // материалы темы в обход него — иначе пакет и веб разойдутся составом блока.
     const { rt, app } = makeRuntime(sectionWithBoth, { text: "Разберите ошибки.", links: [], events: [], assets: [] });
     rt.renderAdaptiveResultsTemplated(app, adaptiveResult(1));
-    expect(recTexts(app)).toEqual(["Разберите ошибки."]);
+    // PRD-61 §10: второго источника у блока не осталось, поэтому тема молчит целиком.
+    expect(recTexts(app)).toEqual([]);
     expect(materials(app)).toEqual([]);
   });
 

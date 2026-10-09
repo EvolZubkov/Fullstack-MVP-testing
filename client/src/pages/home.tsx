@@ -9,7 +9,7 @@
  * cleaner, but it is out of this PRD's scope and needs its own wireframes
  * (decision D-5) — so the shell is picked here rather than unified.
  */
-import { Box } from "@universityrt/ui-kit";
+import { Box } from "@skillum/ui-kit";
 import { AuthorLayout } from "@/pages/author/layout";
 import { LearnerLayout } from "@/pages/learner/layout";
 import { HomePage } from "@/features/home/home-page";

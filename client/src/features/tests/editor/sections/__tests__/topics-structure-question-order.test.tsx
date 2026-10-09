@@ -26,6 +26,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     basic: {
       title: "Sample",
       description: "",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -36,8 +37,9 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     },
     runtime: {
       timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false,
-      allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false,
+      allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false,
       copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false,
+      lmsAttemptResult: "best" as const,
     },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],

@@ -1,10 +1,11 @@
 /**
  * @module features/tests/editor/sections/__tests__/scales-contributions.test
- * @description Tests for «Шкалы» → «Вклады вопросов»: the rail item is disabled
- * until a scale exists; once opened, questions are grouped by section (topic) and
- * each section folds; «Свернуть все» / «Развернуть все» fold and unfold every
- * section (numbering is global across sections); uncovered questions warn on the
- * card and on the section header.
+ * @description Tests for «Шкалы» → «Вклады вопросов»: без единой шкалы раздел —
+ * одно пустое состояние (вкладов нет вовсе), со шкалой обе группы идут стопкой в
+ * одной колонке (рейл принадлежит вкладке, своего под-рейла у шкал нет);
+ * questions are grouped by section (topic) and each section folds; «Свернуть все» /
+ * «Развернуть все» fold and unfold every section (numbering is global across
+ * sections); uncovered questions warn on the card and on the section header.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -40,12 +41,12 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     flowSettings: {},
     folderId: null,
     basic: {
-      title: "Sample", description: "", status: "draft",
+      title: "Sample", description: "", descriptionFormat: "plain", status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -74,7 +75,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const SCALE: ScaleModel = {
-  key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
+  key: "comp", label: "Компетенция", description: "", type: "number", aggregation: "sum",
   normalization: "none", direction: "positive", bands: [],
   domainMin: null, domainMax: null, displayMax: null, valence: "none", learnerVisibility: "hidden",
   scormTarget: "none", sortOrder: 0,
@@ -89,21 +90,37 @@ function renderScales(opts: { withScale?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ScalesSection model={model} testId="test-1" updateModel={() => {}} />
+      <ScalesSection pane="contributions" model={model} testId="test-1" updateModel={() => {}} />
     </QueryClientProvider>,
   );
 }
 
-/** Render with a scale (so the rail item is enabled) and open the pane. */
+/** Render with a scale: обе группы («Шкалы теста» и «Вклады») идут одной колонкой. */
 function openContributions() {
   renderScales({ withScale: true });
-  fireEvent.click(screen.getByRole("button", { name: "Вклады вопросов" }));
 }
 
 describe("«Шкалы» → «Вклады вопросов»", () => {
-  it("the rail item is disabled until a scale exists", () => {
+  it("without a single scale the section is the empty state only — no contributions", () => {
     renderScales({ withScale: false });
-    expect(screen.getByTestId("scales-rail-contributions")).toBeDisabled();
+    expect(screen.getByTestId("scales-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("scales-pane-contributions")).toBeNull();
+  });
+
+  it("панель показывает ОДНУ сторону: вклады без списка шкал", () => {
+    // Разделение сделано ради матрицы: её ширина растёт с каждой шкалой, и делить
+    // панель со списком шкал ей нечем. Выбор между сторонами делает рейл вкладки.
+    renderScales({ withScale: true });
+    expect(screen.getByTestId("scales-pane-contributions")).toBeInTheDocument();
+    expect(screen.queryByTestId("scales-pane-list")).toBeNull();
+    // Свой рейл панель по-прежнему не рисует — рейл принадлежит вкладке.
+    expect(document.querySelector(".ou-drawer__rail")).toBeNull();
+  });
+
+  it("без единой шкалы вклады подменяются списком: показывать матрицу нечем", () => {
+    renderScales({ withScale: false });
+    expect(screen.getByTestId("scales-pane-list")).toBeInTheDocument();
+    expect(screen.queryByTestId("scales-pane-contributions")).toBeNull();
   });
 
   it("groups questions under section headers with global numbering", async () => {
@@ -138,13 +155,15 @@ describe("«Шкалы» → «Вклады вопросов»", () => {
     expect(screen.getByTestId("contrib-card-2")).toBeInTheDocument();
   });
 
-  it("uncovered questions warn on the card and the section header", async () => {
+  it("uncovered questions warn on the card; the section header only counts questions", async () => {
     openContributions();
     const card = await screen.findByTestId("contrib-card-0");
     // Inside the pane a scale always exists, so «не привязан» is actionable.
     expect(card.querySelector(".tb-status-dot--warn")).not.toBeNull();
     expect(card).toHaveTextContent("не привязан");
-    // Section header reflects coverage: top-1 holds q1+q2 = 2 uncovered.
-    expect(screen.getByTestId("contrib-sec-uncovered-top-1")).toHaveTextContent("2 не привязано");
+    // Шапка свёртки о непривязанных МОЛЧИТ: об этом уже говорят баннер над списком и
+    // точка карточки, а третий счётчик тех же вопросов только спорил бы с ними.
+    expect(screen.queryByTestId("contrib-sec-uncovered-top-1")).toBeNull();
+    expect(screen.getByTestId("contrib-sec-top-1")).toHaveTextContent("2 вопроса");
   });
 });

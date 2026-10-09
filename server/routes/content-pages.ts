@@ -369,7 +369,7 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
       return res.status(404).json({ error: "Content page not found" });
     }
 
-    const { topicId, position, mode, type, templateKey, valuesJson, settingsJson, autoAdvance, autoAdvanceDelayMs, sortOrder } = req.body as {
+    const { topicId, position, mode, type, templateKey, valuesJson, settingsJson, autoAdvance, autoAdvanceDelayMs, sortOrder, hidden } = req.body as {
       topicId?: string;
       position?: string;
       mode?: string;
@@ -380,7 +380,20 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
       autoAdvance?: boolean;
       autoAdvanceDelayMs?: number;
       sortOrder?: number;
+      /** Скрыть экран от ученика (решение владельца 2026-09-20). */
+      hidden?: boolean;
     };
+
+    // Блок вопросов и маршрутизатор скрыть нельзя: первый — сам тест, второй —
+    // способ навигации по нему. Проверка на сервере, а не только в редакторе:
+    // прохождение без вопросов или маршрутизаторный сценарий без хаба — это
+    // сломанный тест, каким бы клиентом его ни правили.
+    if (hidden === true && (existing.kind === "questions" || existing.kind === "router")) {
+      return res.status(422).json({
+        error: "Этот экран нельзя скрыть",
+        field: "hidden",
+      });
+    }
 
     // Validate topicId membership only for a non-null id. A null topicId is
     // valid: it moves the page to a test-scope zone («До теста» / «После теста»,
@@ -444,6 +457,7 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
     if (sortOrder !== undefined) updates.sortOrder = sortOrder;
     if (autoAdvance !== undefined) updates.autoAdvance = autoAdvance;
     if (autoAdvanceDelayMs !== undefined) updates.autoAdvanceDelayMs = autoAdvanceDelayMs;
+    if (hidden !== undefined) updates.hidden = hidden;
     if (valuesJson !== undefined) {
       updates.valuesJson = normalizedValues ?? { values: valuesJson.values ?? {}, placeholderStyles: {} };
     }

@@ -1,26 +1,23 @@
 import { Accordion, AccordionItem } from './components/Accordion';
 import {
-  AppShell, AppShellActions, AppShellBrand, AppShellPageHead,
-  AppShellSearch, AppShellUser,
+  AppShell, AppShellActions, AppShellBrand, AppShellPageHead, AppShellSearch, AppShellUser,
 } from './components/AppShell';
 import { Avatar } from './components/Avatar';
 import { Banner } from './components/Banner';
+import { BarChart, Chart, ChartLegendList, LineChart, ProgressRing, DonutChart } from './components/Charts';
+import { Box, Cluster, Grid, Stack } from './components/Layout';
 import { Breadcrumbs } from './components/Breadcrumbs';
+import { BudgetAllocation } from './components/BudgetAllocation';
 import { Button } from './components/Button';
 import { Calendar } from './components/Calendar';
-import { Center } from './components/Center';
-import { IconBadge } from './components/IconBadge';
 import {
   Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia,
 } from './components/Card';
-import {
-  BarChart, Chart, LineChart, ProgressRing,
-} from './components/Charts';
+import { Center } from './components/Center';
 import { Checkbox } from './components/Checkbox';
-import { ChoiceCard, ChoiceCardGroup, ChoiceCardInset } from './components/ChoiceCard';
 import { Chip } from './components/Chip';
+import { ChoiceCard, ChoiceCardGroup, ChoiceCardInset } from './components/ChoiceCard';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './components/Collapsible';
-import { Label } from './components/Label';
 import { ColorPicker } from './components/ColorPicker';
 import { Combobox } from './components/Combobox';
 import { CommandPalette } from './components/CommandPalette';
@@ -29,42 +26,40 @@ import { DatePicker } from './components/DatePicker';
 import { Drawer } from './components/Drawer';
 import { EmptyState } from './components/EmptyState';
 import { Fab, FabGroup, FabMenu } from './components/FAB';
-import { Matching } from './components/Matching';
-import { QuizMap, QuizSummary } from './components/QuizMap';
-import { Ranking } from './components/Ranking';
 import { FileItem, FileTile, FileUploader } from './components/FileUploader';
-import {
-  FormActions, FormCard, FormField, FormGroup, FormSection,
-} from './components/Form';
+import { FilterBar } from './components/FilterBar';
+import { FilterPanel, FilterPanelGroup } from './components/FilterPanel';
+import { FormActions, FormCard, FormField, FormGroup, FormSection } from './components/Form';
 import {
   GradientPicker, buildGradientCss, makeDefaultGradientState,
 } from './components/GradientPicker';
+import { Heading, Text } from './components/Typography';
+import { IconBadge } from './components/IconBadge';
 import { IconButton } from './components/IconButton';
 import { Input } from './components/Input';
-import { Box, Cluster, Grid, Stack } from './components/Layout';
-import { Text } from './components/Text';
 import {
-  Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot,
-  KanbanCardFootStats, KanbanCardMeta, KanbanCardProgress, KanbanCardTags,
-  KanbanCardTitle, KanbanColumn, KanbanTag,
+  Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot, KanbanCardFootStats,
+  KanbanCardMeta, KanbanCardProgress, KanbanCardTags, KanbanCardTitle, KanbanColumn, KanbanTag,
 } from './components/Kanban';
+import { Label } from './components/Label';
+import { Matching } from './components/Matching';
 import {
   Menu, MenuDivider, MenuGroup, MenuHeader, MenuItem, MenuLabel, MenuTrigger,
 } from './components/Menu';
 import { ModalDialog, Modal, DialogHeader, DialogContent } from './components/Modal';
-// Modal is a deprecated alias — kept for backward compatibility
-import { BudgetAllocation } from './components/BudgetAllocation';
 import { NumberInput } from './components/NumberInput';
 import { PageNav } from './components/PageNav';
 import { Pagination, PaginationBar } from './components/Pagination';
 import { Popover, PopoverHeader, PopoverRow } from './components/Popover';
-import {
-  ProgressBar, ProgressSegmented, ProgressStacked,
-} from './components/ProgressBar';
+import { ProgressBar, ProgressSegmented, ProgressStacked } from './components/ProgressBar';
+import { QuizMap, QuizSummary } from './components/QuizMap';
 import { Radio, RadioGroup } from './components/Radio';
+import { Ranking } from './components/Ranking';
+import { RichTextEditor } from './components/RichTextEditor';
 import { ScrollArea } from './components/ScrollArea';
-import { Select } from './components/Select';
+import { SearchField } from './components/SearchField';
 import { SegmentedControl } from './components/SegmentedControl';
+import { Select } from './components/Select';
 import { Separator } from './components/Separator';
 import { Sidebar } from './components/Sidebar';
 import {
@@ -74,11 +69,10 @@ import { Slider } from './components/Slider';
 import { Spinner, SpinnerDots, SpinnerOverlay } from './components/Spinner';
 import { Stepper } from './components/Stepper';
 import { Switch } from './components/Switch';
-import { Table, TableChip } from './components/Table';
 import { Tab, TabList, TabPanel, Tabs } from './components/Tabs';
+import { Table, TableChip } from './components/Table';
 import { Tag } from './components/Tag';
 import { TagInput } from './components/TagInput';
-import { RichTextEditor } from './components/RichTextEditor';
 import { Textarea } from './components/Textarea';
 import { TimePicker } from './components/TimePicker';
 import { Timer, useCountdown } from './components/Timer';
@@ -87,78 +81,28 @@ import { Tooltip } from './components/Tooltip';
 import { TransferList } from './components/TransferList';
 import { Tree } from './components/Tree';
 import { WizardSteps } from './components/WizardSteps';
+// Modal is a deprecated alias — kept for backward compatibility
 
 export {
-  Accordion, AccordionItem,
-  AppShell, AppShellActions, AppShellBrand, AppShellPageHead,
-  AppShellSearch, AppShellUser,
-  Avatar,
-  Banner,
-  Breadcrumbs,
-  Button,
-  Calendar,
-  Center,
-  IconBadge,
-  Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia,
-  BarChart, Chart, LineChart, ProgressRing,
-  Checkbox,
-  ChoiceCard, ChoiceCardGroup, ChoiceCardInset,
-  Chip,
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-  Label,
-  ColorPicker,
-  Combobox,
-  CommandPalette,
-  DataGrid, DataGridProgress,
-  DatePicker,
-  Drawer,
-  EmptyState,
-  Fab, FabGroup, FabMenu,
-  Matching,
-  QuizMap, QuizSummary,
-  Ranking,
-  FileItem, FileTile, FileUploader,
-  FormActions, FormCard, FormField, FormGroup, FormSection,
-  GradientPicker, buildGradientCss, makeDefaultGradientState,
-  IconButton,
-  Input,
-  Box, Cluster, Grid, Stack,
-  Text,
-  Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot,
-  KanbanCardFootStats, KanbanCardMeta, KanbanCardProgress, KanbanCardTags,
-  KanbanCardTitle, KanbanColumn, KanbanTag,
-  Menu, MenuDivider, MenuGroup, MenuHeader, MenuItem, MenuLabel, MenuTrigger,
-  ModalDialog, Modal,
-  DialogHeader, DialogContent,
-  BudgetAllocation,
-  NumberInput,
-  PageNav,
-  Pagination, PaginationBar,
-  Popover, PopoverHeader, PopoverRow,
-  ProgressBar, ProgressSegmented, ProgressStacked,
-  Radio, RadioGroup,
-  ScrollArea,
-  Select,
-  SegmentedControl,
-  Separator,
-  Sidebar,
-  Skeleton, SkeletonCard, SkeletonListRow, SkeletonRow, SkeletonStack,
-  Slider,
-  Spinner, SpinnerDots, SpinnerOverlay,
-  Stepper,
-  Switch,
-  Table, TableChip,
-  Tab, TabList, TabPanel, Tabs,
-  RichTextEditor,
-  Tag,
-  TagInput,
-  Textarea,
-  TimePicker,
-  Timer, useCountdown,
-  Toast, ToastProvider, useToast,
-  Tooltip,
-  TransferList,
-  Tree,
+  Accordion, AccordionItem, AppShell, AppShellActions, AppShellBrand, AppShellPageHead,
+  AppShellSearch, AppShellUser, Avatar, Banner, Breadcrumbs, Button, Calendar, Center,
+  IconBadge, Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia, BarChart,
+  Chart, LineChart, ProgressRing, Checkbox, ChoiceCard, ChoiceCardGroup, ChoiceCardInset, Chip,
+  Collapsible, CollapsibleContent, CollapsibleTrigger, Label, DonutChart, ChartLegendList, ColorPicker,
+  Combobox, CommandPalette, DataGrid, DataGridProgress, DatePicker, Drawer, EmptyState, Fab,
+  FabGroup, FabMenu, Matching, QuizMap, QuizSummary, Ranking, FileItem, FileTile, FileUploader,
+  FilterBar, FilterPanel, FilterPanelGroup, FormActions, FormCard, FormField, FormGroup, FormSection, GradientPicker,
+  buildGradientCss, makeDefaultGradientState, IconButton, Input, Box, Cluster, Grid, Stack,
+  Text, Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot,
+  KanbanCardFootStats, KanbanCardMeta, KanbanCardProgress, KanbanCardTags, KanbanCardTitle,
+  KanbanColumn, KanbanTag, Menu, MenuDivider, MenuGroup, MenuHeader, MenuItem, MenuLabel,
+  MenuTrigger, ModalDialog, Modal, DialogHeader, DialogContent, BudgetAllocation, NumberInput,
+  PageNav, Pagination, PaginationBar, Popover, PopoverHeader, PopoverRow, ProgressBar,
+  ProgressSegmented, ProgressStacked, Radio, RadioGroup, ScrollArea, Select, SegmentedControl,
+  Separator, SearchField, Sidebar, Skeleton, SkeletonCard, SkeletonListRow, SkeletonRow,
+  SkeletonStack, Slider, Spinner, SpinnerDots, SpinnerOverlay, Stepper, Switch, Table,
+  TableChip, Tab, TabList, TabPanel, Tabs, RichTextEditor, Tag, TagInput, Heading, Textarea,
+  TimePicker, Timer, useCountdown, Toast, ToastProvider, useToast, Tooltip, TransferList, Tree,
   WizardSteps,
 };
 
@@ -184,6 +128,8 @@ export type {
   ChartProps, ChartLegendItem, ChartSwatchTone,
   LineChartProps, LineSeries,
   BarChartProps, BarSeries,
+  DonutChartProps, DonutSegment,
+  ChartLegendListProps, ChartLegendListItem,
   ProgressRingProps,
 } from './components/Charts';
 export type { CheckboxProps } from './components/Checkbox';
@@ -225,6 +171,12 @@ export type {
   FileUploaderProps, FileItemProps, FileItemStatus, FileItemKind, FileItemAction, FileTileProps,
 } from './components/FileUploader';
 export type {
+  FilterBarProps, FilterBarAppliedItem,
+} from './components/FilterBar';
+export type {
+  FilterPanelProps, FilterPanelGroupProps,
+} from './components/FilterPanel';
+export type {
   FormFieldProps, FormFieldTone, FormGroupProps, FormSectionProps, FormCardProps, FormActionsProps,
 } from './components/Form';
 export type {
@@ -236,9 +188,6 @@ export type {
   StackProps, ClusterProps, GridProps, BoxProps,
   Space, StackAlign, StackJustify, GridMinItem, BoxSurface, BoxRadius,
 } from './components/Layout';
-export type {
-  TextProps, TextVariant, TextTone, TextWeight, TextAlign,
-} from './components/Text';
 export type {
   KanbanProps, KanbanColumnProps, KanbanColumnDot, KanbanCardProps,
   KanbanTagProps, KanbanTagTone, KanbanCardProgressProps,
@@ -252,7 +201,9 @@ export type {
   DialogHeaderProps, DialogContentProps,
 } from './components/Modal';
 export type { BudgetAllocationProps, BudgetAllocationItem } from './components/BudgetAllocation';
-export type { NumberInputProps, StepperLayout } from './components/NumberInput';
+export type {
+  NumberInputProps, NumberInputBaseProps, NumberInputEmptyProps, StepperLayout,
+} from './components/NumberInput';
 export type {
   PageNavProps, PageNavItem, PageNavVariant, PageNavOrientation,
 } from './components/PageNav';
@@ -260,7 +211,7 @@ export type {
   PaginationProps, PaginationBarProps, PaginationSize, PaginationVariant,
 } from './components/Pagination';
 export type {
-  PopoverProps, PopoverPlacement, PopoverSize,
+  PopoverProps, PopoverPlacement, PopoverSize, PopoverAlign,
 } from './components/Popover';
 export type {
   ProgressBarProps, ProgressSegmentedProps, ProgressStackedProps, ProgressStackedSegment,
@@ -280,7 +231,7 @@ export type {
   SkeletonProps, SkeletonShape, SkeletonLineSize, SkeletonAnim, SkeletonWidth,
   SkeletonStackProps, SkeletonCardProps, SkeletonListRowProps,
 } from './components/Skeleton';
-export type { SliderProps, SliderOrientation } from './components/Slider';
+export type { SliderProps, SliderOrientation, SliderLandmark } from './components/Slider';
 export type {
   SpinnerProps, SpinnerSize, SpinnerTone, SpinnerDotsProps, SpinnerOverlayProps,
 } from './components/Spinner';
@@ -295,6 +246,10 @@ export type {
 export type { TagProps, TagVariant, TagSize } from './components/Tag';
 export type { TagInputProps } from './components/TagInput';
 export type { RichTextEditorProps, RichTextMode } from './components/RichTextEditor';
+export type {
+  TextProps, TextVariant, TextTone, TextWeight, TextAlign,
+  HeadingProps, HeadingLevel, HeadingSize,
+} from './components/Typography';
 export type { TextareaProps } from './components/Textarea';
 export type { TimePickerProps, TimePickerValue } from './components/TimePicker';
 export type {

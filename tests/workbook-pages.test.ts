@@ -50,6 +50,9 @@ describe("листы «Страницы» и «Поля страниц»", () =>
   it("заголовки несут четырёхчастный адрес страницы", () => {
     expect(PAGE_HEADERS).toEqual([
       "Зона", "Раздел", "Вид", "Номер", "Вариант", "Режим", "Автопереход", "Задержка, мс",
+      // Скрытие экрана от ученика (решение владельца 2026-09-20) — свойство страницы,
+      // поэтому едет книгой наравне с автопереходом.
+      "Скрыт",
     ]);
     expect(PAGE_FIELD_HEADERS).toEqual(["Зона", "Раздел", "Вид", "Номер", "Куда", "Ключ", "Значение"]);
   });
@@ -85,6 +88,8 @@ describe("листы «Страницы» и «Поля страниц»", () =>
       mode: "template",
       autoAdvance: false,
       autoAdvanceDelayMs: undefined,
+      // Экспорт всегда пишет «да»/«нет», поэтому обратно приезжает явное значение.
+      hidden: false,
       values: { title: "Добро пожаловать", lead: "Пара слов" },
       // Скаляры едут литералом: именно так их читает нормализация настроек страницы
       // (`raw === "true"`, `Number(raw)`), а «Да»/«Нет» молча дали бы `false`.
@@ -100,6 +105,7 @@ describe("листы «Страницы» и «Поля страниц»", () =>
       mode: "html",
       autoAdvance: true,
       autoAdvanceDelayMs: 0,
+      hidden: false,
       values: { body: "<p>Итоги темы</p>" },
       settings: { sequenceId: "seq-1" },
     });
@@ -270,5 +276,48 @@ describe("листы «Страницы» и «Поля страниц»", () =>
     );
     expect(pages).toEqual([]);
     expect(errors).toEqual([]);
+  });
+
+  // Скрытие экрана (решение владельца 2026-09-20) — свойство страницы, и перенос теста
+  // обязан его сохранять: книга, потерявшая признак, выдала бы ученику экран, который
+  // автор убрал.
+  it("столбец «Скрыт» ходит по кругу", () => {
+    const rows = serializePageRows([
+      { position: "before", kind: "start", hidden: true },
+      { position: "after", kind: "results", hidden: false },
+    ]);
+    expect(rows.map((r) => r["Скрыт"])).toEqual(["Да", "Нет"]);
+    const { pages, errors } = parsePageSheets(rows, []);
+    expect(errors).toEqual([]);
+    expect(pages.map((p) => p.hidden)).toEqual([true, false]);
+  });
+
+  it("пустая ячейка «Скрыт» оставляет видимость как есть", () => {
+    const { pages, errors } = parsePageSheets(
+      [{ "Зона": "До теста", "Вид": "Стартовая", "Номер": 1 }],
+      [],
+    );
+    expect(errors).toEqual([]);
+    expect(pages[0].hidden).toBeUndefined();
+  });
+
+  it("книга не может скрыть вопросы и маршрутизатор", () => {
+    for (const kind of ["Вопросы", "Маршрутизатор"]) {
+      const { pages, errors } = parsePageSheets(
+        [{ "Зона": "До теста", "Вид": kind, "Номер": 1, "Скрыт": "Да" }],
+        [],
+      );
+      expect(pages).toEqual([]);
+      expect(errors.join(" ")).toContain("нельзя скрыть");
+    }
+  });
+
+  it("непонятное значение «Скрыт» — ошибка строки, а не молчаливое «нет»", () => {
+    const { pages, errors } = parsePageSheets(
+      [{ "Зона": "До теста", "Вид": "Стартовая", "Номер": 1, "Скрыт": "может быть" }],
+      [],
+    );
+    expect(pages).toEqual([]);
+    expect(errors.join(" ")).toContain("«Скрыт»");
   });
 });

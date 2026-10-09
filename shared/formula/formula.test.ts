@@ -159,4 +159,30 @@ describe("validator", () => {
     });
     expect(r.warnings.some((w) => w.code === "count-scales-level")).toBe(true);
   });
+
+  // PRD-50 FR-36 regression: the composite-key `tag("<scope>::<key>")` scope check
+  // must run off its OWN reference set (`scopeKeys`), never off `sectionKeys`. The
+  // repository used to pass the section id/code set as `sectionKeys` solely to gate
+  // the composite key, which silently turned on the (previously always-off) strict
+  // `sectionById(...)` check too — a saved formula like `sectionById("unknown")`
+  // then failed re-validation on any unrelated edit.
+  it("does not require sectionKeys to be populated for the composite tag() scope check", () => {
+    const scopeKeys = new Set(["law"]);
+    // A pre-existing formula using the plain accessor must stay saveable: `sectionKeys`
+    // is absent (as it always was before PRD-50), so the check stays disabled.
+    const plain = validate('sectionById("unknown").percent', "number", { scopeKeys });
+    expect(plain.valid).toBe(true);
+  });
+  it("errors on an unknown composite tag() scope", () => {
+    const r = validate('tag("неизвестный_раздел::ПДн").percent', "number", {
+      scopeKeys: new Set(["law"]),
+    });
+    expect(r.errors.some((e) => e.code === "unknown-section")).toBe(true);
+  });
+  it("accepts a composite tag() with a known scope", () => {
+    const r = validate('tag("law::ПДн").percent', "number", {
+      scopeKeys: new Set(["law"]),
+    });
+    expect(r.errors.some((e) => e.code === "unknown-section")).toBe(false);
+  });
 });

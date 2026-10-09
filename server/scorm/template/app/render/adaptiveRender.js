@@ -13,6 +13,10 @@ function renderAdaptiveQuestion() {
   }
   ensureAdaptiveShuffleMapping(qData.question);
 
+  // Время на задании: адаптивный путь ведёт лестница уровней и рендер у него свой, поэтому
+  // засечка ставится здесь, а не в общем `render()`.
+  if (typeof TBQuestionTime !== 'undefined') TBQuestionTime.show(qData.question.id);
+
   var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
   var layout = layouts && layouts['question'];
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
@@ -42,7 +46,7 @@ function buildAdaptiveFeedbackHtml(q) {
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.feedbackBanner) return '';
   // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
-  var feedbackText = TB.feedbackTextFor(q, isCorrect);
+  var feedbackText = TB.feedbackTextFor(q, isCorrect, state.answers[q.id]);
   return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
@@ -410,7 +414,10 @@ function renderAdaptiveResultsTemplated(app, result) {
         // over for EVERY topic; the shared builder is what gates them by the topic's
         // verdict (in this mode: whether any level was confirmed).
         feedbackTexts: vrTopicFeedbackTexts(tr),
-        recommendedAssets: vrTopicAssets(tr)
+        recommendedAssets: vrTopicAssets(tr),
+        // PRD-50 FR-50: тексты подтем этого раздела — тот же читатель, что у обычного
+        // экрана; отбирает их общий построитель.
+        breakdownFeedback: vrTopicBreakdownFeedback(tr)
       };
     })
   };
@@ -422,16 +429,30 @@ function renderAdaptiveResultsTemplated(app, result) {
   // `finishAndClose` later persists and ships to the LMS. Null for a test that declares
   // no scales and no indicators — the context then stays exactly as it was.
   var flatResult = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+  // PRD-50 FR-28: записи области ТЕСТА для сводного блока. Тот же читатель, что у обычного
+  // экрана итогов (`vrTestBreakdown`, viewResults.js — рантайм склеен плоско), и тот же
+  // источник, что уже дал измерения выше: `getAdaptiveResultForScorm` восстанавливает
+  // лестницу в стандартную форму и кладёт туда записи, посчитанные тем же движком (FR-17).
+  // Секционные записи блок не берёт сознательно — карточка адаптивной темы говорит УРОВНЕМ.
+  var adaptiveTestRows = (flatResult && typeof vrTestBreakdown === 'function') ? vrTestBreakdown(flatResult) : [];
+  if (adaptiveTestRows.length) input.breakdowns = adaptiveTestRows;
+  // PRD-50 §16: записи области РАЗДЕЛА — не для карточки темы (она говорит уровнем), а для
+  // отбора текстов подтем: общий построитель читает исход записи, и без записей на входе
+  // адаптивный экран промолчал бы, сколько бы автор ни написал. Порядок тем один и тот же —
+  // оба списка построены из `result.topicResults`, — поэтому сопоставление по индексу верно.
+  if (flatResult && flatResult.topicResults) {
+    for (var t = 0; t < input.topicResults.length; t++) {
+      var flatTopic = flatResult.topicResults[t];
+      if (flatTopic && flatTopic.breakdown && flatTopic.breakdown.length) {
+        input.topicResults[t].breakdown = flatTopic.breakdown;
+      }
+    }
+  }
   var measures = (flatResult && typeof currentAttemptMeasures === 'function')
     ? currentAttemptMeasures(flatResult)
     : null;
   var adaptiveOpts = {
     hasScormActions: true,
-    // The test's OWN feedback (`TEST_DATA.testFeedbackJson`) — the widest source of the
-    // block and its first one. A property of the TEST, not of the flow mode: an author
-    // who wrote a closing word for an adaptive test owes it to the learner just the same,
-    // and the web host hands over the very same block on this screen.
-    testFeedback: vrTestFeedback(),
     // Вводный блок ЭКРАНА — тот же, что у обычного режима: он свойство теста, а не
     // способа выдачи. Читатель у него один и тот же.
     intro: (typeof vrScreenIntro === 'function') ? vrScreenIntro() : null,
@@ -446,8 +467,18 @@ function renderAdaptiveResultsTemplated(app, result) {
     // with PRD-31 it became WRONG: an unlimited test would keep offering the retry
     // straight through a closed interval. The flag now says what it means.
     canRetry: canRetry,
-    showFinish: !canRetry
+    showFinish: !canRetry,
+    // PRD-50 FR-50: общее правило прохождения. У адаптивного теста порога в процентах
+    // обычно нет — тогда условия нет вовсе, и тексты подтем печатаются везде, где автор
+    // их написал (то же, что делает общий построитель на веб-хосте).
+    overallPassRule: TEST_DATA.overallPassRule || null
   };
+  // PRD-50 FR-13: настройка показа, выпеченная в TEST_DATA только когда автор её включил —
+  // тот же признак, что читает обычный экран (`viewResults.js`). Без неё блока нет.
+  if (TEST_DATA.breakdownDisplay) adaptiveOpts.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  // Окраска полос сводного блока — тем же правилом, что у обычного экрана (`viewResults.js`).
+  var adaptiveBarFill = (typeof resultsBarFill === 'function') ? resultsBarFill() : null;
+  if (adaptiveBarFill) adaptiveOpts.barFill = adaptiveBarFill;
   // PRD-49: заголовки блоков + порядок подблоков, для THIS screen — `results.adaptive`
   // carries its OWN composition (no score summary), declared by the manifest and baked
   // into `designSettings.templateBlockOrder['results.adaptive']`. Passing the standard
@@ -532,6 +563,8 @@ function restartAdaptive() {
 
   // Регистрация попытки в SCORM
   registerAttemptStart();
+  // A new attempt starts with clean section budgets and no closed sections (PRD-67).
+  if (typeof resetSectionRunState === 'function') resetSectionRunState();
 
   // Переинициализация адаптивного теста
   initAdaptiveTest();

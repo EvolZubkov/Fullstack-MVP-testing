@@ -47,6 +47,27 @@ const SAFE_PROTOCOL = /^(https?:\/\/|mailto:)/i;
  */
 const MASK = "\u0000";
 
+/**
+ * Инлайн-код: `фрагмент` (PRD-57 FR-01). Внутри — ни типографики, ни разметки.
+ */
+const INLINE_CODE = /`([^`\n]+)`/g;
+
+/**
+ * Блок кода: ограждение из трёх обратных апострофов, необязательное имя языка в первой
+ * строке. Ведущие пробелы и переносы сохраняются дословно.
+ */
+const CODE_BLOCK = /```([A-Za-zА-Яа-я0-9_+-]*)\n([\s\S]*?)```/g;
+
+/**
+ * Формула: `$$…$$` (PRD-57 FR-07a). Написание отраслевое — так формулу отгораживают
+ * Jupyter, Obsidian и GitHub. Одиночный `$` ограждением НЕ является: он встречается в
+ * обычных текстах («цена $100») и срабатывал бы там, где его не звали.
+ */
+const FORMULA = /\$\$([^$]+)\$\$/g;
+
+/** Имя языка — только то, что мы умеем подсвечивать; прочее остаётся блоком без языка. */
+const KNOWN_LANGS = ["python", "sql", "javascript", "js", "ts", "typescript", "json", "bash"];
+
 /** Emphasis markers, longest first so `**` is never read as two italics. */
 function applyEmphasis(html: string): string {
   return html
@@ -105,8 +126,11 @@ export function renderInlineMarkdown(text: string): string {
   if (!text) return "";
 
   const links: string[] = [];
+  // Код маскируется ПЕРВЫМ и тем же приёмом, что ссылки: типографика к моменту показа
+  // уже подменила бы кавычки и дефисы, а в коде это меняет смысл (FR-02, PRD-33 §3.1).
+  const source = maskFormulas(maskInlineCode(normaliseNewlines(text), links), links);
   LINK_TOKEN_RE.lastIndex = 0;
-  const masked = normaliseNewlines(text).replace(LINK_TOKEN_RE, (...args) => {
+  const masked = source.replace(LINK_TOKEN_RE, (...args) => {
     const match = args.slice(0, -2) as unknown as RegExpExecArray;
     links.push(renderLinkToken(match));
     return `${MASK}${links.length - 1}${MASK}`;
@@ -114,6 +138,59 @@ export function renderInlineMarkdown(text: string): string {
 
   const body = renderLineBreaks(applyEmphasis(escapeHtml(applyTypography(masked))));
   return body.replace(new RegExp(`${MASK}(\\d+)${MASK}`, "g"), (_, i: string) => links[Number(i)]);
+}
+
+/**
+ * Спрятать формулу за маской и положить её ЗАГОТОВКУ в общий список подстановок.
+ *
+ * Здесь печатается только оболочка с исходной записью: сам SVG рисует СЕРВЕР (FR-07),
+ * а этот модуль общий с пакетом, куда движок рендера не едет ни при каких
+ * обстоятельствах. Пока подстановка не случилась, участник видит исходную запись — это
+ * же поведение требует FR-10 для неразобранной формулы.
+ */
+function maskFormulas(text: string, slots: string[]): string {
+  FORMULA.lastIndex = 0;
+  return text.replace(FORMULA, (_match, body: string) => {
+    const latex = body.trim();
+    slots.push(
+      `<span class="tb-formula" data-latex="${escapeHtml(latex)}">${escapeHtml(latex)}</span>`,
+    );
+    return `${MASK}${slots.length - 1}${MASK}`;
+  });
+}
+
+/**
+ * Спрятать инлайн-код за маской и положить готовый узел в общий список подстановок.
+ *
+ * Список тот же, что у ссылок: обе подстановки восстанавливаются одним проходом в конце,
+ * и порядок их появления в тексте значения не имеет.
+ */
+function maskInlineCode(text: string, slots: string[]): string {
+  INLINE_CODE.lastIndex = 0;
+  return text.replace(INLINE_CODE, (_match, body: string) => {
+    slots.push(`<code class="tb-code-inline">${escapeHtml(body)}</code>`);
+    return `${MASK}${slots.length - 1}${MASK}`;
+  });
+}
+
+/**
+ * Вырезать блоки кода ДО разбора абзацев и вернуть готовые узлы отдельно.
+ *
+ * Блок обрабатывается раньше всего остального: внутри него нет ни абзацев, ни переносов
+ * в `<br>`, ни типографики — `<pre>` печатает ровно то, что набрал автор (FR-01).
+ */
+function extractCodeBlocks(text: string): { text: string; blocks: string[] } {
+  const blocks: string[] = [];
+  CODE_BLOCK.lastIndex = 0;
+  const rest = text.replace(CODE_BLOCK, (_match, lang: string, body: string) => {
+    const language = KNOWN_LANGS.indexOf(lang.toLowerCase()) === -1 ? "" : lang.toLowerCase();
+    const attr = language === "" ? "" : ` data-lang="${language}"`;
+    // Последний перенос перед ограждением — часть ограждения, а не кода.
+    const code = body.replace(/\n$/, "");
+    blocks.push(`<pre class="tb-code"${attr}><code>${escapeHtml(code)}</code></pre>`);
+    return `\n\n${MASK}b${blocks.length - 1}${MASK}\n\n`;
+  });
+  return { text: rest, blocks };
 }
 
 /**
@@ -129,10 +206,16 @@ export function renderInlineMarkdown(text: string): string {
  */
 export function renderBlockMarkdown(text: string): string {
   if (!text) return "";
-  return normaliseNewlines(text)
+  const { text: withoutBlocks, blocks } = extractCodeBlocks(normaliseNewlines(text));
+  return withoutBlocks
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0)
-    .map((paragraph) => `<p>${renderInlineMarkdown(paragraph)}</p>`)
+    .map((paragraph) => {
+      const whole = new RegExp(`^${MASK}b(\\d+)${MASK}$`).exec(paragraph);
+      // Блок кода — САМ по себе узел: заворачивать его в абзац нельзя, `<pre>` внутри
+      // `<p>` невалиден, браузер закроет абзац за нас и разметка вокруг поедет.
+      return whole ? blocks[Number(whole[1])] : `<p>${renderInlineMarkdown(paragraph)}</p>`;
+    })
     .join("");
 }

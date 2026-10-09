@@ -24,12 +24,12 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     flowSettings: {},
     folderId: null,
     basic: {
-      title: "Sample", description: "", status: "draft",
+      title: "Sample", description: "", descriptionFormat: "plain", status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -100,6 +100,19 @@ describe("<ResultVariablesSection /> — домен и направление ч
     expandFirstCard();
     expect(screen.getByTestId("metrics-domain-manual-0")).toBeInTheDocument();
     expect(screen.getByTestId("metrics-valence-0")).toBeInTheDocument();
+  });
+
+  it("показатель вне отчёта LMS — с предупреждением, в отчёте — без него (PRD-54, решение 13)", () => {
+    const HINT = "Аналитика по выгрузке отчёта LMS этот показатель не увидит";
+    renderStateful(baseModel({ resultVariables: [makeVar({ scormTarget: "suspend_data" })] }));
+    expandFirstCard();
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+  });
+
+  it("показатель, уходящий в отчёт LMS, предупреждения не несёт", () => {
+    renderStateful(baseModel({ resultVariables: [makeVar({ scormTarget: "both" })] }));
+    expandFirstCard();
+    expect(screen.queryByText("Аналитика по выгрузке отчёта LMS этот показатель не увидит")).toBeNull();
   });
 
   it("строковый показатель НЕ показывает границы/направление — только исходы", () => {

@@ -13,10 +13,12 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { templateRoot } from "./helpers/template-roots";
 import { buildResultContext, buildAdaptiveResultContext } from "../shared/template/result-context";
 import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
 import { renderScreenInto } from "../shared/template/render-screen";
 import { resolveReportIntro } from "../shared/report/report-intro";
+import { testIntroSchema } from "../shared/schema";
 import type { ReportInput } from "../shared/report/report-html";
 
 const RESULT = {
@@ -86,8 +88,8 @@ describe("контекст несёт разметку вводного блок
 
 describe("макеты печатают блок ПЕРВЫМ", () => {
   const dirs: Array<[string, string]> = [
-    ["default", path.resolve(process.cwd(), "server", "scorm", "templates", "default")],
-    ["certification", path.resolve(process.cwd(), "templates", "certification")],
+    ["default", templateRoot("default")],
+    ["certification", templateRoot("certification")],
   ];
 
   const render = (layout: string, context: unknown): HTMLElement => {
@@ -170,5 +172,37 @@ describe("переключатель «в отчёте тот же текст, �
     expect(resolveReportIntro(null)).toBeNull();
     expect(resolveReportIntro({})).toBeNull();
     expect(resolveReportIntro({ reportSameAsResults: true })).toBeNull();
+  });
+});
+
+describe("схема вводного текста несёт тексты исхода (PRD-61)", () => {
+  it("принимает тексты исхода рядом с общим вступлением", () => {
+    const parsed = testIntroSchema.parse({
+      results: {
+        format: "plain",
+        text: "Спасибо за прохождение теста.",
+        passed: { format: "plain", text: "Поздравляем." },
+        failed: { format: "html", text: "<p>Не хватило баллов.</p>" },
+      },
+    });
+    expect(parsed.results?.passed?.text).toBe("Поздравляем.");
+    expect(parsed.results?.failed?.format).toBe("html");
+  });
+
+  it("старая форма без ветвей исхода остаётся валидной", () => {
+    // Снимок публикации морозит строку теста целиком и НИКОГДА не мигрируется, поэтому
+    // старая форма — это не переходное состояние, а вечный вход схемы.
+    const parsed = testIntroSchema.parse({ report: { format: "plain", text: "Об отчёте" } });
+    expect(parsed.report?.text).toBe("Об отчёте");
+    expect(parsed.report?.passed).toBeUndefined();
+  });
+
+  it("переключатель отдаёт отчёту ветвь экрана ЦЕЛИКОМ, вместе с текстами исхода", () => {
+    const results = {
+      format: "plain" as const,
+      text: "Общее",
+      passed: { format: "plain" as const, text: "Прошедшему" },
+    };
+    expect(resolveReportIntro({ results, reportSameAsResults: true })?.passed?.text).toBe("Прошедшему");
   });
 });

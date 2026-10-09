@@ -21,7 +21,10 @@ const { guardSpy, toastSpy } = vi.hoisted(() => ({ guardSpy: vi.fn(), toastSpy: 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ can: () => true, hasRole: () => false, user: { id: "u1", name: "Author" } }),
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/features/content-protection/use-content-guard", () => ({
   useContentGuard: () => ({ guard: guardSpy, dialogProps: { open: false } }),
 }));
@@ -29,7 +32,12 @@ vi.mock("@/features/content-protection/content-impact-dialog", () => ({
   ContentImpactDialog: () => null,
 }));
 vi.mock("@/features/questions/question-editor-drawer", () => ({
-  QuestionEditorDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="mock-question-editor" /> : null),
+  QuestionEditorDrawer: ({ open, question, onClose }: { open: boolean; question: { id: string } | null; onClose: () => void }) =>
+    (open ? (
+      <div data-testid="mock-question-editor" data-question={question?.id ?? ""}>
+        <button type="button" data-testid="mock-question-editor-close" onClick={onClose} />
+      </div>
+    ) : null),
 }));
 vi.mock("@/features/topics/topic-drawer", () => ({
   TopicDrawer: ({ target }: { target: unknown }) => (target ? <div data-testid="mock-topic-drawer" /> : null),
@@ -100,6 +108,10 @@ function renderTree(data: TreeData = { folders, topics, questions }) {
   );
   return { ...utils, fetchMock };
 }
+
+// Дерево помнит фильтр в адресе и раскрытие в состоянии записи истории (возврат вглубь-назад);
+// jsdom делит их между тестами файла — каждый тест начинается с чистой записи.
+beforeEach(() => { window.history.replaceState(null, "", "/"); });
 
 beforeEach(() => {
   guardSpy.mockClear();
@@ -172,7 +184,7 @@ describe("<ContentTree /> — expand / collapse", () => {
   it("«Развернуть всё» opens every topic; questions across topics become visible", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Развернуть всё" }));
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть все" }));
     expect(screen.getByText("Сколько будет 2+2?")).toBeInTheDocument();
     expect(screen.getByText("Что такое акция?")).toBeInTheDocument();
   });
@@ -180,7 +192,7 @@ describe("<ContentTree /> — expand / collapse", () => {
   it("«Свернуть всё» collapses folders, hiding the subtree", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Свернуть всё" }));
+    fireEvent.click(screen.getByRole("button", { name: "Свернуть все" }));
     expect(screen.queryByText("Бюджетирование")).not.toBeInTheDocument();
   });
 
@@ -377,19 +389,19 @@ describe("<ContentTree /> — filters & search", () => {
   it("opens the facet filter panel from the toolbar", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     expect(screen.getByText("Тип вопроса")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Фильтры" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Фильтр" })).toBeInTheDocument();
   });
 
   it("applies a facet condition and shows a removable chip", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Не задана")); // difficulty «unset» facet
     fireEvent.click(screen.getByText("Применить"));
     expect(screen.getByText("Сложность: не задана")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Очистить всё"));
+    fireEvent.click(screen.getByText("Сбросить фильтры"));
     expect(screen.queryByText("Сложность: не задана")).not.toBeInTheDocument();
   });
 
@@ -404,6 +416,84 @@ describe("<ContentTree /> — filters & search", () => {
     await waitFor(() => expect(screen.getByText("Что такое акция?")).toBeInTheDocument());
     expect(screen.getByText(/Показано\s+1\s+совпадение/)).toBeInTheDocument();
     expect(screen.queryByText("Финансы")).not.toBeInTheDocument();
+  });
+});
+
+// ── Deep link from analytics: `?questionId=<id>` ──────────────────────────
+// «Открыть вопрос в теме» in analytics lands here; the tree must reveal the
+// question and open its editor once, then drop the param from the address.
+describe("<ContentTree /> — ссылка на вопрос из аналитики", () => {
+  const scrollSpy = vi.fn();
+  let origScroll: typeof Element.prototype.scrollIntoView;
+  beforeEach(() => {
+    origScroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollSpy;
+    scrollSpy.mockClear();
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = origScroll;
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("раскрывает тему, прокручивает к вопросу, открывает его редактор и убирает параметр", async () => {
+    window.history.replaceState(null, "", "/author/content?questionId=q2&keep=1");
+    renderTree();
+    const editor = await screen.findByTestId("mock-question-editor");
+    expect(editor.getAttribute("data-question")).toBe("q2");
+    // The topic is expanded, so the question row is in the tree.
+    expect(screen.getByText("Выберите верные утверждения")).toBeInTheDocument();
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    expect((scrollSpy.mock.contexts[0] as HTMLElement).dataset.questionId).toBe("q2");
+    // Only our param goes; the rest of the query survives.
+    expect(window.location.pathname).toBe("/author/content");
+    expect(window.location.search).toBe("?keep=1");
+    expect(toastSpy).not.toHaveBeenCalled();
+  });
+
+  it("раскрывает свёрнутый путь папок до вопроса", async () => {
+    // t3 lives in f2 ⊂ f1; folders start open, but the path must be walked all the way.
+    const deep = {
+      folders,
+      topics: [...topics, { id: "t3", name: "Прогнозы", folderId: "f2", ownerId: "u1", visibility: "shared" }],
+      questions: [...questions, { id: "q9", topicId: "t3", type: "single", prompt: "Глубокий вопрос", difficulty: null, tags: [], mediaType: null, createdBy: "u1" }],
+    };
+    window.history.replaceState(null, "", "/author/content?questionId=q9");
+    renderTree(deep);
+    expect((await screen.findByTestId("mock-question-editor")).getAttribute("data-question")).toBe("q9");
+    expect(screen.getByText("Глубокий вопрос")).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
+  it("не открывает редактор повторно после закрытия", async () => {
+    window.history.replaceState(null, "", "/author/content?questionId=q1");
+    renderTree();
+    await screen.findByTestId("mock-question-editor");
+    fireEvent.click(screen.getByTestId("mock-question-editor-close"));
+    expect(screen.queryByTestId("mock-question-editor")).not.toBeInTheDocument();
+    // Further renders (e.g. the tree reacting to a click) must not reopen it.
+    fireEvent.click(screen.getByText("Инвестиции"));
+    expect(screen.getByText("Что такое акция?")).toBeInTheDocument();
+    expect(screen.queryByTestId("mock-question-editor")).not.toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
+  it("неизвестный вопрос: без падения и без редактора, только ненавязчивое уведомление", async () => {
+    window.history.replaceState(null, "", "/author/content?questionId=nope");
+    renderTree();
+    await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
+    await waitFor(() => expect(toastSpy).toHaveBeenCalledTimes(1));
+    expect(toastSpy.mock.calls[0][0]).toMatchObject({ title: "Вопрос не найден" });
+    expect(toastSpy.mock.calls[0][0].variant).toBeUndefined();
+    expect(screen.queryByTestId("mock-question-editor")).not.toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
+  it("без параметра ничего не открывает", async () => {
+    window.history.replaceState(null, "", "/author/content");
+    renderTree();
+    await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
+    expect(screen.queryByTestId("mock-question-editor")).not.toBeInTheDocument();
+    expect(toastSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -452,5 +542,24 @@ describe("<ContentTree /> — счётчики в подписях строк", 
     expect(row.textContent).toContain("1 тема");
     expect(row.textContent).toContain("1 вопрос");
     expect(row.textContent).not.toContain("1 вопроса");
+  });
+});
+
+describe("<ContentTree /> — возврат на дерево (замечание владельца 2026-10-05)", () => {
+  it("условия фильтра из адреса и раскрытие из состояния записи восстанавливаются", async () => {
+    window.history.replaceState({ ctTree: { expandedTopics: ["t1"] } }, "", "/author/content?type=multiple");
+    renderTree();
+
+    // Фильтр «Тип: Несколько ответов» применён, тема раскрыта — виден только подходящий вопрос.
+    expect(await screen.findByText("Выберите верные утверждения")).toBeInTheDocument();
+    expect(screen.queryByText("Сколько будет 2+2?")).toBeNull();
+    expect(screen.getByText(/^Тип:/)).toBeInTheDocument();
+  });
+
+  it("раскрытие темы пишется в состояние записи", async () => {
+    renderTree();
+    fireEvent.click(await screen.findByText("Бюджетирование"));
+
+    await waitFor(() => expect((window.history.state as { ctTree?: { expandedTopics?: string[] } }).ctTree?.expandedTopics).toEqual(["t1"]));
   });
 });

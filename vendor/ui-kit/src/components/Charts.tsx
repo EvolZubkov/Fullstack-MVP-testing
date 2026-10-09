@@ -1,5 +1,56 @@
-import React, { forwardRef, useMemo } from 'react';
+import React, { forwardRef, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cn, cssStyleClass } from '../utils';
+
+/**
+ * Tracks the rendered width of a chart wrapper so its viewBox can be in pixels.
+ *
+ * Charts draw into a viewBox and let CSS stretch the SVG to the container
+ * width. With a fixed viewBox width that makes the rendered height a proportion
+ * of the width: `height` set an aspect ratio rather than a height, and a chart
+ * asked for 240 drew 436 in a 1090px column and 780 in a full-width panel.
+ *
+ * Measuring the container and using that as the viewBox width makes one viewBox
+ * unit one pixel, so `height` is a height and the full width is still used.
+ * Measuring in a layout effect keeps the fallback ratio from reaching paint.
+ *
+ * @param fallback - viewBox width used until the first measurement lands
+ * @param forwardedRef - ref the component was asked to forward to the wrapper
+ * @returns The measured width and the ref to put on the wrapper
+ */
+function useMeasuredWidth(
+  fallback: number,
+  forwardedRef: React.ForwardedRef<HTMLDivElement>,
+): readonly [number, (node: HTMLDivElement | null) => void] {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(fallback);
+
+  const attach = useCallback((node: HTMLDivElement | null) => {
+    nodeRef.current = node;
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  }, [forwardedRef]);
+
+  useLayoutEffect(() => {
+    const node = nodeRef.current;
+    if (!node) return undefined;
+
+    // A detached or display:none wrapper measures 0. Keeping the fallback is
+    // better than dividing the geometry by zero.
+    const measure = () => {
+      const next = node.getBoundingClientRect().width;
+      if (next > 0) setWidth(next);
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return [width, attach] as const;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Container (head + legend + body)
@@ -113,9 +164,12 @@ export interface LineChartProps extends React.HTMLAttributes<HTMLDivElement>, Ch
   yMax?: number;
   /** Кол-во ярлыков на оси Y (плюс верхний/нижний). Игнорируется при yTickValues. */
   yTicks?: number;
-  /** Высота SVG (соотн. viewbox). По умолчанию 240. */
+  /** Высота SVG в пикселях. По умолчанию 240. Не зависит от ширины окна. */
   height?: number;
-  /** Ширина viewbox (визуально растягивается). По умолчанию 600. */
+  /**
+   * Запасная ширина viewbox — на время до первого замера контейнера.
+   * По умолчанию 600. Ширину график берёт из контейнера, а не отсюда.
+   */
   width?: number;
   /**
    * Chart-level label format. Used when a series doesn't define its own labelFormat.
@@ -202,13 +256,14 @@ function chooseLabelSide(
 export const LineChart = forwardRef<HTMLDivElement, LineChartProps>(
   ({
     categories, series, yMin, yMax, yTicks = 4,
-    height = 240, width = 600,
+    height = 240, width: widthFallback = 600,
     hideGrid, showGridX,
     hideXAxis, hideXLabels, hideYAxis, hideYLabels,
     yTickValues, yTickFormat,
     labelFormat: chartLabelFormat,
     className, ...rest
   }, ref) => {
+    const [width, attachWrap] = useMeasuredWidth(widthFallback, ref);
     const hasAnyLabels = useMemo(() => series.some(s => !!s.labels), [series]);
     const padding = {
       top:    hasAnyLabels ? 28 : 16,
@@ -241,7 +296,7 @@ export const LineChart = forwardRef<HTMLDivElement, LineChartProps>(
     const pb = pt + innerH;
 
     return (
-      <div ref={ref} className={className} {...rest}>
+      <div ref={attachWrap} className={className} {...rest}>
         <svg className="ou-chart__svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
           {/* Horizontal grid lines */}
           {!hideGrid && ticks.map((t, i) => {
@@ -403,6 +458,12 @@ export interface BarSeries {
   data: number[];
   color?: string;
   /**
+   * Цвет ОТДЕЛЬНОГО столбика по индексу категории — там, где цвет говорит о самой категории,
+   * а не о серии (распределение результатов: ниже порога / у порога / выше). Перекрывает
+   * `color`; где элемента нет, столбик остаётся цветом серии.
+   */
+  colors?: Array<string | undefined>;
+  /**
    * Show value labels on bars.
    * - `true` / `'outside'` — above the bar top (or above the segment top for stacked)
    * - `'inside'`           — centered inside the bar segment; falls back to outside when bar is too short
@@ -419,7 +480,12 @@ export interface BarChartProps extends React.HTMLAttributes<HTMLDivElement>, Cha
   yMax?: number;
   /** Кол-во ярлыков на оси Y (плюс верхний/нижний). Игнорируется при yTickValues. */
   yTicks?: number;
+  /** Высота SVG в пикселях. По умолчанию 240. Не зависит от ширины окна. */
   height?: number;
+  /**
+   * Запасная ширина viewbox — на время до первого замера контейнера.
+   * По умолчанию 600. Ширину график берёт из контейнера, а не отсюда.
+   */
   width?: number;
   /** Стек (вертикальный) или сгруппированные. */
   stacked?: boolean;
@@ -429,6 +495,12 @@ export interface BarChartProps extends React.HTMLAttributes<HTMLDivElement>, Cha
    * @param seriesId - id of the series
    */
   labelFormat?: (value: number, seriesId: string) => string;
+  /**
+   * Вертикальная линия-маркер поперёк области графика: порог, норматив, целевое значение.
+   * `position` — доля ширины области построения [0, 1]; линия может стоять ВНУТРИ столбика,
+   * а не только на границе между категориями.
+   */
+  xMarker?: { position: number; label?: React.ReactNode };
 }
 
 /** Minimum bar height (px in viewBox) for 'inside' labels to fit. */
@@ -437,13 +509,15 @@ const BAR_LABEL_MIN_H = 14;
 export const BarChart = forwardRef<HTMLDivElement, BarChartProps>(
   ({
     categories, series, yMin, yMax, yTicks = 4,
-    height = 240, width = 600, stacked,
+    height = 240, width: widthFallback = 600, stacked,
     hideGrid, showGridX,
     hideXAxis, hideXLabels, hideYAxis, hideYLabels,
     yTickValues, yTickFormat,
     labelFormat: chartLabelFormat,
+    xMarker,
     className, ...rest
   }, ref) => {
+    const [width, attachWrap] = useMeasuredWidth(widthFallback, ref);
     const hasOutsideLabels = series.some(
       s => s.labels === true || s.labels === 'outside',
     );
@@ -482,7 +556,7 @@ export const BarChart = forwardRef<HTMLDivElement, BarChartProps>(
     const pb = pt + innerH;
 
     return (
-      <div ref={ref} className={className} {...rest}>
+      <div ref={attachWrap} className={className} {...rest}>
         <svg className="ou-chart__svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
           {/* Horizontal grid lines */}
           {!hideGrid && ticks.map((t, i) => {
@@ -503,6 +577,34 @@ export const BarChart = forwardRef<HTMLDivElement, BarChartProps>(
               y1={pt} y2={pb}
             />
           ))}
+          {/* Marker line (threshold, target) */}
+          {xMarker && (() => {
+            const x = pl + innerW * Math.min(Math.max(xMarker.position, 0), 1);
+            return (
+              <g>
+                <line className="ou-chart__marker" x1={x} x2={x} y1={pt} y2={pb} />
+                {xMarker.label != null && (
+                  <text className="ou-chart__marker-label" x={x} y={pt - 4} textAnchor="middle">
+                    {xMarker.label}
+                  </text>
+                )}
+              </g>
+            );
+          })()}
+          {/* Marker line (threshold, target) */}
+          {xMarker && (() => {
+            const x = pl + innerW * Math.min(Math.max(xMarker.position, 0), 1);
+            return (
+              <g>
+                <line className="ou-chart__marker" x1={x} x2={x} y1={pt} y2={pb} />
+                {xMarker.label != null && (
+                  <text className="ou-chart__marker-label" x={x} y={pt - 4} textAnchor="middle">
+                    {xMarker.label}
+                  </text>
+                )}
+              </g>
+            );
+          })()}
           {/* Y-axis line */}
           {!hideYAxis && (
             <line className="ou-chart__axis-line" x1={pl} x2={pl} y1={pt} y2={pb} />
@@ -545,7 +647,9 @@ export const BarChart = forwardRef<HTMLDivElement, BarChartProps>(
             categories.forEach((_, ci) => {
               let stackY = yAt(min);
               series.forEach((s, si) => {
-                const color = s.color ?? DEFAULT_PALETTE[si % DEFAULT_PALETTE.length];
+                const color = s.colors?.[ci]
+                  ?? s.color
+                  ?? DEFAULT_PALETTE[si % DEFAULT_PALETTE.length];
                 const v = s.data[ci] ?? 0;
                 const fmt = s.labelFormat
                   ? s.labelFormat
@@ -634,6 +738,171 @@ export const BarChart = forwardRef<HTMLDivElement, BarChartProps>(
   },
 );
 BarChart.displayName = 'BarChart';
+
+// ─────────────────────────────────────────────────────────────────────────
+// DonutChart — одно целое, разрезанное на доли (живёт под `Charts` темой)
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Steps of the accent, handed out by place in the list.
+ *
+ * A donut shows one whole cut up, and its parts are read in order of size, so
+ * a ramp running dark to light runs monotonically around the ring and the
+ * picture can be read before the legend is. What each step actually is belongs
+ * to the theme: the light end of the light theme's ramp is the dark theme's
+ * background.
+ *
+ * More parts than steps wrap round. Eight parts is already past what a reader
+ * holds at once, and the legend carries the names either way.
+ */
+const RAMP = [
+  'var(--ou-ramp-1)',
+  'var(--ou-ramp-2)',
+  'var(--ou-ramp-3)',
+  'var(--ou-ramp-4)',
+  'var(--ou-ramp-5)',
+  'var(--ou-ramp-6)',
+  'var(--ou-ramp-7)',
+];
+
+/** Строка легенды: цвет, подпись и значение справа. */
+export interface ChartLegendListItem {
+  /** Ключ строки. По умолчанию — индекс. */
+  id?: string;
+  /** Произвольный CSS-цвет метки (или CSS-переменная). */
+  color: string;
+  label: React.ReactNode;
+  /** Текст справа — обычно доля в процентах. */
+  value?: React.ReactNode;
+}
+
+export interface ChartLegendListProps extends React.HTMLAttributes<HTMLUListElement> {
+  items: ChartLegendListItem[];
+}
+
+/**
+ * Легенда списком: цветная метка, подпись, значение справа.
+ *
+ * Та же разметка, что у легенды `DonutChart` (`ou-donut__legend`), вынесенная отдельно:
+ * легенду без кольца рисуют и рядом с полосой долей, и во всплывающей подсказке.
+ */
+export const ChartLegendList = forwardRef<HTMLUListElement, ChartLegendListProps>(
+  ({ items, className, ...rest }, ref) => (
+    <ul ref={ref} className={cn('ou-donut__legend', className)} {...rest}>
+      {items.map((item, index) => (
+        <li className="ou-donut__legend-item" key={item.id ?? index}>
+          <span className={cn('ou-donut__dot', cssStyleClass({ background: item.color }, 'ou-donut-dot'))} />
+          <span className="ou-donut__legend-name">{item.label}</span>
+          {item.value !== undefined && <span className="ou-donut__legend-value">{item.value}</span>}
+        </li>
+      ))}
+    </ul>
+  ),
+);
+ChartLegendList.displayName = 'ChartLegendList';
+
+export interface DonutSegment {
+  /** Ключ строки. По умолчанию — индекс. */
+  id?: string;
+  value: number;
+  label?: React.ReactNode;
+  /** Текст справа в строке легенды. По умолчанию — доля в процентах. */
+  valueLabel?: React.ReactNode;
+  /** Произвольный CSS-цвет. По умолчанию — ступень акцента по месту в списке. */
+  color?: string;
+}
+
+export interface DonutChartProps extends React.HTMLAttributes<HTMLDivElement> {
+  segments: DonutSegment[];
+  /** Целое, которому равен полный круг. По умолчанию — сумма долей. */
+  total?: number;
+  /** Диаметр в пикселях. Высота кольца не зависит от ширины контейнера. */
+  size?: number;
+  /** Толщина кольца в пикселях. */
+  thickness?: number;
+  /** Содержимое в центре кольца — обычно `.ou-donut__value` и `.ou-donut__label`. */
+  label?: React.ReactNode;
+  /** Легенда рядом с кольцом. Без неё кольцу нужен свой `aria-label`. */
+  showLegend?: boolean;
+}
+
+export const DonutChart = forwardRef<HTMLDivElement, DonutChartProps>(
+  ({
+    segments, total, size = 180, thickness = 22,
+    label, showLegend = true, className, ...rest
+  }, ref) => {
+    const values = segments.map(s => (Number.isFinite(s.value) ? Math.max(0, s.value) : 0));
+    const whole = total ?? values.reduce((sum, value) => sum + value, 0);
+
+    const radius = (size - thickness) / 2;
+    const circumference = 2 * Math.PI * radius;
+
+    // Arcs are laid end to end around the ring: each one is a dash of its own
+    // length in a gap the size of the whole circle, pushed to where the
+    // previous one stopped. Empty parts are dropped rather than drawn - they
+    // still belong in the legend, but a zero-length arc on the ring is at best
+    // nothing and at worst a dot.
+    let travelled = 0;
+    const arcs = values.map((value, index) => {
+      const length = whole > 0 ? (value / whole) * circumference : 0;
+      const arc = { index, length, offset: -travelled };
+      travelled += length;
+      return arc;
+    }).filter(arc => arc.length > 0);
+
+    const colorOf = (index: number) => segments[index].color ?? RAMP[index % RAMP.length];
+    const shareOf = (index: number) => (whole > 0 ? values[index] / whole : 0);
+
+    return (
+      <div ref={ref} className={cn('ou-donut', className)} {...rest}>
+        <div
+          className={cn('ou-donut__figure', cssStyleClass({ width: size, height: size }, 'ou-donut-fig'))}
+        >
+          <svg
+            className="ou-donut__svg"
+            width={size}
+            height={size}
+            viewBox={`0 0 ${size} ${size}`}
+            role={showLegend ? undefined : 'img'}
+            aria-hidden={showLegend || undefined}
+          >
+            <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+              <circle
+                className="ou-donut__track"
+                cx={size / 2} cy={size / 2} r={radius}
+                strokeWidth={thickness}
+              />
+              {arcs.map(arc => (
+                <circle
+                  key={segments[arc.index].id ?? arc.index}
+                  className="ou-donut__seg"
+                  cx={size / 2} cy={size / 2} r={radius}
+                  strokeWidth={thickness}
+                  stroke={colorOf(arc.index)}
+                  strokeDasharray={`${arc.length} ${circumference}`}
+                  strokeDashoffset={arc.offset}
+                />
+              ))}
+            </g>
+          </svg>
+          {label && <div className="ou-donut__center">{label}</div>}
+        </div>
+
+        {showLegend && (
+          <ChartLegendList
+            items={segments.map((segment, index) => ({
+              id: segment.id,
+              color: colorOf(index),
+              label: segment.label,
+              value: segment.valueLabel ?? `${Math.round(shareOf(index) * 100)}%`,
+            }))}
+          />
+        )}
+      </div>
+    );
+  },
+);
+DonutChart.displayName = 'DonutChart';
 
 // ─────────────────────────────────────────────────────────────────────────
 // ProgressRing — простой кольцевой индикатор (живёт под `Charts` темой)

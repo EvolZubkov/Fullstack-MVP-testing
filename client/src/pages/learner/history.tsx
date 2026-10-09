@@ -11,7 +11,7 @@ import {
   Stack,
   Tag,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { CheckCircle, XCircle, AlertTriangle, Eye, History, TrendingUp } from "lucide-react";
 import { format } from "date-fns";

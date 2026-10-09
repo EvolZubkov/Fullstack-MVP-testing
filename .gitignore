@@ -34,6 +34,8 @@ debug.log
 docker/config/deploy.env
 docker/build/
 coverage/
+# Vitest 5 report/attachment output
+.vitest/
 .playwright-mcp/
 /*.png
 
@@ -59,3 +61,9 @@ templates/*.zip
 .claude/worktrees/
 docs/references/workbook_Выгорание_Маслач (1).xlsx
 .superpowers/
+docs/references/Опросник ЧИЛ См. Алиса .xlsx
+
+# Временные файлы Excel/Word: создаются рядом с открытым документом и живут
+# ровно до его закрытия — в истории им делать нечего.
+~$*
+docs/references/Сертификация_руководителей_в_Ростелекоме (4).tbtest

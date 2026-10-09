@@ -1,0 +1,52 @@
+<!-- ЗОНТИК живёт в НАЧАЛЕ этого блока, а не в хвосте шапки. Он стоит после вводного
+     блока автора, и в шапке печатался бы до него — то есть перенос менял бы порядок
+     документа. Гейт у него СВОЙ и остаётся снаружи гейта карточки, поэтому у методики,
+     которая баллов не приносит, заголовок печатается, а карточка сводки — нет, ровно как
+     до разбора. Выключить его вместе с этим блоком автор, разумеется, вправе.
+     ВНИМАНИЕ: фигурные скобки внутри комментария разбираются движком шаблонов — писать
+     их здесь нельзя даже в пояснении. -->
+<!-- ЗОНТИК «Ваш результат» — та же надпись и то же место в иерархии, что на экране
+     итогов: он покрывает сводку, темы, шкалы и показатели. Формулировку и сам показ
+     задаёт автор одним тумблером на оба экрана; выключен — заголовка нет, разделы
+     остаются. -->
+{{#if labels.results.heading}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.heading }}</div>{{/if}}
+
+<!-- Сводка баллов гейтится ТЕМ ЖЕ признаком, что на экране итогов (PRD-29 §6.7):
+     измерительная методика не приносит баллов, и «0 вопросов / 0.0 баллов / 0 %» —
+     утверждение, которого экран не делает. Гейт стоит на ВСЕЙ карточке: с переездом
+     названия в шапку внутри неё не осталось ничего, что печаталось бы без сводки. -->
+{{#unless result.hideScoreSummary}}
+<section class="tb-report__card">
+  <div class="tb-report__subtitle">Результат теста</div>
+
+  <div class="tb-report__score">
+    <div class="tb-report__metrics">
+      <div class="tb-report__metric">
+        <div class="tb-report__metric-num" data-path="result.totalQuestions"></div>
+        <div class="tb-report__metric-lbl">вопросов</div>
+      </div>
+      <div class="tb-report__metric">
+        <div class="tb-report__metric-num" data-path="report.correctLabel"></div>
+        <div class="tb-report__metric-lbl">верно</div>
+      </div>
+      <div class="tb-report__metric">
+        <div class="tb-report__metric-num" data-path="report.earnedPointsLabel"></div>
+        <div class="tb-report__metric-lbl">баллов</div>
+      </div>
+    </div>
+
+    <div class="tb-report__ring">
+      <svg viewBox="0 0 100 100">
+        <circle class="tb-report__ring-track" cx="50" cy="50" r="44" fill="none" stroke-width="12"/>
+        <circle class="tb-report__ring-fill" cx="50" cy="50" r="44" fill="none" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{ report.ringDasharray }}" stroke-dashoffset="{{ report.ringDashoffset }}"/>
+      </svg>
+      <div class="tb-report__ring-value"><span data-path="result.scorePercent"></span>%</div>
+    </div>
+
+    <!-- Плашка вердикта — на пустой подписи её нет вовсе: она несёт фон и цвет исхода,
+         поэтому пустой строки мало. Гейт отдельный от сводки: автор вправе показать
+         сводку принудительно, но вердикта у неоцениваемого теста всё равно нет. -->
+    {{#if report.verdictBadge}}<div class="tb-report__badge" data-path="report.verdictBadge"></div>{{/if}}
+  </div>
+</section>
+{{/unless}}

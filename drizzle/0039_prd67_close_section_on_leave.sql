@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "close_section_on_leave" boolean DEFAULT false NOT NULL;

@@ -102,10 +102,29 @@ function notify(root: HTMLElement): void {
   root.ownerDocument.defaultView?.setTimeout(() => el.remove(), TOAST_MS);
 }
 
-/** Is the event inside a region the core marked? Self-describing — no spec needed here. */
+/**
+ * Fields the learner TYPES INTO (PRD-57 FR-29). The perimeter marks the whole answer
+ * slot, and a text answer lives inside it: without this exception the learner could
+ * neither select, nor cut, nor right-click their OWN text.
+ */
+const FIELD_SELECTOR = "textarea, input, [contenteditable]:not([contenteditable='false'])";
+
+/** Is this element a learner's own input field, or inside one? */
+function isOwnField(el: Element): boolean {
+  return el.closest(FIELD_SELECTOR) !== null;
+}
+
+/**
+ * Is the event inside a region the core marked? Self-describing — no spec needed here.
+ *
+ * An event inside the learner's own input field answers NO even when that field sits
+ * inside a marked region (FR-29): copying one's own answer is legitimate, and the
+ * «копирование отключено» notice there would be plain wrong.
+ */
 function inPerimeter(root: HTMLElement, target: EventTarget | null): boolean {
   const el = target instanceof Element ? target : null;
   if (!el) return false;
+  if (isOwnField(el)) return false;
   if (root.hasAttribute(PROTECTED_ATTR)) return root.contains(el);
   return el.closest("[" + PROTECTED_ATTR + "]") !== null;
 }
@@ -148,6 +167,41 @@ function unmark(el: HTMLElement): void {
 }
 
 /**
+ * Give the learner's own input fields their selection back (PRD-57 FR-29).
+ *
+ * INLINE, for the same reason the ban itself is inline: the ban sits on the slot as an
+ * inline property, and `user-select` inherits — a rule in a stylesheet could not outrank
+ * it on the field. The field KEEPS {@link PROTECTED_ATTR} where the region put it: that
+ * attribute carries the print rule, and on paper the field disappears with the rest of
+ * the task.
+ *
+ * Marked with an attribute of its own so the lift touches exactly what it granted and
+ * never someone else's inline `user-select`.
+ */
+const EXEMPT_ATTR = "data-tb-protection-exempt";
+
+function exempt(el: HTMLElement): void {
+  el.setAttribute(EXEMPT_ATTR, "");
+  el.style.userSelect = "text";
+  el.style.setProperty("-webkit-user-select", "text");
+  el.style.setProperty("-webkit-touch-callout", "default");
+}
+
+function unexempt(el: HTMLElement): void {
+  el.removeAttribute(EXEMPT_ATTR);
+  el.style.removeProperty("user-select");
+  el.style.removeProperty("-webkit-user-select");
+  el.style.removeProperty("-webkit-touch-callout");
+}
+
+/** Every input field standing inside a marked region (the whole scene counts as one). */
+function fieldsInside(root: HTMLElement): HTMLElement[] {
+  const fields = Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR));
+  if (root.hasAttribute(PROTECTED_ATTR)) return fields;
+  return fields.filter((field) => field.closest("[" + PROTECTED_ATTR + "]") !== null);
+}
+
+/**
  * Apply (or lift) copy protection on a freshly rendered scene.
  *
  * @param root   Scene container the host rendered into.
@@ -160,9 +214,13 @@ export function applyProtection(root: HTMLElement, target: RegionTarget | null):
   // Gating this on `target` left the mark and veil unstyled whenever copy protection
   // itself was off.
   ensureStyle(root);
+  root.querySelectorAll<HTMLElement>("[" + EXEMPT_ATTR + "]").forEach(unexempt);
   root.querySelectorAll<HTMLElement>("[" + PROTECTED_ATTR + "]").forEach(unmark);
   if (root.hasAttribute(PROTECTED_ATTR)) unmark(root);
   if (!target) return;
   for (const el of elementsOf(root, target)) mark(el);
+  // After the regions are marked, not before: which fields stand inside the perimeter
+  // is only known once the perimeter exists (FR-29).
+  for (const field of fieldsInside(root)) exempt(field);
   ensureListeners(root);
 }

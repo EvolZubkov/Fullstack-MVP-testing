@@ -64,19 +64,26 @@ import { adaptiveLevelKey, ADAPTIVE_LEVEL_SHEET_NAME } from "./workbook-adaptive
 export const FEEDBACK_SHEET_NAME = "Обратная связь";
 export const RECOMMENDATION_SHEET_NAME = "Рекомендации";
 
-export const FEEDBACK_HEADERS = ["Кому", "Раздел", "Формат", "Текст"];
-export const FEEDBACK_WIDTHS = [12, 28, 20, 80];
+// «Подтема» стоит сразу за «Разделом»: вместе они ОДИН адрес, а колонки адреса
+// принадлежат друг другу — то же правило, что у «Номера уровня» на «Рекомендациях».
+// Толкование — ДВЕ последние колонки: оно принадлежит тому же владельцу, что и текст в
+// строке, но это другая сущность — оно объясняет результат, а не советует. Свой формат у
+// него потому же, почему у обратной связи: автор пишет его тем же редактором.
+export const FEEDBACK_HEADERS = [
+  "Кому", "Раздел", "Подтема", "Формат", "Текст", "Формат толкования", "Толкование",
+];
+export const FEEDBACK_WIDTHS = [12, 28, 24, 20, 80, 20, 80];
 
 export const RECOMMENDATION_HEADERS = [
   // «Номер уровня» stands next to «Раздел» because the two of them are ONE address: a level
   // is named by its topic and its number, and the columns of an address belong together.
-  "Кому", "Раздел", "Номер уровня", "Тип", "Заголовок", "Ссылка",
+  "Кому", "Раздел", "Подтема", "Номер уровня", "Тип", "Заголовок", "Ссылка",
 ];
-export const RECOMMENDATION_WIDTHS = [12, 28, 14, 16, 34, 46];
+export const RECOMMENDATION_WIDTHS = [12, 28, 24, 14, 16, 34, 46];
 
 /** Column keys, taken from the headers so a rename lands in one place. */
-const [FB_OWNER, FB_TOPIC, FB_FORMAT, FB_TEXT] = FEEDBACK_HEADERS;
-const [RC_OWNER, RC_TOPIC, RC_LEVEL, RC_TYPE, RC_TITLE, RC_URL] = RECOMMENDATION_HEADERS;
+const [FB_OWNER, FB_TOPIC, FB_KEY, FB_FORMAT, FB_TEXT, FB_INT_FORMAT, FB_INT_TEXT] = FEEDBACK_HEADERS;
+const [RC_OWNER, RC_TOPIC, RC_KEY, RC_LEVEL, RC_TYPE, RC_TITLE, RC_URL] = RECOMMENDATION_HEADERS;
 
 /** «Тема» is the legacy spelling of the «Раздел» column, accepted by every sheet here. */
 const TOPIC_COL_LEGACY = "Тема";
@@ -93,16 +100,18 @@ const OWNER_COL_LEGACY = "Уровень";
 const OWNER_TEST = "Тест";
 const OWNER_SECTION = "Раздел";
 const OWNER_LEVEL = "Уровень";
+/** PRD-50 FR-50: подтема (тег вопросов) внутри раздела — свой владелец текста. */
+const OWNER_KEY = "Подтема";
 
 /**
  * Values of the «Кому» column of «Обратная связь» — the workbook template turns them into a
  * drop-down. An adaptive level is NOT here: its text lives on «Адаптивные уровни», so
  * offering it would only produce rows the sheet has to refuse.
  */
-export const OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION];
+export const OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION, OWNER_KEY];
 
 /** Values of the «Кому» column of «Рекомендации» — the same two owners plus a level. */
-export const RECOMMENDATION_OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION, OWNER_LEVEL];
+export const RECOMMENDATION_OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION, OWNER_KEY, OWNER_LEVEL];
 
 /**
  * Recommendation kinds by the branch of `feedback_json` they live in. The labels are the
@@ -128,6 +137,12 @@ export const FEEDBACK_FORMAT_CHOICES = Object.values(FORMAT_LABELS);
 /** What the sheets produce for an owner: a feedback structure, or `null` for "none". */
 export type FeedbackPayload = FeedbackContent;
 
+/** Толкование, прочитанное из книги: текст и его формат. */
+export interface InterpretationPayload {
+  format: FeedbackFormat;
+  text: string;
+}
+
 /** One recommendation as it is stored: everything below has a title and an optional URL. */
 interface RecommendationSource {
   title?: string | null;
@@ -150,6 +165,33 @@ export interface FeedbackSource {
 export interface FeedbackSectionSource {
   topicName: string;
   feedback?: FeedbackSource | null;
+  /**
+   * PRD-50 FR-50: обратная связь ПОДТЕМ раздела — ключ подтемы -> её блок
+   * (`test_sections.breakdown_feedback_json.keys`). Отсутствие = подтемам ничего не
+   * писали, и строк у них не будет.
+   */
+  keyFeedback?: Readonly<Record<string, FeedbackSource | null>> | null;
+  /**
+   * Толкование раздела — то, которым ЭТОТ ТЕСТ переопределил текст темы
+   * (`test_sections.interpretation_json`). Толкование самой ТЕМЫ книга не возит: тема общая
+   * для многих тестов, и книга описывает тест, а не чужое содержание (решение владельца
+   * 2026-09-21).
+   */
+  interpretation?: InterpretationSource | null;
+  /** Толкования подтем раздела (`test_sections.breakdown_interpretation_json.keys`). */
+  keyInterpretation?: Readonly<Record<string, InterpretationSource | null>> | null;
+}
+
+/**
+ * Толкование в том виде, в каком его видит книга: текст и его формат, и больше ничего.
+ *
+ * Отдельный тип от {@link FeedbackSource} не ради строгости, а ради смысла: у толкования нет
+ * ни курсов, ни материалов, ни мероприятий — оно ничего не советует, и лист «Рекомендации»
+ * его не касается.
+ */
+export interface InterpretationSource {
+  format?: string | null;
+  text?: string | null;
 }
 
 /**
@@ -190,6 +232,27 @@ export interface ParsedFeedbackSheets {
    * «Адаптивные уровни» hands in, so the two sheets cannot key levels differently.
    */
   byLevel: Map<string, ParsedLevelRecommendations>;
+  /**
+   * PRD-50 FR-50: обратная связь ПОДТЕМ, по разделам: ключ раздела (нормализованное имя
+   * темы, как у {@link byTopic}) -> карта «подтема -> её блок».
+   *
+   * Раздел, не названный на листе ни одной строкой подтемы, в карте отсутствует — и это
+   * значит «его подтемы не трогать», то же правило, что у остальных владельцев. Раздел,
+   * названный хотя бы одной строкой, забирает НАБОР подтем из книги целиком: подтема,
+   * которой в книге нет, остаётся как была.
+   */
+  byKey: Map<string, Map<string, FeedbackPayload | null>>;
+  /**
+   * Толкования РАЗДЕЛОВ: ключ раздела -> текст с форматом, либо `null` («стёрто»).
+   *
+   * Только переопределение теста: толкование самой ТЕМЫ книга не возит, потому что тема
+   * общая для многих тестов (решение владельца 2026-09-21). Раздел, чью строку книга не
+   * несёт, в карте отсутствует — и это значит «не трогать», то же правило, что у обратной
+   * связи.
+   */
+  interpretationByTopic: Map<string, InterpretationPayload | null>;
+  /** Толкования ПОДТЕМ: ключ раздела -> подтема -> текст с форматом. */
+  interpretationByKey: Map<string, Map<string, InterpretationPayload | null>>;
   errors: string[];
 }
 
@@ -197,6 +260,7 @@ export interface ParsedFeedbackSheets {
 type Owner =
   | { kind: "test" }
   | { kind: "section"; key: string; name: string }
+  | { kind: "key"; key: string; name: string; tag: string }
   | { kind: "level"; key: string; name: string; number: number };
 
 /** Accumulator of one owner's feedback while both sheets are being read. */
@@ -232,24 +296,68 @@ function hasFeedback(fb?: FeedbackSource | null): fb is FeedbackSource {
   return text !== "" || recommendationsOf(fb).length > 0;
 }
 
-/** Owners in sheet order: the test first, then the sections as «Структура» lists them. */
+/** Есть ли что писать в колонке толкования. Пустой текст = толкования нет. */
+function hasInterpretation(value?: InterpretationSource | null): value is InterpretationSource {
+  return !!value && String(value.text ?? "").trim() !== "";
+}
+
+/** Строка листа: владелец, его обратная связь и его толкование — любое из двух может пустовать. */
+interface OwnerRow {
+  level: string;
+  topicName: string;
+  tag: string;
+  feedback?: FeedbackSource | null;
+  interpretation?: InterpretationSource | null;
+}
+
+/**
+ * Owners in sheet order: the test first, then the sections as «Структура» lists them.
+ *
+ * Строка заводится владельцу, у которого есть ХОТЬ ЧТО-ТО — обратная связь либо толкование.
+ * Раньше условием была только обратная связь, и раздел, у которого автор написал одно
+ * толкование, не попадал в книгу вовсе: выгрузил, загрузил — и текста нет.
+ */
 function ownersOf(
-  testFeedback: FeedbackSource | null | undefined,
+  // PRD-61 §10: уровень «Тест» больше не выгружается, поэтому значение не читается.
+  // Параметр оставлен в сигнатуре намеренно: колонки `tests.feedback_json` и `tests.feedback`
+  // ещё живы (их сносит отдельная миграция), и убирать его стоит вместе с ними — одним
+  // заходом, а не двумя правками одного и того же контракта.
+  _testFeedback: FeedbackSource | null | undefined,
   sections: readonly FeedbackSectionSource[],
-): { level: string; topicName: string; feedback: FeedbackSource }[] {
-  const owners: { level: string; topicName: string; feedback: FeedbackSource }[] = [];
-  if (hasFeedback(testFeedback)) {
-    owners.push({ level: OWNER_TEST, topicName: "", feedback: testFeedback });
-  }
+): OwnerRow[] {
+  const owners: OwnerRow[] = [];
+  // PRD-61 §10: строки уровня «Тест» книга больше НЕ ВЫГРУЖАЕТ — обратная связь этого уровня
+  // снята, и печатать поле, которого нет ни в ящике, ни в выдаче, значит звать автора править
+  // мёртвое. На ИМПОРТЕ владелец «Тест» по-прежнему распознаётся (см. `OWNER_CHOICES`): уже
+  // выданные книги обязаны читаться, и их строка просто ничего не меняет.
   for (const section of sections) {
     // A section with no topic name cannot be addressed by the sheet at all — the sheet has
     // no other key for it — so it is skipped instead of producing an unloadable row.
-    if (!hasFeedback(section.feedback) || !String(section.topicName ?? "").trim()) continue;
-    owners.push({
-      level: OWNER_SECTION,
-      topicName: String(section.topicName),
-      feedback: section.feedback,
-    });
+    const topicName = String(section.topicName ?? "").trim();
+    if (!topicName) continue;
+    if (hasFeedback(section.feedback) || hasInterpretation(section.interpretation)) {
+      owners.push({
+        level: OWNER_SECTION,
+        topicName,
+        tag: "",
+        feedback: section.feedback ?? null,
+        interpretation: section.interpretation ?? null,
+      });
+    }
+    // Подтемы — сразу за своим разделом: адрес подтемы начинается с него, и читать книгу
+    // проще сверху вниз, а не прыжками между листами. Набор подтем — объединение двух
+    // карт: у подтемы может быть только толкование, только рекомендация или и то, и другое.
+    const tags = new Set([
+      ...Object.keys(section.keyFeedback ?? {}),
+      ...Object.keys(section.keyInterpretation ?? {}),
+    ]);
+    for (const tag of tags) {
+      if (!tag.trim()) continue;
+      const feedback = section.keyFeedback?.[tag] ?? null;
+      const interpretation = section.keyInterpretation?.[tag] ?? null;
+      if (!hasFeedback(feedback) && !hasInterpretation(interpretation)) continue;
+      owners.push({ level: OWNER_KEY, topicName, tag, feedback, interpretation });
+    }
   }
   return owners;
 }
@@ -262,8 +370,15 @@ export function serializeFeedbackRows(
   return ownersOf(testFeedback, sections).map((owner) => ({
     [FB_OWNER]: owner.level,
     [FB_TOPIC]: owner.topicName,
-    [FB_FORMAT]: formatLabel(owner.feedback.format),
-    [FB_TEXT]: String(owner.feedback.text ?? ""),
+    [FB_KEY]: owner.tag,
+    [FB_FORMAT]: formatLabel(owner.feedback?.format),
+    [FB_TEXT]: String(owner.feedback?.text ?? ""),
+    // Формат толкования пишется, только когда есть сам текст: иначе автор видел бы
+    // «Обычный» в строке, где толкования нет вовсе, и читал бы это как «написано пусто».
+    [FB_INT_FORMAT]: hasInterpretation(owner.interpretation)
+      ? formatLabel(owner.interpretation.format)
+      : "",
+    [FB_INT_TEXT]: String(owner.interpretation?.text ?? ""),
   }));
 }
 
@@ -282,10 +397,12 @@ export function serializeRecommendationRows(
 ): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
   for (const owner of ownersOf(testFeedback, sections)) {
+    // Владелец, у которого есть только толкование, рекомендаций не даёт: у толкования их
+    // нет по определению, и ветви ниже у него пустые.
     const branches: [RecommendationKind, readonly RecommendationSource[]][] = [
-      ["link", owner.feedback.links ?? []],
-      ["asset", owner.feedback.assets ?? []],
-      ["event", owner.feedback.events ?? []],
+      ["link", owner.feedback?.links ?? []],
+      ["asset", owner.feedback?.assets ?? []],
+      ["event", owner.feedback?.events ?? []],
     ];
     for (const [kind, items] of branches) {
       for (const item of items) {
@@ -294,6 +411,7 @@ export function serializeRecommendationRows(
         rows.push({
           [RC_OWNER]: owner.level,
           [RC_TOPIC]: owner.topicName,
+          [RC_KEY]: owner.tag,
           [RC_LEVEL]: "",
           [RC_TYPE]: RECOMMENDATION_TYPE_TO[kind],
           [RC_TITLE]: title,
@@ -314,6 +432,7 @@ export function serializeRecommendationRows(
       rows.push({
         [RC_OWNER]: OWNER_LEVEL,
         [RC_TOPIC]: topicName,
+        [RC_KEY]: "",
         [RC_LEVEL]: level.levelIndex + 1,
         [RC_TYPE]: RECOMMENDATION_TYPE_TO.link,
         [RC_TITLE]: title,
@@ -363,11 +482,15 @@ function readOwner(
   row: Record<string, unknown>,
   ownerCol: string,
   topicCol: string,
+  keyCol: string,
   levelCol?: string,
 ): { ok: true; value: Owner } | { ok: false; error: string } {
   const ownerRaw = String(row[ownerCol] ?? row[OWNER_COL_LEGACY] ?? "");
   const owner = normalizeCell(ownerRaw);
   const topicName = cleanCell(String(row[topicCol] ?? row[TOPIC_COL_LEGACY] ?? ""));
+  // Книга, выгруженная до появления подтем, колонки не несёт вовсе — тогда ячейка пуста, и
+  // владелец «Подтема» в такой книге просто не встречается.
+  const tagName = cleanCell(String(row[keyCol] ?? ""));
   const levelRaw = levelCol === undefined ? "" : cleanCell(String(row[levelCol] ?? ""));
   const choices = levelCol === undefined ? OWNER_CHOICES : RECOMMENDATION_OWNER_CHOICES;
 
@@ -375,20 +498,34 @@ function readOwner(
     levelCol !== undefined && levelRaw !== ""
       ? `для «${ownerCol}» = «${who}» колонка «${levelCol}» должна быть пустой`
       : undefined;
+  // Та же строгость, что у «Номера уровня»: колонки адреса существуют, чтобы владельца не
+  // угадывали, и скопированная-но-не-очищенная ячейка — ровно та ошибка, которую они ловят.
+  const tagMustBeEmpty = (who: string): string | undefined =>
+    tagName !== "" ? `для «${ownerCol}» = «${who}» колонка «${keyCol}» должна быть пустой` : undefined;
 
   if (owner === normalizeCell(OWNER_TEST)) {
     if (topicName !== "") {
       return { ok: false, error: `для «${ownerCol}» = «${OWNER_TEST}» колонка «${topicCol}» должна быть пустой` };
     }
-    const error = levelMustBeEmpty(OWNER_TEST);
+    const error = levelMustBeEmpty(OWNER_TEST) ?? tagMustBeEmpty(OWNER_TEST);
     if (error) return { ok: false, error };
     return { ok: true, value: { kind: "test" } };
   }
   if (owner === normalizeCell(OWNER_SECTION) || owner === normalizeCell(TOPIC_COL_LEGACY)) {
     if (topicName === "") return { ok: false, error: "не указан раздел (тема)" };
-    const error = levelMustBeEmpty(OWNER_SECTION);
+    const error = levelMustBeEmpty(OWNER_SECTION) ?? tagMustBeEmpty(OWNER_SECTION);
     if (error) return { ok: false, error };
     return { ok: true, value: { kind: "section", key: normalizeCell(topicName), name: topicName } };
+  }
+  if (owner === normalizeCell(OWNER_KEY)) {
+    if (topicName === "") return { ok: false, error: "не указан раздел (тема)" };
+    if (tagName === "") return { ok: false, error: `для «${ownerCol}» = «${OWNER_KEY}» колонка «${keyCol}» обязательна` };
+    const error = levelMustBeEmpty(OWNER_KEY);
+    if (error) return { ok: false, error };
+    return {
+      ok: true,
+      value: { kind: "key", key: normalizeCell(topicName), name: topicName, tag: tagName },
+    };
   }
   if (owner === normalizeCell(OWNER_LEVEL)) {
     if (levelCol === undefined) {
@@ -399,6 +536,8 @@ function readOwner(
       };
     }
     if (topicName === "") return { ok: false, error: "не указан раздел (тема)" };
+    const tagError = tagMustBeEmpty(OWNER_LEVEL);
+    if (tagError) return { ok: false, error: tagError };
     if (!/^\d+$/.test(levelRaw) || Number(levelRaw) < 1) {
       return { ok: false, error: `«${levelCol}»: нужно целое ≥ 1, получено "${String(row[levelCol] ?? "")}"` };
     }
@@ -490,16 +629,32 @@ function applyRecommendation(
  *   address is not here is the SAME orphan as a recommendation whose owner is missing from
  *   «Обратная связь». Omitting the argument therefore means "the book describes no levels" —
  *   which is exactly what a book without the «Адаптивные уровни» sheet says.
+ * @param headers Column titles the sheet actually HAS. The rule is the workbook's own, the
+ *   one `mergeOutcomes` spells out: a column the sheet has defines its field in full — an
+ *   emptied cell clears the text, because that cell is the author's only way to clear it —
+ *   while a column the sheet LACKS says nothing at all. It matters for «Толкование», which
+ *   appeared only in contract 3.9.0: a book exported before it has no such column, and
+ *   reading its every cell as "erased" would wipe the texts of a test whose author never
+ *   opened that book's columns. Omitting the argument means "the sheet is of the current
+ *   format" — the caller that can look at the header row passes it.
  */
 export function parseFeedbackSheets(
   feedbackRows: Record<string, unknown>[] = [],
   recommendationRows: Record<string, unknown>[] = [],
   knownLevels: ReadonlySet<string> = new Set<string>(),
+  headers?: ReadonlySet<string>,
 ): ParsedFeedbackSheets {
+  /** Несёт ли лист колонку толкования вообще. Её отсутствие = «о толкованиях молчу». */
+  const readsInterpretation = headers ? headers.has(FB_INT_TEXT) : true;
   const errors: string[] = [];
   const topicDrafts = new Map<string, OwnerDraft>();
   const topicNames = new Map<string, string>();
   const byLevel = new Map<string, ParsedLevelRecommendations>();
+  /** Накопители подтем: ключ раздела -> подтема -> черновик. */
+  const keyDrafts = new Map<string, Map<string, OwnerDraft>>();
+  /** Толкования: те же адреса, что у черновиков выше, но своё значение. */
+  const interpretationByTopic = new Map<string, InterpretationPayload | null>();
+  const interpretationByKey = new Map<string, Map<string, InterpretationPayload | null>>();
   let testDraft: OwnerDraft | undefined;
 
   const newDraft = (format: FeedbackFormat, text: string): OwnerDraft =>
@@ -509,7 +664,7 @@ export function parseFeedbackSheets(
     if (isBlankRow(row, FEEDBACK_HEADERS)) return;
     const where = `Лист «${FEEDBACK_SHEET_NAME}», строка ${i + 2}`;
 
-    const owner = readOwner(row, FB_OWNER, FB_TOPIC);
+    const owner = readOwner(row, FB_OWNER, FB_TOPIC, FB_KEY);
     if (!owner.ok) {
       errors.push(`${where}: ${owner.error}`);
       return;
@@ -524,7 +679,30 @@ export function parseFeedbackSheets(
     const raw = String(row[FB_TEXT] ?? "");
     const text = raw.trim() === "" ? "" : raw;
 
+    // ТОЛКОВАНИЕ. Формат разбирается тем же правилом и теми же подписями, что у обратной
+    // связи: автор пишет оба текста одним редактором, и две таблицы подписей разошлись бы.
+    const intFormat = parseFormat(String(row[FB_INT_FORMAT] ?? ""));
+    if (!intFormat.ok) {
+      errors.push(`${where}: ${intFormat.error.replace(FB_FORMAT, FB_INT_FORMAT)}`);
+      return;
+    }
+    const intRaw = String(row[FB_INT_TEXT] ?? "");
+    const intText = intRaw.trim() === "" ? "" : intRaw;
+    // Пустой текст = «толкования нет»: `null` снимает переопределение, и участник снова
+    // читает толкование самой темы. Это тот же способ сказать «нет», что у обратной связи.
+    const interpretation: InterpretationPayload | null =
+      intText === "" ? null : { format: intFormat.value, text: intText };
+
     if (owner.value.kind === "test") {
+      // У ТЕСТА толкования нет как сущности: толкуется тема, а не тест. Заполненная
+      // ячейка — не мелочь, которую можно промолчать: автор ждёт, что текст доедет.
+      if (readsInterpretation && intText !== "") {
+        errors.push(
+          `${where}: для «${FB_OWNER}» = «${OWNER_TEST}» колонка «${FB_INT_TEXT}» должна быть `
+          + `пустой: толкование принадлежит разделу или подтеме`,
+        );
+        return;
+      }
       // Last occurrence wins; recommendations already collected for the owner survive,
       // because they are keyed by owner rather than by row.
       testDraft = testDraft
@@ -532,9 +710,26 @@ export function parseFeedbackSheets(
         : newDraft(format.value, text);
       return;
     }
+    if (owner.value.kind === "key") {
+      const { key, name, tag } = owner.value;
+      const forTopic = keyDrafts.get(key) ?? new Map<string, OwnerDraft>();
+      const prev = forTopic.get(tag);
+      forTopic.set(tag, prev ? { ...prev, format: format.value, text } : newDraft(format.value, text));
+      keyDrafts.set(key, forTopic);
+      if (readsInterpretation) {
+        const forTopicInt = interpretationByKey.get(key) ?? new Map<string, InterpretationPayload | null>();
+        forTopicInt.set(tag, interpretation);
+        interpretationByKey.set(key, forTopicInt);
+      }
+      // Имя раздела нужно и подтеме: ошибку «такого раздела нет в «Структуре»» автор ищет
+      // по тому написанию, которое сам набрал.
+      topicNames.set(key, name);
+      return;
+    }
     const { key, name } = owner.value;
     const existing = topicDrafts.get(key);
     topicDrafts.set(key, existing ? { ...existing, format: format.value, text } : newDraft(format.value, text));
+    if (readsInterpretation) interpretationByTopic.set(key, interpretation);
     topicNames.set(key, name);
   });
 
@@ -542,7 +737,7 @@ export function parseFeedbackSheets(
     if (isBlankRow(row, RECOMMENDATION_HEADERS)) return;
     const where = `Лист «${RECOMMENDATION_SHEET_NAME}», строка ${i + 2}`;
 
-    const owner = readOwner(row, RC_OWNER, RC_TOPIC, RC_LEVEL);
+    const owner = readOwner(row, RC_OWNER, RC_TOPIC, RC_KEY, RC_LEVEL);
     if (!owner.ok) {
       errors.push(`${where}: ${owner.error}`);
       return;
@@ -562,6 +757,17 @@ export function parseFeedbackSheets(
         return;
       }
       levelOwner = owner.value;
+    } else if (owner.value.kind === "key") {
+      // Подтема подчинена листу «Обратная связь» так же, как раздел: рекомендация подтемы,
+      // которую лист не назвал, хранить некуда.
+      draft = keyDrafts.get(owner.value.key)?.get(owner.value.tag);
+      if (!draft) {
+        errors.push(
+          `${where}: подтема «${owner.value.tag}» раздела «${owner.value.name}» `
+          + `не названа на листе «${FEEDBACK_SHEET_NAME}»`,
+        );
+        return;
+      }
     } else {
       draft = owner.value.kind === "test" ? testDraft : topicDrafts.get(owner.value.key);
       if (!draft) {
@@ -623,12 +829,21 @@ export function parseFeedbackSheets(
 
   const byTopic = new Map<string, FeedbackPayload | null>();
   for (const [key, draft] of topicDrafts) byTopic.set(key, finalize(draft));
+  const byKey = new Map<string, Map<string, FeedbackPayload | null>>();
+  for (const [topicKey, drafts] of keyDrafts) {
+    const resolved = new Map<string, FeedbackPayload | null>();
+    for (const [tag, draft] of drafts) resolved.set(tag, finalize(draft));
+    byKey.set(topicKey, resolved);
+  }
 
   return {
     test: testDraft ? finalize(testDraft) : undefined,
     byTopic,
     topicNames,
     byLevel,
+    byKey,
+    interpretationByTopic,
+    interpretationByKey,
     errors,
   };
 }

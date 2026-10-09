@@ -314,6 +314,15 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-cover__eyebrow:not(:has(*)) { display: none; }
 .tb-cover__title { margin: 0; font-weight: 700; font-size: 44px; line-height: 1.08; letter-spacing: -0.02em; color: var(--ou-fg-default); text-wrap: pretty; }
 .tb-cover__desc { margin: 0; font: var(--ou-text-body-l); color: var(--ou-fg-soft); max-width: 60ch; text-wrap: pretty; }
+/* PRD-59: описание автора может нести абзацы, списки и ссылки. Интервалы заданы явно
+   и по модульной сетке: умолчания браузера дают абзацу отступ в 1em, а он с сеткой
+   обложки не совпадает. Крайние отступы сняты, чтобы блок не раздвигал раскладку. */
+.tb-cover__desc > :first-child { margin-top: 0; }
+.tb-cover__desc > :last-child { margin-bottom: 0; }
+.tb-cover__desc p { margin: 0 0 var(--ou-space-2); }
+.tb-cover__desc ul, .tb-cover__desc ol { margin: 0 0 var(--ou-space-2); padding-inline-start: var(--ou-space-5); }
+.tb-cover__desc li { margin: 0 0 var(--ou-space-1); }
+.tb-cover__desc strong { font-weight: 600; }
 .tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
 /* The illustration is taken OUT OF FLOW (absolute inside the panel) on purpose: the
    cover grid row is `auto`, so a picture left in flow SIZES the row. `height: 100%`
@@ -358,11 +367,35 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   align-items: center; justify-content: safe center; text-align: center;
   gap: var(--ou-space-5);
 }
+/* A DS banner keeps its own left-aligned text inside the centred column (the timer
+   warning of the section intro). */
+.tb-scene__col--center .ou-banner { text-align: left; }
 .tb-scene__col--narrow { max-width: 640px; }
 .tb-scene__hero--s { font-size: 28px; }
 /* DS ring at a fixed diameter (the component does not size itself). */
 .tb-ring { width: 140px; height: 140px; display: inline-flex; align-items: center; justify-content: center; position: relative; }
-.tb-ring .ou-ring__track { stroke: var(--ou-bg-surface-3); }
+.tb-ring .ou-ring__track { stroke: var(--tb-track); }
+
+/* ── Indicator track ─────────────────────────────────────────────────
+   The UNFILLED part of a readout: the topic bar, the scale rail, the ring track and
+   the breakdown bar. The DS paints all of them with `--ou-bg-hover` — the HOVER
+   HIGHLIGHT token. On the dark palette that is 10% white and the track reads; on the
+   light one it is 6% black, which over a white card resolves to about #F1F1F2. The
+   track disappears, and with it the only thing tying the label on the left to the
+   number on the right — the number is left hanging off nothing.
+
+   Our own token rather than a DS edit: the hover highlight must stay a hover
+   highlight, so the two roles are parted HERE instead of taking its colour away. The
+   value is `--ou-border-default`, which is declared in BOTH palettes (#AEB2BB /
+   #3A4150), so no theme-dependent selector is needed — the token itself answers for
+   both. Dark is left as it was: the highlight resolved to nearly that same tone there
+   (#393F4C over the card).
+
+   The ring takes the same token through `stroke`, not `background`: it is an SVG. */
+.tb-scene { --tb-track: var(--ou-border-default); }
+.tb-scene .ou-progress__track,
+.tb-scene .ou-slider__rail { background: var(--tb-track); }
+
 .tb-eyebrow { font: var(--ou-text-body-s); color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 /* Meta dots — inline facts with an accent dot (section intro). */
 .tb-meta-dots { display: flex; gap: var(--ou-space-5); flex-wrap: wrap; justify-content: center; }
@@ -527,6 +560,122 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   font-size: var(--tb-answer-fs, 20px);
   font-weight: 400;
   line-height: 1.35;
+  /* A long single word (`Конфиденциальность`) cannot wrap by default: the text box
+     shrinks with its column (`min-width: 0`) and the word spills past it onto the
+     drag handle next to it. It breaks instead — by syllable where the page declares
+     `lang="ru"`, at any point as a last resort. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+/* Typed answer (PRD-57 §6.5, §6.6). The field fills the column like every other answer
+   block; the NUMERIC flavour takes half of it, because a number is short and a field as
+   wide as the column invites a sentence into a box that compares digits. The input rides
+   the same `--tb-answer-fs` as the option text, so all answers on a run are one size. */
+.tb-scene .tb-answer-field { width: 100%; }
+.tb-scene .tb-answer-field--num { width: 50%; }
+.tb-scene .tb-answer-field .ou-field__input {
+  font-size: var(--tb-answer-fs, 20px);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* Пропуски в тексте задания (PRD-57 §6, FR-24). Поле стоит В СТРОКЕ, поэтому
+   собственных отступов у него НЕТ намеренно: пробелы вокруг пропуска — это пробелы
+   текста задания, а свой margin выглядел бы лишним пробелом перед запятой, стоящей
+   сразу за полем. Ширина живёт в `--tb-blank-w` и выводится из эталона: поле на две
+   цифры и поле на слово — разные подсказки о том, чего ждут. */
+.tb-scene .tb-blank {
+  display: inline-flex;
+  vertical-align: baseline;
+  /* Ширина ТЕКСТА ответа; поля коробки прибавляются сверху, иначе поле на две цифры
+     съело бы их padding'ом и показало обрезок. */
+  width: calc(var(--tb-blank-w, 12ch) + 2 * var(--ou-space-2));
+}
+.tb-scene .tb-blank .ou-field__box { padding-inline: var(--ou-space-2); }
+.tb-scene .tb-blank .ou-field__input {
+  font-size: var(--tb-answer-fs, 20px);
+  text-align: center;
+}
+
+/* Подстановка вместо поля — три режима одной общей функции (FR-24i): прочерк там, где
+   полей нет вовсе; ответ участника и эталон там, где поле уже отыграно. Вид у всех трёх
+   один, различается источник текста и разметка верности. */
+.tb-scene .tb-blank-sub {
+  display: inline-block;
+  border-bottom: 2px solid var(--ou-border-default);
+  text-align: center;
+  font-weight: 600;
+}
+/* Ширину держит ТОЛЬКО прочерк: подставлять там нечего, и без неё он схлопнулся бы в
+   точку. У ответа и эталона ширина равна ширине текста — фиксированная превратилась бы
+   в лишний пробел перед запятой. */
+.tb-scene .tb-blank-sub--dash {
+  color: transparent;
+  min-width: var(--tb-blank-w, 12ch);
+}
+.tb-scene .tb-blank-sub.correct-answer {
+  border-bottom-color: var(--ou-success-default);
+  color: var(--ou-success-on-soft);
+}
+.tb-scene .tb-blank-sub.incorrect-answer {
+  border-bottom-color: var(--ou-error-default);
+  color: var(--ou-error-on-soft);
+}
+/* Эталон автора — нейтральным тоном. Это не «верно», а «вот что ожидалось»; зелёный
+   здесь читался бы как вердикт по чужому ответу. */
+.tb-scene .tb-blank-sub--etalon {
+  border-bottom-style: dashed;
+  color: var(--ou-accent-on-soft);
+}
+
+/* Листинг кода в тексте задания (PRD-57 §4.1). Блок прокручивается САМ: перенос в
+   коде меняет смысл, а прокрутка страницы поперёк — дефект вёрстки (FR-04). Шрифт —
+   из шаблона, поэтому PDF-отчёт одинаков на разных машинах (FR-05). */
+.tb-scene .tb-code {
+  margin: var(--ou-space-3) 0;
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-subtle);
+  border: 1px solid var(--ou-border-soft);
+  font-family: var(--ou-font-family-mono);
+  font-size: calc(var(--tb-answer-fs, 20px) * 0.8);
+  line-height: 1.45;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 4;
+}
+.tb-scene .tb-code code { font-family: var(--ou-font-family-mono); }
+.tb-scene .tb-code-inline {
+  font-family: var(--ou-font-family-mono);
+  font-size: 0.92em;
+  padding: 0 var(--ou-space-1);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-subtle);
+}
+
+/* Пять ролей подсветки (FR-03c). Цвета — токены ТЕМЫ, а не палитра библиотеки: замена
+   движка подсветки меняет один переводчик на сервере, а не оформление каждого шаблона. */
+.tb-scene .tb-code__kw { color: var(--ou-accent-on-soft); font-weight: 600; }
+.tb-scene .tb-code__str { color: var(--ou-success-on-soft); }
+.tb-scene .tb-code__num { color: var(--ou-warning-on-soft); }
+.tb-scene .tb-code__com { color: var(--ou-fg-muted); font-style: italic; }
+.tb-scene .tb-code__fn { color: var(--ou-info-on-soft, var(--ou-accent-default)); }
+
+/* Формула (PRD-57 §4.2). Картинка приезжает готовой: SVG считает сервер, в пакет
+   едет только он. Выравнивание по базовой линии — формула стоит В СТРОКЕ текста и не
+   должна подпрыгивать над ней. */
+.tb-scene .tb-formula {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
+}
+.tb-scene .tb-formula svg {
+  /* Цвет наследуется от текста: у SVG MathJax заливка задана `currentColor`, поэтому
+     формула живёт в теме шаблона, а не в палитре библиотеки. */
+  fill: currentColor;
+  max-width: 100%;
+  height: auto;
 }
 
 /* Multiple: the tick is class-driven (no native input) — mirror DS :checked. */
@@ -586,9 +735,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene .ou-rank__item.dragging { cursor: grabbing; }
 /* Drop-target feedback comes from the DS itself: the pointer engine adds
    `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
-   .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
+   .ou-match__card--fixed` in skillum-ds.css). No extra rule needed here. */
 /* "Just connected" tint needs no scene rule any more: in merge mode the DS already
-   tints BOTH cards + the gap together (`ou-match--gap-narrow` in university-rt.css),
+   tints BOTH cards + the gap together (`ou-match--gap-narrow` in skillum-ds.css),
    unlike the old arrow mode which only tinted the answer card. */
 /* Review verdict (PRD-39): this app marks a matched row `correct-answer`/
    `incorrect-answer` (the choice/ranking convention), not the DS component's own BEM
@@ -649,6 +798,16 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    bare 340px: a bare floor cannot shrink below itself, so on a 360px phone (312px of
    field) auto-fit still lays a 340px track and the BODY gets a horizontal scrollbar.
    `min()` lets the single remaining track fall back to the field width. */
+/* PRD-50: БЛОК РАЗДЕЛОВ — заголовок со счётчиком «пройдено N из M» над собственной
+   сеткой тем. Счётчик прижат вправо и набран приглушённо: это подпись к заголовку, а
+   не второй заголовок. Отступы заданы соседними селекторами (`+`), поэтому плоский
+   список тем — тест без блоков — не получает ни одного лишнего пикселя. */
+.tb-topic-group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-topic-group__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ou-space-2); }
+.tb-topic-group__title { font: var(--ou-text-heading-s); color: var(--ou-fg-default); margin: 0; }
+.tb-topic-group__counter { font: var(--ou-text-body-m); color: var(--ou-fg-muted); white-space: nowrap; }
+.tb-topic-group + .tb-topic-group { margin-top: var(--ou-space-6); }
+.tb-topic-group + .tb-topics-grid { margin-top: var(--ou-space-6); }
 .tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); }
 .tb-topic-card .ou-card__body { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
 .tb-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
@@ -658,6 +817,29 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-topic-card__req { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-stat-rows { display: flex; flex-direction: column; width: 100%; }
 .tb-stat-val { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+/* PRD-50: подытоги по ключам разреза. Тот же род полосы, что `tb-topic-card__bar`
+   выше, и та же дорожка — общий `--tb-track`, объявленный вместе со сценой. Ширину
+   задаёт инлайн-стиль макета (`barPercent`), здесь только заливка и типографика. */
+.tb-topic__breakdown { display: flex; flex-direction: column; gap: var(--ou-space-1); width: 100%; margin-top: var(--ou-space-1); }
+.tb-breakdown__row { width: 100%; }
+.tb-breakdown__name { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-bottom: 2px; }
+.tb-breakdown__bar { height: 4px; background: var(--tb-track); border-radius: 999px; overflow: hidden; }
+.tb-breakdown__bar span { display: block; height: 100%; border-radius: 999px; background: var(--ou-fg-muted); }
+.tb-breakdown__val { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: 2px; }
+/* PRD-50 §16: тон строки разреза. Полоса — единственное, что красится: подтема говорит о
+   результате, а слово вердикта принадлежит карточке темы вокруг. Порога нет — класса нет,
+   и строка остаётся ровно такой, какой была до §16. */
+.tb-breakdown__row.is-pass .tb-breakdown__bar span { background: var(--ou-success-default); }
+.tb-breakdown__row.is-fail .tb-breakdown__bar span { background: var(--ou-error-default); }
+/* Дорожка проваленной подтемы тоже красится: при 0 % заливки нет вовсе, и строка без этого
+   выглядит как "нет данных", а не как провал. Взятая подтема дорожку не меняет — там о
+   результате говорит сама заливка. */
+.tb-breakdown__row.is-fail .tb-breakdown__bar { background: var(--ou-error-soft); }
+.tb-breakdown__req { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: 2px; }
+/* PRD-50 Э4: СВОДНЫЙ блок разреза по всему тесту. Своя обёртка, а не `tb-topic__breakdown`:
+   тот живёт внутри карточки темы и получает от неё ширину и верхний отступ, а этот стоит
+   подблоком итогов наравне со шкалами. Строки внутри — те же самые. */
+.tb-breakdown { display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%; }
 /* Per-topic feedback block — feedback text + recommendation chips, divided off. */
 .tb-topic-card__fb {
   display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%;
@@ -819,6 +1001,48 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .tb-zone:not(:has(~ .tb-zone)) {
   border-start-end-radius: var(--ou-radius-pill);
   border-end-end-radius: var(--ou-radius-pill);
+}
+
+/* ── PRD-29: ЛИНЕЙЧАТАЯ ДИАГРАММА ШКАЛ ───────────────────────────────
+   Вид шкал «Линейчатая диаграмма»: столбики всех шкал на ОДНОЙ оси, вместо списка
+   карточек. Стоит рядом с розой или радаром — те говорят о целом, эта о величинах, и
+   на одном экране не спорят.
+
+   Своя сетка, а не `ou-slider`: слайдер — это рельс с подписями границ под ним, ему
+   нужна высота под метки, а строке диаграммы нужен ОДИН ряд «имя · столбик · число».
+   Колонки одинаковы у всех строк, поэтому столбики начинаются на одной вертикали, без
+   чего сравнивать длины было бы не с чем. Имя ужимается до 220 px и не больше: длинное
+   название шкалы иначе съедало бы поле самой диаграммы. */
+.tb-bars { display: flex; flex-direction: column; gap: var(--ou-space-3); width: 100%; }
+.tb-bars__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ou-space-4);
+}
+.tb-bars__name { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+/* Поле столбика — ПУСТОЕ: дорожки нет. Столбик меряется наибольшим баллом попытки, а не
+   долей домена, и серая полоса до правого края обещала бы шкале максимум, которого фигура
+   не показывает. Поле держит только ширину, от которой считается доля. */
+.tb-bars__field { position: relative; height: var(--ou-space-4); }
+.tb-bars__fill {
+  position: absolute; inset: 0 auto 0 0;
+  background: hsl(var(--tb-zone)); border-radius: var(--ou-radius-pill);
+}
+/* Число — то же, что печатает карточка, и тем же кеглем: читатель переносит взгляд со
+   столбика на балл, а не переучивается на каждой странице. */
+.tb-bars__val {
+  display: flex; align-items: baseline; gap: var(--ou-space-2);
+  font: var(--ou-text-body-m); color: var(--ou-fg-default);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.tb-bars__val strong { font: var(--ou-text-display-s); }
+.tb-bars__lvl { align-self: center; }
+/* Узкая сцена: имя уходит НАД столбиком, иначе на телефоне на долю столбика остаётся
+   меньше половины ряда и диаграмма перестаёт быть диаграммой. */
+@container tbscene (max-width: 520px) {
+  .tb-bars__row { grid-template-columns: minmax(0, 1fr) auto; }
+  .tb-bars__name { grid-column: 1 / -1; }
 }
 
 /* ── PRD-35: competency radar ────────────────────────────────────
@@ -1014,7 +1238,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
    ПРО color-scheme: своего объявления здесь НЕ НУЖНО, и объявлять его прямо вредно.
    `color-scheme` НАСЛЕДУЕТСЯ, а ДС уже ставит его на корне темы (`.ou, .ou--light` — light,
-   `.ou--dark` — dark, см. university-rt.css); корень сцены и есть `.ou` на обоих хостах.
+   `.ou--dark` — dark, см. skillum-ds.css); корень сцены и есть `.ou` на обоих хостах.
    Правило вида `color-scheme: light dark` это наследование ПЕРЕБИВАЕТ и возвращает плеер к
    СИСТЕМНОЙ теме: проверено в браузере — на тёмной сцене плеер становился белым. */
 .question-media[data-media-type="audio"] {
@@ -1255,6 +1479,10 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-scene__col { gap: var(--ou-space-3); }
   .tb-scene__col--doc { gap: var(--ou-space-4); }
 
+  /* Half a column of a 360px screen is a field five digits wide: below this step the
+     numeric answer takes the whole width like every other block. */
+  .tb-scene .tb-answer-field--num { width: 100%; }
+
   /* Header. Measured on a phone the old stack cost 162px of an 844px screen: a brand
      row, then a tier for the timers (the DS digital timer stacks a label OVER a 22px
      number), then a tier for the counters. Here the header itself becomes the wrapping
@@ -1403,7 +1631,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    by its trackpad stays `fine` and the desktop layout is untouched. Deliberately
    NOT `any-pointer: coarse`, which matches every touch-capable laptop.
 
-   This is the size half of the DS `.ou--spacious` density (university-rt.css),
+   This is the size half of the DS `.ou--spacious` density (skillum-ds.css),
    without its spacing half: that class also scales the whole `--ou-space-*` ramp
    by ~30%, which on a 360px screen would hand the cover 128px of horizontal
    padding. It also leaves `.ou-quiz__dot` at its literal 26px, so it would not
@@ -1447,7 +1675,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
      scrolls; the up/down buttons remain the primary, accessible path.
 
      DS hides the grip and collapses the row to three columns below 480px
-     (university-rt.css). Restoring the grip therefore has to restore the FOURTH
+     (skillum-ds.css). Restoring the grip therefore has to restore the FOURTH
      column too — otherwise the controls wrap to a second line and the row
      doubles in height. */
   .tb-scene .ou-rank__item { grid-template-columns: auto auto 1fr auto; gap: var(--ou-space-2); }
@@ -1488,3 +1716,109 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 }
 .tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
 .tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+
+/* Author links. The rule lists the regions that carry AUTHOR markup instead of
+   styling `a` outright: the core prints links of its own — the recommendation chips
+   (`.tb-rec`) — and a bare `a[href]` would outweigh `.tb-rec` on specificity and undo
+   their pill look. Colour and underline are the ones the cover description already
+   used, so a link reads the same wherever the author put it. */
+.tb-cover__desc a,
+.tb-content__lead a,
+.tb-content__body a,
+.content-placeholder a,
+.tb-scene__note a,
+.tb-scene__qtitle a,
+.question-text a,
+.tb-intro a,
+.tb-recs-group__text a,
+.tb-topic-card__fb-text a { color: var(--ou-accent-default); text-decoration: underline; }
+
+/* ДВУХКОЛОНОЧНАЯ СТРОКА ТЕМЫ (эскиз approved/prd-rtk-topic-row.html, согласован
+   2026-09-21). Слева имя, вердикт и сводка, справа толкование темы либо полосы подтем.
+
+   Раскладку решают ДАННЫЕ: модификатор ставит ядро признаком `hasAside`, то есть только у
+   темы, которой есть что нести справа. Обёртки при этом стоят в разметке ВСЕГДА, и по
+   умолчанию они ПРОЗРАЧНЫ (`display: contents`): их дети остаются прямыми потомками
+   `.ou-card__body`, флексовая колонка карточки не меняется, и тема без толкования и без
+   подтем печатается ровно так, как печаталась.
+
+   Двухколоночная карточка занимает ВСЮ ширину сетки: в колонке минимум 340 px двум
+   колонкам текста не разойтись, а в референсе строки идут во всю ширину листа. */
+.tb-topic-card__main,
+.tb-topic-card__aside { display: contents; }
+.tb-topic-card--split { grid-column: 1 / -1; }
+.tb-topic-card--split .ou-card__body {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: var(--ou-space-2) var(--ou-space-6);
+  align-items: start;
+}
+.tb-topic-card--split .tb-topic-card__main,
+.tb-topic-card--split .tb-topic-card__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  min-width: 0;
+}
+/* Хвост карточки — подпись требования и рекомендации — идёт ПОД обеими колонками: это
+   высказывание обо всей теме, а не о её левой половине. */
+.tb-topic-card--split .tb-topic-card__req,
+.tb-topic-card--split .tb-topic-card__fb { grid-column: 1 / -1; }
+/* ТОЛКОВАНИЕ темы на экране. Абзацы автора сохраняются: ядро отдаёт разметку, а не строку. */
+.tb-topic-card__interpretation { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-topic-card__interpretation p { margin: 0 0 var(--ou-space-2); }
+.tb-topic-card__interpretation p:last-child { margin-bottom: 0; }
+/* Полосы подтем в правой колонке идут в три колонки — как в референсе; на узком экране
+   раскладка схлопывается вместе с самой карточкой (см. медиазапрос ниже по файлу). */
+.tb-topic-card--split .tb-topic__breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: var(--ou-space-3) var(--ou-space-5);
+  align-items: end;
+}
+
+/* Что двухколоночная строка НЕ печатает (эскиз approved/prd-rtk-topic-row.html,
+   референс PRD-51 §10.1): «Правильно» / «Баллов», полосу темы и подпись «Нужно N %».
+   Референс их не содержит, а строка с ними читается как две разные карточки рядом.
+   Правило действует ТОЛЬКО в этом состоянии — тема без толкования и без подтем печатает
+   их по-прежнему.
+
+   Скрытие, а не изъятие из макета: разметка общая у трёх шаблонов и держится гардом
+   паритета, а условие «если справа есть что показать» в ней выражается одним признаком на
+   карточке, не оборачивая каждый блок отдельно. */
+.tb-topic-card--split .tb-stat-rows,
+.tb-topic-card--split .tb-topic-card__bar,
+.tb-topic-card--split .tb-topic-card__req,
+.tb-topic-card--split .tb-breakdown__req { display: none; }
+
+/* ЧИП УРОВНЯ: белый, с цветной точкой. Цвет исхода несёт ровно один элемент строки —
+   ни полосы темы, ни заливки чипа рядом больше нет, и две краски об одном и том же
+   спорили бы друг с другом. */
+.tb-topic-card--split .tb-topic-card__main > .ou-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  background: var(--ou-bg-surface-1);
+  border: var(--wf-border-w, 1px) solid var(--ou-border-default);
+  color: var(--ou-fg-default);
+}
+/* База НЕЙТРАЛЬНАЯ: тема без вердикта не должна получить точку исхода. */
+.tb-topic-card--split .tb-topic-card__main > .ou-tag::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ou-fg-muted);
+}
+.tb-topic-card--split .tb-topic-card__main > .ou-tag.is-pass::before { background: var(--ou-success-default); }
+.tb-topic-card--split .tb-topic-card__main > .ou-tag.is-fail::before { background: var(--ou-error-default); }
+
+/* ТОЛКОВАНИЕ ПОДТЕМЫ на экране: стоит ПОД своей полосой, поэтому название подтемы
+   печатается один раз — в заголовке её строки. Включённый показ разворачивает колонки в
+   список во всю ширину правой колонки: в узкой колонке абзац нечитаем, а повтор названия
+   перед текстом — визуальный мусор (решение владельца 2026-09-21). */
+.tb-breakdown__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+.tb-topic-card--split .tb-topic__breakdown:has(.tb-breakdown__note) {
+  grid-template-columns: minmax(0, 1fr);
+}

@@ -1,23 +1,36 @@
 /**
  * @module pages/author/__tests__/import.test
- * @description Component tests for the PRD-14 «Импорт» page. Covers the empty
- * uploader state, the questions-only path (inspect -> detected banner -> dry-run
- * preview -> real import "done" banner), the wrong-file-type guard, and the
- * workbook path that requires a target test (target combobox + gated action
- * buttons). Auth is stubbed (can create tests); `fetch` is stubbed per URL so
- * the inspect/import mutations and the /api/tests query resolve against
- * fixtures.
+ * @description Component tests for the «Импорт» section as the SINGLE import point (stage E6,
+ * wireframe `docs/wireframes/approved/e6-import-single-point.html`): the uploader and the
+ * «Что можно загрузить» list by rights, routing a file to its kind's form, the denial without
+ * explanation, the entry from the test menu, and the workbook path kept from PRD-14 (questions
+ * only to the bank; scales and the rest need a target test chosen in a searchable Select). Auth
+ * is stubbed per test; `fetch` is stubbed per URL.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { hasPermission, type Capability, type Role } from "@shared/access";
 import { getQueryFn } from "@/lib/queryClient";
 
+const auth = vi.hoisted(() => ({ roles: ["administrator"] as string[] }));
+const route = vi.hoisted(() => ({ search: "" }));
+
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ can: () => true, hasRole: () => false, user: { id: "u1", name: "Author" } }),
+  useAuth: () => ({
+    can: (cap: Capability) => hasPermission(auth.roles as Role[], cap),
+    hasRole: () => false,
+    user: { id: "u1", name: "Author", roles: auth.roles },
+  }),
+}));
+
+vi.mock("wouter", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("wouter")>()),
+  useSearch: () => route.search,
 }));
 
 import ImportPage from "../import";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── fetch stub ─────────────────────────────────────────────────────────────
 
@@ -31,6 +44,7 @@ const testsData = [
 ];
 
 const questionsOnlyInspect = {
+  kind: "workbook",
   sheets: ["Вопросы"],
   hasQuestions: true,
   hasScales: false,
@@ -40,28 +54,36 @@ const questionsOnlyInspect = {
   counts: { questions: 3, scales: 0, resultVariables: 0, measurements: 0 },
 };
 const workbookInspect = {
+  ...questionsOnlyInspect,
   sheets: ["Вопросы", "Шкалы", "Показатели"],
-  hasQuestions: true,
   hasScales: true,
   hasResultVariables: true,
-  hasMeasurements: false,
   requiresTest: true,
   counts: { questions: 3, scales: 2, resultVariables: 1, measurements: 0 },
 };
 
-let inspectResult: unknown = questionsOnlyInspect;
+let inspectResponse: Response;
 let importWarnings: string[] = [];
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  inspectResult = questionsOnlyInspect;
+  auth.roles = ["administrator"];
+  route.search = "";
+  inspectResponse = jsonRes(questionsOnlyInspect);
   importWarnings = [];
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method || "GET").toUpperCase();
     if (method === "GET" && url === "/api/tests") return jsonRes(testsData);
+    if (method === "GET" && url === "/api/groups") return jsonRes([]);
+    if (method === "GET" && url.startsWith("/api/analytics/lms-import/batches/")) return jsonRes([]);
     if (method === "POST") {
-      if (url.startsWith("/api/workbook/inspect")) return jsonRes(inspectResult);
+      if (url.startsWith("/api/workbook/inspect")) return inspectResponse;
+      if (url.startsWith("/api/users/bulk-preview")) {
+        return jsonRes([
+          { idx: 0, email: "a@test.com", name: "А", role: "learner", groupName: null, groupId: null, groupFound: false, status: "new" },
+        ]);
+      }
       if (url.startsWith("/api/questions/import")) {
         return jsonRes({ created: 3, updated: 1, skipped: 0, errors: [] });
       }
@@ -88,9 +110,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <ImportPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -100,34 +122,56 @@ function fileInput(container: HTMLElement): HTMLInputElement {
   return el as HTMLInputElement;
 }
 
-function xlsx(name = "book.xlsx"): File {
-  return new File(["x"], name, {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
+function file(name: string): File {
+  return new File(["x"], name);
+}
+
+function inspectCalls(): number {
+  return fetchMock.mock.calls.filter(([u]) => String(u).startsWith("/api/workbook/inspect")).length;
+}
+
+/** Pick an option of the target-test Select: open it by its trigger, then click the option. */
+async function pickTarget(label: string) {
+  fireEvent.click(screen.getByText("Выберите тест или создайте новый"));
+  fireEvent.click(await screen.findByRole("option", { name: label }));
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("<ImportPage /> — empty", () => {
-  it("renders the uploader and the download-template action", async () => {
+describe("<ImportPage /> — пусто: загрузчик и перечень по правам", () => {
+  it("администратор видит все пять видов и все форматы", async () => {
     renderPage();
-    expect(await screen.findByText("Импорт из Excel")).toBeInTheDocument();
-    expect(screen.getByText("Перетащите файл .xlsx или выберите")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Скачать шаблон" })).toBeInTheDocument();
+    expect(await screen.findByText("Перетащите файл или выберите")).toBeInTheDocument();
+    expect(screen.getByText(".xlsx, .csv, .tbtest, .zip")).toBeInTheDocument();
+    for (const kind of ["Книга с вопросами", "Выгрузка отчёта LMS", "Пакет теста", "Список пользователей", "Шаблон оформления"]) {
+      expect(screen.getByText(kind)).toBeInTheDocument();
+    }
   });
 
-  it("скачивает руководство по заполнению шаблона с /api/workbook/docs/guide", async () => {
+  it("менеджер видит только выгрузку LMS и список пользователей", async () => {
+    auth.roles = ["manager"];
     renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Перетащите файл или выберите");
+    expect(screen.getByText(".xlsx, .csv")).toBeInTheDocument();
+    expect(screen.getByText("Выгрузка отчёта LMS")).toBeInTheDocument();
+    expect(screen.getByText("Список пользователей")).toBeInTheDocument();
+    expect(screen.getByText("учётные записи участников и группы")).toBeInTheDocument();
+    expect(screen.queryByText("Книга с вопросами")).toBeNull();
+    expect(screen.queryByText("Пакет теста")).toBeNull();
+    expect(screen.queryByText("Шаблон оформления")).toBeNull();
+  });
 
-    // The handler builds a detached <a> and clicks it; capture the click target.
+  it("руководство по книге скачивается с /api/workbook/docs/guide", async () => {
+    renderPage();
+    await screen.findByText("Книга с вопросами");
+
     const clicked: string[] = [];
     const realClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
       clicked.push(this.getAttribute("href") ?? "");
     };
     try {
-      fireEvent.click(screen.getByRole("button", { name: "Руководство по заполнению (PDF)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Руководство" }));
     } finally {
       HTMLAnchorElement.prototype.click = realClick;
     }
@@ -136,150 +180,159 @@ describe("<ImportPage /> — empty", () => {
   });
 });
 
-describe("<ImportPage /> — wrong file type", () => {
-  it("rejects a non-.xlsx file without inspecting", async () => {
+describe("<ImportPage /> — вид файла", () => {
+  it("формат вне доступных отклоняется без разбора", async () => {
+    auth.roles = ["manager"];
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
-    fireEvent.change(fileInput(container), { target: { files: [xlsx("data.txt")] } });
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("пакет.tbtest")] } });
 
-    // No inspect call was made; the uploader is still shown.
-    expect(
-      fetchMock.mock.calls.some(([u]) => String(u).startsWith("/api/workbook/inspect")),
-    ).toBe(false);
-    expect(screen.getByText("Перетащите файл .xlsx или выберите")).toBeInTheDocument();
+    expect(inspectCalls()).toBe(0);
+    expect(screen.getByText("Перетащите файл или выберите")).toBeInTheDocument();
+  });
+
+  it("распознанный вид без права — отказ без пояснений", async () => {
+    auth.roles = ["manager"];
+    inspectResponse = jsonRes({ kind: "workbook", error: "Недостаточно прав для выполнения операции" }, false, 403);
+    const { container } = renderPage();
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("mbi_test.xlsx")] } });
+
+    expect(await screen.findByText("Недостаточно прав для выполнения операции")).toBeInTheDocument();
+    expect(screen.getByText("mbi_test.xlsx")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Выбрать другой файл" }));
+    expect(await screen.findByText("Перетащите файл или выберите")).toBeInTheDocument();
+  });
+
+  it("список пользователей ведёт на предпросмотр списка", async () => {
+    inspectResponse = jsonRes({ kind: "users", sheets: ["Лист1"], rows: 1 });
+    const { container } = renderPage();
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("сотрудники.csv")] } });
+
+    expect(await screen.findByText("Новых: 1")).toBeInTheDocument();
+    expect(screen.getByText("список пользователей · 1 строка · 1 КБ")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Импортировать (1 строка)" })).toBeInTheDocument();
+  });
+
+  it("выгрузка LMS ведёт на форму выгрузки", async () => {
+    inspectResponse = jsonRes({
+      kind: "lmsExport", testId: "test1", testTitle: "Стресс-опросник", rows: 3, questionIds: 2,
+      scaleKeys: [], variableNames: [], unknownColumns: [],
+    });
+    const { container } = renderPage();
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("выгрузка.xlsx")] } });
+
+    expect(await screen.findByText("Стресс-опросник")).toBeInTheDocument();
+    expect(screen.getByText("Группа")).toBeInTheDocument();
   });
 });
 
-describe("<ImportPage /> — questions-only path", () => {
+describe("<ImportPage /> — вход из меню теста", () => {
+  it("сразу шаг выгрузки LMS этого теста: заголовок, название теста и его загрузки", async () => {
+    route.search = "testId=test2";
+    renderPage();
+
+    expect(await screen.findByText("Загрузка выгрузки LMS")).toBeInTheDocument();
+    expect(await screen.findByText("Аттестация")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/analytics/lms-import/batches/test2", expect.anything()),
+    );
+    expect(screen.queryByText("Что можно загрузить")).toBeNull();
+  });
+});
+
+describe("<ImportPage /> — книга: только вопросы", () => {
   it("inspects, previews the dry-run, then imports to the done banner", async () => {
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Перетащите файл или выберите");
 
-    fireEvent.change(fileInput(container), { target: { files: [xlsx("questions.xlsx")] } });
+    fireEvent.change(fileInput(container), { target: { files: [file("questions.xlsx")] } });
 
-    // Inspect resolves -> questions-only banner + file item.
     await waitFor(() =>
       expect(screen.getByText("В файле только вопросы — импорт в общий банк.")).toBeInTheDocument(),
     );
     expect(screen.getByText("questions.xlsx")).toBeInTheDocument();
+    expect(screen.getByText("книга с вопросами · 1 лист · 1 КБ")).toBeInTheDocument();
 
-    // Dry-run preview: no target needed, "Проверить" is enabled.
     fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
     await waitFor(() =>
       expect(screen.getByText("Ошибок не найдено — можно импортировать.")).toBeInTheDocument(),
     );
 
-    // Confirm the real import -> "Импорт выполнен" done banner.
     fireEvent.click(screen.getByRole("button", { name: "Импортировать" }));
-    await waitFor(() => expect(screen.getByText("Импорт выполнен")).toBeInTheDocument());
+    await waitFor(() => {
+      const onPage = screen.getAllByText("Импорт выполнен").filter((el) => !el.closest(".ou-toast-stack"));
+      expect(onPage).toHaveLength(1);
+    });
     expect(screen.getByRole("button", { name: "Импортировать ещё" })).toBeInTheDocument();
   });
 });
 
-describe("<ImportPage /> — workbook path (requires test)", () => {
+describe("<ImportPage /> — книга с целевым тестом", () => {
   it("gates the actions until a target test is chosen and previews the workbook plan", async () => {
-    inspectResult = workbookInspect;
+    inspectResponse = jsonRes(workbookInspect);
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("workbook.xlsx")] } });
 
-    fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
-
-    await waitFor(() =>
-      expect(
-        screen.getByText("В файле есть шкалы/показатели/вклады — укажите целевой тест."),
-      ).toBeInTheDocument(),
-    );
-
-    // No target yet -> both action buttons disabled.
+    await screen.findByText("В файле есть шкалы/показатели/вклады — укажите целевой тест.");
     expect(screen.getByRole("button", { name: "Проверить" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Импортировать" })).toBeDisabled();
 
-    // Pick an existing test via the target combobox.
-    const combo = screen.getByRole("combobox");
-    fireEvent.focus(combo);
-    fireEvent.click(await screen.findByText("Аттестация"));
+    await pickTarget("Аттестация");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Проверить" })).not.toBeDisabled());
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Проверить" })).not.toBeDisabled(),
-    );
-
-    // Dry-run preview of the workbook plan (scales row present).
     fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
     await waitFor(() => expect(screen.getByText("Шкалы")).toBeInTheDocument());
     expect(screen.getByText(/Целевой тест:/)).toBeInTheDocument();
   });
 
-  it("requires a name when creating a new test", async () => {
-    inspectResult = workbookInspect;
+  it("целевой тест — список с поиском по части названия", async () => {
+    inspectResponse = jsonRes(workbookInspect);
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
-    fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("workbook.xlsx")] } });
     await screen.findByText("В файле есть шкалы/показатели/вклады — укажите целевой тест.");
 
-    const combo = screen.getByRole("combobox");
-    fireEvent.focus(combo);
-    fireEvent.click(await screen.findByText("＋ Создать новый тест"));
+    fireEvent.click(screen.getByText("Выберите тест или создайте новый"));
+    fireEvent.change(await screen.findByPlaceholderText("Поиск по названию теста"), { target: { value: "аттес" } });
 
-    // New-test name field appears; actions stay disabled until it is filled.
-    // (The label carries a required «*» marker, so match loosely.)
+    expect(screen.getByRole("option", { name: "Аттестация" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Стресс-опросник" })).toBeNull();
+  });
+
+  it("requires a name when creating a new test", async () => {
+    inspectResponse = jsonRes(workbookInspect);
+    const { container } = renderPage();
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("workbook.xlsx")] } });
+    await screen.findByText("В файле есть шкалы/показатели/вклады — укажите целевой тест.");
+
+    await pickTarget("＋ Создать новый тест");
+
     const nameInput = await screen.findByLabelText(/Название нового теста/);
     expect(screen.getByRole("button", { name: "Импортировать" })).toBeDisabled();
     fireEvent.change(nameInput, { target: { value: "Новый тест 2026" } });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Импортировать" })).not.toBeDisabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Импортировать" })).not.toBeDisabled());
   });
-});
 
-describe("<ImportPage /> — предупреждения импорта", () => {
-  it("показывает предупреждение о конфликте источников оценки в предпросмотре", async () => {
-    inspectResult = workbookInspect;
+  it("показывает предупреждение импорта в предпросмотре, не блокируя запись", async () => {
+    inspectResponse = jsonRes(workbookInspect);
     importWarnings = [
       "Оценка взята с листа «Оценка» (строк: 0); колонки «Балл»/«Цена ответа» листа «Вопросы» не читались.",
     ];
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Перетащите файл или выберите");
+    fireEvent.change(fileInput(container), { target: { files: [file("workbook.xlsx")] } });
+    await screen.findByText("В файле есть шкалы/показатели/вклады — укажите целевой тест.");
 
-    fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
-    await waitFor(() =>
-      expect(
-        screen.getByText("В файле есть шкалы/показатели/вклады — укажите целевой тест."),
-      ).toBeInTheDocument(),
-    );
-
-    const combo = screen.getByRole("combobox");
-    fireEvent.focus(combo);
-    fireEvent.click(await screen.findByText("Аттестация"));
+    await pickTarget("Аттестация");
     await waitFor(() => expect(screen.getByRole("button", { name: "Проверить" })).not.toBeDisabled());
-
     fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
 
-    // The warning is surfaced verbatim, alongside the "no errors" verdict — it
-    // does not block the import, it explains a silent precedence.
     await waitFor(() => expect(screen.getByText(/не читались/)).toBeInTheDocument());
     expect(screen.getByText("Ошибок не найдено — можно импортировать.")).toBeInTheDocument();
-  });
-
-  it("без предупреждений блок не рендерится", async () => {
-    inspectResult = workbookInspect;
-    const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
-
-    fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
-    await waitFor(() =>
-      expect(
-        screen.getByText("В файле есть шкалы/показатели/вклады — укажите целевой тест."),
-      ).toBeInTheDocument(),
-    );
-    const combo = screen.getByRole("combobox");
-    fireEvent.focus(combo);
-    fireEvent.click(await screen.findByText("Аттестация"));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Проверить" })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
-
-    await waitFor(() =>
-      expect(screen.getByText("Ошибок не найдено — можно импортировать.")).toBeInTheDocument(),
-    );
-    expect(screen.queryByText(/не читались/)).not.toBeInTheDocument();
   });
 });

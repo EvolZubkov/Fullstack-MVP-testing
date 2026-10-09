@@ -5,7 +5,7 @@
  * Coverage:
  *   - DS Drawer markup (FR-43): `ou-drawer-root`, `ou-drawer--xl --right`,
  *     `ou-tabs--underline --m`, four tab triggers, `ou-drawer__foot` with a
- *     single primary `Сохранить` action.
+ *     three footer actions: «Отменить» / «Применить» / «Закрыть».
  *   - NFR-19: focus the first interactive element on open.
  *   - FR-05: closing while dirty opens the FR-05 confirmation dialog; closing
  *     while clean calls `onClose` directly.
@@ -27,6 +27,7 @@ import type * as React from "react";
 import { useState } from "react";
 import { TestEditor, TestEditorView } from "../test-editor";
 import { useTestEditor } from "../use-test-editor";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function makeClient() {
 }
 
 function withClient(client: QueryClient, ui: React.JSX.Element) {
-  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+  return <QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>;
 }
 
 // ─── fetch mocking ────────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ function nextResponse(body: unknown, status = 200) {
 // ─── Component tests ──────────────────────────────────────────────────────────
 
 describe("<TestEditor /> DOM and focus", () => {
-  it("renders the DS Drawer with the four tabs and a single Сохранить action", async () => {
+  it("renders the DS Drawer with the seven tabs and the three footer actions", async () => {
     nextResponse(buildApiResponse());
     const client = makeClient();
     render(
@@ -121,14 +122,54 @@ describe("<TestEditor /> DOM and focus", () => {
     expect(root.querySelector(".ou-tabs.ou-tabs--underline.ou-tabs--m")).not.toBeNull();
     expect(root.querySelector(".ou-drawer__foot")).not.toBeNull();
 
-    for (const label of ["Состав", "Настройки", "Оформление", "Структура"]) {
+    for (const label of [
+      "Основное",
+      "Состав и сценарий",
+      "Правила прохождения",
+      "Оценка результата",
+      "Обратная связь и итоги",
+      "Оформление",
+      "Комментарии",
+    ]) {
       expect(screen.getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
 
     await waitFor(() => expect(screen.getByText("Sample Test")).toBeInTheDocument());
 
     const save = screen.getByTestId("test-editor-save");
+    expect(save).toHaveTextContent("Применить");
     expect(save.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByTestId("test-editor-cancel")).toHaveTextContent("Отменить");
+    expect(screen.getByTestId("test-editor-foot-close")).toHaveTextContent("Закрыть");
+  });
+
+  // Решение владельца 2026-09-22: ящик открывается на «Основном». Прежде он открывался
+  // на «Составе и сценарии», и автор нового теста читал баннер «Название обязательно»,
+  // не видя ни поля названия, ни пометки рядом с ним: и поле, и точка — на соседней
+  // вкладке, а единственная видимая точка стояла у «Состава».
+  it("по умолчанию открывается вкладка «Основное»", async () => {
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+    render(withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />));
+
+    await screen.findByTestId("settings-pane-main");
+    expect(screen.getByRole("tab", { selected: true }).textContent).toContain("Основное");
+  });
+
+  it("`initialTab` перебивает умолчание", async () => {
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+    render(
+      withClient(
+        client,
+        <TestEditor testId="test-1" open initialTab="rules" onClose={() => {}} />,
+      ),
+    );
+
+    await screen.findByTestId("test-editor-root");
+    expect(screen.getByRole("tab", { selected: true }).textContent).toContain(
+      "Правила прохождения",
+    );
   });
 
   it("wires the body as the active tab's panel (a11y: tab aria-controls resolves)", async () => {
@@ -150,18 +191,21 @@ describe("<TestEditor /> DOM and focus", () => {
     expect(body.getAttribute("aria-labelledby")).toBe(activeTab.id);
   });
 
-  it("focuses the first interactive tab on open (NFR-19)", async () => {
+  it("фокус при открытии уходит в ТЕЛО ящика (NFR-19)", async () => {
+    // На первой вкладке фокус читался как «вы здесь», и стрелки листали вкладки
+    // вместо прокрутки содержимого. Эскиз держит фокус на теле.
     nextResponse(buildApiResponse());
     const client = makeClient();
-    render(
+    const { container } = render(
       withClient(
         client,
         <TestEditor testId="test-1" open onClose={() => {}} />,
       ),
     );
 
-    const firstTab = await screen.findByRole("tab", { name: /Состав/i });
-    await waitFor(() => expect(document.activeElement).toBe(firstTab));
+    await screen.findByRole("tab", { name: /Основное/i });
+    const body = container.querySelector(".ou-drawer__body");
+    await waitFor(() => expect(document.activeElement).toBe(body));
   });
 
   it("closes immediately when the editor is clean", async () => {
@@ -235,8 +279,8 @@ describe("<TestEditor /> DOM and focus", () => {
 
 describe("<TestEditor /> FR-20c — error summary anchor navigation", () => {
   it("surfaces the summary and focuses the offending field via «Перейти к ошибкам»", async () => {
-    // Empty title is a blocking error (FR-11); the field lives in the Настройки
-    // tab while the editor opens on Состав, so the anchor must switch tabs.
+    // Empty title is a blocking error (FR-11); the anchor has to scroll to the
+    // field and focus it, whichever tab the editor happens to be showing.
     nextResponse(buildApiResponse({ title: "" }));
     const client = makeClient();
     render(withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />));
@@ -260,6 +304,57 @@ describe("<TestEditor /> FR-20c — error summary anchor navigation", () => {
 
     await screen.findByText("Sample Test");
     expect(screen.queryByTestId("test-editor-error-summary")).toBeNull();
+  });
+
+  // Контракт «Индикация проблем»: баннер говорит, СКОЛЬКО проблем И В ЧЁМ ОНИ.
+  // Один счётчик оставлял автора со свёрнутой карточкой наедине с «Поля с ошибками: 1».
+  it("баннер называет саму ошибку, а не только их число", async () => {
+    nextResponse(buildApiResponse({ title: "" }));
+    const client = makeClient();
+    render(withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />));
+
+    const banner = await screen.findByTestId("test-editor-error-summary");
+    expect(banner).toHaveTextContent("Название обязательно.");
+  });
+
+  // Ошибка внутри темы: точного якоря в DOM нет, пока карточка свёрнута, а общий
+  // `data-field="sections"` висит на кнопке «Добавить тему» — переход уводил на неё,
+  // и автор оставался без подсветки и без сообщения.
+  it("переход к ошибке темы раскрывает карточку и ведёт к полю, а не к «Добавить тему»", async () => {
+    nextResponse(
+      buildApiResponse({
+        sections: [
+          {
+            id: "section-1",
+            topicId: "topic-1",
+            topicName: "Основы ИБ",
+            drawCount: 50,
+            required: true,
+            maxQuestions: 10,
+          },
+        ],
+      }),
+    );
+    const client = makeClient();
+    render(withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />));
+
+    await screen.findByTestId("test-editor-error-summary");
+    // Ящик открыт на «Основном», а виноватое поле — в «Составе». Заглядываем туда,
+    // убеждаемся, что карточка темы свёрнута, и возвращаемся: переход обязан и вкладку
+    // сменить, и карточку раскрыть.
+    fireEvent.click(screen.getByRole("tab", { name: /Состав и сценарий/i }));
+    expect(screen.getByTestId("topic-toggle-topic-1")).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("tab", { name: /Основное/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Перейти к ошибкам/i }));
+
+    await waitFor(() => {
+      // Карточка раскрыта: её тело остаётся в разметке и в свёрнутом виде, поэтому
+      // проверяем именно состояние свёртки, а не присутствие поля в DOM.
+      expect(screen.getByTestId("topic-toggle-topic-1")).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByTestId("topic-drawcount-topic-1")).toHaveFocus();
+    });
+    expect(screen.getByTestId("composition-add-topic")).not.toHaveFocus();
   });
 });
 
@@ -472,6 +567,292 @@ describe("useTestEditor — create mode", () => {
     );
     expect(result.current.createdId).toBe("te-new");
   });
+
+  /** Минимальный состав, без которого сохранение заблокировано валидацией. */
+  const oneSection = () => [
+    {
+      topicId: "top-1",
+      topicName: "Topic",
+      maxQuestions: 10,
+      drawCount: 1,
+      drawAll: false,
+      required: true,
+      timeLimit: { source: "inherit_test" as const },
+      feedback: { format: "plain" as const, text: "" },
+      feedbackLinks: [],
+      feedbackAssets: [],
+      feedbackEvents: [],
+      defaultPoints: null,
+    },
+  ];
+
+  // Оформление нового теста едет в ДВА приёма: шаблон — телом создания (системные
+  // страницы связывает с ним та же транзакция, позже поздно), а всё прочее — своим
+  // маршрутом сразу после INSERT, где эта проверка против манифеста уже написана.
+  it("шаблон кладёт в тело создания, а параметры дописывает после INSERT", async () => {
+    nextResponse({ ...buildApiResponse({ id: "te-new", title: "Свежий" }) }, 201);
+
+    const client = makeClient();
+    const { result } = renderHook(
+      () => useTestEditor({ mode: "create", folderId: null }),
+      { wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    // Новый тест начинает со «Стандартного» — того же, чем его обслужит выдача.
+    expect(result.current.model?.design).toEqual({ templateId: "default", params: {} });
+
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "Свежий" },
+        design: { templateId: "corporate", params: { companyName: "Ромашка" } },
+        sections: oneSection(),
+      }));
+    });
+    // Правка оформления зажигает точку своей вкладки, а не чужой.
+    expect(result.current.tabStatuses.design.dirty).toBe(true);
+
+    nextResponse({ templateId: "corporate", params: { companyName: "Ромашка" } });
+    nextResponse(buildApiResponse({ id: "te-new" }));
+    await act(async () => {
+      await result.current.save();
+    });
+
+    const post = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/tests" && (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(JSON.parse(String((post?.[1] as RequestInit).body)).designSettingsJson).toEqual({
+      templateId: "corporate",
+    });
+
+    const designPut = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/tests/te-new/design",
+    );
+    expect(designPut).toBeDefined();
+    expect(JSON.parse(String((designPut?.[1] as RequestInit).body))).toEqual({
+      templateId: "corporate",
+      params: { companyName: "Ромашка" },
+    });
+  });
+
+  it("выбрали только шаблон — лишнего запроса за оформлением нет", async () => {
+    nextResponse({ ...buildApiResponse({ id: "te-new", title: "Свежий" }) }, 201);
+
+    const client = makeClient();
+    const { result } = renderHook(
+      () => useTestEditor({ mode: "create", folderId: null }),
+      { wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "Свежий" },
+        design: { templateId: "corporate", params: {} },
+        sections: oneSection(),
+      }));
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+
+    // Шаблон уже записан телом создания; повторять его отдельным PUT незачем.
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith("/design"))).toBe(false);
+  });
+
+  it("переопределения оценки дописываются после INSERT", async () => {
+    nextResponse({ ...buildApiResponse({ id: "te-new", title: "Свежий" }) }, 201);
+
+    const client = makeClient();
+    const { result } = renderHook(
+      () => useTestEditor({ mode: "create", folderId: null }),
+      { wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "Свежий" },
+        sections: oneSection(),
+        scoring: {
+          defaultQuestionPoints: null,
+          questionOverrides: [
+            {
+              id: "",
+              testId: "",
+              questionId: "q-1",
+              points: 5,
+              scoringJson: null,
+              difficulty: null,
+              pinnedContentHash: "hash-1",
+            },
+          ],
+        },
+      }));
+    });
+
+    nextResponse({ ok: true });
+    nextResponse(buildApiResponse({ id: "te-new" }));
+    await act(async () => {
+      await result.current.save();
+    });
+
+    const scoringPut = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/tests/te-new/question-scoring/q-1",
+    );
+    expect(scoringPut).toBeDefined();
+    expect(JSON.parse(String((scoringPut?.[1] as RequestInit).body))).toEqual({
+      points: 5,
+      scoringJson: null,
+      difficulty: null,
+    });
+  });
+
+  // Ловушка пути создания: тест создаётся одним POST, а набранное до создания
+  // дописывается следом отдельными запросами. Сбой любого из них роняет мутацию, но
+  // тест в базе УЖЕ есть — и повтор не имеет права создать второй.
+  it("повтор после сбоя дозаписи не создаёт второй тест", async () => {
+    nextResponse({ ...buildApiResponse({ id: "te-new", title: "Свежий" }) }, 201); // POST — успех
+    nextResponse({ error: "boom" }, 500); // дозапись оформления — 500
+
+    const client = makeClient();
+    const { result } = renderHook(
+      () => useTestEditor({ mode: "create", folderId: null }),
+      { wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "Свежий" },
+        sections: oneSection(),
+        design: { templateId: "corporate", params: { companyName: "Ромашка" } },
+      }));
+    });
+
+    await act(async () => {
+      await result.current.save();
+    });
+    // Сохранение не удалось, ящик остаётся открытым — но тест уже создан.
+    expect(result.current.createdId).toBeNull();
+    expect(result.current.getCreatedId()).toBe("te-new");
+    expect(
+      fetchMock.mock.calls.filter(
+        (c) => String(c[0]) === "/api/tests" && (c[1] as RequestInit)?.method === "POST",
+      ),
+    ).toHaveLength(1);
+
+    // Повтор: чтение версии → PUT тела по тому же идентификатору → дозапись заново.
+    nextResponse(buildApiResponse({ id: "te-new", version: 1 })); // GET версии
+    nextResponse(buildApiResponse({ id: "te-new", version: 2 })); // PUT тела
+    nextResponse({ templateId: "corporate", params: { companyName: "Ромашка" } }); // PUT оформления
+    nextResponse(buildApiResponse({ id: "te-new", version: 2 })); // финальный GET
+    await act(async () => {
+      await result.current.save();
+    });
+
+    // Второго создания не случилось.
+    expect(
+      fetchMock.mock.calls.filter(
+        (c) => String(c[0]) === "/api/tests" && (c[1] as RequestInit)?.method === "POST",
+      ),
+    ).toHaveLength(1);
+    // Тело ушло PUT'ом по созданному идентификатору, с ТЕКУЩЕЙ версией строки.
+    const put = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/tests/te-new" && (c[1] as RequestInit)?.method === "PUT",
+    );
+    expect(put).toBeDefined();
+    expect(JSON.parse(String((put![1] as RequestInit).body)).expectedVersion).toBe(1);
+    // Дозапись прогналась заново и на этот раз удалась.
+    expect(
+      fetchMock.mock.calls.some((c) => String(c[0]) === "/api/tests/te-new/design"),
+    ).toBe(true);
+    expect(result.current.createdId).toBe("te-new");
+  });
+
+  it("следующее создание не дописывается в тест прошлой попытки", async () => {
+    nextResponse({ ...buildApiResponse({ id: "te-first", title: "Первый" }) }, 201);
+    nextResponse({ error: "boom" }, 500);
+
+    const client = makeClient();
+    const { result, rerender } = renderHook(
+      ({ open }: { open: boolean }) =>
+        useTestEditor(open ? { mode: "create", folderId: null } : null),
+      {
+        wrapper: ({ children }) => withClient(client, <>{children}</>),
+        initialProps: { open: true },
+      },
+    );
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "Первый" },
+        sections: oneSection(),
+        design: { templateId: "corporate", params: { companyName: "Ромашка" } },
+      }));
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(result.current.getCreatedId()).toBe("te-first");
+
+    // Ящик закрыли и открыли снова: сеанс создания начинается чисто.
+    rerender({ open: false });
+    rerender({ open: true });
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    expect(result.current.getCreatedId()).toBeNull();
+
+    nextResponse({ ...buildApiResponse({ id: "te-second", title: "Второй" }) }, 201);
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "Второй" },
+        sections: oneSection(),
+      }));
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+
+    // Второй тест создан СВОИМ POST, а не дописан в первый.
+    expect(result.current.createdId).toBe("te-second");
+    expect(
+      fetchMock.mock.calls.filter(
+        (c) => String(c[0]) === "/api/tests/te-first" && (c[1] as RequestInit)?.method === "PUT",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("правка существующего теста об оформлении не сообщает", async () => {
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+    const { result } = renderHook(() => useTestEditor({ mode: "edit", testId: "test-1" }), {
+      wrapper: ({ children }) => withClient(client, <>{children}</>),
+    });
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    // У открытого на правку теста среза нет вовсе: оформление правит свой ресурс
+    // (`PUT /api/tests/:id/design`), и второй писатель затёр бы его параметры.
+    expect(result.current.model?.design).toBeUndefined();
+
+    nextResponse(buildApiResponse({ version: 8 }));
+    act(() => {
+      result.current.updateModel((m) => ({ ...m, basic: { ...m.basic, title: "Другое" } }));
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+
+    const put = fetchMock.mock.calls.find(
+      (c) => (c[1] as RequestInit)?.method === "PUT",
+    );
+    const body = JSON.parse(String((put?.[1] as RequestInit).body));
+    expect(body.designSettingsJson).toBeUndefined();
+  });
 });
 
 // ─── Gap 4: Create adaptive happy path ──────────────────────────────────────────
@@ -680,8 +1061,9 @@ describe("<TestEditor /> — close-confirmation with blocking errors (Gap 5)", (
     }
 
     render(withClient(client, <Harness />));
-    // Title is empty, so wait for a loaded-model marker (the default section topic).
-    await screen.findByText("Основы ИБ");
+    // Title is empty, so wait for a loaded-model marker: the «Основное» pane, which
+    // mounts only once the draft is in hand.
+    await screen.findByTestId("settings-pane-main");
 
     act(() => {
       fireEvent.click(screen.getByTestId("harness-dirty"));
@@ -727,7 +1109,7 @@ describe("<TestEditor /> — footer «Отменить» discards and closes wit
     }
 
     render(withClient(client, <Harness />));
-    await screen.findByText("Основы ИБ");
+    await screen.findByTestId("settings-pane-main");
 
     act(() => {
       fireEvent.click(screen.getByTestId("harness-dirty"));
@@ -766,10 +1148,13 @@ describe("<TestEditor /> — публикация не запирает реда
 
     const foot = await screen.findByTestId("test-editor-foot");
     expect(foot.getAttribute("data-state")).toBe("default");
-    expect(screen.getByTestId("test-editor-cancel")).toHaveTextContent("Закрыть");
+    // Три действия стоят всегда; без правок откатывать и применять нечего.
+    expect(screen.getByTestId("test-editor-foot-close")).toHaveTextContent("Закрыть");
+    expect(screen.getByTestId("test-editor-cancel")).toBeDisabled();
+    expect(screen.getByTestId("test-editor-save")).toBeDisabled();
   });
 
-  it("closes immediately without confirm when published and clean", async () => {
+  it("«Закрыть» без правок закрывает сразу, без вопроса", async () => {
     nextResponse(buildApiResponse({ status: "published" }));
     const onClose = vi.fn();
     const client = makeClient();
@@ -779,7 +1164,7 @@ describe("<TestEditor /> — публикация не запирает реда
 
     await screen.findByText("Sample Test");
 
-    fireEvent.click(screen.getByTestId("test-editor-cancel"));
+    fireEvent.click(screen.getByTestId("test-editor-foot-close"));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(
@@ -1026,7 +1411,7 @@ describe("<TestEditor /> — close-confirm chips + error banner", () => {
     await waitFor(() =>
       expect(screen.getByTestId("test-editor-close-confirm-chips")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("test-editor-close-confirm-chip-settings")).toBeInTheDocument();
+    expect(screen.getByTestId("test-editor-close-confirm-chip-main")).toBeInTheDocument();
   });
 
   it("shows the goToError banner inside close-confirm when there are validation errors (G31)", async () => {
@@ -1057,8 +1442,8 @@ describe("<TestEditor /> — close-confirm chips + error banner", () => {
     }
 
     render(withClient(client, <Harness />));
-    // Title is empty → wait for the loaded section marker instead of "Sample Test".
-    await screen.findByText("Основы ИБ");
+    // Title is empty → wait for the «Основное» pane instead of "Sample Test".
+    await screen.findByTestId("settings-pane-main");
 
     act(() => {
       fireEvent.click(screen.getByTestId("harness-dirty"));

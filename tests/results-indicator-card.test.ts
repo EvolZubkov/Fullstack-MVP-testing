@@ -18,16 +18,16 @@
 
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
+import { templateFile } from "./helpers/template-roots";
 import { renderScreenInto } from "../shared/template/render-screen";
 import { buildMeasureView } from "../shared/template/measure-view";
 import { LEVEL_SCHEMES } from "../shared/template/level-ramp";
 
 const layouts: Array<[string, string]> = [
   ["default", fs.readFileSync(
-    path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts", "results.html"), "utf8")],
+    templateFile("default", "layouts/results.html"), "utf8")],
   ["certification", fs.readFileSync(
-    path.join(process.cwd(), "templates", "certification", "layouts", "results.html"), "utf8")],
+    templateFile("certification", "layouts/results.html"), "utf8")],
 ];
 
 /** A numeric indicator with no bands: the author's computed number, nothing to interpret. */

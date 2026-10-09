@@ -7,7 +7,7 @@
  * the client-side health-check engine.
  */
 import { useState } from "react";
-import { Banner, Button, MenuItem, MenuTrigger, Tag } from "@universityrt/ui-kit";
+import { Banner, Button, MenuItem, MenuTrigger, Tag } from "@skillum/ui-kit";
 import { BookOpen, Download, Eye, FileText, Info, MoreVertical, Power, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
   previewImageUrl,

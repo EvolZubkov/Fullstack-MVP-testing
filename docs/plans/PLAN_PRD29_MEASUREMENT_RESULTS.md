@@ -14,7 +14,7 @@
 скалярных колонок меняется только `show_to_learner` (булев becomes перечень). Экран итогов
 остаётся ОДНИМ макетом `results`, блоки которого включаются настройками варианта.
 
-**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@universityrt/ui-kit`,
+**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@skillum/ui-kit`,
 Vitest (`npm test`), plain-JS SCORM runtime (`server/scorm/**`), ExcelJS.
 Спецификация: [docs/specs/prd-29/measurement-results.md](../specs/prd-29/measurement-results.md).
 
@@ -187,7 +187,7 @@ export interface CtxRecommendations {
 
 - [ ] **Step 2: Свериться с каталогом классов дизайн-системы**
 
-Перед вёрсткой открыть `client/src/styles/vendor/university-rt.css` и убедиться в
+Перед вёрсткой открыть `client/src/styles/vendor/skillum-ds.css` и убедиться в
 существовании каждого используемого `ou-*` класса. Контролёр эскизов НЕ ловит несуществующий
 класс. Известные ловушки: `ou-skeleton` не существует; у `ou-textarea` и `ou-banner` нет
 модификатора `--m`.
@@ -2866,13 +2866,13 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 
 - [ ] **Step 3: Проверить существование использованных токенов**
 
-Run: `npx rg -n -- "--ou-info-soft|--ou-warning-on-soft|--ou-info-on-soft" client/src/styles/vendor/university-rt.css`
+Run: `npx rg -n -- "--ou-info-soft|--ou-warning-on-soft|--ou-info-on-soft" client/src/styles/vendor/skillum-ds.css`
 Expected: каждое имя найдено. Отсутствующий токен добавляется в `vendor/ui-kit` по
 согласованию, локальный шим заводить нельзя.
 
 - [ ] **Step 4: Продублировать правку в файл, который грузится**
 
-`university-rt.css` лежит в ДВУХ копиях: `vendor/ui-kit` — источник, `client/src/styles/vendor`
+`skillum-ds.css` лежит в ДВУХ копиях: `vendor/ui-kit` — источник, `client/src/styles/vendor`
 — то, что реально грузится. Если в Step 3 понадобилась правка DS, внести её в ОБЕ копии.
 
 - [ ] **Step 5: Commit**
@@ -4246,7 +4246,7 @@ git commit -m "fix(prd-29): нет порога — нет вердикта, п�
 
 Диагноз (по коду, подтвердить в браузере). Оболочка ученика —
 `<Stack minH="screen">` (`client/src/pages/learner/layout.tsx:31`), а модификатор даёт
-`min-height: 100dvh` (`university-rt.css:7564`) — МИНИМАЛЬНУЮ высоту. Колонка растёт вместе
+`min-height: 100dvh` (`skillum-ds.css:7564`) — МИНИМАЛЬНУЮ высоту. Колонка растёт вместе
 с содержимым, `<Box as="main" grow>` растёт за ней, `.tbh-inset-screen` со своим
 `flex: 1 1 auto` растягивается — и сцена не ограничена ничем.
 

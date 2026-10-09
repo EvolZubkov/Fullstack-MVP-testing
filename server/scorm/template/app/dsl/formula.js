@@ -28,6 +28,10 @@ var FormulaDSL = (function () {
   // PRD-44 §5: ранг шкалы в группе. Форма повторяет countScales плюс доступ к свойству.
   var SCALE_RANK_FNS = { topScale: 1, bottomScale: 1 };
   var SCALE_RANK_PROPS = ["key", "label", "value", "margin", "tiedCount"];
+  // PRD-53 §4.2: верхняя зона группы шкал. Форма как у topScale, но второй аргумент — ПОРОГ,
+  // и он принимает строку «N%»: доля нужна, когда шкалы группы нормализованы по-разному.
+  var SCALE_GROUP_PROPS = ["code", "count", "max"];
+  var PERCENT_RE = /^(\d+(?:\.\d+)?)%$/;
   var COMPARISONS = { "=": 1, "!=": 1, ">": 1, ">=": 1, "<": 1, "<=": 1 };
   var OPERATORS = ["!=", ">=", "<=", "=", ">", "<", "+", "-", "*", "/"];
   var PUNCT = { "(": 1, ")": 1, ",": 1, "[": 1, "]": 1, ".": 1 };
@@ -171,6 +175,25 @@ var FormulaDSL = (function () {
         if (SCALE_RANK_PROPS.indexOf(rp.value) < 0) throw new Error("У «" + name + "» нет свойства «" + rp.value + "»");
         return { type: "scaleRank", fn: name, keys: rkeys, place: Number(placeTok.value), prop: rp.value };
       }
+      if (name === "topGroup") {
+        nextTok(); expectPunct("("); expectPunct("[");
+        var gkeys = [];
+        if (!(peek().type === "punct" && peek().value === "]")) {
+          gkeys.push(parseStr());
+          while (peek().type === "punct" && peek().value === ",") { nextTok(); gkeys.push(parseStr()); }
+        }
+        expectPunct("]"); expectPunct(",");
+        var thTok = nextTok();
+        if (thTok.type !== "number" && thTok.type !== "string") {
+          throw new Error("Порог верхней зоны — число или строка вида «10%»");
+        }
+        var threshold = thTok.type === "number" ? Number(thTok.value) : thTok.value;
+        expectPunct(")"); expectPunct(".");
+        var gp = nextTok();
+        if (gp.type !== "ident") throw new Error("Ожидалось свойство");
+        if (SCALE_GROUP_PROPS.indexOf(gp.value) < 0) throw new Error("У «topGroup» нет свойства «" + gp.value + "»");
+        return { type: "scaleGroup", keys: gkeys, threshold: threshold, prop: gp.value };
+      }
       if (COUNT_FNS[name]) {
         nextTok(); expectPunct("("); expectPunct("[");
         var keys = [];
@@ -271,6 +294,50 @@ var FormulaDSL = (function () {
     return fromBottom ? ranked[ranked.length - place] : ranked[place - 1];
   }
 
+  // ─── PRD-53: верхняя зона группы шкал ───────────────────────────────────────
+  // Дословный перенос shared/formula/scale-group.ts. Расхождение проявится только в LMS,
+  // поэтому паритет закреплён золотым корпусом tests/fixtures/formula-cases.json.
+
+  function parseGroupThreshold(raw) {
+    if (typeof raw === "number") return isFinite(raw) && raw >= 0 ? { kind: "abs", value: raw } : null;
+    var m = PERCENT_RE.exec(String(raw).replace(/^\s+|\s+$/g, ""));
+    if (!m) return null;
+    var v = Number(m[1]);
+    return isFinite(v) ? { kind: "pct", value: v } : null;
+  }
+
+  function inAuthorOrder(keys, authorOrder) {
+    var index = {}, i;
+    for (i = 0; i < authorOrder.length; i++) index[authorOrder[i]] = i;
+    return keys.slice().sort(function (a, b) {
+      var ia = index[a] === undefined ? Number.MAX_SAFE_INTEGER : index[a];
+      var ib = index[b] === undefined ? Number.MAX_SAFE_INTEGER : index[b];
+      return ia - ib;
+    });
+  }
+
+  function resolveTopGroup(keys, values, authorOrder, threshold) {
+    var present = [], i, k;
+    for (i = 0; i < keys.length; i++) {
+      k = keys[i];
+      if (present.indexOf(k) >= 0) continue;
+      if (values[k] && values[k].hasValue === true) present.push(k);
+    }
+    if (!present.length) return { code: "", count: 0, max: 0 };
+
+    var max = -Infinity;
+    for (i = 0; i < present.length; i++) max = Math.max(max, values[present[i]].normalized);
+    // Доля берётся от МОДУЛЯ максимума: у шкалы с отрицательными значениями иначе получился бы
+    // отрицательный порог, то есть зона шире всей группы.
+    var delta = threshold.kind === "abs" ? threshold.value : (Math.abs(max) * threshold.value) / 100;
+
+    var top = [];
+    for (i = 0; i < present.length; i++) {
+      if (values[present[i]].normalized >= max - delta) top.push(present[i]);
+    }
+    return { code: inAuthorOrder(top, authorOrder).join("+"), count: top.length, max: max };
+  }
+
   function evaluateAst(node, ctx) {
     switch (node.type) {
       case "number": case "string": case "boolean": return node.value;
@@ -299,6 +366,16 @@ var FormulaDSL = (function () {
         var entry = scaleAtRank(node.keys, ctx.scales || {}, scaleOrder, node.place, node.fn === "bottomScale");
         if (!entry) return null;
         return entry[node.prop] === undefined ? null : entry[node.prop];
+      }
+
+      case "scaleGroup": {
+        var gOrder = ctx.scaleOrder || Object.keys(ctx.scales || {});
+        var th = parseGroupThreshold(node.threshold);
+        // Непонятный порог — неопределённое значение, а не исключение: ошибка формулы не должна
+        // ломать завершение попытки.
+        if (!th) return null;
+        var group = resolveTopGroup(node.keys, ctx.scales || {}, gOrder, th);
+        return group[node.prop] === undefined ? null : group[node.prop];
       }
 
       case "count": {
@@ -345,6 +422,7 @@ var FormulaDSL = (function () {
   // Twin of shared/formula computeResultVariables. Evaluates variables in
   // sort_order so a later var("earlier") resolves; collects per-variable errors
   // without aborting; derives the controls_status override. Deterministic.
+  // Several controllers of one status combine with OR; a failed (null) one does not vote.
   function computeResultVariables(vars, base) {
     var ordered = vars.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
     var computed = {}, values = {}, errors = [], status = {};
@@ -362,7 +440,7 @@ var FormulaDSL = (function () {
       values[v.name] = value;
       computed[v.name] = value;
       if ((v.controlsStatus === "success" || v.controlsStatus === "completion") && typeof value === "boolean") {
-        status[v.controlsStatus] = value;
+        status[v.controlsStatus] = status[v.controlsStatus] === true || value;
       }
     }
     return { values: values, errors: errors, status: status };

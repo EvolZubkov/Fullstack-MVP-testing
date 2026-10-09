@@ -14,20 +14,24 @@ describe("resolveBlockOrder", () => {
       "scales",
       "indicators",
       "topics",
+      "breakdown",
     ]);
   });
 
   it("keeps the author's order", () => {
-    const saved: ResultsBlockKey[] = ["topics", "scales", "indicators", "summary"];
+    const saved: ResultsBlockKey[] = ["topics", "scales", "indicators", "summary", "breakdown"];
     expect(resolveBlockOrder(saved, DEFAULT_BLOCK_ORDER)).toEqual(saved);
   });
 
   it("appends a key the saved order does not mention, in template order", () => {
+    // PRD-50 FR-28: this is how the block reaches a test saved before it existed — the
+    // author's four keys stay put and `breakdown` lands at the end of the template's list.
     expect(resolveBlockOrder(["topics", "scales"], DEFAULT_BLOCK_ORDER)).toEqual([
       "topics",
       "scales",
       "summary",
       "indicators",
+      "breakdown",
     ]);
   });
 
@@ -37,6 +41,7 @@ describe("resolveBlockOrder", () => {
       "summary",
       "scales",
       "indicators",
+      "breakdown",
     ]);
   });
 
@@ -46,6 +51,16 @@ describe("resolveBlockOrder", () => {
       "summary",
       "scales",
       "indicators",
+      "breakdown",
+    ]);
+  });
+
+  it("шаблон без ключа `breakdown` не получает его ни при каком сохранённом порядке (FR-30)", () => {
+    // Сторонний шаблон реестра PRD-3 объявляет состав БЕЗ разреза — автор мог сохранить
+    // порядок на другом шаблоне, и ключ обязан отсеяться, а не «поехать» в чужой макет.
+    expect(resolveBlockOrder(["breakdown", "topics"], ["summary", "topics"])).toEqual([
+      "topics",
+      "summary",
     ]);
   });
 });
@@ -102,11 +117,13 @@ describe("templateBlockOrder", () => {
       "scales",
       "indicators",
       "topics",
+      "breakdown",
     ]);
     expect(templateBlockOrder(manifest.resultsBlockOrder, "results.adaptive")).toEqual([
       "topics",
       "scales",
       "indicators",
+      "breakdown",
     ]);
   });
 });

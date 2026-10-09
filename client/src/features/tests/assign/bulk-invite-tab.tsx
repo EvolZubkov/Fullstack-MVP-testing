@@ -1,19 +1,21 @@
 /**
  * @module features/tests/assign/bulk-invite-tab
- * @description The fourth tab of the test-assignment dialog (PRD-28 FR-09..FR-19):
- * invite participants from an uploaded workbook. One canvas holds four states —
- * `upload` (file, dates, optional group name), `preview` (classified rows the
- * operator ticks), `running` (the same preview with the action busy) and
- * `report` (what the run amounted to). The run itself is one request: the server
- * creates the accounts, assigns the test and mails the links, and hands back a
- * report that exists only here — the raw links are never stored, which is why
- * the export of раздел 7 lives on this screen and nowhere else.
+ * @description The fourth tab of the test-assignment dialog (PRD-28 FR-09..FR-19,
+ * FR-23..FR-30): invite participants from a list. The list comes EITHER typed by
+ * hand or from a workbook — the two are alternatives, and filling one dims the
+ * other (раздел 16). One canvas holds four states — `upload` (the two halves,
+ * dates, optional group name), `preview` (classified rows the operator ticks),
+ * `running` (the same preview with the action busy) and `report` (what the run
+ * amounted to). The run itself is one request: the server creates the accounts,
+ * assigns the test and mails the links, and hands back a report that exists only
+ * here — the raw links are never stored, which is why the export of раздел 7
+ * lives on this screen and nowhere else.
  *
  * It is a separate module because the dialog is already a long file and its
  * three existing tabs are untouched by this feature: the dialog stays the shell
  * that owns the tab strip, this owns everything behind the fourth tab.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, KeyRound, Trash2 } from "lucide-react";
 import {
@@ -30,10 +32,12 @@ import {
   Table,
   Tag,
   Text,
+  Textarea,
   type TableColumn,
   type Tone,
-} from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+  useToast,
+} from "@skillum/ui-kit";
+import { parseRecipientList } from "@shared/recipients/parse-recipient-list";
 import { t } from "@/lib/i18n";
 import { buildLinksWorkbook, linksWorkbookFileName } from "./bulk-invite-export";
 
@@ -56,6 +60,14 @@ export interface ParticipantPreviewRow {
   userId: string | null;
   /** Present only for `status: "error"`. */
   error?: string;
+  /**
+   * Org-structure values from the workbook (org-structure plan, BR-54-29).
+   * Present only when the file has them filled; the run writes them onto a new
+   * participant and into the empty fields of an existing one.
+   */
+  organization?: string;
+  unit?: string;
+  position?: string;
 }
 
 /** What happened to one recipient during the run. */
@@ -184,6 +196,13 @@ class InviteRefusal extends Error {
   }
 }
 
+/** Multipart body the preview route reads the workbook from. */
+function fileBody(picked: File): FormData {
+  const fd = new FormData();
+  fd.append("file", picked);
+  return fd;
+}
+
 /** Hand the browser a URL to save; the response carries its own file name. */
 function saveFromUrl(url: string) {
   const a = document.createElement("a");
@@ -213,16 +232,58 @@ interface BulkInviteTabProps {
   testTitle: string;
   /** Return to the «Назначено» tab, where revoke and re-send already live. */
   onGoToAssignments: () => void;
+  /**
+   * PRD-52: зачем приглашают. `assign` — участник проходит тест (PRD-28),
+   * `review` — рецензент получает грант и ссылку на окно рецензирования.
+   *
+   * Разбор книги, предпросмотр и отчёт у них ОБЩИЕ: список людей — один и тот же
+   * список людей, и вторая копия разбора однажды разошлась бы с первой (например,
+   * потеряла бы признак внешнего). Расходится только последний шаг — что именно
+   * человеку выдают — и подписи, которые об этом говорят.
+   */
+  purpose?: "assign" | "review";
 }
 
 type BulkStep = "upload" | "preview" | "running" | "report";
 
-export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInviteTabProps) {
-  const { toast } = useToast();
+export function BulkInviteTab({
+  testId, testTitle, onGoToAssignments, purpose = "assign",
+}: BulkInviteTabProps) {
+  const isReview = purpose === "review";
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
+
+  /**
+   * Маршруты назначения и рецензирования РАЗНЫЕ: конвейер общий, а право своё —
+   * `tests.review.invite` против `assignments.manage` (PRD-52 раздел 14).
+   * Собраны здесь одним объектом, чтобы вкладка не решала это заново в каждой
+   * мутации: так один из четырёх вызовов однажды и остался бы на чужом маршруте,
+   * отвечающем автору отказом.
+   */
+  const api = isReview
+    ? {
+      preview: `/api/tests/${testId}/review/preview`,
+      invite: `/api/tests/${testId}/review/invite`,
+      template: `/api/tests/${testId}/review/template`,
+      exported: `/api/tests/${testId}/review/links-exported`,
+    }
+    : {
+      preview: `/api/tests/${testId}/participants/preview`,
+      invite: `/api/tests/${testId}/participants/invite`,
+      template: `/api/tests/${testId}/participants/template`,
+      exported: `/api/tests/${testId}/participants/links-exported`,
+    };
 
   const [step, setStep] = useState<BulkStep>("upload");
   const [file, setFile] = useState<File | null>(null);
+  /**
+   * Набранный вручную список. Он и книга — АЛЬТЕРНАТИВЫ (раздел 16): заполненное
+   * поле гасит зону файла и наоборот. Поэтому источник ВЫВОДИТСЯ из полей, а не
+   * хранится третьим флагом — флаг и поля однажды разошлись бы.
+   */
+  const [emails, setEmails] = useState("");
+  const typedRows = useMemo(() => parseRecipientList(emails), [emails]);
+  const source: "text" | "file" | null = emails.trim() ? "text" : file ? "file" : null;
   const [dueDate, setDueDate] = useState("");
   const [linkExpiresAt, setLinkExpiresAt] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -236,6 +297,8 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
    */
   const [groupNameConflict, setGroupNameConflict] = useState(false);
   const [rows, setRows] = useState<ParticipantPreviewRow[]>([]);
+  /** Чем разобран показанный предпросмотр: подпись счётчика у путей разная. */
+  const [previewSource, setPreviewSource] = useState<"text" | "file">("file");
   const [selected, setSelected] = useState<string[]>([]);
   const [report, setReport] = useState<ParticipantsReport | null>(null);
   const groupInputRef = useRef<HTMLInputElement>(null);
@@ -248,39 +311,51 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
   };
 
   const previewMutation = useMutation({
-    mutationFn: async (picked: File) => {
-      const fd = new FormData();
-      fd.append("file", picked);
-      const res = await fetch(`/api/tests/${testId}/participants/preview`, {
-        method: "POST",
-        credentials: "include",
-        body: fd,
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Не удалось разобрать файл");
+    mutationFn: async () => {
+      // Книга уезжает файлом, набранный список — разобранными строками. Дальше
+      // предпросмотр не различает источник: классификация на сервере одна.
+      const res = file
+        ? await fetch(api.preview, { method: "POST", credentials: "include", body: fileBody(file) })
+        : await fetch(api.preview, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: typedRows }),
+        });
+      if (!res.ok) throw new Error((await res.json()).error || "Не удалось разобрать список");
       return res.json() as Promise<ParticipantPreviewRow[]>;
     },
     onSuccess: (parsed) => {
       setRows(parsed);
       setSelected(parsed.filter((r) => r.status !== "error").map((r) => String(r.index)));
+      setPreviewSource(file ? "file" : "text");
       setStep("preview");
     },
     onError: (e: Error) =>
-      toast({ variant: "destructive", title: t.common.error, description: e.message }),
+      toast({ tone: "error", title: t.common.error, description: e.message }),
   });
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/tests/${testId}/participants/invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          rows: rows.filter((r) => selected.includes(String(r.index))),
-          dueDate: dueDate || null,
-          linkExpiresAt: linkExpiresAt || null,
-          groupName: groupName.trim() || null,
-        }),
-      });
+      const picked = rows.filter((r) => selected.includes(String(r.index)));
+      const res = await fetch(
+        api.invite,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          // Рецензирование не знает ни срока сдачи, ни группы: у него нет
+          // назначения, к которому эти поля относятся, — только срок жизни ссылки.
+          body: JSON.stringify(isReview
+            ? { rows: picked, linkExpiresAt: linkExpiresAt || null }
+            : {
+              rows: picked,
+              dueDate: dueDate || null,
+              linkExpiresAt: linkExpiresAt || null,
+              groupName: groupName.trim() || null,
+            }),
+        },
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new InviteRefusal(body.error || "Не удалось выполнить рассылку", body.code);
@@ -309,7 +384,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
         setGroupNameConflict(true);
         return;
       }
-      toast({ variant: "destructive", title: t.common.error, description: e.message });
+      toast({ tone: "error", title: t.common.error, description: e.message });
     },
   });
 
@@ -334,7 +409,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
         expiresAt: report.linksExpireAt,
       });
       saveBlob(new Blob([bytes], { type: XLSX_MIME }), linksWorkbookFileName(testTitle));
-      await fetch(`/api/tests/${testId}/participants/links-exported`, {
+      await fetch(api.exported, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -343,16 +418,16 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       return issued.length;
     },
     onSuccess: (count) =>
-      toast({ title: "Файл сохранён", description: `Ссылок в файле: ${count}` }),
+      toast({ tone: "success", title: "Файл сохранён", description: `Ссылок в файле: ${count}` }),
     onError: () =>
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось собрать файл со ссылками" }),
+      toast({ tone: "error", title: t.common.error, description: "Не удалось собрать файл со ссылками" }),
   });
 
   const handleFiles = (files: File[]) => {
     const picked = files[0];
     if (!picked) return;
     if (!/\.xlsx$/i.test(picked.name)) {
-      toast({ variant: "destructive", title: t.common.error, description: "Поддерживается только формат .xlsx." });
+      toast({ tone: "error", title: t.common.error, description: "Поддерживается только формат .xlsx." });
       return;
     }
     setFile(picked);
@@ -390,6 +465,24 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
 
   const uploadPanel = (
     <Stack gap={5}>
+      {/* Верхняя половина. Разбор — по кнопке «Проверить список», как и у книги:
+          нераспознанная запись должна попасть в предпросмотр строкой с ошибкой,
+          а не гаснуть под курсором (раздел 16). */}
+      <Textarea
+        label="Адреса почты"
+        fullWidth
+        rows={4}
+        value={emails}
+        disabled={Boolean(file)}
+        onChange={(e) => setEmails(e.target.value)}
+        placeholder={"Ирина Петрова <i.petrova@example.com>\ns.kovalev@example.com"}
+        hint="По одному в строке или через запятую. Запись «Имя <адрес>» задаёт имя, голый адрес — только адрес."
+      />
+
+      <div className="tb-orsep">
+        <Text variant="body-s" tone="muted" className="tb-orsep__word">или</Text>
+      </div>
+
       {file ? (
         <FileItem
           name={file.name}
@@ -407,34 +500,46 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       ) : (
         <FileUploader
           accept=".xlsx"
+          disabled={Boolean(emails.trim())}
           title="Перетащите книгу или нажмите, чтобы выбрать"
-          description="Только .xlsx. Колонки: email, name."
+          description={isReview
+            ? "Только .xlsx. Колонки: email, name."
+            // The assignment reads the org columns too (BR-54-29); review does not.
+            : "Только .xlsx. Колонки: email, name; по желанию organization, unit, position."}
           cta="Выбрать файл"
           onFiles={handleFiles}
         />
       )}
 
       <Cluster justify="start" gap={0}>
+        {/* Шаблон — принадлежность нижней половины: набранному списку он не нужен. */}
         <Button
           variant="ghost"
           size="s"
+          disabled={Boolean(emails.trim())}
           leadingIcon={<Download size={16} />}
-          onClick={() => saveFromUrl(`/api/tests/${testId}/participants/template`)}
+          onClick={() => saveFromUrl(api.template)}
         >
           Скачать шаблон .xlsx
         </Button>
       </Cluster>
 
+      {/* Срок сдачи и группа — свойства НАЗНАЧЕНИЯ, которого у рецензирования
+          нет: прогон их не отправляет (`review/invite` знает только срок жизни
+          ссылки). Показывать их рецензенту — обещать поведение, которого не
+          будет: оператор заполнял их и не получал ничего. */}
       <Stack direction="row" gap={4}>
-        <Box grow>
-          <Input
-            label={t.assignments.dueDate}
-            type="date"
-            fullWidth
-            value={dueDate}
-            onChange={(e) => handleDueDateChange(e.target.value)}
-          />
-        </Box>
+        {!isReview && (
+          <Box grow>
+            <Input
+              label={t.assignments.dueDate}
+              type="date"
+              fullWidth
+              value={dueDate}
+              onChange={(e) => handleDueDateChange(e.target.value)}
+            />
+          </Box>
+        )}
         <Box grow>
           <Input
             label="Ссылка активна до"
@@ -447,12 +552,12 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
         </Box>
       </Stack>
 
-      {groupField}
+      {!isReview && groupField}
 
       <Cluster justify="end" gap={2}>
         <Button
-          onClick={() => file && previewMutation.mutate(file)}
-          disabled={!file}
+          onClick={() => previewMutation.mutate()}
+          disabled={source === null}
           loading={previewMutation.isPending}
         >
           Проверить список
@@ -466,6 +571,24 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
   const previewColumns: TableColumn<ParticipantPreviewRow>[] = [
     { key: "email", header: "Адрес", render: (r) => <Text variant="mono-s">{r.email}</Text> },
     { key: "name", header: "Имя", render: (r) => <Text variant="body-s">{r.name || "—"}</Text> },
+    // Org-structure plan: the column appears only when the file carries org
+    // values — a list of addresses keeps the layout it always had.
+    ...(rows.some((r) => r.organization || r.unit || r.position)
+      ? [{
+        key: "org",
+        header: "Подразделение и должность",
+        render: (r: ParticipantPreviewRow) => {
+          const second = [r.position, r.organization].filter(Boolean).join(" · ");
+          if (!r.unit && !second) return <Text variant="body-xs" tone="muted">—</Text>;
+          return (
+            <Stack gap={1}>
+              <Text variant="body-s">{r.unit || "—"}</Text>
+              {second && <Text variant="body-xs" tone="muted">{second}</Text>}
+            </Stack>
+          );
+        },
+      }]
+      : []),
     {
       key: "status",
       header: "Статус",
@@ -494,13 +617,15 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
   const errorCount = rows.filter((r) => r.status === "error").length;
   const reusedCount = rows.length - newCount - errorCount;
   /**
-   * Rows the sheet held, inferred from the last kept row's sheet position: the
-   * server collapses a repeated address before answering, so a collapsed row
-   * shows up only as a gap in `index`. A duplicate in the LAST line of the book
-   * leaves no gap and is therefore invisible here — the count then equals the
-   * kept rows and the «после схлопывания» half is simply not shown.
+   * Rows the source held, inferred from the last kept row's position: repeated
+   * addresses are collapsed before the preview is built, so a collapsed row
+   * shows up only as a gap in `index`. A duplicate in the LAST line leaves no
+   * gap and is therefore invisible here — the count then equals the kept rows
+   * and the «после схлопывания» half is simply not shown.
    */
   const sheetRowCount = rows.length > 0 ? rows[rows.length - 1].index + 1 : 0;
+  /** Строки книги и записи набранного списка — счётчик не должен их путать. */
+  const countedAs = previewSource === "file" ? "строк файла" : "записей списка";
 
   const previewPanel = (
     <Stack gap={4}>
@@ -510,8 +635,8 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
         <Tag tone="error" size="s" dot>Ошибок: {errorCount}</Tag>
         <Text variant="body-s" tone="muted">
           {sheetRowCount > rows.length
-            ? `${sheetRowCount} строк файла · ${rows.length} после схлопывания повторов`
-            : `${rows.length} строк файла`}
+            ? `${sheetRowCount} ${countedAs} · ${rows.length} после схлопывания повторов`
+            : `${rows.length} ${countedAs}`}
         </Text>
       </Cluster>
 
@@ -580,7 +705,11 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
         email: r.email,
         outcome: "Письмо не доставлено",
         tone: "warning" as Tone,
-        reason: "Почтовый сервер отклонил адрес. Назначение создано, ссылка выпущена и действует — заберите её из выгрузки",
+        // У рецензирования назначения нет — доступ несёт грант, и говорить о
+        // назначении значило бы отправить оператора искать несуществующую запись.
+        reason: isReview
+          ? "Почтовый сервер отклонил адрес. Доступ выдан, ссылка выпущена и действует — заберите её из выгрузки"
+          : "Почтовый сервер отклонил адрес. Назначение создано, ссылка выпущена и действует — заберите её из выгрузки",
       })),
     ...result.failed.map((f) => ({
       key: `failed:${f.email}`,
@@ -619,7 +748,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       <Grid cols={3} gap={3}>
         {statTile(report.created, "Создано учётных записей", "success")}
         {statTile(report.reused, "Переиспользовано", "info")}
-        {statTile(report.assigned, "Назначено", "accent")}
+        {statTile(report.assigned, isReview ? "Приглашено" : "Назначено", "accent")}
         {statTile(report.results.filter((r) => r.delivered).length, "Писем отправлено", "success")}
         {statTile(report.results.filter((r) => !r.delivered).length, "Письмо не ушло", "error")}
         {statTile(Math.max(0, rows.length - report.results.length), "Пропущено", "muted")}
@@ -658,7 +787,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       />
 
       <Cluster justify="end" gap={2}>
-        <Button onClick={onGoToAssignments}>К назначениям</Button>
+        <Button onClick={onGoToAssignments}>{isReview ? "К приглашённым" : "К назначениям"}</Button>
       </Cluster>
     </Stack>
   );

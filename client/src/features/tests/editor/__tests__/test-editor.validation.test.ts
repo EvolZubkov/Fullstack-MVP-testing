@@ -8,12 +8,12 @@
  *   FR-14 — overall percent value in [0, 100]
  *   FR-15a — passDecisionPolicy is a valid enum value
  *   FR-15g — forbidden combination: all_topics_passed + inherit_overall + overall.type=none
- *   FR-20  — webhook URL valid or empty
+ *   FR-20  — снят: «Webhook URL» больше не проверяется (поля в форме нет)
  */
 import { describe, expect, it } from "vitest";
 import { TAG_MAX_LENGTH } from "@shared/tags";
 import { validateTestEditor } from "../test-editor.validation";
-import type { TestEditorModel } from "../test-editor.types";
+import type { TestEditorModel, ResultVariableModel, ScaleModel } from "../test-editor.types";
 
 // ─── Base fixture ─────────────────────────────────────────────────────────────
 
@@ -279,36 +279,17 @@ describe("FR-15g: forbidden combination all_topics_passed + inherit_overall + ov
   });
 });
 
-// ─── FR-20: webhook URL valid or empty ───────────────────────────────────────
+// ─── Снятый «Webhook URL» ─────────────────────────────────────────────────────
 
-describe("FR-20: webhook URL valid or empty", () => {
-  it("happy path — empty webhook URL passes", () => {
-    const result = validateTestEditor(baseModel());
-    const urlErrors = result.errors.filter((e) => e.field === "basic.webhookUrl");
-    expect(urlErrors).toHaveLength(0);
-  });
-
-  it("happy path — valid HTTPS URL passes", () => {
-    const model = baseModel({
-      basic: { ...baseModel().basic, webhookUrl: "https://example.com/hook" },
-    });
-    const result = validateTestEditor(model);
-    const urlErrors = result.errors.filter((e) => e.field === "basic.webhookUrl");
-    expect(urlErrors).toHaveLength(0);
-  });
-
-  it("sad path — malformed URL produces invalid_url error", () => {
+describe("снятый «Webhook URL»", () => {
+  it("значение, оставшееся в модели, не блокирует сохранение", () => {
+    // Поля в форме больше нет: ошибка по нему была бы невидимой и держала бы тест
+    // несохраняемым без объяснения.
     const model = baseModel({
       basic: { ...baseModel().basic, webhookUrl: "not-a-url" },
     });
     const result = validateTestEditor(model);
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({
-        field: "basic.webhookUrl",
-        code: "invalid_url",
-        severity: "error",
-      }),
-    );
+    expect(result.errors.filter((e) => e.field === "basic.webhookUrl")).toHaveLength(0);
   });
 });
 
@@ -1316,5 +1297,165 @@ describe("PRD-24: by_variant topic pass rule", () => {
     const errs = ruleErrors(withRule({ v1: { type: "absolute", value: 7 }, v2: { type: "absolute", value: 1 } }, { overrides }));
     expect(errs).toHaveLength(1);
     expect(errs[0].code).toBe("range");
+  });
+});
+
+// ─── PRD-53: находки профиля в общем контуре индикации ────────────────────────
+//
+// Правило владельца (docs/architecture/test-editor-contracts.md, «Индикация проблем»):
+// проблема, о которой автору говорят, обязана быть здесь. Секция, считающая себя сама,
+// делает индикацию лживой — точка на вкладке не загорается, сводный баннер молчит,
+// а сохранение всё равно падает на серверной 422.
+
+describe("validateTestEditor — профиль по группе шкал (PRD-53)", () => {
+  const scale = (key: string, over: Partial<ScaleModel> = {}): ScaleModel => ({
+    clientKey: `s-${key}`,
+    key,
+    label: key.toUpperCase(),
+    description: "Описание",
+    type: "number",
+    aggregation: "sum",
+    normalization: "none",
+    direction: "positive",
+    bands: [],
+    domainMin: null,
+    domainMax: null,
+    displayMax: null,
+    valence: "none",
+    learnerVisibility: "hidden",
+    scormTarget: "none",
+    sortOrder: 0,
+    ...over,
+  });
+
+  const profileVar = (over: Partial<ResultVariableModel> = {}): ResultVariableModel => ({
+    clientKey: "v1",
+    name: "profile",
+    label: "Профиль",
+    type: "string",
+    formula: 'topGroup(["a","b"], 5).code',
+    learnerVisibility: "hidden",
+    scormTarget: "both",
+    controlsStatus: "none",
+    bands: [],
+    outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
+    sortOrder: 0,
+    ...over,
+  });
+
+  const run = (v: ResultVariableModel, scales: ScaleModel[]) =>
+    validateTestEditor(baseModel({ resultVariables: [v], scales }));
+
+  it("группа из одной шкалы — ОШИБКА с якорем на карточку", () => {
+    const res = run(profileVar({ formula: 'topGroup(["a"], 5).code' }), [scale("a")]);
+    const issue = res.errors.find((e) => e.code === "profile_group_small");
+    expect(issue).toBeDefined();
+    expect(issue?.field).toBe("resultVariables[0]");
+  });
+
+  it("удалённая шкала группы — ОШИБКА, названная по ключу", () => {
+    const res = run(profileVar({ formula: 'topGroup(["a","eng"], 5).code' }), [scale("a")]);
+    expect(res.errors.find((e) => e.code === "profile_unknown_scale")?.message).toContain("eng");
+  });
+
+  it("наборы без текста — ПРЕДУПРЕЖДЕНИЕ, сохранение не блокируется", () => {
+    const res = run(
+      profileVar({ outcomes: [{ code: "a", label: "A", text: "", tone: "" }] }),
+      [scale("a"), scale("b", { sortOrder: 1 })],
+    );
+    expect(res.warnings.find((w) => w.code === "profile_uncovered")).toBeDefined();
+    expect(res.errors.filter((e) => e.field === "resultVariables[0]")).toHaveLength(0);
+  });
+
+  it("пустое описание шкалы при включённом блоке «вне профиля» — ПРЕДУПРЕЖДЕНИЕ", () => {
+    const res = run(
+      profileVar({ restScales: { show: true, label: "", keys: ["a", "b"] } }),
+      [scale("a", { description: "  " }), scale("b", { sortOrder: 1 })],
+    );
+    expect(res.warnings.find((w) => w.code === "profile_bare_rest")?.message).toContain("A");
+  });
+
+  it("разная нормализация при абсолютном пороге — ПРЕДУПРЕЖДЕНИЕ", () => {
+    const res = run(profileVar(), [scale("a"), scale("b", { normalization: "percent", sortOrder: 1 })]);
+    expect(res.warnings.find((w) => w.code === "profile_mixed_normalization")).toBeDefined();
+  });
+
+  it("тот же набор с долевым порогом предупреждения не даёт", () => {
+    const res = run(profileVar({ formula: 'topGroup(["a","b"], "10%").code' }), [
+      scale("a"),
+      scale("b", { normalization: "percent", sortOrder: 1 }),
+    ]);
+    expect(res.warnings.find((w) => w.code === "profile_mixed_normalization")).toBeUndefined();
+  });
+
+  it("показатель без профиля находок не даёт", () => {
+    const res = run(profileVar({ formula: '"growing"' }), [scale("a")]);
+    expect(res.errors.filter((e) => e.code.startsWith("profile_"))).toHaveLength(0);
+    expect(res.warnings.filter((w) => w.code.startsWith("profile_"))).toHaveLength(0);
+  });
+});
+
+// ─── «Сценарий в ИС»: тест «Сценарий» ────────────────────────────────────────
+
+describe("тест «Сценарий»", () => {
+  it("без банка сценариев не сохраняется, и ошибка не про темы", () => {
+    const result = validateTestEditor(baseModel({ mode: "scenario", sections: [], scenarioItems: [] }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ field: "scenario", code: "required" }));
+    expect(result.errors.some((e) => e.field === "sections")).toBe(false);
+  });
+
+  it("с банком — ошибок состава нет, даже без тем", () => {
+    const result = validateTestEditor(
+      baseModel({ mode: "scenario", sections: [], scenarioItems: [{ topicId: "bank", topicName: "Работа в СЭД", questionId: null }] }),
+    );
+    expect(result.errors.some((e) => e.field === "scenario" || e.field === "sections")).toBe(false);
+  });
+
+  it("стандартный тест по-прежнему требует тему", () => {
+    const result = validateTestEditor(baseModel({ sections: [] }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ field: "sections", code: "required" }));
+  });
+});
+
+// ─── «Сценарий в ИС», техдолг №8: правила открытия пунктов роутера ─────────────
+
+describe("правила открытия пунктов роутера", () => {
+  const router = (sectionUnlockRules: Record<string, unknown>) =>
+    baseModel({
+      flowMode: "router_by_topics",
+      flowSettings: { router: { completionPolicy: "all_required_completed", sectionUnlockRules } },
+      scenarioItems: [{ id: "s1", topicId: "bank", topicName: "Банк", questionId: null, title: "Сценарий" }],
+    } as Partial<TestEditorModel>);
+  const unlockErrors = (m: TestEditorModel) => validateTestEditor(m).errors.filter((e) => e.field.endsWith(".unlock"));
+
+  it("условие без пунктов — ошибка поля у самого пункта", () => {
+    expect(unlockErrors(router({ "scenario:s1": { mode: "after_sections_passed", sectionIds: [] } }))).toEqual([
+      expect.objectContaining({ field: "scenarioItems[0].unlock", message: "Выберите хотя бы один пункт." }),
+    ]);
+  });
+
+  it("пункт, которого в составе нет, условием не считается", () => {
+    expect(unlockErrors(router({ "topic-1": { mode: "after_sections_completed", sectionIds: ["gone"] } }))).toEqual([
+      expect.objectContaining({ field: "sections[0].unlock", code: "required" }),
+    ]);
+  });
+
+  it("кольцо — ошибка у пункта, с которого оно видно", () => {
+    const errors = unlockErrors(router({
+      "topic-1": { mode: "after_sections_completed", sectionIds: ["scenario:s1"] },
+      "scenario:s1": { mode: "after_sections_passed", sectionIds: ["topic-1"] },
+    }));
+    expect(errors).toEqual([expect.objectContaining({ code: "unlock_cycle", field: "sections[0].unlock" })]);
+  });
+
+  it("цепочка без кольца и линейный поток — без ошибок", () => {
+    expect(unlockErrors(router({ "scenario:s1": { mode: "after_sections_passed", sectionIds: ["topic-1"] } }))).toEqual([]);
+    expect(unlockErrors({
+      ...router({ "topic-1": { mode: "after_sections_completed", sectionIds: [] } }),
+      flowMode: "linear_by_topics",
+    })).toEqual([]);
   });
 });

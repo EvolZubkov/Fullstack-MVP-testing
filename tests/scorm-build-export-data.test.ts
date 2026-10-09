@@ -25,10 +25,14 @@ const { storageMock } = vi.hoisted(() => ({
     getScales: vi.fn(),
     getQuestionMeasurements: vi.fn(),
     getTestQuestionScoring: vi.fn(),
+    // PRD-51: документ отчёта читается через тот же источник, что и прочий состав.
+    listReportBlocks: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
     getAdaptiveLevelLinks: vi.fn(),
     getLatestSnapshot: vi.fn(),
+    // «Сценарий в ИС»: источник выдачи читает пункты-сценарии теста.
+    getTestScenarios: vi.fn(),
   },
 }));
 
@@ -67,9 +71,11 @@ beforeEach(() => {
   storageMock.getScales.mockResolvedValue([] as never);
   storageMock.getQuestionMeasurements.mockResolvedValue([] as never);
   storageMock.getTestQuestionScoring.mockResolvedValue([] as never);
+  storageMock.listReportBlocks.mockResolvedValue([] as never);
   storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([] as never);
   storageMock.getAdaptiveLevelsByTest.mockResolvedValue([{ id: "lvl1" }] as never);
   storageMock.getAdaptiveLevelLinks.mockResolvedValue([{ id: "lnk1" }] as never);
+  storageMock.getTestScenarios.mockResolvedValue([] as never);
 });
 
 describe("buildScormExportData", () => {
@@ -133,6 +139,7 @@ describe("buildScormExportData", () => {
   it("reads from the active snapshot for source=export of a published test", async () => {
     storageMock.getTest.mockResolvedValue(baseTest({ status: "published" }));
     storageMock.getLatestSnapshot.mockResolvedValue({
+      version: 3,
       contentJson: {
         test: baseTest({ status: "published" }),
         sections: [{ id: "s1", topicId: "tp1" }],
@@ -157,6 +164,62 @@ describe("buildScormExportData", () => {
     expect(storageMock.getLatestSnapshot).toHaveBeenCalledWith("t1");
     // The frozen snapshot is the source — the bake does NOT re-read live sections.
     expect(storageMock.getTestSections).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * PRD-56 FR-19a, звено 1: номер версии публикации уезжает в пакет.
+ *
+ * Без него разрез по версиям слеп ровно к тем прохождениям, ради которых пакет и собирали:
+ * `attempts.snapshot_id` есть только у веб-попытки.
+ */
+describe("buildScormExportData — версия публикации (PRD-56 FR-19a)", () => {
+  const publishedSnapshot = (version: number) => ({
+    version,
+    contentJson: {
+      test: baseTest({ status: "published" }),
+      sections: [{ id: "s1", topicId: "tp1" }],
+      topics: [{ id: "tp1", name: "Topic" }],
+      questionsByTopic: { tp1: [] },
+      topicCoursesByTopic: { tp1: [] },
+      topicEventsByTopic: { tp1: [] },
+      adaptiveSettings: [],
+      adaptiveLevels: [],
+      adaptiveLevelLinksByLevel: {},
+      scales: [],
+      measurements: [],
+      resultVariables: [],
+      contentPages: [],
+      questionScoring: [],
+    },
+  }) as never;
+
+  it("опубликованный тест отдаёт номер активного снимка", async () => {
+    storageMock.getTest.mockResolvedValue(baseTest({ status: "published" }));
+    storageMock.getLatestSnapshot.mockResolvedValue(publishedSnapshot(3));
+
+    const data = await buildScormExportData("t1", { source: "export" });
+
+    expect(data.publicationVersion).toBe(3);
+  });
+
+  it("у черновика ключа нет вовсе — пакет остаётся прежним", async () => {
+    // Не `undefined` значением, а ОТСУТСТВИЕ ключа: черновик собирается живым источником,
+    // версии публикации у него не существует, и выдумывать её нечем.
+    const data = await buildScormExportData("t1", { source: "export" });
+
+    expect("publicationVersion" in data).toBe(false);
+  });
+
+  it("отладочная сборка версии не несёт даже у опубликованного теста", async () => {
+    // PRD-18 D-4: отладочный прогон ВСЕГДА идёт по живому состоянию, а не по снимку.
+    storageMock.getTest.mockResolvedValue(baseTest({ status: "published" }));
+    storageMock.getLatestSnapshot.mockResolvedValue(publishedSnapshot(3));
+
+    const data = await buildScormExportData("t1", { source: "debug" });
+
+    expect("publicationVersion" in data).toBe(false);
+    expect(storageMock.getLatestSnapshot).not.toHaveBeenCalled();
   });
 });
 
@@ -234,5 +297,110 @@ describe("liveDataSource — live read facade backing the debug source", () => {
     expect(storageMock.getTopics).toHaveBeenCalled();
     expect(storageMock.getQuestionsByIds).toHaveBeenCalledWith(["q1"]);
     expect(storageMock.getTest).toHaveBeenCalledWith("t1");
+  });
+});
+
+/**
+ * PRD-56 FR-17a: снятое задание не уезжает и в пакет ЧЕРНОВИКА.
+ *
+ * У опубликованного теста правило выполняет снимок (`buildSnapshotContent` фильтрует состав
+ * при публикации), поэтому пакет по снимку состав не меняет — это обратная сторона того же
+ * правила (PRD-15). А черновик и отладочный прогон собираются ЖИВЫМИ, и без собственного
+ * фильтра автор, снявший задание, продолжал видеть его в своём же прогоне.
+ */
+describe("buildScormExportData — исключённые задания (PRD-56 FR-17a)", () => {
+  beforeEach(() => {
+    storageMock.getQuestionsByTopic.mockResolvedValue([
+      { id: "q1", type: "single", topicId: "tp1" },
+      { id: "q2", type: "single", topicId: "tp1" },
+    ] as never);
+  });
+
+  it("живая сборка снятое задание не берёт", async () => {
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      { testId: "t1", questionId: "q2", excludedFromDelivery: true },
+    ] as never);
+
+    const data = await buildScormExportData("t1", { source: "debug" });
+
+    expect(data.sections[0].questions.map((q) => q.id)).toEqual(["q1"]);
+  });
+
+  it("без признака состав прежний", async () => {
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      { testId: "t1", questionId: "q2", points: 3, excludedFromDelivery: false },
+    ] as never);
+
+    const data = await buildScormExportData("t1", { source: "debug" });
+
+    expect(data.sections[0].questions.map((q) => q.id)).toEqual(["q1", "q2"]);
+  });
+
+  it("сборка ПО СНИМКУ состав не меняет", async () => {
+    // Снимок уже отфильтрован публикацией; применять к нему сегодняшние настройки значит
+    // переписывать опубликованную версию задним числом.
+    storageMock.getTest.mockResolvedValue(baseTest({ status: "published" }));
+    storageMock.getLatestSnapshot.mockResolvedValue({
+      version: 1,
+      contentJson: {
+        test: baseTest({ status: "published" }),
+        sections: [{ id: "s1", topicId: "tp1" }],
+        topics: [{ id: "tp1", name: "Topic" }],
+        questionsByTopic: { tp1: [{ id: "q1", type: "single", topicId: "tp1" }, { id: "q2", type: "single", topicId: "tp1" }] },
+        topicCoursesByTopic: { tp1: [] },
+        topicEventsByTopic: { tp1: [] },
+        adaptiveSettings: [], adaptiveLevels: [], adaptiveLevelLinksByLevel: {},
+        scales: [], measurements: [], resultVariables: [], contentPages: [],
+        // Снимок несёт СВОИ строки настроек: сегодняшнее исключение в них не попадает.
+        questionScoring: [],
+      },
+    } as never);
+
+    const data = await buildScormExportData("t1", { source: "export" });
+
+    expect(data.sections[0].questions.map((q) => q.id)).toEqual(["q1", "q2"]);
+  });
+});
+
+describe("«Сценарий в ИС»: раздел пункта-сценария в пакете (Э4)", () => {
+  const item = { id: "it1", testId: "t1", topicId: "bank", questionId: null, title: "Работа в СЭД", required: true, timeLimitMinutes: null, imageUrl: null, groupKey: null, sortOrder: 0 };
+  const bankQuestions = [
+    { id: "s1", type: "simulation", topicId: "bank" },
+    { id: "x1", type: "single", topicId: "bank" },
+    { id: "s2", type: "simulation", topicId: "bank" },
+  ];
+
+  beforeEach(() => {
+    storageMock.getTest.mockResolvedValue(baseTest({ mode: "scenario" }));
+    storageMock.getTestScenarios.mockResolvedValue([item] as never);
+    storageMock.getTopic.mockImplementation(async (id: string) => (id === "bank" ? { id: "bank", name: "Банк", feedbackJson: { text: "x" } } : undefined) as never);
+    storageMock.getQuestionsByTopic.mockResolvedValue(bankQuestions as never);
+  });
+
+  it("тест «Сценарий» собирается: раздел под ключом пункта и его именем, пул — только сценарии", async () => {
+    const data = await buildScormExportData("t1", { source: "debug" });
+    expect(data.sections).toHaveLength(1);
+    const [section] = data.sections;
+    expect(section.topicId).toBe("scenario:it1");
+    expect(section.topic).toMatchObject({ id: "scenario:it1", name: "Работа в СЭД", feedbackJson: null });
+    expect(section.questions.map((q) => q.id)).toEqual(["s1", "s2"]);
+  });
+
+  it("фиксированный пункт несёт только свой сценарий", async () => {
+    storageMock.getTestScenarios.mockResolvedValue([{ ...item, questionId: "s2" }] as never);
+    const data = await buildScormExportData("t1", { source: "debug" });
+    expect(data.sections[0].questions.map((q) => q.id)).toEqual(["s2"]);
+  });
+
+  it("пункт без сценариев — явный отказ, а не пакет без задания", async () => {
+    storageMock.getQuestionsByTopic.mockResolvedValue([bankQuestions[1]] as never);
+    await expect(buildScormExportData("t1", { source: "debug" })).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("роутер несёт пункт рядом с темой", async () => {
+    storageMock.getTest.mockResolvedValue(baseTest({ flowPolicyJson: { mode: "router_by_topics" } }));
+    storageMock.getTopic.mockImplementation(async (id: string) => ({ id, name: id === "bank" ? "Банк" : "Topic" }) as never);
+    const data = await buildScormExportData("t1", { source: "debug" });
+    expect(data.sections.map((s) => s.topicId)).toEqual(["tp1", "scenario:it1"]);
   });
 });

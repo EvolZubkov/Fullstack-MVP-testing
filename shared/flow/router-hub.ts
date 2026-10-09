@@ -13,6 +13,7 @@
  *
  * Framework-free and browser-safe: bundled verbatim into the SCORM package.
  */
+import { matchTestItem, parseItemKey } from "../test-items";
 
 /** Per-section state as the run progresses. */
 export type RouterTopicStatus = "notStarted" | "inProgress" | "completed";
@@ -30,10 +31,21 @@ export interface RouterSection {
 /** A frozen section result, as far as the hub cares about it. */
 export interface RouterSectionResult {
   passed?: boolean | null;
+  /**
+   * Исход ещё считается (веб ждёт серверную оценку раздела). Такой пункт не открывает зависимых и
+   * не считается проваленным окончательно — до ответа о нём ничего не известно.
+   */
+  pending?: boolean;
 }
 
 export interface SectionUnlockRule {
-  mode?: "always" | "after_sections_completed" | "after_sections_passed" | string;
+  /** `always_available` is the wording the editor stores; `always` is its synonym. */
+  mode?:
+    | "always_available"
+    | "always"
+    | "after_sections_completed"
+    | "after_sections_passed"
+    | string;
   sectionIds?: string[];
 }
 
@@ -44,12 +56,11 @@ export interface RouterHubState {
   /** `all_required_completed` (default) | `all_required_passed`. */
   completionPolicy?: string | null;
   /**
-   * Whether the test reveals section outcomes (PRD-19 `show_section_results`).
-   * When off, a completed section's card stays a NEUTRAL «Завершена» — the hub must
-   * not leak pass/fail the author chose to hide. When on, the card reflects the
-   * frozen result (see {@link sectionResults}).
+   * «Сценарий в ИС», техдолг №7: тест разрешает менять ответ — завершённый пункт-сценарий можно
+   * пройти заново. Его карточка остаётся нажимаемой и несёт «пройти заново». Темы повторного входа
+   * не имеют: правило касается только пункта-сценария (решение владельца 2026-10-06).
    */
-  showSectionResults?: boolean;
+  rerunScenarios?: boolean;
 }
 
 function escHtml(s: unknown): string {
@@ -77,7 +88,9 @@ export function pluralQuestions(n: number): string {
  */
 export function isSectionUnlocked(section: RouterSection, state: RouterHubState): boolean {
   const rule = (state.unlockRules || {})[section.topicId];
-  if (!rule || !rule.mode || rule.mode === "always") return true;
+  if (!rule || !rule.mode || rule.mode === "always" || rule.mode === "always_available") {
+    return true;
+  }
   const ids = rule.sectionIds || [];
   if (rule.mode === "after_sections_completed") {
     return ids.every((id) => state.topicStates[id] === "completed");
@@ -88,13 +101,44 @@ export function isSectionUnlocked(section: RouterSection, state: RouterHubState)
       const result = (state.sectionResults || {})[id];
       // A section with no pass rule reports `passed: null`; treat that as passed
       // for navigation — it cannot be failed, so it cannot block.
-      return !result || result.passed !== false;
+      return !result || (!result.pending && result.passed !== false);
     });
   }
   return true;
 }
 
-/** Whether «Завершить» may be offered. Optional sections never block. */
+/** Провал пункта окончателен: пройти его заново нельзя (повтор есть только у сценария). */
+function isFinalFailure(topicId: string, state: RouterHubState): boolean {
+  if (state.topicStates[topicId] !== "completed") return false;
+  const result = (state.sectionResults || {})[topicId];
+  if (!result || result.pending || result.passed !== false) return false;
+  return !(state.rerunScenarios && parseItemKey(topicId).kind === "scenario");
+}
+
+/**
+ * Пункт уже не откроется никогда (техдолг №8, решение владельца 2026-10-08): он ждёт успешного
+ * прохождения пункта, проваленного окончательно, — или ждёт пункт, который сам недостижим. Такой
+ * пункт не держит «Завершить»: в вердикте он идёт непройденным, а в хабе остаётся «Недоступен».
+ * Иначе участник застревал бы в тесте без выхода.
+ */
+export function isSectionUnreachable(topicId: string, state: RouterHubState, seen: Set<string> = new Set()): boolean {
+  if (seen.has(topicId)) return false;
+  seen.add(topicId);
+  const rule = (state.unlockRules || {})[topicId];
+  if (!rule || (rule.mode !== "after_sections_completed" && rule.mode !== "after_sections_passed")) return false;
+  return (rule.sectionIds || []).some((id) => {
+    if (state.topicStates[id] !== "completed") return isSectionUnreachable(id, state, seen);
+    return rule.mode === "after_sections_passed" && isFinalFailure(id, state);
+  });
+}
+
+/**
+ * Whether «Завершить» may be offered. Optional sections never block.
+ *
+ * Недостижимое не ждут (решение владельца 2026-10-08): ни пункт, который уже не откроется, ни — при
+ * политике «все обязательные пройдены» — пункт, проваленный окончательно. Оба идут в вердикт
+ * непройденными; держать из-за них «Завершить» значило бы запереть участника в тесте.
+ */
 export function isRouterReadyToFinish(
   sections: RouterSection[] | null | undefined,
   state: RouterHubState,
@@ -103,33 +147,56 @@ export function isRouterReadyToFinish(
   const required = (sections || []).filter((s) => s.required !== false);
   if (required.length === 0) return true;
   return required.every((s) => {
-    if (state.topicStates[s.topicId] !== "completed") return false;
+    if (state.topicStates[s.topicId] !== "completed") return isSectionUnreachable(s.topicId, state);
     if (policy === "all_required_passed") {
       const result = (state.sectionResults || {})[s.topicId];
       // No result under the strict policy means «not demonstrably passed».
       if (!result) return false;
-      return result.passed === true;
+      return result.passed === true || isFinalFailure(s.topicId, state);
     }
     return true;
   });
 }
 
+/**
+ * The card's own wording. A closed section reads «Завершена», never «Пройдена»: the hub
+ * states THAT the learner closed the section, not HOW — see {@link buildRouterHubHtml}.
+ */
 export function statusLabel(status: RouterTopicStatus): string {
-  if (status === "completed") return "Пройдена";
+  if (status === "completed") return "Завершена";
   if (status === "inProgress") return "В процессе";
   return "Не начата";
 }
 
-/** Status marks for a completed card — a check (done / passed) or a cross (failed);
- *  colour comes from the card's state class in the scene layer, not the markup. */
+/**
+ * Подписи карточки по виду пункта (`shared/test-items`). У сценария — мужской род: «сценарий
+ * завершён», а не «завершена» (согласованный эскиз sim-scenario-learner.html, экран 4).
+ */
+interface CardWords {
+  status: (s: RouterTopicStatus) => string;
+  locked: string;
+  optional: string;
+  isScenario: boolean;
+}
+
+function cardWords(section: RouterSection): CardWords {
+  return matchTestItem<CardWords>(parseItemKey(section.topicId), {
+    topic: () => ({ status: statusLabel, locked: "Недоступна", optional: "(необязательная)", isScenario: false }),
+    scenario: () => ({
+      status: (st: RouterTopicStatus) => (st === "completed" ? "Завершён" : st === "inProgress" ? "В процессе" : "Не начат"),
+      locked: "Недоступен",
+      optional: "(необязательный)",
+      isScenario: true,
+    }),
+  });
+}
+
+/** The mark a completed card carries — «closed», not «passed»; colour comes from the
+ *  card's state class in the scene layer, not the markup. */
 const CARD_CHECK =
   '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" ' +
   'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M20 6 9 17l-5-5"></path></svg>';
-const CARD_CROSS =
-  '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" ' +
-  'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M18 6 6 18M6 6l12 12"></path></svg>';
 
 /**
  * Builds the hub body: optional deadline stats, the required-sections progress
@@ -139,6 +206,16 @@ const CARD_CROSS =
  * host binds them by delegation. «Завершить» is NOT part of this body: it lives in
  * the layout's standard footer (nav slot), gated by `page.nextDisabled` until the
  * completion policy is met — see {@link isRouterReadyToFinish} and the hosts' wiring.
+ *
+ * A card states WHETHER the learner closed the section, never HOW: a completed one is
+ * always a neutral «Завершена» with a ✓, whatever {@link RouterSectionResult} the run
+ * froze for it. The hub is the section MENU — it is shown while the run is still going,
+ * beside sections the learner has not opened yet, and a green/red card there announces
+ * the outcome of a section to everyone looking at the screen long before the test has a
+ * verdict of its own. Where the outcome of a section IS to be told, the test tells it on
+ * the section-results screen it gates with `showSectionResults` (PRD-19 FR-05a) and on the
+ * results screen, whose wording the author controls through the PRD-49 label dictionary —
+ * two surfaces that the hub, which reads no dictionary, could only contradict.
  */
 export function buildRouterHubHtml(
   sections: RouterSection[] | null | undefined,
@@ -184,25 +261,17 @@ export function buildRouterHubHtml(
     const status: RouterTopicStatus = state.topicStates[section.topicId] || "notStarted";
     const unlocked = isSectionUnlocked(section, state);
     const locked = !unlocked && status !== "completed";
-    // A completed card reflects its OUTCOME (green «Пройдена» / red «Не пройдена»)
-    // only when the test reveals section results AND the section carries a verdict.
-    // Otherwise — results hidden, or a section with no pass rule (`passed == null`,
-    // which cannot fail) — it reads as a neutral «Завершена», never coloured, so the
-    // hub can't imply a pass the author didn't grade or chose not to show.
-    let outcome: "passed" | "failed" | null = null;
-    if (status === "completed" && state.showSectionResults) {
-      const result = (state.sectionResults || {})[section.topicId];
-      if (result && result.passed === true) outcome = "passed";
-      else if (result && result.passed === false) outcome = "failed";
-    }
-    const completedLabel =
-      outcome === "passed" ? "Пройдена" : outcome === "failed" ? "Не пройдена" : "Завершена";
-    // Completed cards stay disabled to prevent re-entry; locked ones because their
-    // prerequisites are not met yet.
-    const disabled = status === "completed" || !unlocked;
+    const words = cardWords(section);
+    // A completed scenario the test lets the learner run again (tech debt №7).
+    const rerun = state.rerunScenarios === true && words.isScenario && status === "completed";
+    // Completed cards stay disabled to prevent re-entry — except a scenario that may be run again;
+    // locked ones because their prerequisites are not met yet.
+    const disabled = (status === "completed" && !rerun) || !unlocked;
 
     const meta: string[] = [];
-    if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
+    // «Сценарий в ИС»: у пункта-сценария вместо числа вопросов — метка вида; задание одно.
+    if (words.isScenario) meta.push("Сценарий");
+    else if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
     if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " мин");
     const metaHtml = meta.length
       ? '<span class="router-topic-card__meta">' +
@@ -217,13 +286,14 @@ export function buildRouterHubHtml(
     const imgHtml = imgUrl
       ? '<span class="router-topic-card__img"><img src="' + escHtml(imgUrl) + '" alt=""></span>'
       : "";
-    const goHtml =
-      unlocked && status !== "completed" ? '<span class="router-topic-card__go">начать</span>' : "";
+    const goHtml = rerun
+      ? '<span class="router-topic-card__go">пройти заново</span>'
+      : unlocked && status !== "completed" ? '<span class="router-topic-card__go">начать</span>' : "";
 
     cards +=
       '<button type="button" role="listitem"' +
       ' class="router-topic-card router-topic-card--' + status +
-      (outcome ? " router-topic-card--" + outcome : "") +
+      (words.isScenario ? " router-topic-card--scenario" : "") +
       (locked ? " router-topic-card--locked" : "") + '"' +
       ' data-topic-id="' + escHtml(section.topicId) + '"' +
       ' data-router-status="' + status + '"' +
@@ -234,7 +304,7 @@ export function buildRouterHubHtml(
       '<span class="router-topic-card__name">' +
       escHtml(section.topicName || section.topicId) +
       (section.required === false
-        ? ' <span class="router-topic-card__optional">(необязательная)</span>'
+        ? ' <span class="router-topic-card__optional">' + words.optional + "</span>"
         : "") +
       "</span>" +
       imgHtml +
@@ -242,10 +312,10 @@ export function buildRouterHubHtml(
       metaHtml +
       '<span class="router-topic-card__foot">' +
       '<span class="router-topic-card__status">' +
-      // A completed card carries a mark (✓ done/passed, ✗ failed) so it reads as
-      // clearly finished, distinct from a fresh «Не начата» card at a glance.
-      (status === "completed" ? (outcome === "failed" ? CARD_CROSS : CARD_CHECK) : "") +
-      escHtml(unlocked ? (status === "completed" ? completedLabel : statusLabel(status)) : "Недоступна") +
+      // A completed card carries a ✓ so it reads as clearly finished, distinct from a
+      // fresh «Не начата» card at a glance. The mark says «closed», not «passed».
+      (status === "completed" ? CARD_CHECK : "") +
+      escHtml(unlocked ? words.status(status) : words.locked) +
       "</span>" +
       goHtml +
       "</span>" +

@@ -117,15 +117,20 @@ describe("buildTestJson (PRD-29)", () => {
     expect(baked.configJson.outcomes[0].code).toBe("burnout");
   });
 
-  it("запекает блок обратной связи теста целиком", () => {
+  it("обратную связь ТЕСТА в пакет больше не запекает (PRD-61 §10)", () => {
+    // Уровень теста снят: три вводных текста говорят то же самое и в начале документа.
+    // Ни блок, ни легаси-текст в TEST_DATA не попадают — рантайм их и не ищет.
     const feedbackJson = {
       text: "Опросник носит справочный характер.",
       links: [{ title: "Курс", url: "https://example.test/c" }],
       assets: [{ title: "Памятка.pdf", fileName: "p.pdf", mimeType: "application/pdf", scormHref: "feedback/p.pdf" }],
     };
-    const baked = bake({ ...(exportData as any), test: { ...baseTest, feedbackJson } });
-    // RAW, with `scormHref` intact — the runtime normalises it exactly once.
-    expect(baked.testFeedbackJson).toEqual(feedbackJson);
+    const baked = bake({
+      ...(exportData as any),
+      test: { ...baseTest, feedbackJson, feedback: "Легаси-текст" },
+    });
+    expect(baked.testFeedbackJson).toBeUndefined();
+    expect(baked.testFeedback).toBeUndefined();
   });
 
   it("запекает вложения ТЕМЫ и РАЗДЕЛА в один список раздела (PRD-32)", () => {
@@ -170,10 +175,11 @@ describe("buildTestJson (PRD-29)", () => {
     ]);
   });
 
-  it("запекает тексты обратной связи ТЕМЫ и РАЗДЕЛА в один список раздела", () => {
-    // Порядок «тема, затем раздел» повторяет веб (`server/routes/attempts.ts`): он решает,
-    // чей экземпляр переживёт дедупликацию в общем блоке рекомендаций. Пробелы по краям
-    // снимаются, пустые записи не кладутся — пустой абзац рекомендацией не является.
+  it("запекает РАЗРЕШЁННЫЙ текст раздела: он заменяет текст темы (§7.1a)", () => {
+    // Разрешение одним значением повторяет веб (`server/routes/attempts.ts`): задан текст
+    // раздела — печатается он, не задан — текст темы. Сложение двух текстов признано
+    // дефектом владельцем 2026-09-02: ученик получал склейку, которую автор не собирал.
+    // Пробелы по краям снимаются, пустой текст не кладётся — пустой абзац не рекомендация.
     const section = {
       id: "sec-1",
       topicId: "tp1",
@@ -186,7 +192,7 @@ describe("buildTestJson (PRD-29)", () => {
       events: [],
     };
     const baked = bake({ ...(exportData as any), sections: [section] });
-    expect(baked.sections[0].feedbackTexts).toEqual(["Текст темы", "Текст раздела"]);
+    expect(baked.sections[0].feedbackTexts).toEqual(["Текст раздела"]);
   });
 
   it("тема, у которой заполнена только легаси-колонка, свой текст отдаёт", () => {

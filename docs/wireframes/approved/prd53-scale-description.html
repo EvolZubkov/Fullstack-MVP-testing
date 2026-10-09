@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-53 — Профиль по группе шкал (форма шаблона в «Показателях»)
+    Спека: docs/specs/prd-53/scale-group-profile.md §5.
+    Голова и хвост взяты ДОСЛОВНО из approved/prd2-prd5-scoring-tabs.html — карточка
+    показателя, селект шаблона и блок «Вывод» те же; дельта только в форме шаблона,
+    генераторе матрицы и предупреждениях.
+    Состояния:
+      s-scale-card        — карточка шкалы с полем «Описание»
+    СОГЛАСОВАН 2026-09-06.
+  -->
+    <title>PRD-53 — Шкалы: описание шкалы</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты и DS-override на токенах. */
+      .wf-sprite {
+        display: none;
+      }
+      /* DS sets ou-drawer__head align-items: flex-start; центрируем заголовок. */
+      .ou-drawer__head {
+        align-items: center;
+      }
+      /* Override legacy .ou-select fallback из wf-utils.css (двойная рамка). */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      /* Меню селекта закрыто по умолчанию (открывается классом is-open из prd7-shared.js). */
+      .ou-select:not(.is-open) .ou-select__menu {
+        display: none;
+      }
+      .wf-sep {
+        border: none;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+        /* 4x по модульной сетке. В каркасе эскизов стоит --ou-space-5 (20px), что не на сетке. */
+        margin: var(--ou-space-4) 0;
+      }
+      .wf-skel-textarea {
+        height: var(--wf-size-72);
+      }
+      /* Контейнер сопроводительных таблиц (Пояснения + DS Mapping) под состояниями. */
+      .wf-doc {
+        padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10);
+      }
+      /* Заголовок списка с действием справа (кнопка «Добавить …» — наверх). */
+      .wf-list-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ou-space-3);
+        margin-bottom: var(--ou-space-1);
+      }
+      .wf-list-head .tb-section-label {
+        margin-bottom: 0;
+      }
+      /* Muted scale chip: a scale this question does NOT contribute to. */
+      .wf-chip-muted {
+        opacity: 0.45;
+      }
+      /* Narrow number inputs in the «вариант × шкала» grid. */
+      .wf-num-grid td .ou-field {
+        width: var(--ou-space-12);
+      }
+      /* Bands editor grid: keep min/max/level inputs compact, let «Метка» fill. */
+      .wf-bands-grid td .ou-field {
+        width: 100%;
+      }
+      .wf-bands-grid td:nth-child(1) .ou-field,
+      .wf-bands-grid td:nth-child(2) .ou-field {
+        width: var(--wf-size-72);
+      }
+      .wf-bands-grid td:nth-child(4) .ou-field {
+        width: var(--wf-size-110);
+      }
+      /* Read-only highlight of the correct variant row (edited in «Вопросы»). */
+      .wf-row-correct td {
+        background: var(--ou-bg-hover);
+      }
+      .wf-correct-mark {
+        color: var(--ou-accent-default);
+        font-weight: 600;
+        margin-left: var(--ou-space-2);
+      }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* WIREFRAME.html contract: meta-навигация и state-контейнеры. */
+      .wf-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs);
+        color: var(--ou-fg-default);
+        flex-wrap: wrap;
+      }
+      .wf-nav-title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin-right: var(--ou-space-2);
+        white-space: nowrap;
+      }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s);
+        background: transparent;
+        color: var(--ou-fg-default);
+        font: var(--ou-text-body-s);
+        cursor: pointer;
+      }
+      .wf-nav button:hover {
+        background: var(--ou-bg-hover);
+      }
+      .wf-nav button.active {
+        background: var(--ou-accent-default);
+        color: var(--ou-fg-on-accent);
+        border-color: var(--ou-accent-default);
+      }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-nav-sep {
+        width: var(--wf-border-w);
+        height: var(--ou-space-5);
+        background: var(--ou-border-soft);
+        margin: 0 var(--ou-space-2);
+      }
+      .wf-state {
+        display: none;
+        padding-top: var(--wf-nav-offset, var(--wf-size-52));
+      }
+      .wf-state.active {
+        display: block;
+      }
+      .wf-state > .ou-drawer-root {
+        top: var(--wf-nav-offset, var(--wf-size-52));
+        bottom: 0;
+        height: auto;
+      }
+      .wf-state > .ou-drawer-root > .ou-drawer {
+        height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+        max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      }
+      /* Локальные эскизные помощники (на токенах) */
+      .wf-scope-toggle {
+        margin-bottom: var(--ou-space-3);
+      }
+      .wf-row-actions {
+        display: flex;
+        gap: var(--ou-space-1);
+        margin-top: var(--ou-space-4);
+      }
+      .wf-grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--ou-space-3) var(--ou-space-4);
+      }
+      .wf-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-3);
+      }
+      /* Список переключателей: строки тонкие, и шаг .wf-rows (12px) сравнялся бы с
+         расстоянием МЕЖДУ группами полей. По модульной сетке родственные — 1x. */
+      .wf-switch-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-1);
+      }
+      /* Модульная сетка 4px: между РАЗНЫМИ группами полей — 4x, то есть 16px.
+         Сейчас в карточке уровня выходит 12: margin-bottom 8 (--ou-space-2) плюс gap 4
+         родительского поля. Источник — .tb-level-card .ou-card__body .ou-formfield
+         в tb-components.css, ОДИНАКОВО в приложении и в копии для эскизов. Эскиз
+         показывает целевое значение; правка самого tb-components.css — отдельный шаг. */
+      .tb-level-card .ou-card__body .ou-formfield {
+        margin-bottom: var(--ou-space-3);
+      }
+      /* Подпись секции. Два отличия от источника (.tb-section-label в tb-components.css),
+         эскиз показывает целевые значения:
+         1. отбита от содержимого на 8px, тогда как подпись ПОЛЯ — на 4px; обе связи
+            родственные, значит обе 1x;
+         2. inline-flex, и строка добавляет вокруг неё выносной пробел, из-за чего
+            разделитель отбивается не на 16, а на 18. Блочный бокс этого не делает,
+            а gap для хвостовой метки сохраняется. */
+      .tb-level-card .ou-card__body .tb-section-label {
+        margin-bottom: var(--ou-space-1);
+        display: flex;
+      }
+      /* Карточки исходов — родственные элементы одного списка, по модульной сетке 1x.
+         Сейчас они стоят вплотную: форма PRD-45 задаёт зазор на контейнере .tb-levels,
+         а он тут не используется. Эскиз показывает целевое значение. */
+      .wf-outcome-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-1);
+      }
+      /* Блоки карточки исхода — разные группы, значит 4x. Источник — .tb-levels__tone
+         и .tb-levels__fold в tb-components.css, там 12. */
+      .tb-level-card .tb-levels__tone,
+      .tb-level-card .tb-levels__fold {
+        margin-top: var(--ou-space-4);
+      }
+      /* Соседи верхнего уровня в теле карточки: margin-bottom поля даёт 12, нужно 4x.
+         Соседние margin-ы схлопываются, поэтому целевое число задаёт следующий элемент,
+         а не добавка к предыдущему. */
+      .tb-level-card .ou-card__body > .ou-formfield + .ou-formfield,
+      .tb-level-card .ou-card__body > .ou-formfield + .ou-lgrid,
+      .tb-level-card .ou-card__body > .ou-formfield + .ou-banner {
+        margin-top: var(--ou-space-4);
+      }
+      /* Строки «По профилям»: между строками 4x даёт сама ДС (.ou-formsection__body),
+         а вот margin поля 16 к нему прибавляется, и подпись от предпросмотра отбита на 8.
+         Цель — 4x между строками, 1x внутри строки. Источник — .tb-settings-content
+         .ou-formfield, проектный слой; эскиз показывает целевое значение. */
+      .tb-profile-feedback .ou-formsection__body .ou-formfield {
+        margin-bottom: 0;
+        gap: var(--ou-space-1);
+      }
+      /* Тумблер и поле под ним — РАЗНЫЕ компоненты, значит 4x. Своего отступа у
+         .ou-switch-field нет вовсе: те 4px под ним — выносной пробел строки, а не
+         решение об интервале. Блочный бокс с шириной по содержимому сохраняет область
+         нажатия и даёт точный отступ (у строчного вертикальные margin-ы на высоту
+         строки не влияют). */
+      .tb-level-card .ou-card__body > .ou-switch-field {
+        display: flex;
+        width: fit-content;
+        margin-bottom: var(--ou-space-4);
+      }
+      /* Карточки шкал — родственные элементы одного списка, значит 1x. */
+      /* ── Слой раскладки ДС, отсутствующий в копии для эскизов ─────────────
+         Скопировано дословно из vendor/ui-kit/css/skillum-ds.css (layout.css).
+         Без него карточка шкалы рисуется не так, как в продукте: колонки не
+         сжимаются, и форма вылезает за панель. */
+      .ou-stack { display: flex; flex-direction: column; min-width: 0; }
+      .ou-stack--row { flex-direction: row; }
+      .ou-stack--gap-0 { gap: 0; }
+      .ou-stack--gap-2 { gap: var(--ou-space-2); }
+      .ou-stack--ai-center { align-items: center; }
+      .ou-stack--jc-between { justify-content: space-between; }
+      .ou-lgrid { display: grid; min-width: 0; }
+      .ou-lgrid--gap-3 { gap: var(--ou-space-3); }
+      .ou-lgrid--cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .wf-card-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-1);
+      }
+      .wf-cond-row {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--ou-space-1);
+      }
+      .wf-cond-sep {
+        font: var(--ou-text-body-s);
+        color: var(--ou-fg-muted);
+        white-space: nowrap;
+      }
+      .wf-fn-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: var(--ou-space-2);
+      }
+      .wf-fn-group {
+        margin-bottom: var(--ou-space-5);
+      }
+      .wf-fn-group__title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin: 0 0 var(--ou-space-2);
+      }
+      .wf-fn-row {
+        display: grid;
+        grid-template-columns: max-content 1fr auto;
+        align-items: center;
+        gap: var(--ou-space-3);
+        padding: var(--ou-space-2) 0;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+      }
+      .wf-fn-desc {
+        color: var(--ou-fg-muted);
+        font: var(--ou-text-body-s);
+      }
+      .wf-opt-group {
+        padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-1);
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      </symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9" />
+      </symbol>
+      <symbol id="i-chevrons-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" />
+      </symbol>
+      <symbol id="i-chevrons-down-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m7 20 5-5 5 5" /><path d="m7 4 5 5 5-5" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="20 6 9 17 4 12" />
+      </symbol>
+      <symbol id="i-rotate-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" />
+        <circle cx="15" cy="6" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </symbol>
+    </svg>
+
+﻿    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></symbol>
+    </svg>
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Описание шкалы:</span>
+      <button type="button" class="active" onclick="showState(this, 'scale-card')">карточка шкалы</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+    </nav>
+
+    <!-- ════════════════ s-scale-card: карточка шкалы с полем «Описание» ════════════════ -->
+    <div id="wf-scale-card" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Основное</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Оценка результата</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Рецензирование</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item">Показатели</button>
+              </nav>
+              <div class="tb-settings-content">
+                <div class="ou-drawer__split">
+                  <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                    <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Список шкал</button>
+                    <button type="button" class="ou-drawer__rail-item">Вклады вопросов</button>
+                  </nav>
+                  <div class="tb-settings-content">
+                    <div class="ou-stack ou-stack--row ou-stack--gap-0 ou-stack--ai-center ou-stack--jc-between wf-list-head">
+                      <div class="tb-section-label">Шкалы теста</div>
+                      <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Предпросмотр расчёта</button>
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-plus" /></svg></span><span>Добавить шкалу</span></button>
+                      </div>
+                    </div>
+                    <div class="wf-card-list">
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">EE — Эмоциональное истощение</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 9 вопросов · high ≥ 25</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                          <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                        </div>
+                      </header>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <span class="tb-status-dot tb-status-dot--warn" aria-hidden="true"></span>
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">D — Отстранённость</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 5 вопросов · 1 без вклада</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                          <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                        </div>
+                      </header>
+                    </section>
+                      <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                        <header class="ou-card__header tb-level-card__head">
+                          <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                          <div class="ou-card__heading tb-level-card__heading">
+                            <h5 class="ou-card__title tb-level-card__title">AD — Обесценивание достижений</h5>
+                            <p class="ou-card__subtitle tb-level-card__summary">8 вопросов · обратная шкала</p>
+                          </div>
+                          <div class="ou-card__trail tb-level-card__trail">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                            <button type="button" class="tb-level-card__chev" aria-label="Свернуть шкалу" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                          </div>
+                        </header>
+                        <div class="ou-card__body tb-level-card__body">
+                          <div class="ou-lgrid ou-lgrid--cols-2 ou-lgrid--gap-3">
+                            <div class="ou-formfield">
+                              <label class="ou-formfield__lbl" for="s-key">Ключ <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="s-key" type="text" value="ad" /></div></div>
+                            </div>
+                            <div class="ou-formfield">
+                              <label class="ou-formfield__lbl" for="s-label">Метка</label>
+                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="s-label" type="text" value="Обесценивание достижений" /></div></div>
+                            </div>
+                          </div>
+                          <!-- PRD-53: НОВОЕ поле. Колонка scales.description есть в базе и
+                               возится книгой Excel, но в редакторе её не было, и блок «шкалы
+                               вне профиля» на экране итогов печатал одни названия. Стоит
+                               рядом с «Меткой»: это про то, ЧТО шкала измеряет, а не про
+                               механику расчёта ниже. -->
+                          <div class="ou-formfield" data-wf-new>
+                            <label class="ou-formfield__lbl" for="s-desc">Описание</label>
+                            <div class="ou-textarea ou-textarea--m ou-textarea--full">
+                              <div class="ou-textarea__box">
+                                <textarea class="ou-textarea__input" id="s-desc" rows="2">Склонность обесценивать собственные результаты и приписывать успех внешним обстоятельствам.</textarea>
+                              </div>
+                            </div>
+                            <div class="ou-formfield__msg">Показывается обучающемуся, когда шкала попала в блок «вне профиля» на экране итогов.</div>
+                          </div>
+                          <div class="ou-lgrid ou-lgrid--cols-2 ou-lgrid--gap-3">
+                            <div class="ou-formfield">
+                              <label class="ou-formfield__lbl" for="s-agg">Агрегация</label>
+                              <div class="ou-select ou-field--m ou-field--full" data-ou-options="Сумма|Среднее|Взвешенное среднее|Максимум|Минимум">
+                                <button type="button" class="ou-select__trigger" id="s-agg"><span class="ou-select__value">Сумма</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                              </div>
+                            </div>
+                            <div class="ou-formfield">
+                              <label class="ou-formfield__lbl">Источник</label>
+                              <div class="ou-seg" role="group" aria-label="Источник шкалы">
+                                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Вопросы</button>
+                                <button type="button" class="ou-seg__item" aria-pressed="false">Другие шкалы</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      // Wireframe state switcher (как в approved/prd7-*). prd7-shared.js затем
+      // дооборачивает window.showState, чтобы пере-инициализировать ou-select.
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el === target);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) {
+          button.classList.toggle('active', button === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>
+

@@ -34,6 +34,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     clientKey: "k1",
     key: "ee",
     label: "Эмоциональное истощение",
+    description: "",
     type: "number",
     aggregation: "sum",
     normalization: "none",
@@ -174,5 +175,22 @@ describe("ScalesSection (PRD-29)", () => {
 
     expect(await screen.findByTestId("scales-domain-drift-0")).toBeInTheDocument();
     expect(screen.getByTestId("scales-domain-max-0")).toHaveValue("45");
+  });
+});
+
+// ─── PRD-53: описание шкалы ────────────────────────────────────────────────────
+
+describe("описание шкалы (PRD-53 §4.4)", () => {
+  it("поле есть в карточке и правка доходит до модели", () => {
+    renderExpanded(modelWithScale());
+    const field = screen.getByTestId("scales-description-0");
+    expect(field).toBeInTheDocument();
+    fireEvent.change(field, { target: { value: "Что измеряет шкала" } });
+    expect(field).toHaveValue("Что измеряет шкала");
+  });
+
+  it("описание из модели показывается в поле", () => {
+    renderExpanded(modelWithScale({ description: "Готовый текст" }));
+    expect(screen.getByTestId("scales-description-0")).toHaveValue("Готовый текст");
   });
 });

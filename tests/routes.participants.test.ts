@@ -1,7 +1,8 @@
 /**
  * @module tests/routes.participants
  * @description PRD-28 (FR-09, FR-10, FR-14, FR-22): the three endpoints behind
- * the «Списком из файла» tab — preview, run and file template.
+ * the «Списком» tab — preview (of a workbook OR a typed list, раздел 16), run
+ * and file template.
  *
  * What is pinned here is the ROUTE layer only: who may call it, how an uploaded
  * file turns into an answer, and how the two conditions the pipeline refuses on
@@ -180,11 +181,57 @@ describe("POST /api/tests/:id/participants/preview", () => {
     expect(res.body.code).toBe("empty_file");
   });
 
-  it("отсутствие файла — ошибка запроса, а не сбой сервера", async () => {
+  // ── Второй источник строк: набранный вручную список (PRD-28 раздел 16) ──────
+
+  it("принимает набранные строки телом JSON и классифицирует их так же", async () => {
+    const res = await as("mgr1", request(app).post("/api/tests/t1/participants/preview"))
+      .send({ rows: [{ index: 0, email: "a@x.ru", name: "Анна" }, { index: 1, email: "b@x.ru", name: null }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body[0]).toMatchObject({ email: "a@x.ru", name: "Анна", status: "new" });
+  });
+
+  it("не доверяет телу: берёт только адрес, имя и позицию", async () => {
+    const res = await as("mgr1", request(app).post("/api/tests/t1/participants/preview"))
+      .send({ rows: [{ index: 0, email: " a@x.ru ", name: "  ", status: "privileged", userId: "u-9" }] });
+
+    expect(res.status).toBe(200);
+    // Статус ставит СЕРВЕР: в этом весь смысл предпросмотра, и подсунутый в теле
+    // «privileged» не должен ни на что влиять.
+    expect(res.body[0]).toMatchObject({ email: "a@x.ru", name: null, status: "new", userId: null });
+  });
+
+  it("держит тот же потолок строк, что и книга", async () => {
+    config.limits = { ...config.limits, participantsImportMaxRows: 1 };
+
+    const res = await as("mgr1", request(app).post("/api/tests/t1/participants/preview"))
+      .send({ rows: [{ index: 0, email: "a@x.ru", name: null }, { index: 1, email: "b@x.ru", name: null }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("too_many_rows");
+  });
+
+  it("пустой список отклоняет своей фразой, а не фразой про файл", async () => {
+    const res = await as("mgr1", request(app).post("/api/tests/t1/participants/preview")).send({ rows: [] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("empty_list");
+    expect(res.body.error).toBe("В списке нет ни одного адреса.");
+  });
+
+  it("права и область теста проверяются и на этом пути", async () => {
+    const res = await as("lrn1", request(app).post("/api/tests/t1/participants/preview"))
+      .send({ rows: [{ index: 0, email: "a@x.ru", name: null }] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("ни файла, ни списка — ошибка запроса, а не сбой сервера", async () => {
     const res = await as("mgr1", request(app).post("/api/tests/t1/participants/preview"));
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/File required/i);
+    expect(res.body.code).toBe("empty_list");
   });
 });
 
@@ -251,7 +298,7 @@ describe("POST /api/tests/:id/participants/invite", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GET /api/tests/:id/participants/template", () => {
-  it("отдаёт книгу с двумя колонками", async () => {
+  it("отдаёт книгу с адресом, именем и оргколонками", async () => {
     const res = await as("mgr1", request(app).get("/api/tests/t1/participants/template"))
       .buffer()
       .parse((r, cb) => {
@@ -266,9 +313,10 @@ describe("GET /api/tests/:id/participants/template", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(res.body);
     const ws = wb.worksheets[0];
-    // Two columns and no more: `role` and `group` are ignored by the reader, and
-    // offering them in the template would promise behaviour that does not exist.
-    expect(ws.getRow(1).values).toEqual([undefined, "email", "name"]);
+    // No `role` or `group`: they are ignored by the reader, and offering them in
+    // the template would promise behaviour that does not exist. The org columns
+    // ARE read (BR-54-29), so the template offers them.
+    expect(ws.getRow(1).values).toEqual([undefined, "email", "name", "organization", "unit", "position"]);
   });
 
   it("учащемуся отказано", async () => {

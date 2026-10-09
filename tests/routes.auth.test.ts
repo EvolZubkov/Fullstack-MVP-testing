@@ -29,6 +29,7 @@ vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/email", () => emailMock);
 
 import authRouter from "../server/routes/auth";
+import { magicScopeGuard } from "../server/middleware/magic-scope";
 
 // ─── App factory ──────────────────────────────────────────────────────────────
 function makeApp() {
@@ -49,6 +50,11 @@ function makeApp() {
   });
 
   app.get("/probe-session", (req: any, res: any) => res.json({ magic: req.session.magic ?? null }));
+  // The scope guard sits in front of the routers in production (server/routes.ts),
+  // so it must sit in front of them here too: without it these tests exercise the
+  // handlers through a door the real request never gets to open, and a rule table
+  // that locks a magic-link session out of `/api/auth/login` still looks green.
+  app.use(magicScopeGuard);
   app.use("/api/auth", authRouter);
   return app;
 }
@@ -406,5 +412,63 @@ describe("magic-link scope on the session", () => {
     const res = await request(makeApp()).get("/api/auth/me").set("x-test-user", "u1");
     expect(res.status).toBe(200);
     expect(res.body.user.magicScope).toBeNull();
+  });
+
+  // Regression for the trap a magic link used to close on a browser: the scope
+  // guard refused `/api/auth/login`, so the ONE action that clears the mark could
+  // not be performed. Everything outside the test answered 403, the client sent
+  // the person to the login form, and the form answered 403 as well — a loop with
+  // no exit but deleting the cookie. The way OUT of a link must stay reachable
+  // from inside it.
+  it("lets a restricted session log in with a password (no lock-out loop)", async () => {
+    storageMock.validatePassword.mockResolvedValue(baseUser);
+    storageMock.updateUserLastLogin.mockResolvedValue(undefined);
+    const agent = request.agent(makeApp());
+    await agent.get("/probe-session").set("x-test-magic", magicHeader);
+
+    const login = await agent.post("/api/auth/login").send({ email: "kate@test.com", password: "secret" });
+    expect(login.status).toBe(200);
+    expect(login.body.error).toBeUndefined();
+  });
+
+  it("lets a restricted session ask for a password-recovery letter", async () => {
+    storageMock.getUserByEmail.mockResolvedValue(baseUser);
+    storageMock.getRecentTokensCount.mockResolvedValue(0);
+    storageMock.createPasswordResetToken.mockResolvedValue({ id: "tok1" });
+    emailMock.sendPasswordResetEmail.mockResolvedValue(true);
+    const agent = request.agent(makeApp());
+    await agent.get("/probe-session").set("x-test-magic", magicHeader);
+
+    const res = await agent.post("/api/auth/forgot-password").send({ email: "kate@test.com" });
+    expect(res.status).toBe(200);
+    expect(res.body.code).not.toBe("MAGIC_SCOPE");
+  });
+
+  it("lets a restricted session verify and redeem a recovery token", async () => {
+    storageMock.getPasswordResetToken.mockResolvedValue(activeToken);
+    storageMock.updateUserPassword.mockResolvedValue(undefined);
+    storageMock.markTokenAsUsed.mockResolvedValue(undefined);
+    const agent = request.agent(makeApp());
+    await agent.get("/probe-session").set("x-test-magic", magicHeader);
+
+    const verify = await agent.get("/api/auth/verify-reset-token?token=abc");
+    expect(verify.status).toBe(200);
+
+    const reset = await agent.post("/api/auth/reset-password").send({ token: "abc", newPassword: "newpass123" });
+    expect(reset.status).toBe(200);
+    expect(reset.body.success).toBe(true);
+  });
+
+  // The opposite side of the same rule: `change-password` is an action INSIDE the
+  // application, not a way out of the link, and it stays denied (tests/magic-scope-rules).
+  it("still denies changing the password from inside a link", async () => {
+    const agent = request.agent(makeApp());
+    await agent.get("/probe-session").set("x-test-magic", magicHeader);
+
+    const res = await agent.post("/api/auth/change-password")
+      .set("x-test-user", "u1")
+      .send({ currentPassword: "correct", newPassword: "newpass123" });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("MAGIC_SCOPE");
   });
 });

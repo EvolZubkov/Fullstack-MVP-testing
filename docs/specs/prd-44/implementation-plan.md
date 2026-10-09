@@ -12,7 +12,7 @@
 `shared/template/question-interaction.ts`, а обе плоские копии рантайма (движок шкал, язык формул, признаки типа)
 правятся симметрично под golden-тестами.
 
-**Стек:** TypeScript, Vitest, React 19, `@universityrt/ui-kit`, esbuild-бандл `TBTemplate` для SCORM.
+**Стек:** TypeScript, Vitest, React 19, `@skillum/ui-kit`, esbuild-бандл `TBTemplate` для SCORM.
 
 **Источник требований:** [PRD-44](scale-allocation-question-type.md). Ссылки вида FR-NN ниже — на него.
 
@@ -193,7 +193,7 @@
 | `server/scorm/template/app/dsl/formula.js` | двойник языка формул (FR-26) |
 | `shared/template/preview-context.ts` | демонстрационный вопрос-распределение (FR-55) |
 | `server/scorm/templates/<id>/styles/theme.css` | раскладка узкого экрана (FR-36) |
-| `vendor/ui-kit/css/university-rt.css` и `client/src/styles/vendor/` | ОБЕ копии бандла дизайн-системы (FR-59) |
+| `vendor/ui-kit/css/skillum-ds.css` и `client/src/styles/vendor/` | ОБЕ копии бандла дизайн-системы (FR-59) |
 
 ---
 
@@ -733,8 +733,8 @@ git commit -m "feat(prd-44): паритет двойника движка шка
 
 - Создать: `vendor/ui-kit/src/components/BudgetAllocation.tsx`
 - Создать: `vendor/ui-kit/src/components/BudgetAllocation.stories.tsx`
-- Изменить: `vendor/ui-kit/src/index.ts`, `vendor/ui-kit/css/university-rt.css`
-- Изменить: `client/src/styles/vendor/university-rt.css` (ВТОРАЯ копия, FR-59)
+- Изменить: `vendor/ui-kit/src/index.ts`, `vendor/ui-kit/css/skillum-ds.css`
+- Изменить: `client/src/styles/vendor/skillum-ds.css` (ВТОРАЯ копия, FR-59)
 
 - [ ] **Шаг 1: собрать компонент из существующих примитивов**
 
@@ -743,7 +743,7 @@ git commit -m "feat(prd-44): паритет двойника движка шка
 Классы: `.ou-alloc`, `.ou-alloc__counter`, `.ou-alloc__row`, `.ou-alloc__label`, `.ou-alloc__slider`,
 `.ou-alloc__field` — те же имена потом повторяет framework-free двойник (FR-58).
 
-- [ ] **Шаг 2: сверить каждый класс `ou-*` по `university-rt.css`**
+- [ ] **Шаг 2: сверить каждый класс `ou-*` по `skillum-ds.css`**
 
 Контролёр НЕ ловит несуществующий класс дизайн-системы — сверять глазами по бандлу.
 

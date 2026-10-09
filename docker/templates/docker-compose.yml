@@ -54,7 +54,7 @@ services:
 
     healthcheck:
       # curl is installed by docker/Dockerfile. Do NOT switch this to wget: the
-      # base image (node:20-slim) ships neither, and a healthcheck calling a
+      # base image (node:24-slim) ships neither, and a healthcheck calling a
       # missing binary leaves the container permanently "unhealthy".
       test: ["CMD-SHELL", "curl -f http://localhost:${TB_PORT}/api/me || exit 1"]
       interval: 30s

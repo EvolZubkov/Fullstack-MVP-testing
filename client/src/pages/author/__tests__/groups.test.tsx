@@ -17,6 +17,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import GroupsPage from "../groups";
+import { ToastProvider } from "@skillum/ui-kit";
 
 interface MockGroup {
   id: string;
@@ -93,9 +94,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <GroupsPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

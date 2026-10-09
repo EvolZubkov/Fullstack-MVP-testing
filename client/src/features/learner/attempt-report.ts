@@ -16,6 +16,7 @@ import type { MeasuresInput } from "@shared/template/result-context";
 import type { ResolvedLabels } from "@shared/template/labels";
 import { buildReportContext, buildAdaptiveReportContext } from "@shared/report/report-context";
 import { exportReportPdf, inlineReportImageValues } from "@shared/report/export-pdf";
+import type { ReportBlockToRender } from "@shared/report/render-report";
 import { buildReportMeasures } from "@shared/report/report-measures";
 
 /** Where the server serves the report's libraries (see server/routes/report.ts). */
@@ -98,6 +99,13 @@ export interface AttemptReportRender {
    * шаблона, который `labels[]` не объявил: макет тогда печатает свои жёсткие строки.
    */
   labels?: ResolvedLabels;
+  /**
+   * PRD-51: БЛОКИ ДОКУМЕНТА с их раскладками, в порядке печати. Отсутствуют у шаблона,
+   * печатающего цельную раскладку (§5.4), — тогда рисуется `layout`, как раньше. Различать
+   * эти два случая обязательно: пустой список блоков у блочного шаблона означал бы «печатать
+   * нечего», а отсутствие поля — «печатать одним макетом».
+   */
+  blocks?: ReportBlockToRender[];
 }
 
 /**
@@ -140,6 +148,10 @@ export async function downloadAttemptReport(
   return exportReportPdf(
     {
       layout: render.layout,
+      // PRD-51 §5.3: у блочного шаблона `layout` — ОБОЛОЧКА, и документ собирается из
+      // блоков той же функцией, что печатает пакет. Поле отсутствует у шаблона с цельной
+      // раскладкой, и тогда путь остаётся прежним — ровно как до разбора на блоки.
+      ...(render.blocks ? { shell: render.layout, blocks: render.blocks } : {}),
       // Токены темы приходят блоком, скоупленным в `.tb-report` (§6.3).
       css: render.themeCss ? `${render.css}
 ${render.themeCss}` : render.css,

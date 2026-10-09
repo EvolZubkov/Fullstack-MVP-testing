@@ -4,8 +4,9 @@
  * prop-driven question editor mounted in a design-system Drawer. Coverage:
  *   - Per-type builders render (single / multiple / matching / ranking), driven
  *     by the `question` prop and by the type SegmentedControl.
- *   - Field editing: prompt text, topic Select, option add / remove, marking the
- *     correct answer (single radio, multiple checkbox).
+ *   - Field editing: prompt text, topic Combobox (selection, substring search and
+ *     its empty state), option add / remove, marking the correct answer (single
+ *     radio, multiple checkbox).
  *   - Live validation: the error banner appears (empty prompt) and blocks save;
  *     a valid form enables save.
  *   - Save paths: create routes through the create mutation (POST /api/questions,
@@ -17,6 +18,7 @@
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { chooseQuestionType } from "./helpers/question-type";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Question, Topic } from "@shared/schema";
 
@@ -29,6 +31,7 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 }));
 
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -126,9 +129,9 @@ function renderDrawer(overrides: Partial<QuestionEditorDrawerProps> = {}) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const utils = render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <QuestionEditorDrawer {...props} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onClose: props.onClose, onSaved: props.onSaved };
 }
@@ -143,7 +146,7 @@ describe("<QuestionEditorDrawer />", () => {
 
   it("renders the single-choice builder (create default)", () => {
     renderDrawer();
-    expect(screen.getByTestId("seg-question-type")).toBeInTheDocument();
+    expect(screen.getByTestId("select-question-type")).toBeInTheDocument();
     expect(screen.getByTestId("input-option-0")).toBeInTheDocument();
     expect(screen.getByTestId("input-option-3")).toBeInTheDocument();
     // Single choice exposes a "correct answer" radio per option.
@@ -180,7 +183,7 @@ describe("<QuestionEditorDrawer />", () => {
     expect(screen.getByTestId("input-option-0")).toBeInTheDocument();
     expect(screen.getByTestId("switch-shuffle-answers")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ранжирование" }));
+    chooseQuestionType("Ранжирование");
 
     expect(screen.getByTestId("input-ranking-0")).toBeInTheDocument();
     expect(screen.queryByTestId("input-option-0")).toBeNull();
@@ -226,15 +229,87 @@ describe("<QuestionEditorDrawer />", () => {
     expect(screen.getByRole("checkbox", { name: "Вариант ответа 3" })).toBeChecked();
   });
 
+  /** Open the topic picker and hand back its search input. */
+  function openTopicPicker(): HTMLInputElement {
+    const field = screen.getByTestId("select-question-topic");
+    // The field holds two buttons (trigger + reset), so address the trigger by class.
+    fireEvent.click(field.querySelector(".ou-select__trigger") as HTMLButtonElement);
+    return within(field).getByRole("combobox") as HTMLInputElement;
+  }
+
+  /** What the closed topic picker currently shows. */
+  function topicPickerValue(): string {
+    const field = screen.getByTestId("select-question-topic");
+    return field.querySelector(".ou-select__value")?.textContent ?? "";
+  }
+
   it("selecting a topic clears the topic-required validation error", () => {
     renderDrawer();
     expect(screen.getByText("Тема обязательна")).toBeInTheDocument();
 
-    const trigger = within(screen.getByTestId("select-question-topic")).getByRole("button");
-    fireEvent.click(trigger);
+    openTopicPicker();
     fireEvent.click(screen.getByRole("option", { name: "Тема A" }));
 
     expect(screen.queryByText("Тема обязательна")).toBeNull();
+  });
+
+  it("filters the topic list by a substring of the typed query", () => {
+    renderDrawer();
+    const search = openTopicPicker();
+
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Тема A",
+      "Тема B",
+    ]);
+
+    // A substring, not a prefix: the query matches the tail of the name.
+    fireEvent.change(search, { target: { value: "ма b" } });
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Тема B"]);
+
+    fireEvent.click(screen.getByRole("option", { name: "Тема B" }));
+    expect(screen.queryByText("Тема обязательна")).toBeNull();
+    // The picked topic reads as plain text on the trigger — no chip, no checkbox.
+    expect(topicPickerValue()).toBe("Тема B");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByTestId("select-question-topic").querySelector(".ou-combo__chip")).toBeNull();
+  });
+
+  it("reports an empty result when no topic matches the query", () => {
+    renderDrawer();
+    const search = openTopicPicker();
+
+    fireEvent.change(search, { target: { value: "кварк" } });
+
+    expect(screen.getByText("Тема не найдена")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Тема A" })).toBeNull();
+  });
+
+  it("drops the query when the picker is reopened", () => {
+    renderDrawer();
+    const search = openTopicPicker();
+    fireEvent.change(search, { target: { value: "B" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    const reopened = openTopicPicker();
+
+    expect(reopened.value).toBe("");
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("resets the chosen topic through the clear button", () => {
+    renderDrawer({ defaultTopicId: "t1" });
+    const field = screen.getByTestId("select-question-topic");
+    expect(topicPickerValue()).toBe("Тема A");
+    expect(screen.queryByText("Тема обязательна")).toBeNull();
+
+    fireEvent.click(within(field).getByRole("button", { name: "Очистить тему" }));
+
+    // Cleared: the placeholder is back, the reset button is gone with the value,
+    // and the form reports the field as required again.
+    expect(topicPickerValue()).toBe("Выберите тему");
+    expect(screen.getByText("Тема обязательна")).toBeInTheDocument();
+    expect(within(field).queryByRole("button", { name: "Очистить тему" })).toBeNull();
   });
 
   it("shows the validation banner and blocks save when the prompt is emptied", async () => {
@@ -293,7 +368,7 @@ describe("<QuestionEditorDrawer />", () => {
 
   it("adds and removes options in the multiple-choice builder", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Несколько ответов" }));
+    chooseQuestionType("Несколько ответов");
 
     expect(screen.queryByTestId("input-multi-option-4")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Добавить вариант" }));
@@ -305,7 +380,7 @@ describe("<QuestionEditorDrawer />", () => {
 
   it("adds and removes items in the ranking builder", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Ранжирование" }));
+    chooseQuestionType("Ранжирование");
 
     expect(screen.queryByTestId("input-ranking-4")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Добавить вариант" }));
@@ -317,7 +392,7 @@ describe("<QuestionEditorDrawer />", () => {
 
   it("adds a pair and auto-links it when the left cell is filled (matching)", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Соответствие" }));
+    chooseQuestionType("Соответствие");
 
     // Options carried over from single choice (4) → 4 rows; «Добавить пару» grows both columns.
     expect(screen.getByTestId("input-matching-left-3")).toBeInTheDocument();

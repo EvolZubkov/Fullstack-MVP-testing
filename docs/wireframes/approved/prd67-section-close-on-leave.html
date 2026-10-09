@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-67 — Закрывать раздел при выходе.
+    Спека: docs/specs/prd-67/section-close-on-leave.md (§6 UI автора, §7 уведомления ученика).
+    Базовый эскиз: editor-settings-target.html, состояние wf-rules-limits — раздел
+    «Ограничения попытки» берётся оттуда БЕЗ изменений, PRD-67 добавляет один
+    переключатель последним полем раздела (виден, когда задан хоть один лимит).
+    Поверхности:
+      1) Редактор теста → «Правила прохождения» → «Ограничения» → раздел
+         «Ограничения попытки» (client/.../editor/sections/basic-settings-section.tsx,
+         LimitsPane → PerTopicLimitsBlock).
+      2) Учащийся: уведомление при возврате в закрытый раздел. Уведомление при входе
+         в раздел снято 2026-09-29: правило автор пишет на вводной странице теста
+         (веб — DS Toast; SCORM — существующий showToast рантайма, тот же текст).
+    Состояния:
+      s-on         — индивидуальные лимиты включены, переключатель включён
+      s-off        — индивидуальные лимиты включены, переключатель выключен (по умолчанию)
+      s-test-limit — только общий лимит теста: переключатель виден
+      s-no-limits  — лимитов нет совсем: переключателя нет
+      s-closed     — ученик: возврат в закрытый раздел (и в тест без разделов)
+      s-docs       — Пояснения + DS Mapping
+    СОГЛАСОВАН 2026-09-24.
+    -->
+    <title>PRD-67 — Закрывать раздел при выходе</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+      .wf-pane { max-width: var(--wf-size-720); }
+      .wf-toast-demo { display: flex; flex-direction: column; gap: var(--ou-space-3); align-items: flex-start; }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state { display: none; padding: var(--wf-size-72) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-720); }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Закрывать раздел при выходе:</span>
+      <button type="button" class="active" onclick="showState(this, 'on')">настройки · вкл</button>
+      <button type="button" onclick="showState(this, 'off')">настройки · выкл</button>
+      <button type="button" onclick="showState(this, 'test-limit')">только общий лимит</button>
+      <button type="button" onclick="showState(this, 'no-limits')">лимитов нет</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'closed')">ученик · раздел закрыт</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="../editor-settings-target.html">&harr; Ограничения</a>
+    </nav>
+
+    <!-- ════════════════ s-on: переключатель включён ════════════════ -->
+    <div id="wf-on" class="wf-state active">
+      <div class="tb-settings-content wf-pane">
+        <div class="ou-formsection ou-formsection--stacked">
+          <div class="ou-formsection__intro">
+            <h3 class="ou-formsection__title">Ограничения попытки</h3>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-number ou-number--m ou-number--split">
+              <label class="ou-number__lbl" for="on-time">Лимит времени теста</label>
+              <div class="ou-number__box">
+                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                <input class="ou-number__input" id="on-time" type="text" inputmode="numeric" value="60" /><span class="ou-number__suffix">минут</span>
+                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+              </div>
+              <div class="ou-number__hint">Оставьте 0, чтобы не ограничивать. Сейчас это 1 ч на одну попытку.</div>
+            </div>
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text"><span class="ou-switch-field__label">Индивидуальные лимиты для тем</span></span>
+              </label>
+            </div>
+            <table class="tb-table tb-table--mb" aria-label="Индивидуальные лимиты времени по темам">
+              <thead>
+                <tr>
+                  <th>Тема</th>
+                  <th>Лимит</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1. О компании</td>
+                  <td><div class="ou-number ou-number--s ou-number--split">
+                    <div class="ou-number__box">
+                      <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                      <input class="ou-number__input" type="text" inputmode="numeric" value="25" aria-label="Лимит для темы 1. О компании" />
+                      <span class="ou-number__suffix">минут</span>
+                      <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                    </div>
+                  </div></td>
+                </tr>
+                <tr>
+                  <td>2. Корпоративные финансы</td>
+                  <td><div class="ou-number ou-number--s ou-number--split">
+                    <div class="ou-number__box">
+                      <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                      <input class="ou-number__input" type="text" inputmode="numeric" value="20" aria-label="Лимит для темы 2. Корпоративные финансы" />
+                      <span class="ou-number__suffix">минут</span>
+                      <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                    </div>
+                  </div></td>
+                </tr>
+                <tr>
+                  <td>3. Технологии</td>
+                  <td><div class="ou-number ou-number--s ou-number--split">
+                    <div class="ou-number__box">
+                      <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                      <input class="ou-number__input" type="text" inputmode="numeric" value="" placeholder="Без ограничения" aria-label="Лимит для темы 3. Технологии" />
+                      <span class="ou-number__suffix">минут</span>
+                      <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                    </div>
+                  </div></td>
+                </tr>
+              </tbody>
+            </table>
+            <!-- PRD-67: новый переключатель — сразу под таблицей лимитов -->
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text">
+                  <span class="ou-switch-field__label">Закрывать раздел при выходе</span>
+                  <span class="ou-switch-field__desc">Если ученик покинул раздел — перешёл дальше, вернулся к списку разделов или закрыл браузер, — вернуться и дорешать нельзя. В тесте без разделов выход завершает попытку.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-off: переключатель выключен (по умолчанию) ════════════════ -->
+    <div id="wf-off" class="wf-state">
+      <div class="tb-settings-content wf-pane">
+        <div class="ou-formsection ou-formsection--stacked">
+          <div class="ou-formsection__intro">
+            <h3 class="ou-formsection__title">Ограничения попытки</h3>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-number ou-number--m ou-number--split">
+              <label class="ou-number__lbl" for="off-time">Лимит времени теста</label>
+              <div class="ou-number__box">
+                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                <input class="ou-number__input" id="off-time" type="text" inputmode="numeric" value="60" /><span class="ou-number__suffix">минут</span>
+                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+              </div>
+              <div class="ou-number__hint">Оставьте 0, чтобы не ограничивать. Сейчас это 1 ч на одну попытку.</div>
+            </div>
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text"><span class="ou-switch-field__label">Индивидуальные лимиты для тем</span></span>
+              </label>
+            </div>
+            <table class="tb-table tb-table--mb" aria-label="Индивидуальные лимиты времени по темам">
+              <thead>
+                <tr>
+                  <th>Тема</th>
+                  <th>Лимит</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1. О компании</td>
+                  <td><div class="ou-number ou-number--s ou-number--split">
+                    <div class="ou-number__box">
+                      <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                      <input class="ou-number__input" type="text" inputmode="numeric" value="25" aria-label="Лимит для темы 1. О компании" />
+                      <span class="ou-number__suffix">минут</span>
+                      <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                    </div>
+                  </div></td>
+                </tr>
+                <tr>
+                  <td>2. Корпоративные финансы</td>
+                  <td><div class="ou-number ou-number--s ou-number--split">
+                    <div class="ou-number__box">
+                      <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                      <input class="ou-number__input" type="text" inputmode="numeric" value="20" aria-label="Лимит для темы 2. Корпоративные финансы" />
+                      <span class="ou-number__suffix">минут</span>
+                      <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                    </div>
+                  </div></td>
+                </tr>
+                <tr>
+                  <td>3. Технологии</td>
+                  <td><div class="ou-number ou-number--s ou-number--split">
+                    <div class="ou-number__box">
+                      <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                      <input class="ou-number__input" type="text" inputmode="numeric" value="" placeholder="Без ограничения" aria-label="Лимит для темы 3. Технологии" />
+                      <span class="ou-number__suffix">минут</span>
+                      <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                    </div>
+                  </div></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text">
+                  <span class="ou-switch-field__label">Закрывать раздел при выходе</span>
+                  <span class="ou-switch-field__desc">Выключено — при выходе время замирает, а по возвращении ученик продолжает с того же места.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-test-limit: только общий лимит теста ════════════════ -->
+    <div id="wf-test-limit" class="wf-state">
+      <div class="tb-settings-content wf-pane">
+        <div class="ou-formsection ou-formsection--stacked">
+          <div class="ou-formsection__intro">
+            <h3 class="ou-formsection__title">Ограничения попытки</h3>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-number ou-number--m ou-number--split">
+              <label class="ou-number__lbl" for="tl-time">Лимит времени теста</label>
+              <div class="ou-number__box">
+                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                <input class="ou-number__input" id="tl-time" type="text" inputmode="numeric" value="60" /><span class="ou-number__suffix">минут</span>
+                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+              </div>
+              <div class="ou-number__hint">Оставьте 0, чтобы не ограничивать. Сейчас это 1 ч на одну попытку.</div>
+            </div>
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text"><span class="ou-switch-field__label">Индивидуальные лимиты для тем</span></span>
+              </label>
+            </div>
+            <!-- PRD-67: общий лимит теста есть — переключатель виден и без лимитов тем -->
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text">
+                  <span class="ou-switch-field__label">Закрывать раздел при выходе</span>
+                  <span class="ou-switch-field__desc">Если ученик покинул раздел — перешёл дальше, вернулся к списку разделов или закрыл браузер, — вернуться и дорешать нельзя. В тесте без разделов выход завершает попытку.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-no-limits: лимитов нет совсем ════════════════ -->
+    <div id="wf-no-limits" class="wf-state">
+      <div class="tb-settings-content wf-pane">
+        <div class="ou-formsection ou-formsection--stacked">
+          <div class="ou-formsection__intro">
+            <h3 class="ou-formsection__title">Ограничения попытки</h3>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-number ou-number--m ou-number--split">
+              <label class="ou-number__lbl" for="nl-time">Лимит времени теста</label>
+              <div class="ou-number__box">
+                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                <input class="ou-number__input" id="nl-time" type="text" inputmode="numeric" value="0" /><span class="ou-number__suffix">минут</span>
+                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+              </div>
+              <div class="ou-number__hint">Оставьте 0, чтобы не ограничивать.</div>
+            </div>
+            <div class="ou-formfield">
+              <label class="ou-switch-field">
+                <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="ou-switch-field__text"><span class="ou-switch-field__label">Индивидуальные лимиты для тем</span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-closed: возврат в закрытый раздел ════════════════ -->
+    <div id="wf-closed" class="wf-state">
+      <div class="wf-toast-demo">
+        <div class="ou-toast ou-toast--info" role="status">
+          <span class="ou-toast__ico"><svg width="18" height="18" aria-hidden="true"><use href="#i-lock" /></svg></span>
+          <div class="ou-toast__body">
+            <div class="ou-toast__title">Раздел «Корпоративные финансы» закрыт</div>
+            <div class="ou-toast__desc">Вы вышли из него до завершения. Ответы, данные до выхода, сохранены.</div>
+          </div>
+          <button type="button" class="ou-toast__close" aria-label="Закрыть"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></button>
+        </div>
+        <!-- Тест без разделов: возврат ведёт на итоги сданной попытки -->
+        <div class="ou-toast ou-toast--info" role="status">
+          <span class="ou-toast__ico"><svg width="18" height="18" aria-hidden="true"><use href="#i-lock" /></svg></span>
+          <div class="ou-toast__body">
+            <div class="ou-toast__title">Попытка завершена</div>
+            <div class="ou-toast__desc">Вы вышли из теста до завершения. Засчитаны ответы, данные до выхода.</div>
+          </div>
+          <button type="button" class="ou-toast__close" aria-label="Закрыть"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Поверхность 1</td><td>«Правила прохождения» → «Ограничения» → «Ограничения попытки»</td><td>Раздел из <code>editor-settings-target.html</code> (wf-rules-limits) без изменений; добавлен один переключатель последним полем раздела. Раздел «Ограничения повторных попыток» не меняется</td></tr>
+            <tr><td>Свич «Закрывать раздел при выходе»</td><td><code>closeSectionOnLeave</code> (<code>tests.close_section_on_leave</code>)</td><td>По умолчанию выключен: существующие тесты не меняют поведения</td></tr>
+            <tr><td>Видимость свича</td><td>лимит времени теста &gt; 0 ИЛИ включены «Индивидуальные лимиты для тем»</td><td>Без единого лимита обходить нечего (s-no-limits). Значение при скрытии сохраняется</td></tr>
+            <tr><td>Область действия</td><td>разделы со своим лимитом + все разделы при общем лимите</td><td>Закрывается текущий раздел; тест без разделов — один раздел, выход завершает попытку</td></tr>
+            <tr><td>Описание свича</td><td>зависит от состояния</td><td>Вкл — что считается выходом, что вернуться нельзя, что тест без разделов завершается; выкл — нынешнее поведение (время замирает)</td></tr>
+            <tr><td>Поверхность 2</td><td>уведомление ученику</td><td>Веб — DS <code>Toast</code>; SCORM — существующий <code>showToast</code> рантайма (центральный тост), текст «заголовок. описание» одной строкой. Макеты шаблонов не меняются</td></tr>
+            <tr><td>Тост «Раздел … закрыт»</td><td>возврат в закрытый раздел (перезапуск, возобновление)</td><td>info; ученика переводит дальше закрытого раздела, как при истечении лимита</td></tr>
+            <tr><td>Тост «Попытка завершена»</td><td>возврат в тест без разделов</td><td>info; попытка сдана с данными ответами, ученик на итогах</td></tr>
+            <tr><td>Обзор раздела</td><td>PRD-19, узел <code>review</code> своего раздела</td><td>Считается ВНУТРИ раздела: таймер идёт, возврат к вопросам доступен</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Строка с «custom» в колонке DS-компонент — блокер. Новых примитивов PRD-67 не требует.</p>
+        <table>
+          <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
+          <tbody>
+            <tr><td>Раздел «Ограничения попытки»</td><td><code>FormSection</code> (<code>ou-formsection--stacked</code>)</td><td><code>--ou-space-*</code></td><td>Существующий раздел, без изменений</td></tr>
+            <tr><td>Свич «Закрывать раздел при выходе»</td><td><code>Switch</code> в <code>ou-switch-field</code> (label + desc)</td><td><code>--ou-accent-*</code>, <code>--ou-fg-muted</code></td><td>Тот же узор, что у «Ограничение между попытками»</td></tr>
+            <tr><td>Тост входа</td><td><code>Toast</code> (<code>ou-toast--warning</code>)</td><td><code>--ou-warning-default</code></td><td>Веб-хост, <code>useToast</code></td></tr>
+            <tr><td>Тост закрытого раздела</td><td><code>Toast</code> (<code>ou-toast--info</code>)</td><td><code>--ou-accent-default</code></td><td>Веб-хост, <code>useToast</code></td></tr>
+            <tr><td>Демо-колонка тостов</td><td>каркас эскиза (<code>wf-toast-demo</code>)</td><td><code>--ou-space-3</code></td><td>Только эскиз; в продукте тосты выводит <code>ou-toast-stack</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

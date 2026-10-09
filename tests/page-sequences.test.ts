@@ -14,7 +14,9 @@ import {
   buildPageContextFor,
   collectSequenceIds,
   nextLabelOf,
+  sectionSubtitleOf,
   sequenceIdOf,
+  DEFAULT_SECTION_SUBTITLE,
 } from "@shared/template/page-sequences";
 
 /** Content page shorthand: `page("a", "before", "Галерея", 0)`. */
@@ -226,6 +228,9 @@ describe("buildPageContextFor", () => {
       // Always present, like `canGoBack`: an ordinary content page carries the
       // live (false) value, and only the router hub raises it.
       nextDisabled: false,
+      // PRD-22 FR-42: present on EVERY page context, because the intro screen is an
+      // ordinary content page and reads it from the same block.
+      sectionSubtitle: "Инструкция",
     });
   });
 
@@ -295,5 +300,64 @@ describe("collectSequenceIds", () => {
 
   it("empty input yields an empty list", () => {
     expect(collectSequenceIds(null)).toEqual([]);
+  });
+});
+
+describe("sectionSubtitleOf — подзаголовок раздела (PRD-22 FR-38 – FR-41)", () => {
+  it("без настроек печатает умолчание шаблона", () => {
+    expect(sectionSubtitleOf(page("p1", "before", null, 0))).toBe("Инструкция");
+    expect(sectionSubtitleOf(null)).toBe("Инструкция");
+  });
+
+  it("берёт авторскую формулировку", () => {
+    const p = page("p1", "before", null, 0, { settingsJson: { sectionSubtitle: "Как отвечать" } });
+    expect(sectionSubtitleOf(p)).toBe("Как отвечать");
+  });
+
+  it("обрезает пробелы по краям", () => {
+    const p = page("p1", "before", null, 0, { settingsJson: { sectionSubtitle: "  Как отвечать  " } });
+    expect(sectionSubtitleOf(p)).toBe("Как отвечать");
+  });
+
+  it("пустое поле при включённом тумблере возвращает к тексту шаблона, а не гасит надпись", () => {
+    expect(sectionSubtitleOf(page("p1", "before", null, 0, { settingsJson: { sectionSubtitle: "" } }))).toBe(
+      "Инструкция",
+    );
+    expect(
+      sectionSubtitleOf(page("p1", "before", null, 0, { settingsJson: { sectionSubtitle: "   " } })),
+    ).toBe("Инструкция");
+  });
+
+  it("выключенный тумблер гасит надпись, даже когда формулировка задана", () => {
+    const p = page("p1", "before", null, 0, {
+      settingsJson: { sectionSubtitleShown: false, sectionSubtitle: "Как отвечать" },
+    });
+    expect(sectionSubtitleOf(p)).toBe("");
+  });
+
+  it("читает настройки в той форме, в какой их везёт пакет", () => {
+    // Без `settingsJson`: пакет кладёт настройки в `settings`, и читатель обязан
+    // смотреть в обе формы — как это делает `sequenceIdOf`.
+    expect(sectionSubtitleOf({ id: "p1", settings: { sectionSubtitle: "Памятка" } })).toBe("Памятка");
+  });
+});
+
+describe("buildPageContext — подзаголовок в блоке page.*", () => {
+  it("без явного значения отдаёт умолчание, а не пустую строку", () => {
+    expect(buildPageContext(null).sectionSubtitle).toBe(DEFAULT_SECTION_SUBTITLE);
+  });
+
+  it("пустую строку НЕ подменяет умолчанием: это выключенная надпись", () => {
+    expect(buildPageContext(null, { sectionSubtitle: "" }).sectionSubtitle).toBe("");
+  });
+
+  it("buildPageContextFor разрешает подзаголовок по настройкам страницы", () => {
+    const pages = [
+      page("p1", "before", null, 0, { settingsJson: { sectionSubtitleShown: false } }),
+      page("p2", "before", null, 1, { settingsJson: { sectionSubtitle: "Памятка" } }),
+    ];
+
+    expect(buildPageContextFor("p1", pages).sectionSubtitle).toBe("");
+    expect(buildPageContextFor("p2", pages).sectionSubtitle).toBe("Памятка");
   });
 });

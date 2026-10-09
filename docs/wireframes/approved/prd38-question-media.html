@@ -51,7 +51,7 @@
     ИСТОЧНИКИ РАЗМЕТКИ.
       - сцена и её блоки — поставляемый шаблон «Стандартный» (theme.css
         подключён как есть, без копирования правил);
-      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - компоненты — ДС Skillum (client/src/styles/vendor/skillum-ds.css);
       - степпер шкалы — реальный рендерер shared/template/question-interaction.ts,
         функция renderScale: ou-stepper ou-stepper--choice, шаги
         ou-stepper__step--btn со статусами is-done / is-current;
@@ -77,7 +77,7 @@
   <!-- Absolute-from-root paths, like the other approved wireframes: the review recipe
        serves the REPOSITORY ROOT over http, and this file moved into `approved/` after
        it was drawn, which broke the relative ones. -->
-  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="/client/src/styles/vendor/skillum-ds.css">
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
   <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
   <style>
@@ -186,12 +186,12 @@
        ПРО color-scheme: своего объявления здесь НЕ НУЖНО, и объявлять его прямо
        вредно. `color-scheme` НАСЛЕДУЕТСЯ, а ДС уже ставит его на корне темы
        (`.ou, .ou--light { color-scheme: light }`, `.ou--dark { color-scheme: dark }`
-       в university-rt.css) — корень сцены и есть `.ou` на обоих хостах. Правило
+       в skillum-ds.css) — корень сцены и есть `.ou` на обоих хостах. Правило
        вида `color-scheme: light dark` это наследование ПЕРЕБИВАЕТ и возвращает
        плеер к системной теме: проверено в браузере — на тёмной сцене плеер
        становился белым.
        Токен рамки — --ou-border-soft: имени --ou-border-subtle в
-       university-rt.css НЕТ, а несуществующий токен молча даёт прозрачный фон. */
+       skillum-ds.css НЕТ, а несуществующий токен молча даёт прозрачный фон. */
     .question-media[data-media-type="audio"] {
       padding: var(--ou-space-3);
       border: var(--wf-border-w) solid var(--ou-border-soft);
@@ -803,7 +803,7 @@
       <tr><td><code>question-media</code>, <code>qm-fs-btn</code>, <code>qm-preview</code>, <code>qm-audio</code>, <code>data-media-type</code>, <code>data-media-fullscreen</code></td><td>Общий рендерер <code>shared/template/question-media.ts</code> (задача 2 плана)</td></tr>
       <tr><td><code>ou-stepper ou-stepper--choice</code>, <code>ou-stepper__step--btn</code>, статусы <code>is-done</code> / <code>is-current</code></td><td><code>shared/template/question-interaction.ts</code>, <code>renderScale</code> (PRD-26)</td></tr>
       <tr><td><code>ou-radio-group</code>, <code>ou-radio-card</code>, <code>ou-radio</code></td><td>Тот же файл, <code>renderChoice</code></td></tr>
-      <tr><td><code>ou-quiz</code>, <code>ou-timer</code>, <code>ou-tag</code>, <code>ou-btn</code></td><td>ДС UniversityRT, <code>vendor/ui-kit/css/university-rt.css</code></td></tr>
+      <tr><td><code>ou-quiz</code>, <code>ou-timer</code>, <code>ou-tag</code>, <code>ou-btn</code></td><td>ДС Skillum, <code>vendor/ui-kit/css/skillum-ds.css</code></td></tr>
       <tr><td>Изображение в слоте медиа</td><td>Заглушка вместо загруженного автором файла: SVG в <code>data:</code>-адресе, чтобы эскиз открывался и по <code>file://</code></td></tr>
     </tbody>
   </table>
@@ -816,7 +816,7 @@
       <tr><td>Специфичность правила аудио</td><td>Черновик даёт <code>.tb-scene__q:has([data-media-type="audio"])</code> — это (0,2,0), а правило двух колонок выше (0,3,0), потому что <code>:has()</code> берёт специфичность самого специфичного аргумента, а там <code>:not(:empty)</code>. Аудио молча оставалось в колонке 5 из 12: проверено в браузере, плашка плеера была 376px вместо 923px. В эскизе аргумент удлинён до <code>:has([data-slot="question-media"] [data-media-type="audio"])</code></td></tr>
       <tr><td><code>color-scheme</code> у плеера</td><td>Черновик FR-11 предлагает «пробросить» <code>color-scheme</code> на плеер. Своего объявления не нужно и оно ВРЕДНО: свойство наследуется, а ДС уже ставит его на корне темы. Правило <code>color-scheme: light dark</code> это наследование перебивает — проверено в браузере, на тёмной сцене плеер становился белым</td></tr>
       <tr><td>Кнопка «во весь экран» и ширина кадра</td><td>Если оставить у медиа <code>width: 100%</code>, на узкой сцене картинка вписывается в кадр с полями (<code>object-fit</code>), а кнопка уезжает к краю пустой колонки. В эскизе обёртка изображения и видео хватает по содержимому (<code>width: fit-content; margin-inline: auto</code>), картинка не растягивается сверх натурального размера, и кнопка стоит в её углу</td></tr>
-      <tr><td>Токен <code>--ou-border-subtle</code></td><td>Имени в <code>university-rt.css</code> НЕТ. Плашка аудио в эскизе обведена <code>--ou-border-soft</code>; при реализации брать его же</td></tr>
+      <tr><td>Токен <code>--ou-border-subtle</code></td><td>Имени в <code>skillum-ds.css</code> НЕТ. Плашка аудио в эскизе обведена <code>--ou-border-soft</code>; при реализации брать его же</td></tr>
       <tr><td><code>max-height</code> у медиа</td><td>Инлайновые размеры уходят, но потолок высоты нужен: вертикальная картинка иначе растягивает левую колонку и утапливает варианты под сгиб. В эскизе 320px на широкой сцене и 220px на узкой — величины на согласование</td></tr>
       <tr><td>Собственный плеер <code>ou-audio</code></td><td>Внутренности нативного плеера различаются в Chrome, Firefox и Safari. Компонент ДС — техдолг PRD-38 (раздел 9), в эскизе намеренно не рисуется</td></tr>
       <tr><td>Видео</td><td>Отдельного состояния нет: правило раскладки у видео то же, что у изображения, и разметка отличается только тегом</td></tr>

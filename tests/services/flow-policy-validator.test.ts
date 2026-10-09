@@ -203,3 +203,50 @@ describe("validateFlowPolicy — strict adaptive section gating", () => {
     ).toHaveLength(0);
   });
 });
+
+// ─── Rule 3: the router's unlock rules form no ring («Сценарий в ИС», техдолг №8) ──
+
+describe("validateFlowPolicy — кольцо в правилах открытия пунктов", () => {
+  const router = (sectionUnlockRules: Record<string, unknown>) =>
+    buildTest({ flowPolicyJson: { mode: "router_by_topics", router: { sectionUnlockRules } } });
+
+  it("отказывает, когда пункты ждут друг друга по кругу (тема и сценарий)", () => {
+    const violations = validateFlowPolicy(
+      router({
+        "topic-1": { mode: "after_sections_passed", sectionIds: ["scenario:s"] },
+        "scenario:s": { mode: "after_sections_completed", sectionIds: ["topic-1"] },
+      }),
+      [buildSection()],
+      undefined,
+    );
+    expect(violations).toEqual([
+      expect.objectContaining({ code: "unlock_cycle", field: "flowPolicyJson.router.sectionUnlockRules" }),
+    ]);
+  });
+
+  it("цепочка без кольца допустима", () => {
+    const violations = validateFlowPolicy(
+      router({
+        "topic-2": { mode: "after_sections_completed", sectionIds: ["topic-1"] },
+        "scenario:s": { mode: "after_sections_passed", sectionIds: ["topic-1", "topic-2"] },
+      }),
+      [buildSection()],
+      undefined,
+    );
+    expect(violations).toHaveLength(0);
+  });
+
+  it("правила линейного потока не проверяются — там их не читают", () => {
+    const violations = validateFlowPolicy(
+      buildTest({
+        flowPolicyJson: {
+          mode: "linear_by_topics",
+          router: { sectionUnlockRules: { a: { mode: "after_sections_completed", sectionIds: ["a"] } } },
+        },
+      }),
+      [buildSection()],
+      undefined,
+    );
+    expect(violations).toHaveLength(0);
+  });
+});

@@ -256,7 +256,7 @@ interface ExportData {
 
 | Файл | Функция | Описание |
 | --- | --- | --- |
-| [scorm/zip.ts](../../server/scorm/zip.ts) | `buildZip(files)` | Создание ZIP (archiver, compression: 9) |
+| [scorm/zip.ts](../../server/scorm/zip.ts) | `buildZip(files)` | Создание ZIP (jszip, DEFLATE level 9) |
 | [scorm/assets/read-asset.ts](../../server/scorm/assets/read-asset.ts) | `readAsset(name)` | Чтение шаблонов из нескольких путей (dev/prod fallback) |
 | [scorm/utils/escape.ts](../../server/scorm/utils/escape.ts) | `escapeXml(str)` | Экранирование XML-спецсимволов |
 

@@ -62,6 +62,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     id: "s1",
     key: "ee",
     label: "Эмоциональное истощение",
+    description: "",
     type: "number",
     aggregation: "sum",
     normalization: "none",

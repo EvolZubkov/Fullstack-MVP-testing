@@ -81,6 +81,11 @@ for (const templateId of BUILTIN_IDS) {
         expect(typeof ct.key,   `ct.key in ${templateId}`).toBe("string");
         expect(typeof ct.label, `ct.label in ${templateId}`).toBe("string");
         expect(typeof ct.kind,  `ct.kind in ${templateId}`).toBe("string");
+        // PRD-51: у блока документа, отличного от `page`, областей содержимого НЕТ и
+        // быть не должно (спека §8.4.7): он печатает данные попытки, а не авторский
+        // текст. Требовать от него пустой массив значило бы просить внешние шаблоны
+        // объявлять поле, которое контракт им запрещает наполнять.
+        if (ct.kind === "report.block" && ct.block !== "page") continue;
         expect(Array.isArray(ct.placeholders), `ct.placeholders in ${templateId}`).toBe(true);
       }
     });
@@ -106,7 +111,7 @@ for (const templateId of BUILTIN_IDS) {
 
     it("every placeholder has key, type, label, required", () => {
       for (const ct of m.contentTemplates as Record<string, unknown>[]) {
-        for (const ph of ct.placeholders as Record<string, unknown>[]) {
+        for (const ph of (ct.placeholders ?? []) as Record<string, unknown>[]) {
           expect(typeof ph.key,      `ph.key in ${templateId}`).toBe("string");
           expect(typeof ph.type,     `ph.type in ${templateId}`).toBe("string");
           expect(typeof ph.label,    `ph.label in ${templateId}`).toBe("string");

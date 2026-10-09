@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getPermissions, ROLES, type Capability } from "@shared/access";
 import { TestsListPage } from "../tests-list";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // The list reads capabilities to gate row actions (PRD-13). Stub the auth
 // context so the component renders without an AuthProvider; `authMock.can` is
@@ -30,6 +31,13 @@ const { authMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
+    can: (cap: string) => authMock.can(cap),
+    hasRole: (role: string) => authMock.roles.includes(role),
+    user: { id: authMock.userId },
+  }),
+  // Ящик редактора читает пользователя НЕОБЯЗАТЕЛЬНО (`useOptionalAuth`): он
+  // собирается и без провайдера. Мок обязан знать оба чтения, иначе падает импорт.
+  useOptionalAuth: () => ({
     can: (cap: string) => authMock.can(cap),
     hasRole: (role: string) => authMock.roles.includes(role),
     user: { id: authMock.userId },
@@ -139,9 +147,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <TestsListPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -223,7 +231,7 @@ describe("<TestsListPage /> — test more-menu", () => {
     fireEvent.click(screen.getByTestId("test-more-t-1"));
 
     expect(screen.getByTestId("menu-edit-t-1")).toBeInTheDocument();
-    expect(screen.getByTestId("menu-export-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-save-as-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("menu-toggle-publish-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("menu-move-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("menu-archive-t-1")).toBeInTheDocument();
@@ -299,7 +307,7 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     expect(screen.queryByTestId("menu-access-t-1")).toBeNull();
   });
 
-  it("an author gets «Выполнить отладку» but no «Экспорт SCORM»", async () => {
+  it("an author gets «Выполнить отладку» and «Сохранить как…» without the SCORM format", async () => {
     authMock.can = canForRoles([ROLES.AUTHOR]);
     authMock.roles = [ROLES.AUTHOR];
     mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
@@ -307,10 +315,13 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     await waitFor(() => screen.getByTestId("test-row-t-1"));
     fireEvent.click(screen.getByTestId("test-more-t-1"));
     expect(screen.getByTestId("menu-debug-t-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("menu-export-t-1")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-save-as-t-1"));
+    await screen.findByRole("dialog", { name: /Сохранить как/ });
+    expect(screen.queryByRole("radio", { name: /SCORM/ })).toBeNull();
+    expect(screen.getByRole("radio", { name: /Книга для правки/ })).toBeInTheDocument();
   });
 
-  it("a developer gets both «Выполнить отладку» and «Экспорт SCORM»", async () => {
+  it("a developer gets «Выполнить отладку» and the SCORM format in «Сохранить как…»", async () => {
     authMock.can = canForRoles([ROLES.DEVELOPER]);
     authMock.roles = [ROLES.DEVELOPER];
     mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
@@ -318,7 +329,9 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     await waitFor(() => screen.getByTestId("test-row-t-1"));
     fireEvent.click(screen.getByTestId("test-more-t-1"));
     expect(screen.getByTestId("menu-debug-t-1")).toBeInTheDocument();
-    expect(screen.getByTestId("menu-export-t-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("menu-save-as-t-1"));
+    await screen.findByRole("dialog", { name: /Сохранить как/ });
+    expect(screen.getByRole("radio", { name: /SCORM/ })).toBeInTheDocument();
   });
 });
 
@@ -378,6 +391,55 @@ describe("<TestsListPage /> — delete confirm (FR-30)", () => {
     });
     expect(confirmBtn).not.toBeDisabled();
   });
+
+  // PRD-15 FR-07a, approved wireframe test-delete-lms-impact.
+  it("names what goes with the test and offers archiving as the alternative", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+      "/api/tests/t-1/delete-impact": { webAttempts: 12, lmsAttempts: 125, importBatches: 2, packages: 3 },
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    fireEvent.click(screen.getByTestId("menu-delete-t-1"));
+
+    const banner = await screen.findByTestId("delete-test-impact");
+    expect(banner).toHaveTextContent("Будут удалены 137 прохождений");
+    expect(banner).toHaveTextContent("125 — из LMS, в том числе 2 загруженные выгрузки");
+    expect(screen.getByText(/будет удалён безвозвратно/)).toBeInTheDocument();
+
+    // Archiving needs no typed title: it is the reversible alternative.
+    fireEvent.click(screen.getByTestId("delete-test-archive"));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/tests/t-1/status",
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "archived" }) }),
+      ),
+    );
+    expect(screen.queryByTestId("delete-test-confirm")).toBeNull();
+  });
+
+  it("has no banner without attempts and no archive button without the right to archive", async () => {
+    authMock.can = (cap) => cap !== "tests.publish";
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+      "/api/tests/t-1/delete-impact": { webAttempts: 0, lmsAttempts: 0, importBatches: 0, packages: 0 },
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    fireEvent.click(screen.getByTestId("menu-delete-t-1"));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/tests/t-1/delete-impact", expect.anything()),
+    );
+    expect(screen.queryByTestId("delete-test-impact")).toBeNull();
+    expect(screen.queryByTestId("delete-test-archive")).toBeNull();
+  });
 });
 
 describe("<TestsListPage /> — FAB", () => {
@@ -417,7 +479,7 @@ describe("<TestsListPage /> — empty state", () => {
 // ─── PRD-22 (plan Э6): pages needing a variant mapping ────────────────────────
 
 describe("<TestsListPage /> — unmapped-page mark", () => {
-  it("marks a test whose pages need mapping and opens «Структура» on click", async () => {
+  it("метит тест с непривязанными страницами и открывает полотно сценария", async () => {
     mockMany({
       "/api/tests": [buildApiTestRow({ unmappedPageCount: 3 })],
       "/api/test-folders": [],
@@ -430,10 +492,15 @@ describe("<TestsListPage /> — unmapped-page mark", () => {
     expect(mark).toHaveTextContent("");
     expect(mark).toHaveAttribute("title", expect.stringContaining("Страниц с недоступным вариантом: 3"));
 
-    // The editor Drawer opens on «Структура», where the mapping is made — the row
-    // click alone would land the author on «Состав».
+    // Ящик открывается на «Составе и сценарии» — там живёт полотно, где привязка и
+    // делается; клик по самой строке привёл бы автора на «Основное».
     fireEvent.click(mark);
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Структура/ })).toHaveAttribute("aria-selected", "true"));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Состав и сценарий/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
   });
 
   it("shows no mark when nothing needs mapping", async () => {
@@ -446,4 +513,49 @@ describe("<TestsListPage /> — unmapped-page mark", () => {
 
     expect(screen.queryByTestId("test-unmapped-t-1")).toBeNull();
   });
+});
+
+// ─── PRD-52 FR-32: открытые комментарии рецензентов ──────────────────────────
+
+describe("<TestsListPage /> — счётчик комментариев", () => {
+  it("показывает число открытых комментариев", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ openReviewComments: 3 })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    const mark = screen.getByTestId("open-comments");
+    expect(mark).toHaveTextContent("3");
+    expect(mark).toHaveAttribute("title", "Открытых комментариев: 3");
+  });
+
+  it("у теста без открытых комментариев строка не меняется", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ openReviewComments: 0 })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    expect(screen.queryByTestId("open-comments")).toBeNull();
+  });
+});
+
+// ─── PRD-52 FR-27: ссылка на конкретную ветку ────────────────────────────────
+
+describe("<TestsListPage /> — ссылка ?review=<id>", () => {
+  it("открывает ящик теста сразу на вкладке «Комментарии»", async () => {
+    window.history.replaceState(null, "", "/author/tests?test=t-1&review=c1");
+    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Комментарии/ })).toHaveAttribute("aria-selected", "true"),
+    );
+    // Параметры сняты с адреса: обновление страницы не должно снова открывать ящик.
+    expect(window.location.search).toBe("");
+  });
+
 });

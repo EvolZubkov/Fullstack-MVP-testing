@@ -10,7 +10,7 @@ export interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
   decorative?: boolean;
 }
 
-/** UniversityRT · Separator — a hairline rule between content groups. */
+/** Skillum · Separator — a hairline rule between content groups. */
 export const Separator = forwardRef<HTMLDivElement, SeparatorProps>(
   ({ orientation = 'horizontal', decorative = true, className, ...rest }, ref) => (
     <div

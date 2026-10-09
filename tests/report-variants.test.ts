@@ -290,7 +290,10 @@ describe("валидация вариантов отчёта (FR-25)", () => {
     expect(msgs(m, FILES_OK).join(" ")).toContain("неизвестный тип");
   });
 
-  it("отклоняет placeholders: у отчёта нет читаемого содержимого", () => {
+  // PRD-51: запрет сузился до ОБОЛОЧКИ и стал честным. Авторское содержимое документа
+  // объявляют варианты блоков (`kind: "report.block"`), у них `placeholders[]` разрешены —
+  // это проверяет `shared/report/__tests__/report-variants.blocks.test.ts`.
+  it("отклоняет placeholders у ОБОЛОЧКИ: своего содержимого у неё нет", () => {
     const m = manifest({ placeholders: [{ key: "body", type: "text" }] });
     expect(msgs(m, FILES_OK).join(" ")).toContain("placeholders неприменимы");
   });

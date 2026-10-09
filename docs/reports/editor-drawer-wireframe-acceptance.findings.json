@@ -1,0 +1,3603 @@
+[
+  {
+    "id": "W-1",
+    "area": "W",
+    "place": "editor-settings-target.html",
+    "expected": "`ou-drawer-root--right`, использований 28",
+    "actual": "Модификатора нет: в ДС объявлен только `ou-drawer-root`, сторона задаётся на панели (`ou-drawer--right`)",
+    "kind": "выдуманный класс дс",
+    "severity": "существенное",
+    "code": "docs/wireframes/editor-settings-target.html:493",
+    "files": [
+      "editor-settings-target.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-2",
+    "area": "W",
+    "place": "editor-settings-target.html",
+    "expected": "`ou-formfield__hint`, использований 19",
+    "actual": "`ou-formfield__desc`",
+    "kind": "выдуманный класс дс",
+    "severity": "существенное",
+    "code": "docs/wireframes/editor-settings-target.html:1261",
+    "files": [
+      "editor-settings-target.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-3",
+    "area": "W",
+    "place": "editor-settings-target.html",
+    "expected": "`ou-field__hint`, использований 2",
+    "actual": "`ou-formfield__desc`; семейства `ou-field__*` для подсказки в ДС нет",
+    "kind": "выдуманный класс дс",
+    "severity": "существенное",
+    "code": "docs/wireframes/editor-settings-target.html:1215",
+    "files": [
+      "editor-settings-target.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-4",
+    "area": "W",
+    "place": "editor-settings-target.html",
+    "expected": "`ou-seg--m`, использований 4",
+    "actual": "Модификатора нет: в ДС объявлены `ou-seg--s` и `ou-seg--l`, размер m — умолчание без класса",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/editor-settings-target.html:744",
+    "files": [
+      "editor-settings-target.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-5",
+    "area": "W",
+    "place": "editor-settings-target.html",
+    "expected": "`ou-textarea--m`, использований 2",
+    "actual": "Модификатора нет: объявлены `ou-textarea--s` и `ou-textarea--l`, размер m — умолчание",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/editor-settings-target.html:3554",
+    "files": [
+      "editor-settings-target.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-6",
+    "area": "W",
+    "place": "editor-settings-target.html",
+    "expected": "`ou-tabs__ico`",
+    "actual": "В ДС не объявлен; иконка вкладки в ui-kit своего класса не имеет",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/editor-settings-target.html:2050",
+    "files": [
+      "editor-settings-target.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-7",
+    "area": "W",
+    "place": "approved/prd7-editor-conflict.html",
+    "expected": "`ou-table`",
+    "actual": "`ou-tbl` (11 объявлений в ДС)",
+    "kind": "выдуманный класс дс",
+    "severity": "существенное",
+    "code": "docs/wireframes/approved/prd7-editor-conflict.html:133",
+    "files": [
+      "prd7-editor-conflict.html"
+    ],
+    "batch": "owner",
+    "status": "fixed",
+    "note": "Заодно исправлена и разметка: в ДС `ou-tbl` — КОРЕНЬ таблицы (рамка, скругление, срез), а сама таблица внутри него своего класса не имеет (`.ou-tbl table`)."
+  },
+  {
+    "id": "W-8",
+    "area": "W",
+    "place": "approved/prd7-editor-conflict.html",
+    "expected": "`ou-table-wrap`",
+    "actual": "Обёртки с таким именем в ДС нет",
+    "kind": "выдуманный класс дс",
+    "severity": "существенное",
+    "code": "docs/wireframes/approved/prd7-editor-conflict.html:132",
+    "files": [
+      "prd7-editor-conflict.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-9",
+    "area": "W",
+    "place": "approved/prd52-review-panel.html",
+    "expected": "`ou-textarea--m`, использований 3",
+    "actual": "Модификатора нет, размер m — умолчание",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/approved/prd52-review-panel.html:290",
+    "files": [
+      "prd52-review-panel.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-10",
+    "area": "W",
+    "place": "approved/prd52-review-player.html",
+    "expected": "`ou-textarea--m`",
+    "actual": "Модификатора нет, размер m — умолчание",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/approved/prd52-review-player.html:300",
+    "files": [
+      "prd52-review-player.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-11",
+    "area": "W",
+    "place": "approved/prd7-editor-settings-tab.html",
+    "expected": "`ou-textarea--m`, использований 8",
+    "actual": "Модификатора нет, размер m — умолчание",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/approved/prd7-editor-settings-tab.html:666",
+    "files": [
+      "prd7-editor-settings-tab.html"
+    ],
+    "batch": "owner",
+    "status": "fixed"
+  },
+  {
+    "id": "W-12",
+    "area": "W",
+    "place": "approved/prd7-editor-settings-tab.html",
+    "expected": "`ou-skel--w-1/4`, использований 3",
+    "actual": "В ДС не объявлен; имя с дробью — остаток утилитарного класса Tailwind",
+    "kind": "выдуманный класс дс",
+    "severity": "косметическое",
+    "code": "docs/wireframes/approved/prd7-editor-settings-tab.html:952",
+    "files": [
+      "prd7-editor-settings-tab.html"
+    ],
+    "batch": "owner",
+    "status": "withdrawn",
+    "note": "Снята как ошибка приёмки: `.ou-skel--w-1\\/4` в бандле ДС ОБЪЯВЛЕН (skillum-ds.css, экранированная косая) — поиском по `ou-skel--w-1/4` он не находился. Имя с дробью пришло из Tailwind, но в ДС оно принято."
+  },
+  {
+    "id": "A-1",
+    "area": "A",
+    "place": "Поповер изменений (`s-changes`)",
+    "expected": "Ширина 420 px (`--wf-w-popover`), эскиз строка 273",
+    "actual": "`width: var(--wf-size-400)` — токен `--wf-size-400` НИГДЕ не объявлен (ни в `client/src/styles`, ни в `vendor/ui-kit/css`), правило невалидно, ширина схлопывается до содержимого (~170 px на снимке `impl-changes.png`), значения переносятся по 2-3 слова",
+    "kind": "нарушение фиксированного размера (раздел 7.7)",
+    "severity": "блокирующее",
+    "code": "client/src/styles/tb-components.css:1055",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "A-2",
+    "area": "A",
+    "place": "Поповер изменений",
+    "expected": "Ограничение высоты 320 px у ТЕЛА поповера (`.tb-changes-popover__body { max-height: var(--wf-h-changes) }`)",
+    "actual": "`max-height: var(--wf-size-420)` навешено на весь поповер, токен также не объявлен; у `__body` ограничения нет",
+    "kind": "нарушение фиксированного размера",
+    "severity": "существенное",
+    "code": "client/src/styles/tb-components.css:1055, :1070",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "A-3",
+    "area": "A",
+    "place": "Вкладка «Основное», раздел «О тесте»",
+    "expected": "Раздел `div.ou-formsection.ou-formsection--stacked` с заголовком `h3.ou-formsection__title` «О тесте», внутри — Название, Описание, Режим теста",
+    "actual": "Разделов нет: три поля идут подряд во фрагменте, заголовка «О тесте» нет ни в разметке, ни на снимке",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:111; client/src/features/tests/editor/sections/editor-tabs.tsx:67",
+    "files": [
+      "basic-settings-section.tsx",
+      "editor-tabs.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "A-4",
+    "area": "A",
+    "place": "Вкладка «Основное», раздел «Интеграция»",
+    "expected": "Раздел `ou-formsection--stacked` с заголовком `h3` «Интеграция», внутри — Webhook URL, телеметрия, результат для LMS",
+    "actual": "Разделов нет, заголовка «Интеграция» нет; поля продолжают тот же поток, что и «О тесте»",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:929",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "A-5",
+    "area": "A",
+    "place": "Вкладка «Основное», поле «Название»",
+    "expected": "Сообщение об ошибке `ou-field__msg--error`: «Название обязательно.» (эскиз `s-errors`)",
+    "actual": "Сообщение приходит из валидатора на английском: «Test title is required.»; у поля «Webhook URL» — «Webhook URL must be a valid HTTP or HTTPS URL.»",
+    "kind": "расхождение подписи",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/test-editor.validation.ts:117, :175",
+    "files": [
+      "test-editor.validation.ts"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "A-6",
+    "area": "A",
+    "place": "Риббон вкладок",
+    "expected": "`.ou-tabs__list` — `padding-inline: 24` (раздел 7.2), полоса выровнена с содержимым тела",
+    "actual": "Переопределения нет: у DS `.ou-tabs__list` отступа нет (`vendor/ui-kit/css/skillum-ds.css:6520`), в `tb`-слое задана только прокрутка. На снимке вкладки прижаты к левому краю ящика, поля тела начинаются правее",
+    "kind": "нарушение сетки 24 px",
+    "severity": "существенное",
+    "code": "client/src/styles/tb-components.css:89",
+    "files": [
+      "tb-components.css",
+      "skillum-ds.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "A-7",
+    "area": "A",
+    "place": "Шапка ящика",
+    "expected": "`.ou-drawer__head` — padding 24 (раздел 7.2, «ui-kit: 20»)",
+    "actual": "Переопределения в проектном слое нет — действует значение ui-kit `padding: var(--ou-space-5)` = 20 px (в `tb`-слое переопределён только подвал)",
+    "kind": "нарушение сетки 24 px",
+    "severity": "существенное",
+    "code": "client/src/styles/tb-components.css:228 (правило только для __foot); vendor/ui-kit/css/skillum-ds.css:2850",
+    "files": [
+      "tb-components.css",
+      "skillum-ds.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "A-8",
+    "area": "A",
+    "place": "Шапка ящика, тег статуса",
+    "expected": "Тег «Изменено» (`ou-tag--warning ou-tag--outline`), когда есть несохранённые изменения (3.2, 5.26)",
+    "actual": "Тег считается только по `editor.isDirty` (черновик настроек теста), тогда как подвал и блокировка «Сохранить» — по `combinedDirty` (настройки + оформление + страницы содержания). Правка только оформления или структуры даёт «грязный» подвал, но тег в шапке остаётся прежним",
+    "kind": "потерянное состояние",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/test-editor.tsx:1487; сравнение с :306",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "A-9",
+    "area": "A",
+    "place": "Подвал, состояния `s-errors` и `s-changes`",
+    "expected": "В подвале слева стоит тег `ou-tag--warning` «Изменено» (3.5, 5.27, 5.28)",
+    "actual": "Тега в подвале нет ни в одном состоянии: только кнопки",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/test-editor.tsx:738-:812",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "A-10",
+    "area": "A",
+    "place": "Точка состояния во вкладке",
+    "expected": "`span.tb-status-dot` с модификаторами `--warn` (жёлтая, «несохранённые изменения») и `--err` (красная), диаметр 12 px (`.tb-status-dot`)",
+    "actual": "`span.status-dot` с классами `dirty` / `warn` / `error`, диаметр 8 px; «изменено» окрашено акцентным (фиолетовым) `--ou-accent-default`, а не жёлтым `--ou-warning-default`. На снимке `impl-dirty.png` точка фиолетовая",
+    "kind": "не тот класс и цвет индикатора",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/test-editor.tsx:853-:859; client/src/styles/tb-components.css:663-:674",
+    "files": [
+      "test-editor.tsx",
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-11",
+    "area": "A",
+    "place": "Точка состояния во вкладке, `aria-label`",
+    "expected": "«Есть несохранённые изменения» и «Есть ошибки» — раздел 6.3 прямо предписывает брать формулировку целевого эскиза",
+    "actual": "«есть изменения», «есть предупреждения», «есть блокирующие ошибки» (со строчной буквы)",
+    "kind": "расхождение подписи",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/test-editor.tsx:861-:865",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "A-12",
+    "area": "A",
+    "place": "Вкладка «Основное», между «Описание» и «Режим теста»",
+    "expected": "Разделителя нет: поля лежат в одном `ou-formsection__body`",
+    "actual": "Горизонтальный разделитель `<hr className=\"wf-sep\" />` (видимая линия, `border-top`)",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:154; стиль client/src/styles/tb-components.css:446",
+    "files": [
+      "basic-settings-section.tsx",
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-13",
+    "area": "A",
+    "place": "Вкладка «Основное», «Webhook URL»",
+    "expected": "Placeholder `https://some-lms.example.ru/hooks/scorm`",
+    "actual": "Placeholder `https://example.com/webhook`",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:939",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "A-14",
+    "area": "A",
+    "place": "Вкладка «Основное», «Webhook URL»",
+    "expected": "Пояснения под полем нет",
+    "actual": "`div.ou-formfield__desc`: «Оставьте пустым, если webhook не нужен.»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:950",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-15",
+    "area": "A",
+    "place": "Вкладка «Основное», «Результат для LMS при нескольких попытках»",
+    "expected": "Подсказки под полем нет",
+    "actual": "Длинный hint: «Действует только в SCORM-пакете. Многие LMS сами решают…»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:974",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-16",
+    "area": "A",
+    "place": "Оболочка ящика",
+    "expected": "Корень `div.ou-drawer-root.ou-drawer-root--right` (3.1)",
+    "actual": "Корень `div.ou-drawer-root` без модификатора `--right` (модификатор есть только на самой панели `aside`)",
+    "kind": "отсутствующий модификатор",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:506",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "A-17",
+    "area": "A",
+    "place": "Шапка ящика, тег статуса при ошибках",
+    "expected": "В целевом эскизе `s-errors` шапка держит нейтральный тег «Черновик»: об ошибках говорят баннер и точки, а «Изменено» стоит в подвале",
+    "actual": "При любой ошибке валидации тег шапки подменяется на «Есть ошибки» (тон `error`) и вытесняет статус публикации",
+    "kind": "лишний элемент / расхождение подписи",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:1480-:1485",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "A-18",
+    "area": "A",
+    "place": "Риббон вкладок",
+    "expected": "Вкладка «Комментарии» присутствует во всех 27 состояниях-ящиках (3.3)",
+    "actual": "Вкладка скрыта в режиме создания теста (`editor.mode !== \"create\"`)",
+    "kind": "отсутствующий элемент (условно)",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:466",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "withdrawn"
+  },
+  {
+    "id": "A-19",
+    "area": "A",
+    "place": "Подвал, «Сохранить» при ошибках",
+    "expected": "`disabled` + `aria-describedby` с причиной «исправьте ошибки в выделенных секциях» (6.3)",
+    "actual": "`disabled` + `aria-disabled`, `aria-describedby` нет — причина блокировки не озвучена скринридеру",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:780-:781, :803-:804",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "A-20",
+    "area": "A",
+    "place": "Поповер изменений, строка изменения",
+    "expected": "Старое значение — приглушённое зачёркнутое (`color: fg-muted`), новое — полужирное; фонов и моноширинного шрифта нет",
+    "actual": "Старое — красная плашка `error-soft` моноширинным, новое — зелёная плашка `success-soft` моноширинным",
+    "kind": "расхождение оформления",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:1087-:1098",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-21",
+    "area": "A",
+    "place": "Поповер изменений, строка изменения",
+    "expected": "Стрелка — иконка `i-arrow-right` 12x12",
+    "actual": "Текстовый символ «→»",
+    "kind": "не тот тип элемента",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:982",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-22",
+    "area": "A",
+    "place": "Поповер изменений, строки группы",
+    "expected": "Разделителей между строками нет (только интервал 4 px)",
+    "actual": "Между строками пунктирная линия `border-top: … dashed`",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:1080-:1085",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-23",
+    "area": "A",
+    "place": "Диалог закрытия редактора",
+    "expected": "`ou-modal--m`, ширина 480 px (6.4)",
+    "actual": "`ModalDialog size=\"l\"` (`ou-modal--l`, max-width 720 px) — в коде оговорено, что три кнопки не влезают в `m`",
+    "kind": "не тот размер",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:1138",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn"
+  },
+  {
+    "id": "A-24",
+    "area": "A",
+    "place": "Диалог конфликта версий",
+    "expected": "`ou-modal--m`, ширина 520 px (6.5)",
+    "actual": "`ModalDialog size=\"l\"` (max-width 720 px)",
+    "kind": "не тот размер",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:1241",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-25",
+    "area": "A",
+    "place": "Диалог конфликта, таблица различий",
+    "expected": "Таблица `ou-table` с `aria-label=\"Различия версий\"`",
+    "actual": "Собственная таблица `table.tb-conflict-diff` с `aria-label=\"Сравнение версий\"`",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:1358-:1362",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "A-26",
+    "area": "A",
+    "place": "Диалог конфликта, подсказки кнопок",
+    "expected": "«Записать ваши изменения поверх серверной версии. Чужие правки будут перезаписаны.» и «Загрузить серверную версию. Ваши несохранённые изменения будут потеряны.»",
+    "actual": "Обе подсказки усечены до первого предложения: «Записать ваши изменения поверх серверной версии.» и «Загрузить серверную версию.»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:1259, :1271",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "A-27",
+    "area": "A",
+    "place": "Открытие ящика, фокус",
+    "expected": "NFR-19: фокус при открытии — тело ящика (`div.ou-drawer__body[tabindex=\"0\"]`)",
+    "actual": "Фокус ставится на первую вкладку риббона; тело `tabindex={0}` есть, но фокус в него не уходит",
+    "kind": "расхождение поведения",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:267-:272",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "A-28",
+    "area": "A",
+    "place": "Баннер ошибок, «Перейти к ошибкам»",
+    "expected": "Поле, на которое ведёт переход, получает класс `is-focused` и кольцо фокуса 2 px (`--wf-ring`, 5.27)",
+    "actual": "Переход прокручивает к якорю `data-field` и вызывает нативный `focus()`; класс `is-focused` не ставится, отдельного кольца нет",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:351-:371",
+    "files": [
+      "test-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-1",
+    "area": "B",
+    "place": "Состав, заголовок раздела",
+    "expected": "`ou-formsection--stacked` с `h3.ou-formsection__title` «Темы теста» (эскиз 618-621)",
+    "actual": "сырой `div.tb-section-label` «Темы и выборка вопросов» — мелкий приглушённый текст, не заголовок раздела",
+    "kind": "подпись + тип элемента",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:242",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "B-2",
+    "area": "B",
+    "place": "Состав, шапка раздела",
+    "expected": "поле «Поиск темы» — Input `ou-field--m` с иконкой `i-search` (эскиз 623-626)",
+    "actual": "поля нет",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:242-260",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-3",
+    "area": "B",
+    "place": "Состав, порядок выдачи",
+    "expected": "подпись «Порядок выдачи вопросов в тесте»",
+    "actual": "«Порядок выдачи вопросов» (в `aria-label` при этом полная формулировка)",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:250",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-4",
+    "area": "B",
+    "place": "Состав, порядок выдачи",
+    "expected": "Select `ou-field--m ou-field--full` с меткой НАД полем, на всю ширину (эскиз 627-633)",
+    "actual": "строка «метка слева + Select `size=\"s\"` + хвост-подсказка»",
+    "kind": "тип/размер контрола",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:249-260",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-5",
+    "area": "B",
+    "place": "Состав, панель действий",
+    "expected": "`tb-fold-toolbar` НАД списком тем: «Добавить тему» (secondary, s, `i-plus`) слева (эскиз 634-640)",
+    "actual": "кнопка стоит ПОД списком тем, `variant=\"secondary\" size=\"m\" fullWidth`",
+    "kind": "место + размер кнопки",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:311-321",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-6",
+    "area": "B",
+    "place": "Состав, панель действий",
+    "expected": "пара «Развернуть все» / «Свернуть все» (ghost, s, `i-chevrons-up-down` / `i-chevrons-down-up`) справа (эскиз 636-639)",
+    "actual": "кнопок нет",
+    "kind": "отсутствующее действие",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:242-321",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-7",
+    "area": "B",
+    "place": "Состав, список тем",
+    "expected": "аккордеон `ou-acc ou-acc--separated`, строка-шапка `tb-acc-head` с шевроном `ou-acc__chev`; по умолчанию все темы СВЁРНУТЫ (комментарий эскиза, строка 643)",
+    "actual": "плоские карточки `tb-topic-row`, всегда раскрытые: ни шеврона, ни свёрнутого состояния",
+    "kind": "потерянное состояние",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:408-437",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-8",
+    "area": "B",
+    "place": "Состав, шапка темы",
+    "expected": "подзаголовок под названием: «41 вопрос в банке · выдаётся 16»",
+    "actual": "счётчик «9 вопросов» справа в шапке; сколько выдаётся — не показано",
+    "kind": "подпись + место",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:416-418",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-9",
+    "area": "B",
+    "place": "Состав, шапка темы",
+    "expected": "название с номером: «1. О компании»",
+    "actual": "номера нет, выводится только имя темы",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:410",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-10",
+    "area": "B",
+    "place": "Состав, шапка темы",
+    "expected": "кнопка «Убрать тему «…»» с иконкой `i-trash` 14x14 (эскиз 653)",
+    "actual": "та же кнопка с иконкой `X`",
+    "kind": "не та иконка",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:428-435",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-11",
+    "area": "B",
+    "place": "Состав, тело темы",
+    "expected": "Switch «Обязательная» — ПЕРВЫЙ пункт тела карточки (эскиз 657-662)",
+    "actual": "Switch перенесён в шапку карточки, между счётчиком и крестиком",
+    "kind": "порядок/место",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:419-427",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-12",
+    "area": "B",
+    "place": "Состав, блок квот",
+    "expected": "карточки квот `ou-card--outlined ou-card--sm tb-level-card`: `h5` с именем подтемы, подзаголовок «ровно 4 · доступно 11 · в вариантах A: 2 · B: 2», действия «Удалить квоту «…»» и «Свернуть квоту «…»», тело — группа в 2 колонки и группа в 3 колонки (эскиз 710-792)",
+    "actual": "таблица `tb-table` со строками-квотами",
+    "kind": "не тот тип контрола",
+    "severity": "блокирующее",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:733-879",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "quotas",
+    "status": "fixed",
+    "note": "Карточки сделаны без полей порога: их отменил PRD-50 §16 уже после утверждения эскиза. Карточки открываются свёрнутыми — свёрнутая карточка говорит ровно то, что говорила строка таблицы («ровно 4 · доступно 3 · в вариантах …»)."
+  },
+  {
+    "id": "B-13",
+    "area": "B",
+    "place": "Состав, блок квот",
+    "expected": "подписи полей карточки: «Подтема (тег вопроса)», «Сколько вопросов», «Режим квоты», «Порог по подтеме», «Значение порога, %»",
+    "actual": "заголовки колонок: «Подтема (тег вопроса)», «Сколько», «Режим», «Доступно», «Порог», «В вариантах»; у поля процента подписи нет",
+    "kind": "подписи + состав колонок",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:735-743",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "quotas",
+    "status": "fixed"
+  },
+  {
+    "id": "B-14",
+    "area": "B",
+    "place": "Состав, блок квот",
+    "expected": "панель «Развернуть все» / «Свернуть все» (ghost, s), прижата вправо (эскиз 704-709)",
+    "actual": "панели нет",
+    "kind": "отсутствующее действие",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:703-733",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "quotas",
+    "status": "fixed"
+  },
+  {
+    "id": "B-15",
+    "area": "B",
+    "place": "Состав, блок квот",
+    "expected": "пояснение «Порог сравнивается с долей баллов по подтеме. Подтема, не попавшая в выдачу, вердикт темы не роняет.»",
+    "actual": "«Порог сравнивается с долей БАЛЛОВ по подтеме, независимо от того, что выбрано для показа. Подтема, не попавшая в выдачу, вердикт темы не роняет.»",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:913-918",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "quotas",
+    "status": "withdrawn",
+    "note": "Снята как устаревшая: PRD-50 §16 (влит 2026-09-06) убрал индивидуальные пороги подтем вовсе — подтема судится правилом СВОЕЙ ТЕМЫ. Пояснения, которое просили сократить, в коде больше нет."
+  },
+  {
+    "id": "B-16",
+    "area": "B",
+    "place": "Состав, переключатели квот/порогов/вариантов",
+    "expected": "подписи без иконок: «Квоты по подтемам (тегам)», «Пороги по подтемам (тегам)», «Варианты теста»",
+    "actual": "перед каждой подписью иконка (`Layers`, `Layers`, `List`)",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:667-670, client/src/features/tests/editor/sections/variants-editor.tsx:110-113",
+    "files": [
+      "topics-structure-section.tsx",
+      "variants-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-17",
+    "area": "B",
+    "place": "Состав, блок вариантов",
+    "expected": "строка итога одна: «В вариантах задействовано 32 из 41 вопроса темы · 9 не используются» + тег",
+    "actual": "добавлена вторая строка баланса: «{N} вариантов по {X} · при старте темы выпадает один, выдаётся целиком; на повторе — другой» + тег «сбалансировано» / «неравные варианты»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/variants-editor.tsx:176-193",
+    "files": [
+      "variants-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed",
+    "note": "Строка баланса убрана из карточки, но сигнал не потерян: неравные варианты стали предупреждением `variants_unequal` общего контура — оно зажигает точку рейла «Состава» и попадает в баннер, куда ведёт «Перейти к ошибкам»."
+  },
+  {
+    "id": "B-18",
+    "area": "B",
+    "place": "Состав, блок вариантов",
+    "expected": "метки вариантов «Вариант A» / «Вариант B» (и в подзаголовке квоты — «в вариантах A: 2 · B: 2»)",
+    "actual": "метки нумеруются цифрами: «Вариант 1» / «Вариант 2»",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/variants-editor.tsx:263, variants-editor.tsx:302",
+    "files": [
+      "variants-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-19",
+    "area": "B",
+    "place": "Состав, интервалы",
+    "expected": "между разными настройками — 4x (16 px), метка и её контрол — 1x (4 px) (раздел 7.3-7.4 описи, заметка эскиза 141-144)",
+    "actual": "строки тела карточки отбиты на `--ou-space-2` (8 px), внутренний зазор «метка — контрол» тоже 8 px",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:800-838",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "B-20",
+    "area": "B",
+    "place": "Состав, интервалы",
+    "expected": "тело раскрытой темы — `padding: 0 24 24` (раздел 7.2 описи)",
+    "actual": "`.tb-topic-row__body { padding: 12px 16px }`",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:798",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "B-21",
+    "area": "B",
+    "place": "Состав, интервалы",
+    "expected": "однородные карточки тем — 1x (4 px) между собой (заметка эскиза 141-144)",
+    "actual": "`.tb-topic-row { margin-bottom: 8px }`",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:781",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "withdrawn"
+  },
+  {
+    "id": "B-22",
+    "area": "B",
+    "place": "Пустое состояние «нет тем»",
+    "expected": "заголовок «В тесте нет тем», описание «Тема даёт тесту вопросы: из неё идёт выборка, по ней считается вердикт и печатается разбор. Добавьте первую тему.»",
+    "actual": "заголовок «Пока нет ни одной темы», описание «Добавьте темы, из которых будут отбираться вопросы. Минимум одна тема обязательна для сохранения теста (FR-12).» — с кодом требования в тексте интерфейса",
+    "kind": "подпись",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:262-270",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-23",
+    "area": "B",
+    "place": "Пустое состояние «нет тем»",
+    "expected": "под пустым состоянием — баннер `ou-banner--info`, `role=\"status\"`: «Пока тем нет, правила оценки тем, квоты по подтемам и адаптивная лестница недоступны.»",
+    "actual": "баннера нет",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:262-270",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-24",
+    "area": "B",
+    "place": "Пустое состояние «нет тем»",
+    "expected": "`ou-empty--page ou-empty--well` с иллюстрацией-иконкой `i-info`; «Добавить тему» вынесена в шапку раздела (secondary, s)",
+    "actual": "`EmptyState layout=\"inline\" well` без иллюстрации; кнопка «Добавить тему» — под пустым состоянием, `size=\"m\" fullWidth`",
+    "kind": "вариант компонента + место кнопки",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:263-321",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-25",
+    "area": "B",
+    "place": "Модалка «Добавить тему»",
+    "expected": "описание шапки «Темы, доступные вам и ещё не добавленные в тест»",
+    "actual": "«Выберите тему, вопросы из которой попадут в тест.»",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:957",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-26",
+    "area": "B",
+    "place": "Модалка «Добавить тему»",
+    "expected": "поле поиска с видимой подписью «Поиск темы» и иконкой `i-search` в поле",
+    "actual": "подписи и иконки нет — только `aria-label`",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:970-980",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-27",
+    "area": "B",
+    "place": "Модалка «Добавить тему»",
+    "expected": "placeholder «Название темы»",
+    "actual": "placeholder «Поиск по названию...» (с тремя точками вместо многоточия)",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:973",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-28",
+    "area": "B",
+    "place": "Модалка «Добавить тему»",
+    "expected": "пометка темы без вопросов — «нет вопросов»",
+    "actual": "всегда числовая пометка, для пустой темы «0 вопросов»",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:998-1000",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-29",
+    "area": "B",
+    "place": "Модалка «Добавить тему»",
+    "expected": "«Отмена» — ghost, размер m",
+    "actual": "ghost, размер s",
+    "kind": "не тот размер кнопки",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/topics-structure-section.tsx:959-966",
+    "files": [
+      "topics-structure-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-30",
+    "area": "B",
+    "place": "Адаптивные уровни, шапка раздела",
+    "expected": "`ou-formsection` + `h3` в строке `tb-section-head`, справа пара «Развернуть все» / «Свернуть все» (ghost, s) (эскиз 2323-2332)",
+    "actual": "сырой `h3.tb-topics-title` «Адаптивность по темам», кнопок нет",
+    "kind": "отсутствующее действие + тип элемента",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1886",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "B-31",
+    "area": "B",
+    "place": "Адаптивные уровни, строка темы",
+    "expected": "точка состояния `tb-status-dot--ok` / `--off` с `aria-label=\"Состояние темы\"` (NFR-21: точка обязательно парная с `aria-label`)",
+    "actual": "модификаторы `--ok` / `--warn`, точка помечена `aria-hidden=\"true\"` — подписи нет",
+    "kind": "потерянное состояние + нарушение nfr-21",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1998-2001",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "B-32",
+    "area": "B",
+    "place": "Адаптивные уровни, строка темы",
+    "expected": "подзаголовок «16 вопросов · 2 уровня», у темы без уровней — «10 вопросов · уровней нет»",
+    "actual": "«12 вопросов · 3 уровня»; у темы без уровней — «0 уровней»; слово «вопросов» не склоняется",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1976-1978",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-33",
+    "area": "B",
+    "place": "Адаптивные уровни, блок «Уровни сложности»",
+    "expected": "кнопка «Добавить уровень» (secondary, s) с иконкой `i-plus`",
+    "actual": "та же кнопка без иконки, плюс набран текстом: «+ Добавить уровень»",
+    "kind": "не тот контрол/подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:2046-2053",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-34",
+    "area": "B",
+    "place": "Адаптивные уровни, карточка уровня",
+    "expected": "шапка: точка состояния, `h4` с названием, кнопки удаления и сворачивания; подзаголовка НЕТ",
+    "actual": "добавлен подзаголовок «0–100 · 8 вопросов · 70 % · валидно»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:2122-2127",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-35",
+    "area": "B",
+    "place": "Адаптивные уровни, карточка уровня",
+    "expected": "`section.ou-card.tb-level-card` (базовая карточка); кнопка удаления — `ou-iconbtn`, `aria-label` «Удалить уровень «Базовый»» с кавычками",
+    "actual": "`Card variant=\"outlined\" size=\"sm\"`; удаление — `Button variant=\"ghost\"` с иконкой, `aria-label` «Удалить уровень Базовый» без кавычек",
+    "kind": "вариант компонента + подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:2106-2143",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-36",
+    "area": "B",
+    "place": "Сценарий, заголовок раздела",
+    "expected": "`ou-formsection--stacked` + `h3` «Сценарий» (эскиз 2527-2530)",
+    "actual": "заголовка раздела нет вовсе, подраздел начинается сразу с поля",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:214-216",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "B-37",
+    "area": "B",
+    "place": "Сценарий, «Показывать итоги раздела»",
+    "expected": "Switch без описания",
+    "actual": "у Switch добавлено описание «После завершения раздела показывается экран с его результатом. Только для секционных тестов.»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:252-267",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-38",
+    "area": "B",
+    "place": "Сценарий, полотно структуры",
+    "expected": "сразу после настроек идёт зона «ДО ТЕСТА»",
+    "actual": "между настройками и зоной вставлена полоса `FlowModeBar`: «Режим: Линейный по темам — задаётся выше, полем «Сценарий прохождения»»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:489, start-pages-section.tsx:574-585",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-39",
+    "area": "B",
+    "place": "Сценарий, полотно структуры",
+    "expected": "зона `section.inside-test` с меткой «ВНУТРИ ТЕСТА» и ветками `tree-branches` / `tree-branch` вокруг тем (эскиз 2581-2721)",
+    "actual": "в сценарии «Линейный по темам» зоны и метки «ВНУТРИ ТЕСТА» нет: блоки тем идут прямо за зоной «До теста»; метка есть только в маршрутизаторном сценарии",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:899-917",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed",
+    "note": "Зона «Внутри теста» теперь у ОБОИХ потемных сценариев: маршрутизаторная строка рисуется только там, где маршрутизатор есть, ветки одинаковы."
+  },
+  {
+    "id": "B-40",
+    "area": "B",
+    "place": "Сценарий, заголовки зон",
+    "expected": "`div.zone-header` — только текст «ДО ТЕСТА» / «ПОСЛЕ ТЕСТА»",
+    "actual": "перед текстом добавлен шеврон `ChevronRight`",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:952-961",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-41",
+    "area": "B",
+    "place": "Сценарий, строка страницы",
+    "expected": "бейдж `page-variant-badge` — вид узла: «Старт», «Введение», «Вопросы», «Обзор», «Итоги», «Страница»",
+    "actual": "бейдж — название МАКЕТА: «Старт: стандартный», «Введение раздела: стандартное», «Стандартный макет вопроса», «Итоги раздела: стандартные»",
+    "kind": "подпись",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:1276, start-pages-section.tsx:1342",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-42",
+    "area": "B",
+    "place": "Сценарий, зона «До теста»",
+    "expected": "заголовок системной строки — «Стартовая страница»",
+    "actual": "«Старт» (значение `KIND_LABEL`)",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:181-192, start-pages-section.tsx:247-255",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-43",
+    "area": "B",
+    "place": "Сценарий, узел «Обзор»",
+    "expected": "заголовок «Обзор раздела»",
+    "actual": "«Обзор раздела — навигация по вопросам и «Завершить раздел»»",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:1106-1108",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-44",
+    "area": "B",
+    "place": "Сценарий, строка страницы",
+    "expected": "в строке только бейдж, заголовок и два действия",
+    "actual": "добавлены иконка типа строки (`page-icon`), кнопка разворота `page-expand-toggle` («Развернуть»), маркер «шаблон» и теги `page-row__meta` («Доступно макетов: 2»)",
+    "kind": "лишние элементы",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:1329-1353, start-pages-section.tsx:1396-1425",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed",
+    "note": "Закрыта частично: сняты пиктограмма вида строки и маркер «шаблон». Кнопка разворота и `page-row__meta` остаются — их объявляет проектный слой САМОГО эскиза (`.page-expand-toggle`, `.page-expand-slot`, `.page-actions__slot`, `.page-row__meta`), а полотно их просто не нарисовало; без разворота поля страницы не открыть, без меты не увидеть, что страница привязана к пропавшему макету."
+  },
+  {
+    "id": "B-45",
+    "area": "B",
+    "place": "Сценарий, действия строки",
+    "expected": "«Предпросмотр страницы» — `i-eye` 14x14; «Действия для страницы» — `i-more-vertical` 13x13",
+    "actual": "`Eye` 12x12; меню — `MoreHorizontal` (горизонтальные точки) 12x12",
+    "kind": "не та иконка + размеры из раздела 7",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:1357-1377",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "B-46",
+    "area": "B",
+    "place": "Сценарий, действия строки",
+    "expected": "`aria-label` «Предпросмотр страницы» / «Действия для страницы»",
+    "actual": "«Предпросмотр системной страницы «{бейдж}»» / «Действия для системной страницы «{бейдж}»»",
+    "kind": "подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:1360, start-pages-section.tsx:1372",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-47",
+    "area": "B",
+    "place": "Сценарий, зона «После теста»",
+    "expected": "порядок: вставка, страница «Что дальше», вставка, системная «Итоги теста» — после «Итогов теста» вставки НЕТ",
+    "actual": "после строки «Итоги теста» стоит ещё одна вставка «Добавить страницу»",
+    "kind": "порядок элементов",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/start-pages-section.tsx:1521-1532",
+    "files": [
+      "start-pages-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-48",
+    "area": "B",
+    "place": "Модалка «Варианты теста», строка вопроса",
+    "expected": "мета строки — «подтема · N балл(а)» («Продукты компании · 1 балл»)",
+    "actual": "мета — тип вопроса («Один вариант ответа»); подтема и балл не показаны",
+    "kind": "подпись/состав данных",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/variants-editor.tsx:268-289",
+    "files": [
+      "variants-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-49",
+    "area": "B",
+    "place": "Модалка «Варианты теста», подвал",
+    "expected": "«2 варианта · в вариантах задействовано 32 из 41 вопроса · 9 не используются»",
+    "actual": "«2 вариант(а/ов) · в вариантах задействовано 32 из 41» — склонение не сделано, шаблон печатается как есть",
+    "kind": "подпись",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/variants-editor.tsx:316-320",
+    "files": [
+      "variants-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "B-50",
+    "area": "B",
+    "place": "Модалка «Варианты теста», панели переноса",
+    "expected": "строка выбора «Выбрать все»; две кнопки переноса — «Назначить выбранных», «Снять выбранных»",
+    "actual": "«Выбрать всех (N)»; четыре кнопки — добавлены «Назначить всех» и «Снять всех» (поведение компонента ДС)",
+    "kind": "подпись + лишние элементы",
+    "severity": "косметическое",
+    "code": "vendor/ui-kit/src/components/TransferList.tsx:249, TransferList.tsx:272-290",
+    "files": [
+      "TransferList.tsx"
+    ],
+    "batch": "ds",
+    "status": "fixed",
+    "note": "Правка ДС одобрена владельцем 2026-09-07: «Выбрать всех» -> «Выбрать все» — форма для людей, а список бывает из вопросов, страниц и блоков. Четыре кнопки переноса оставлены: эскиз рисует две, но пакетные операции полезны."
+  },
+  {
+    "id": "B-51",
+    "area": "B",
+    "place": "Модалка «Варианты теста», вкладки",
+    "expected": "`ou-tabs__list` с `aria-label=\"Варианты темы\"`",
+    "actual": "`aria-label` не задан",
+    "kind": "потерянная подпись",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/variants-editor.tsx:329-336",
+    "files": [
+      "variants-editor.tsx"
+    ],
+    "batch": "ds",
+    "status": "fixed",
+    "note": "Правка ДС одобрена владельцем 2026-09-07: у `Tabs` появился `listAriaLabel`. `aria-label` из `...rest` доставался внешней обёртке `div.ou-tabs`, у которой роли нет, — список вкладок оставался безымянным."
+  },
+  {
+    "id": "B-52",
+    "area": "B",
+    "place": "Модалка «Варианты теста», строка вопроса",
+    "expected": "строка — чекбокс, аватар, название, мета",
+    "actual": "добавлены иконка типа вопроса и теги-номера «также в вариантах»",
+    "kind": "лишние элементы",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/variants-editor.tsx:273-288",
+    "files": [
+      "variants-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn",
+    "note": "Снята: слот аватара занят той же пиктограммой типа вопроса, которую реестр сам требует в D-29, а номера «также в вариантах» — единственное место, где видно, что вопрос уже занят другим вариантом."
+  },
+  {
+    "id": "C-1",
+    "area": "C",
+    "place": "Навигация",
+    "expected": "Раздел обёрнут в `ou-formsection` с заголовком `h3` «Навигация» (эскиз, строки 900-903)",
+    "actual": "Заголовка раздела нет: панель рендерится без `FormSection`, первым идёт переключатель",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/editor-tabs.tsx:194; client/src/features/tests/editor/sections/basic-settings-section.tsx:1013-:1015",
+    "files": [
+      "editor-tabs.tsx",
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "C-2",
+    "area": "C",
+    "place": "Навигация",
+    "expected": "Порядок переключателей: возврат, свободная навигация, изменение ответа, «Переходить к следующему вопросу сразу после ответа», «Не показывать обзор, если отвечены все вопросы» (`wf-spec.md:367`-`371`)",
+    "actual": "Четвёртым идёт «Не показывать обзор, если отвечены все вопросы», пятым — «Переходить к следующему вопросу сразу после ответа»",
+    "kind": "порядок элементов",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1090-:1127",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "C-3",
+    "area": "C",
+    "place": "Навигация",
+    "expected": "У всех пяти переключателей только `ou-switch-field__label`, пояснений нет (эскиз, строки 904-940)",
+    "actual": "У каждого переключателя есть `description` (5 текстов, от «Ученик может пропускать вопросы…» до «Без отдельного нажатия «Далее»…»)",
+    "kind": "лишний элемент (текст)",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1018, :1043, :1066, :1093, :1108",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "C-4",
+    "area": "C",
+    "place": "Навигация, баннеры блокировки",
+    "expected": "«Недоступно при включённом показе правильных ответов (раздел «Ограничения»): …» (два баннера)",
+    "actual": "«Недоступно при включённом показе правильных ответов («Обратная связь и итоги» → «Во время теста»): …»",
+    "kind": "расхождение текста подсказки",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1085, :1124",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "withdrawn"
+  },
+  {
+    "id": "C-5",
+    "area": "C",
+    "place": "Навигация, баннеры блокировки",
+    "expected": "`ou-banner ou-banner--subtle ou-banner--warning ou-banner--sm` с одним `ou-banner__desc`, без иконки",
+    "actual": "DS-компонент `Banner` всегда печатает `span.ou-banner__ico` с иконкой тона — на скриншоте у обоих баннеров треугольник слева",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "vendor/ui-kit/src/components/Banner.tsx:107; вывод client/src/features/tests/editor/sections/basic-settings-section.tsx:1078-:1088",
+    "files": [
+      "Banner.tsx",
+      "basic-settings-section.tsx"
+    ],
+    "batch": "ds",
+    "status": "fixed",
+    "note": "Правка ДС одобрена владельцем 2026-09-07: `Banner` принимает `icon={false}`. Применено к баннерам блокировки в «Навигации»: баннер подчинён переключателю над ним и объясняет ЕГО состояние, а колонка треугольников в форме читается как список тревог."
+  },
+  {
+    "id": "C-6",
+    "area": "C",
+    "place": "Навигация, «Свободная навигация внутри раздела»",
+    "expected": "Переключатель активен, никакой подчинённости не показано",
+    "actual": "Переключатель гаснет при выключенном возврате к неотвеченным и получает баннер «Доступно только при включённом возврате к неотвеченным.»",
+    "kind": "лишняя зависимость и баннер",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1008, :1045, :1055-:1061",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn"
+  },
+  {
+    "id": "C-7",
+    "area": "C",
+    "place": "Во время прохождения",
+    "expected": "«Режим прогресса» и «Показывать прогресс-бар» — без подсказок (эскиз, строки 3628-3644)",
+    "actual": "Под селектом подсказка «Что считает индикатор в шапке: выданные вопросы, страницы или ничего.», под переключателем — «Полоса заполнения под счётчиком в шапке.»",
+    "kind": "лишний элемент (текст)",
+    "severity": "косметическое",
+    "code": "Приходят из манифеста шаблона через SectionPane: client/src/features/tests/editor/sections/editor-tabs.tsx:202-:210",
+    "files": [
+      "editor-tabs.tsx"
+    ],
+    "batch": "owner",
+    "status": "withdrawn",
+    "note": "Решение владельца 2026-09-07: оставить как есть. Подсказку объявил АВТОР ШАБЛОНА (`manifest.settings[].hint`), а не продукт; прятать её значит решать за него, что автору теста читать не нужно. Эскиз не знал, что текст приходит из манифеста."
+  },
+  {
+    "id": "C-8",
+    "area": "C",
+    "place": "Ограничения, числовые поля",
+    "expected": "«Лимит времени теста» и «Максимум попыток» имеют фиксированную ширину `--tb-input-w-md` (280 px): правило `.tb-settings-content .ou-formsection__body > .ou-number` эскиза, строки 161-164",
+    "actual": "Поля растянуты на всю ширину колонки (видно на скриншоте): проектное правило адресовано только прямому потомку `.tb-settings-content`, до полей внутри `.ou-formsection__body` не достаёт, а `.ou-number` в flex-колонке растягивается",
+    "kind": "нарушение фиксированных размеров (раздел 7.7)",
+    "severity": "существенное",
+    "code": "client/src/styles/tb-components.css:174 (правило есть только для > .ou-formfield > .ou-number); поля — client/src/features/tests/editor/sections/basic-settings-section.tsx:456-:464, :478-:485",
+    "files": [
+      "tb-components.css",
+      "basic-settings-section.tsx"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "C-9",
+    "area": "C",
+    "place": "Ограничения повторных попыток",
+    "expected": "Подписи полей периода охлаждения: «После неуспешной попытки, дней», «После успешной попытки, дней» (`wf-spec.md:409`-`410`)",
+    "actual": "«При успешном прохождении, дней», «При неуспешном прохождении, дней»",
+    "kind": "расхождение подписи (два поля)",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:787, :802",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "C-10",
+    "area": "C",
+    "place": "Ограничения повторных попыток",
+    "expected": "Сначала поле неуспешного исхода (7), затем успешного (180)",
+    "actual": "Сначала «При успешном прохождении, дней», затем «При неуспешном прохождении, дней»",
+    "kind": "порядок элементов",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:783-:812",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "C-11",
+    "area": "C",
+    "place": "Ограничения, баннер WebTutor",
+    "expected": "«Проверка через WebTutor находит прошлые попытки по названию курса. Ограничение сработает, только если название курса в WebTutor точно совпадает с названием этого теста.»",
+    "actual": "«…по НАЗВАНИЮ курса. Ограничение сработает только если название курса (модуля) в WebTutor точно совпадает с названием этого теста. Если при загрузке в LMS курс назван иначе — период охлаждения применяться не будет.»",
+    "kind": "расхождение текста подсказки",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:833",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "C-12",
+    "area": "C",
+    "place": "Ограничения, баннеры",
+    "expected": "Баннер WebTutor и итоговый info-баннер — размера по умолчанию (`ou-banner--subtle ou-banner--warning` / `--info`, без `--sm`)",
+    "actual": "Оба баннера с `size=\"sm\"`",
+    "kind": "не тот вариант компонента",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:832, :912",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "C-13",
+    "area": "C",
+    "place": "Ограничения повторных попыток",
+    "expected": "Разделительной линии перед «Ограничение между попытками» нет; проектный слой прямо говорит «Разделительных ЛИНИЙ в панели нет — их работу делает интервал»",
+    "actual": "Перед переключателем стоит `div.ou-card__divider`",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:863; правило — client/src/styles/tb-components.css:181",
+    "files": [
+      "basic-settings-section.tsx",
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "C-14",
+    "area": "C",
+    "place": "Ограничения, переключатели",
+    "expected": "«Индивидуальные лимиты для тем» и «Ограничить повторное прохождение» — без пояснений (эскиз, строки 3697-3701 и 3753-3757)",
+    "actual": "У обоих есть пояснение: «Если выключено, действует только общий лимит теста (см. выше).» и «Выключено — учащийся может перезапускать курс без ограничений (как сейчас).»",
+    "kind": "лишний элемент (текст)",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:567, :717-:721",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "C-15",
+    "area": "C",
+    "place": "Защита контента",
+    "expected": "Раздел обёрнут в `ou-formsection` с заголовком `h3` «Защита контента» (эскиз, строки 3929-3932)",
+    "actual": "Заголовка раздела нет: панель рендерится без `FormSection`",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/editor/sections/editor-tabs.tsx:217; client/src/features/tests/editor/sections/basic-settings-section.tsx:1181-:1186",
+    "files": [
+      "editor-tabs.tsx",
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "C-16",
+    "area": "C",
+    "place": "Защита контента",
+    "expected": "У трёх переключателей только подписи, пояснений нет",
+    "actual": "У каждого переключателя есть `description` (три текста)",
+    "kind": "лишний элемент (текст)",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/basic-settings-section.tsx:1189, :1204, :1219",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-1",
+    "area": "D",
+    "place": "Оценка ответа, строка умолчания",
+    "expected": "Input `ou-field--m` (эскиз, строка 2171)",
+    "actual": "`Input size=\"s\"`",
+    "kind": "не тот размер контрола",
+    "severity": "косметическое",
+    "code": "scoring-section.tsx:184",
+    "files": [
+      "scoring-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-2",
+    "area": "D",
+    "place": "Оценка ответа, колонка «Состояние»",
+    "expected": "у переопределённой строки тег `ou-tag--warning` «задано в тесте» (эскиз, строка 2243)",
+    "actual": "тег выводится ТОЛЬКО при устаревшей настройке («Настройка устарела»); у обычного переопределения колонка пуста",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "scoring-section.tsx:330-339",
+    "files": [
+      "scoring-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-3",
+    "area": "D",
+    "place": "Оценка ответа, таблица вопросов",
+    "expected": "`aria-label=\"Оценка вопросов темы «О компании»\"` (строка 2193)",
+    "actual": "таблица без `aria-label`",
+    "kind": "потерянный атрибут",
+    "severity": "косметическое",
+    "code": "scoring-section.tsx:256",
+    "files": [
+      "scoring-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-4",
+    "area": "D",
+    "place": "Оценка ответа, свёртка темы",
+    "expected": "классы `tb-fold-sec` / `tb-fold-sec-head` / `tb-fold-sec-name` (строки 2181-2185)",
+    "actual": "собственный дубликат `tb-qscoring__sec` / `__sec-head` / `__sec-name` с отдельными правилами CSS",
+    "kind": "расхождение разметки",
+    "severity": "косметическое",
+    "code": "scoring-section.tsx:221-234, tb-components.css:2365-2374",
+    "files": [
+      "scoring-section.tsx",
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-5",
+    "area": "D",
+    "place": "Оценка ответа, балл секции",
+    "expected": "`aria-label=\"Балл по умолчанию секции «О компании»\"` (кавычки, строка 2190)",
+    "actual": "«Балл по умолчанию секции Демо: управленческие компетенции» — без кавычек",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "scoring-section.tsx:247",
+    "files": [
+      "scoring-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-6",
+    "area": "D",
+    "place": "Вердикт, «Тест пройден, если»",
+    "expected": "`ou-formsection--stacked` + `h3.ou-formsection__title` (строки 990-993)",
+    "actual": "обведённая карточка `Card variant=\"outlined\" size=\"sm\"` + `CardHeader`",
+    "kind": "не тот контейнер раздела",
+    "severity": "существенное",
+    "code": "basic-settings-section.tsx:1369-1376",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "D-7",
+    "area": "D",
+    "place": "Вердикт, заголовок",
+    "expected": "«Тест пройден, если»",
+    "actual": "«Тест пройден, если:» (двоеточие)",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:1376",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-8",
+    "area": "D",
+    "place": "Вердикт, вариант 2",
+    "expected": "«достигнут порог и пройдены все обязательные темы» (строка 1011)",
+    "actual": "«достигнут общий проходной порог и пройдены все обязательные темы»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:1352",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-9",
+    "area": "D",
+    "place": "Вердикт, тело карточки",
+    "expected": "разделителя между радиогруппой и селектом нет",
+    "actual": "`hr.wf-sep`",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:1390",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-10",
+    "area": "D",
+    "place": "Вердикт, общее правило",
+    "expected": "«Тип общего правила» и счётчик «Порог» — два поля во всю ширину друг под другом (строки 1034-1049)",
+    "actual": "оба поля в одной строке двумя колонками (`tb-pass-overall`)",
+    "kind": "расхождение раскладки",
+    "severity": "существенное",
+    "code": "basic-settings-section.tsx:1392-1445",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-11",
+    "area": "D",
+    "place": "Вердикт, порог",
+    "expected": "подпись «Порог», значение с суффиксом «%» (строки 1042-1046)",
+    "actual": "«Порог (%)» / «Порог (баллы)»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:1422-1425",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-12",
+    "area": "D",
+    "place": "Вердикт, «Правила оценки тем»",
+    "expected": "`ou-formsection--stacked` + `h3.ou-formsection__title` (строки 1053-1056)",
+    "actual": "голый `h3.tb-topics-title` без обёртки раздела",
+    "kind": "не тот контейнер раздела",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:1451",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "D-13",
+    "area": "D",
+    "place": "Шкалы, подзаголовок карточки",
+    "expected": "«сумма · проценты · 17 вопросов» (строка 2812)",
+    "actual": "добавлен член «N уровней»: «сумма · без пересчёта · 3 уровня · 14 вопросов»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:527-536",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-14",
+    "area": "D",
+    "place": "Шкалы, поле «Источник»",
+    "expected": "только Seg «Вопросы» / «Другие шкалы» (disabled), описания нет (строки 2838-2844)",
+    "actual": "под сегментом `p.ou-formfield__desc` «„Другие шкалы“ пока недоступны…»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:675-678",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-15",
+    "area": "D",
+    "place": "Шкалы, верхняя сетка формы",
+    "expected": "три группы `ou-formgroup--two`, gap 16 px",
+    "actual": "один `Grid cols={2} gap={3}` — 12 px",
+    "kind": "нарушение сетки 4/16/24",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:629, vendor/ui-kit/css/skillum-ds.css:3354",
+    "files": [
+      "scales-section.tsx",
+      "skillum-ds.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "D-16",
+    "area": "D",
+    "place": "Шкалы, «Уровни шкалы» и «Границы шкалы и показ результата»",
+    "expected": "подписи ПОЛЯ (`ou-formfield__lbl` + `ou-formfield__desc`) внутри тела карточки (строки 2862-2864, 2982-2983)",
+    "actual": "`hr.wf-sep` + `div.tb-section-label` + `p.tb-card-desc` — линейка-разделитель, которой в эскизе нет",
+    "kind": "лишний элемент, не тот контрол",
+    "severity": "существенное",
+    "code": "scales-section.tsx:702-712, :724-725",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-17",
+    "area": "D",
+    "place": "Шкалы, «Задать предел показа на диаграмме»",
+    "expected": "«Читается, только когда у экрана итогов выбран предел оси „заданный автором“.» (строка 3019)",
+    "actual": "добавлено второе предложение «Нужен, когда домен недостижимо велик: фигура иначе жмётся к центру и различия шкал пропадают.»",
+    "kind": "расхождение текста подсказки",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:1008",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-18",
+    "area": "D",
+    "place": "Шкалы, «Слоты карточки»",
+    "expected": "«Выключается показ слота — на экране итогов и в отчёте…» (строка 3048)",
+    "actual": "«Выключается ПОКАЗ слота — …» (заглавными)",
+    "kind": "расхождение текста подсказки",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:957",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-19",
+    "area": "D",
+    "place": "Конструктор уровней, поля покрытия",
+    "expected": "`ou-field--m`, `aria-label` «Начало шкалы» / «Конец шкалы» (строки 2869, 2881)",
+    "actual": "`Input size=\"s\"`, `aria-label` «Начало» / «Конец»",
+    "kind": "не тот размер, расхождение подписи",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:161-170, :214-223",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-20",
+    "area": "D",
+    "place": "Конструктор уровней, шапка карточки",
+    "expected": "заголовок — КОД уровня (`basic`, `confident`, `advanced`; строки 2887, 2921, 2955)",
+    "actual": "заголовок — название уровня («Базовый»), код только в поле",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:73-75, :269",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-21",
+    "area": "D",
+    "place": "Конструктор уровней, удаление",
+    "expected": "`aria-label=\"Удалить уровень «basic»\"` (строка 2890)",
+    "actual": "«Удалить уровень 1»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:277",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-22",
+    "area": "D",
+    "place": "Конструктор уровней, сетка карточки",
+    "expected": "Input `ou-field--m`, без подсказки и placeholder (строки 2893-2900)",
+    "actual": "`Input size=\"s\"`; у «Кода уровня» добавлены hint «Машинное имя для формул показателей» и `placeholder=\"напр. high\"`",
+    "kind": "не тот размер, лишний элемент",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:286-306",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-23",
+    "area": "D",
+    "place": "Конструктор уровней, «Как трактовать»",
+    "expected": "Seg с `aria-label=\"Трактовка уровня\"`, подсказки справа нет (строка 2904)",
+    "actual": "`aria-label=\"Оценка уровня N\"`, добавлена подпись «Авто — цвет по направлению шкалы»",
+    "kind": "расхождение подписи, лишний элемент",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:309-321",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-24",
+    "area": "D",
+    "place": "Конструктор уровней, «Добавить уровень»",
+    "expected": "ghost, размер **m**, центрирована в `div.tb-levels__add` (строки 2977-2979)",
+    "actual": "ghost, размер **s**, без обёртки, слева",
+    "kind": "не тот размер, расхождение раскладки",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:373-383",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-25",
+    "area": "D",
+    "place": "Конструктор уровней, карточка уровня",
+    "expected": "тело заканчивается строкой «Как трактовать»",
+    "actual": "добавлены складка «Толкование для обучающегося» и строка «Рекомендации» с бейджем",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:326-368",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn",
+    "note": "Снята: эскиз недорисован. Складка «Толкование для обучающегося» и строка «Рекомендации» — единственные редакторы полей `band.text` и `band.feedback`; убрать их значит сделать тексты уровня, которые видит обучающийся, недоступными для правки."
+  },
+  {
+    "id": "D-26",
+    "area": "D",
+    "place": "Конструктор уровней, низ",
+    "expected": "баннера нет",
+    "actual": "постоянный `Banner tone=\"info\"` «„Код уровня“ — машинное имя…»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:415-421",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-27",
+    "area": "D",
+    "place": "Конструктор уровней, порог",
+    "expected": "`aria-label=\"Порог между уровнями «Базовый» и «Уверенный»\"` (строка 2911)",
+    "actual": "«Порог между уровнями 1 и 2»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:245",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-28",
+    "area": "D",
+    "place": "Конструктор уровней и вклады, интервалы",
+    "expected": "§7.4: `.tb-levels`, `.tb-levels__cover`, `.tb-levels__grid`, `.tb-levels__tone`, `.tb-fold-sec__body` — 16 px",
+    "actual": "8 px (`.tb-levels`, column-gap `.tb-levels__cover`) и 12 px (`__grid`, `__tone`, `.tb-fold-sec__body`)",
+    "kind": "нарушение сетки 4/16/24",
+    "severity": "косметическое",
+    "code": "tb-components.css:2403, :2542, :2546, :2622, :2631",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "D-29",
+    "area": "D",
+    "place": "Вклады вопросов, карточка вопроса",
+    "expected": "заголовок = пиктограмма типа + «1. текст» (строка 3108)",
+    "actual": "только «1. текст», пиктограммы нет",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:1480, :1491",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-30",
+    "area": "D",
+    "place": "Вклады вопросов, подзаголовок",
+    "expected": "только теги шкал, у непривязанного — «· не привязан» (строки 3085, 3109)",
+    "actual": "подзаголовок начинается с типа словами («распределение баллов», «один выбор»)",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:1492-1493",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-31",
+    "area": "D",
+    "place": "Вклады вопросов, матрица",
+    "expected": "`aria-label=\"Вклады вариантов ответа в шкалы\"` (строка 3117)",
+    "actual": "таблица без `aria-label`",
+    "kind": "потерянный атрибут",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:1539-1543",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-32",
+    "area": "D",
+    "place": "Вклады вопросов, ячейка вклада",
+    "expected": "счётчик `ou-number--s ou-number--split` со степперами «Меньше»/«Больше», `aria-label=\"Вклад\"` (строки 3134-3140)",
+    "actual": "`Input size=\"s\"` без степперов, `aria-label` «Вклад «…» в шкалу …»",
+    "kind": "не тот тип контрола",
+    "severity": "существенное",
+    "code": "scales-section.tsx:1601-1629",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "components",
+    "status": "fixed"
+  },
+  {
+    "id": "D-33",
+    "area": "D",
+    "place": "Вклады вопросов, шапка свёртки",
+    "expected": "один тег `ou-tag--neutral ou-tag--outline` «41 вопрос» (строка 3077)",
+    "actual": "добавлен тег `ou-tag--warning` «{N} не привязано» перед нейтральным",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "scales-section.tsx:1416-1424",
+    "files": [
+      "scales-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-34",
+    "area": "D",
+    "place": "Модалка оценки вопроса, подвал",
+    "expected": "«Предпросмотр балла» — secondary (`s-qscoring`, `s-qscoring-tiered`, `s-qscoring-weighted`)",
+    "actual": "`Button variant=\"ghost\"`",
+    "kind": "не тот вариант кнопки",
+    "severity": "косметическое",
+    "code": "question-scoring-modal.tsx:144-152",
+    "files": [
+      "question-scoring-modal.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-35",
+    "area": "D",
+    "place": "Модалка оценки вопроса, подвал и шапка",
+    "expected": "раздел 9 п. 3: «Применить» (`s-qscoring`) против «Сохранить» (два других состояния); «Секция «…»» против «Тема «…»»",
+    "actual": "фактически: главная кнопка — «Применить», описание шапки — «Секция «Демо: управленческие компетенции»»; то есть выбран вариант `s-qscoring`",
+    "kind": "разрешённое расхождение эскиза",
+    "severity": "косметическое",
+    "code": "question-scoring-modal.tsx:126-127, :159",
+    "files": [
+      "question-scoring-modal.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed",
+    "note": "Эскиз спорит сам с собой (три состояния одной модалки: «Применить»/«Сохранить», «Секция»/«Тема»). Выбрано: «Применить» — модалка кладёт правку в черновик, а пишет её единственное «Сохранить» ящика; «Тема «…»» — так этот объект назван в «Составе» и в «Оценке ответа»."
+  },
+  {
+    "id": "D-36",
+    "area": "D",
+    "place": "Модалка, строка «Цена ответа»",
+    "expected": "`div.tb-qscoring__price` + тег `ou-tag--neutral ou-tag--outline` (строки эскиза `s-qscoring`, п. 5.30.3)",
+    "actual": "`Cluster justify=\"between\"` + `Tag variant=\"outline\"` без тона `neutral`, класса `tb-qscoring__price` нет",
+    "kind": "расхождение разметки",
+    "severity": "косметическое",
+    "code": "scoring-builder.tsx:143-148",
+    "files": [
+      "scoring-builder.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-37",
+    "area": "D",
+    "place": "Модалка, режим «Веса опций»",
+    "expected": "`table.tb-table.tb-weights` с колонками «Вариант ответа» и «Балл» (п. 5.32)",
+    "actual": "не таблица: `Grid template=\"label-control\"` из `div`, заголовки — `div` с инлайновым `font-size:12px; font-weight:500`",
+    "kind": "не тот тип контрола, обход дс",
+    "severity": "существенное",
+    "code": "scoring-builder.tsx:168-189",
+    "files": [
+      "scoring-builder.tsx"
+    ],
+    "batch": "components",
+    "status": "fixed"
+  },
+  {
+    "id": "D-38",
+    "area": "D",
+    "place": "Модалка, `s-qscoring-weighted`",
+    "expected": "полей «Балл за вопрос» и «Сложность» на этом экране НЕТ (§8 п. 9)",
+    "actual": "поля показываются всегда, для любого типа вопроса",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "question-scoring-modal.tsx:184-209",
+    "files": [
+      "question-scoring-modal.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn",
+    "note": "Снята: эскиз спорит сам с собой — состояние `s-qscoring-tiered` той же модалки поля «Балл за вопрос» и «Сложность» рисует. Убрать их нельзя и по существу: заработанное считается как `points × ratio` (`shared/scoring/aggregate.ts`), то есть цена вопроса управляет и весовым случаем."
+  },
+  {
+    "id": "D-39",
+    "area": "D",
+    "place": "Модалка, ступени",
+    "expected": "фиксированные ширины §7.7: счётчик 152 px, оператор 88 px, балл ступени 88 px",
+    "actual": "`tb-fw-lg` = 144 px, `tb-fw-sm` = 80 px (и оператор, и балл ступени)",
+    "kind": "нарушение фиксированных размеров",
+    "severity": "косметическое",
+    "code": "scoring-builder.tsx:207, :218, :256; tb-components.css:2440-2442",
+    "files": [
+      "scoring-builder.tsx",
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "D-40",
+    "area": "D",
+    "place": "Показатели, заголовок раздела",
+    "expected": "`ou-formsection--stacked` + `h3.ou-formsection__title` «Показатели» (строки 3262-3265)",
+    "actual": "мелкая подпись `div.tb-section-label` «Показатели результата[ · порядок вычисления]», раздела нет",
+    "kind": "не тот уровень заголовка, расхождение подписи",
+    "severity": "существенное",
+    "code": "result-variables-section.tsx:271-274",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "D-41",
+    "area": "D",
+    "place": "Показатели, «Добавить показатель»",
+    "expected": "отдельная панель `ou-formactions` под заголовком, кнопка слева (строки 3267-3272)",
+    "actual": "кнопка в одной строке с подписью, прижата вправо",
+    "kind": "расхождение раскладки",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:271-286",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-42",
+    "area": "D",
+    "place": "Показатели, тело карточки",
+    "expected": "между «Имя/Метка» и «Формула» разделителя нет",
+    "actual": "`hr.wf-sep`",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:530",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-43",
+    "area": "D",
+    "place": "Показатели, поле имени",
+    "expected": "«Имя показателя» (`s-metrics-number` строка 4517, `s-metrics-builder` строка 4780)",
+    "actual": "«Имя» (совпадает с `s-metrics`)",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:508",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-44",
+    "area": "D",
+    "place": "Показатели, выбор способа формулы",
+    "expected": "раздел 9 п. 4: «Формула» + «Конструктор»/«DSL», `ou-seg--s` (`s-metrics`) против «Как задать формулу» + «Конструктор»/«Выражение», `ou-seg--m`, `aria-label=\"Способ задания формулы\"` (`s-metrics-builder`)",
+    "actual": "фактически смешано: подпись «Формула», элементы «Конструктор»/«DSL», `aria-label=\"Режим редактора формулы\"`, но размер **m**",
+    "kind": "разрешённое расхождение эскиза",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:533-541",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-45",
+    "area": "D",
+    "place": "Показатели, поле DSL",
+    "expected": "Textarea `rows=\"4\"` (строка 3308)",
+    "actual": "`rows={5}`",
+    "kind": "не тот размер контрола",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:562",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-46",
+    "area": "D",
+    "place": "Показатели, «Толкование результата» и «Вывод»",
+    "expected": "подписи ПОЛЯ (`ou-formfield__lbl`, строки 3317, 3339)",
+    "actual": "`hr.wf-sep` + `div.tb-section-label`",
+    "kind": "лишний элемент, не тот контрол",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:580-585, :658-660",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-47",
+    "area": "D",
+    "place": "Показатели, таблица исходов",
+    "expected": "`aria-label=\"Исходы показателя\"`, четвёртая колонка озаглавлена видимым «Действия» (строки 3318-3326)",
+    "actual": "`aria-label` нет; четвёртый заголовок — `span.sr-only` «Действия»",
+    "kind": "потерянный атрибут, скрытая подпись",
+    "severity": "косметическое",
+    "code": "outcomes-editor.tsx:90, :102",
+    "files": [
+      "outcomes-editor.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-48",
+    "area": "D",
+    "place": "Показатели, блок «Вывод»",
+    "expected": "«Показывать обучающемуся» и «Управление статусом курса» парой, «Передавать в LMS» — отдельным селектом во всю ширину ниже (строки 3341-3360)",
+    "actual": "все три селекта в одном `Grid cols={2}`",
+    "kind": "расхождение раскладки",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:661-700",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-49",
+    "area": "D",
+    "place": "Показатели, «Толкование результата»",
+    "expected": "постоянного баннера нет",
+    "actual": "постоянный `Banner tone=\"info\"` с пояснением по типу",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:648-656",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-50",
+    "area": "D",
+    "place": "Числовой показатель, границы",
+    "expected": "подпись группы «Границы показателя» (строка 4656)",
+    "actual": "подписи группы нет — сразу переключатель",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:605-617",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-51",
+    "area": "D",
+    "place": "Числовой показатель, переключатель границ",
+    "expected": "«Выключено — границы берутся из охвата уровней.» (строка 4660)",
+    "actual": "добавлено «Ноль — законная граница, а не признак „не задано“.»",
+    "kind": "расхождение текста подсказки",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:613",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-52",
+    "area": "D",
+    "place": "Числовой показатель, порядок полей",
+    "expected": "«Благоприятное направление» и «Показывать обучающемуся» стоят парой в одной группе (строки 4686-4700)",
+    "actual": "разнесены: направление — в «Толковании результата», видимость — в «Выводе»",
+    "kind": "расхождение порядка",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:618-629, :668-677",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "D-53",
+    "area": "D",
+    "place": "Числовой показатель, лента покрытия",
+    "expected": "подпись «Покрытие» (строка 4544; раздел 9 п. 7)",
+    "actual": "всегда «Покрытие шкалы» — редактор общий со шкалами",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "levels-editor.tsx:158",
+    "files": [
+      "levels-editor.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-54",
+    "area": "D",
+    "place": "Конструктор формулы",
+    "expected": "блок «Что получится»: `tb-formula-preview` с собранным выражением + описание «Выражение собирается конструктором…» (строки 4818-4822)",
+    "actual": "блока нет; вместо него баннер валидации «Синтаксис корректен…»",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "result-variables-section.tsx:576-578, :780-978",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "D-55",
+    "area": "D",
+    "place": "Конструктор формулы, «Сертификация / вердикт»",
+    "expected": "подпись поля «Условия» (строка 4801)",
+    "actual": "«Все условия должны выполняться (И)»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:807",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-56",
+    "area": "D",
+    "place": "Конструктор формулы, строка условия",
+    "expected": "«Тест целиком», «Тема «Информационная безопасность»», свойство «Процент» (строки 4803-4816)",
+    "actual": "«Общий результат», тема — просто название темы, свойство «процент» строчными",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "result-variables-builder.ts:69-79, :119-124",
+    "files": [
+      "result-variables-builder.ts"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "D-57",
+    "area": "D",
+    "place": "Конструктор формулы, строка условия",
+    "expected": "четыре колонки, кнопки удаления условия нет",
+    "actual": "добавлен `IconButton` «Удалить условие» при более чем одном условии",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:1049",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn"
+  },
+  {
+    "id": "D-58",
+    "area": "D",
+    "place": "Конструктор формулы, статус курса",
+    "expected": "«Управление статусом курса» = «Ставит „Пройден“, когда истина» + описание «Доступно только для показателей типа „да/нет“.» (строки 4823-4830)",
+    "actual": "опции «Нет» / «Успех (success_status)» / «Завершение (completion_status)», описания у поля нет",
+    "kind": "расхождение подписи, отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "result-variables-section.tsx:95-99, :678-689",
+    "files": [
+      "result-variables-section.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "E-1",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "Раздел «Показ правильных ответов» — `ou-formsection` с заголовком `h3` (эскиз, строки 1385-1397)",
+    "actual": "Заголовка раздела нет: переключатель стоит голым `div.ou-formfield`",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "basic-settings-section.tsx:281-302",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "E-2",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "Подпись «Показывать правильные ответы после прохождения» (5.15)",
+    "actual": "«Показывать правильные ответы после ответа»",
+    "kind": "расхождение подписи",
+    "severity": "существенное",
+    "code": "basic-settings-section.tsx:285",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-3",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "Заголовок раздела «Обратная связь вопросов» (5.15, строка 1401)",
+    "actual": "«По вопросам»",
+    "kind": "расхождение подписи",
+    "severity": "существенное",
+    "code": "question-feedback-registry.tsx:96",
+    "files": [
+      "question-feedback-registry.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-4",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "У раздела подзаголовка нет",
+    "actual": "Добавлен подзаголовок «Только чтение: обратная связь принадлежит вопросу и правится в его редакторе — тот же вопрос стоит и в других тестах.»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "question-feedback-registry.tsx:97",
+    "files": [
+      "question-feedback-registry.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-5",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "«Развернуть все» / «Свернуть все» с иконками `i-chevrons-up-down` и `i-chevrons-down-up` (строки 1404-1405)",
+    "actual": "Кнопки без иконок",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "question-feedback-registry.tsx:100-115",
+    "files": [
+      "question-feedback-registry.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "E-6",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "Подзаголовок темы «16 вопросов · у 12 задана обратная связь» (5.15)",
+    "actual": "«вопросов 9 · с обратной связью 0» — иной порядок слов и формулировка",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "question-feedback-registry.tsx:140",
+    "files": [
+      "question-feedback-registry.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-7",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "Таблица с колонками «Вопрос», «Режим», «Текст», безымянная колонка действия (5.15)",
+    "actual": "Таблицы нет: строки `div.tb-qfeedback__row`, шапки и колонок нет, режим — тег, тексты — строки с подписями",
+    "kind": "не тот тип контрола",
+    "severity": "существенное",
+    "code": "question-feedback-registry.tsx:148-181",
+    "files": [
+      "question-feedback-registry.tsx"
+    ],
+    "batch": "components",
+    "status": "fixed"
+  },
+  {
+    "id": "E-8",
+    "area": "E",
+    "place": "Во время теста",
+    "expected": "Кнопка строки «К вопросу», ghost, s, иконка `i-arrow-right` (5.15)",
+    "actual": "«Открыть вопрос», иконка `Pencil`",
+    "kind": "расхождение подписи и иконки",
+    "severity": "существенное",
+    "code": "question-feedback-registry.tsx:171-179",
+    "files": [
+      "question-feedback-registry.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-9",
+    "area": "E",
+    "place": "Состав итогов",
+    "expected": "Порядок разделов: «Порядок подблоков», затем «Подытоги по подтемам», затем надписи (5.16, строки 1162, 1206, 1243)",
+    "actual": "«Подытоги по подтемам», затем семь групп надписей, «Порядок подблоков» — последним",
+    "kind": "расхождение порядка",
+    "severity": "существенное",
+    "code": "editor-tabs.tsx:344-362, results-labels-pane.tsx:182-191",
+    "files": [
+      "editor-tabs.tsx",
+      "results-labels-pane.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-10",
+    "area": "E",
+    "place": "Состав итогов",
+    "expected": "Подсказка: «Полосы по подтемам (тегам вопросов) на карточке темы: итоги раздела, итоги теста и отчёт. «Не показывать» убирает подытоги совсем и прячет два поля ниже.» (5.16)",
+    "actual": "«Полосы по подтемам (тегам вопросов): на экране итогов теста и в отчёте. Экран «Итоги раздела» подытогов не печатает. «Не показывать» убирает подытоги совсем и прячет два поля ниже.»",
+    "kind": "расхождение текста подсказки",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:1257",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "texts",
+    "status": "withdrawn"
+  },
+  {
+    "id": "E-11",
+    "area": "E",
+    "place": "Состав итогов → Порядок подблоков",
+    "expected": "Только заголовок `h3`, подзаголовка нет (строки 1160-1164)",
+    "actual": "Добавлен подзаголовок «Блоки печатаются под общим заголовком итогов в этом порядке. Выключенный заголовок блок не убирает — за видимость отвечают настройки самих блоков.»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "results-labels-pane.tsx:310",
+    "files": [
+      "results-labels-pane.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-12",
+    "area": "E",
+    "place": "Состав итогов → Порядок подблоков",
+    "expected": "Строка `wf-order-row`: рамка `--ou-border-soft`, радиус `s`, padding 8/12 (эскиз, строки 425-433)",
+    "actual": "Плоская строка без рамки и подложки: `Stack` + `Text`; CSS для строк порядка в проектном слое нет",
+    "kind": "потерянное оформление",
+    "severity": "косметическое",
+    "code": "results-labels-pane.tsx:313-322; в client/src/styles/ селекторов нет",
+    "files": [
+      "results-labels-pane.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "E-13",
+    "area": "E",
+    "place": "Состав итогов",
+    "expected": "Интервалы: между строками порядка 1x = 4 px (`.wf-order > * + *`, раздел 7.3), между подписью и полем внутри строки надписи — 4 px (`.ou-formfield` gap 4)",
+    "actual": "`Stack gap={2}` = `--ou-space-2` = 8 px в обоих местах",
+    "kind": "нарушение сетки 4/16/24",
+    "severity": "косметическое",
+    "code": "results-labels-pane.tsx:223, results-labels-pane.tsx:312; токен — client/src/styles/vendor/skillum-ds.css:389",
+    "files": [
+      "results-labels-pane.tsx",
+      "skillum-ds.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "E-14",
+    "area": "E",
+    "place": "Состав итогов → надписи",
+    "expected": "У каждой строки с пустым значением — подсказка «Пусто — печатается формулировка шаблона.» (5.18, строки 785-787)",
+    "actual": "Такой подсказки нет ни у одной строки: hint выводится только когда пуст сам подставляемый текст",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "results-labels-pane.tsx:218-221",
+    "files": [
+      "results-labels-pane.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "E-15",
+    "area": "E",
+    "place": "Состав итогов → «Вердикт: нет порога»",
+    "expected": "Подсказка «Шаблон не печатает эту надпись — задайте свою, если она нужна.» (5.18, строка 808)",
+    "actual": "«Эта надпись не печатается на экране итогов.»",
+    "kind": "расхождение текста подсказки",
+    "severity": "косметическое",
+    "code": "results-labels-pane.tsx:220",
+    "files": [
+      "results-labels-pane.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-16",
+    "area": "E",
+    "place": "Обратная связь",
+    "expected": "Порядок: «Вводный текст» первым, «Общая обратная связь теста» вторым (5.17, строки 1489 и 1513)",
+    "actual": "«Общая обратная связь теста» первой, «Вводный текст» второй",
+    "kind": "расхождение порядка",
+    "severity": "существенное",
+    "code": "basic-settings-section.tsx:316-387",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-17",
+    "area": "E",
+    "place": "Обратная связь",
+    "expected": "Разделы «По уровням шкал» и «По уровням показателей» (5.17, строки 1714 и 1792)",
+    "actual": "Разделов нет; в клиентском коде таких компонентов нет вовсе (поиск по строкам даёт только `docs/`)",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "editor-tabs.tsx:373-388",
+    "files": [
+      "editor-tabs.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed",
+    "note": "Решение владельца 2026-09-07: «Обратная связь» стала группой рейла — «Общее», «По уровням шкал», «По уровням сложности», «По уровням показателей». Дочерний пункт ПРЯЧЕТСЯ, когда перечислять нечего. Тексты уровней — те же поля модели, что правит конструктор уровней в «Оценке результата»; здесь они собраны в колонку."
+  },
+  {
+    "id": "E-18",
+    "area": "E",
+    "place": "Обратная связь",
+    "expected": "Раздел «По уровням» показан у СТАНДАРТНОГО теста эскиза, вторая тема помечена тегом «адаптивность выключена» (5.17)",
+    "actual": "Раздел рисуется только при `model.mode === \"adaptive\"`",
+    "kind": "потерянное состояние",
+    "severity": "существенное",
+    "code": "editor-tabs.tsx:384-386, level-feedback-card.tsx:37",
+    "files": [
+      "editor-tabs.tsx",
+      "level-feedback-card.tsx"
+    ],
+    "batch": "actions",
+    "status": "withdrawn",
+    "note": "Решение владельца 2026-09-07: «нет смысла показывать то, что относится к адаптивному режиму, если он не включён». Эскиз опирается на потемную адаптивность, которой в модели нет: режим — свойство ТЕСТА. Раздел переименован в «По уровням сложности» и остаётся привилегией адаптивного теста."
+  },
+  {
+    "id": "E-19",
+    "area": "E",
+    "place": "Обратная связь → «По подтемам (тегам)», «По уровням»",
+    "expected": "Заголовок в `tb-section-head` с «Развернуть все» / «Свернуть все»; темы — свёртки `tb-fold-sec` с тегом «3 подтемы» / «2 уровня» (5.17, строки 1584-1600)",
+    "actual": "Панели свёртки нет, свёрток нет, тега со счётчиком нет: плоский список разделов формы",
+    "kind": "отсутствующие элементы",
+    "severity": "существенное",
+    "code": "breakdown-feedback-card.tsx:92-101, level-feedback-card.tsx:62-77",
+    "files": [
+      "breakdown-feedback-card.tsx",
+      "level-feedback-card.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "E-20",
+    "area": "E",
+    "place": "Обратная связь → «Общая обратная связь теста»",
+    "expected": "Превью без подписи поля (строки 1513-1527)",
+    "actual": "Появилась подпись поля «Обратная связь после прохождения»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "basic-settings-section.tsx:316-337",
+    "files": [
+      "basic-settings-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-21",
+    "area": "E",
+    "place": "Обратная связь → «По темам»",
+    "expected": "Переопределённый текст помечается ТОЛЬКО жёлтой полосой слева, без подписи (решение эскиза 13, раздел 6.1)",
+    "actual": "Кроме полосы добавлен тег «Задано в этом тесте» / «Из темы»",
+    "kind": "лишний элемент",
+    "severity": "существенное",
+    "code": "topic-feedback-card.tsx:139-143",
+    "files": [
+      "topic-feedback-card.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-22",
+    "area": "E",
+    "place": "Обратная связь → «По темам»",
+    "expected": "Название темы — подпись поля `label.ou-formfield__lbl` внутри раздела «По темам» (строки 1536-1539)",
+    "actual": "Каждая тема — отдельный `FormSection` с заголовком `h3`",
+    "kind": "не тот тип контрола",
+    "severity": "существенное",
+    "code": "topic-feedback-card.tsx:138",
+    "files": [
+      "topic-feedback-card.tsx"
+    ],
+    "batch": "components",
+    "status": "fixed"
+  },
+  {
+    "id": "E-23",
+    "area": "E",
+    "place": "Обратная связь",
+    "expected": "Пустое превью подписано «Без текста» (5.17)",
+    "actual": "«Не задано — ни в теме, ни в этом тесте» (темы) и «Не задано — нажмите для редактирования» (подтемы)",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "topic-feedback-card.tsx:171, feedback-preview.tsx:83",
+    "files": [
+      "topic-feedback-card.tsx",
+      "feedback-preview.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-24",
+    "area": "E",
+    "place": "Вся вкладка",
+    "expected": "Название темы с порядковым номером: «1. О компании», «2. Корпоративные финансы» (5.15, 5.17)",
+    "actual": "Номера нет: «Демо: управленческие компетенции»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "question-feedback-registry.tsx:138, topic-feedback-card.tsx:138",
+    "files": [
+      "question-feedback-registry.tsx",
+      "topic-feedback-card.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-25",
+    "area": "E",
+    "place": "Вся вкладка",
+    "expected": "Разделы — `ou-formsection ou-formsection--stacked` с заголовком `h3`, карточек нет ни в одном состоянии участка",
+    "actual": "«По вопросам», «Общая обратная связь теста», «Вводный текст», «По темам», «По подтемам (тегам)», «Отчёт о результатах» обёрнуты в `Card variant=\"outlined\"`",
+    "kind": "не тот тип контрола",
+    "severity": "существенное",
+    "code": "question-feedback-registry.tsx:94, basic-settings-section.tsx:316, basic-settings-section.tsx:342, topic-feedback-card.tsx:89, breakdown-feedback-card.tsx:92, report-settings-card.tsx:238",
+    "files": [
+      "question-feedback-registry.tsx",
+      "basic-settings-section.tsx",
+      "topic-feedback-card.tsx",
+      "breakdown-feedback-card.tsx",
+      "report-settings-card.tsx"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "E-26",
+    "area": "E",
+    "place": "Отчёт",
+    "expected": "«Что показывать в отчёте» — один `Select` со значением «Итоги и разбор по темам» (5.19, строки 3450-3457)",
+    "actual": "Это подпись ГРУППЫ полей вида: сам `Select` вида живёт только на стороне «Оформления», а под подписью рисуется сетка полей шаблона в две колонки",
+    "kind": "не тот тип контрола",
+    "severity": "существенное",
+    "code": "report-settings-card.tsx:305-321, report-settings-card.tsx:275",
+    "files": [
+      "report-settings-card.tsx"
+    ],
+    "batch": "components",
+    "status": "fixed"
+  },
+  {
+    "id": "E-27",
+    "area": "E",
+    "place": "Отчёт",
+    "expected": "Переключатель «Выдавать отчёт обучающемуся» без описания (строки 3446-3451)",
+    "actual": "Добавлено описание «Кнопка «Скачать отчёт» на экране результатов. Выключите, если документ по этому тесту не выдаётся.»",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "report-settings-card.tsx:246-251",
+    "files": [
+      "report-settings-card.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-28",
+    "area": "E",
+    "place": "Отчёт",
+    "expected": "«Предпросмотр отчёта» — secondary, размер `s`, иконка `i-eye` (5.19, строка 3572)",
+    "actual": "secondary, размер `m`, иконки нет",
+    "kind": "не тот вариант кнопки",
+    "severity": "косметическое",
+    "code": "report-settings-card.tsx:368-378",
+    "files": [
+      "report-settings-card.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-29",
+    "area": "E",
+    "place": "Отчёт → строка блока",
+    "expected": "Меню действий — иконка `i-more-vertical` (5.19)",
+    "actual": "`MoreHorizontal` (горизонтальное многоточие)",
+    "kind": "не та иконка",
+    "severity": "косметическое",
+    "code": "report-document-list.tsx:328-341",
+    "files": [
+      "report-document-list.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-30",
+    "area": "E",
+    "place": "Отчёт → «Разрыв листа»",
+    "expected": "Название обычным регистром, без линий (5.19, скриншот `wf-report.png`)",
+    "actual": "«РАЗРЫВ ЛИСТА» капслоком и с пунктирными линиями по бокам",
+    "kind": "расхождение оформления",
+    "severity": "косметическое",
+    "code": "report-document-list.tsx:254; видно на impl-t5-...-r4-отч-т.png",
+    "files": [
+      "report-document-list.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-31",
+    "area": "E",
+    "place": "Отчёт",
+    "expected": "После «Предпросмотра отчёта» подраздел заканчивается (5.19, строка 3576)",
+    "actual": "Добавлена карточка «Заголовки и подписи отчёта» со вторым слоем надписей",
+    "kind": "лишний элемент",
+    "severity": "существенное",
+    "code": "editor-tabs.tsx:397-404, design-section.tsx:571-602",
+    "files": [
+      "editor-tabs.tsx",
+      "design-section.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed",
+    "note": "Карточка не удалена, а переехала в «Оформление» → «Облик отчёта»: формулировка заголовка документа — это КАК он выглядит (правило владельца от 2026-09-06), и подраздел «Отчёт» в «Обратной связи» кончается предпросмотром, как в эскизе."
+  },
+  {
+    "id": "E-32",
+    "area": "E",
+    "place": "Палитра блоков",
+    "expected": "`div.ou-modal.ou-modal--xl` (5.33, строка 4366)",
+    "actual": "`ModalDialog size=\"m\"`",
+    "kind": "не тот размер",
+    "severity": "существенное",
+    "code": "report-block-palette.tsx:157",
+    "files": [
+      "report-block-palette.tsx"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "E-33",
+    "area": "E",
+    "place": "Палитра блоков",
+    "expected": "Тело — сетка `variant-picker`: слева список 320 px (мин. 220 px), справа живое превью `tb-sheet` шириной до 320 px (5.33, разделы 7.7)",
+    "actual": "Правой колонки нет вовсе: только поиск и список; ни `variant-picker`, ни `variant-picker__preview`, ни `tb-sheet` не рисуются",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "report-block-palette.tsx:176-199",
+    "files": [
+      "report-block-palette.tsx"
+    ],
+    "batch": "actions",
+    "status": "fixed",
+    "note": "Правая колонка показывает СХЕМУ блока (лист с крупными штрихами), а не рендер: блок отчёта — не самостоятельный экран, и «как будет» до данных попытки показать нечем. Схема отвечает на вопрос, который автор задаёт палитре: это текст, таблица или картинка."
+  },
+  {
+    "id": "E-34",
+    "area": "E",
+    "place": "Палитра блоков → «Страницы»",
+    "expected": "У каждого пункта своё описание: «Свободный текст: заголовок и абзацы», «Тексты по темам и подтемам из обратной связи», «Вопросы, ответы участника и верные ответы» (5.33)",
+    "actual": "Всем страницам подставляется одна жёстко зашитая строка «Авторская страница документа.»",
+    "kind": "расхождение текста",
+    "severity": "существенное",
+    "code": "report-block-palette.tsx:71",
+    "files": [
+      "report-block-palette.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-35",
+    "area": "E",
+    "place": "Палитра блоков → «Служебное»",
+    "expected": "«Разрыв листа» — «Следующий блок печатается с новой страницы» (5.33)",
+    "actual": "«Следующий блок начнётся с нового листа документа.»",
+    "kind": "расхождение текста",
+    "severity": "косметическое",
+    "code": "report-block-palette.tsx:80-81",
+    "files": [
+      "report-block-palette.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "E-36",
+    "area": "E",
+    "place": "Палитра блоков → «Удалённые из документа»",
+    "expected": "Описание пункта — «Убран из документа — вернётся на прежнее место» (5.33)",
+    "actual": "«Вернуть системный блок в документ.»",
+    "kind": "расхождение текста",
+    "severity": "косметическое",
+    "code": "report-block-palette.tsx:91",
+    "files": [
+      "report-block-palette.tsx"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "F-1",
+    "area": "F",
+    "place": "Оформление, рельс в состоянии «шаблон без параметров»",
+    "expected": "Рельс из ОДНОГО пункта «Шаблон» (`editor-settings-target.html:1903-1905`, спека 5.22)",
+    "actual": "«Облик отчёта» показывается всегда, поэтому рельс не может схлопнуться до одного пункта — минимум два",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/design-section.tsx:189-197",
+    "files": [
+      "design-section.tsx",
+      "editor-settings-target.html"
+    ],
+    "batch": "cosmetics",
+    "status": "withdrawn",
+    "note": "Снята: эскиз не знает решения владельца от 2026-09-06 («Оформление» — то, КАК показывать). «Облик отчёта» — не параметр шаблона, он есть у любого теста, поэтому рельс «Оформления» не схлопывается до одного пункта."
+  },
+  {
+    "id": "F-2",
+    "area": "F",
+    "place": "Оформление → Шаблон, кнопка «Заменить шаблон»",
+    "expected": "Кнопка secondary s БЕЗ иконки (`editor-settings-target.html:1338`)",
+    "actual": "Кнопка с ведущей иконкой `Layout` 12 px",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/sections/design-section.tsx:538-546",
+    "files": [
+      "design-section.tsx",
+      "editor-settings-target.html"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-3",
+    "area": "F",
+    "place": "Оформление → Шаблон, блок сведений `tpl-info`",
+    "expected": "`gap: 16`, у `tpl-info__head`, `tpl-desc`, `tpl-actions` — `margin: 0` (`editor-settings-target.html:370-372`; спека 7.4 прямо называет `.tpl-info`)",
+    "actual": "`gap: 8`, у `.tpl-actions` дополнительный `margin-top: 4`",
+    "kind": "нарушение сетки 4/16/24",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:2146-2161",
+    "files": [
+      "tb-components.css",
+      "editor-settings-target.html"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "F-4",
+    "area": "F",
+    "place": "Оформление, ВСЕ панели («Шаблон», «Брендирование», «Цвета», «Вид диаграмм»)",
+    "expected": "Блоки панели — прямые дети `.tb-settings-content`, между ними 16 px (спека 7.4; `tb-components.css:183-184`)",
+    "actual": "Каждая панель обёрнута в собственный `div[data-testid]`, правило `.tb-settings-content > *` до её блоков не достаёт: строки параметров, таблица цветов и баннеры идут без интервала (видно на снимках «Брендирование» и «Вид диаграмм» — подсказка одного поля и подпись следующего слиты)",
+    "kind": "нарушение сетки 4/16/24",
+    "severity": "существенное",
+    "code": "design-section.tsx:450, :661, :673, :725, :781; client/src/styles/tb-components.css:183-184",
+    "files": [
+      "design-section.tsx",
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "F-5",
+    "area": "F",
+    "place": "Оформление → Шаблон, баннер «Шаблон обновлён»",
+    "expected": "Баннер — прямой ребёнок панели, поэтому полноширинный и липкий, без скруглений и боковых полей (`editor-settings-target.html:1319-1327`; правило `tb-components.css:148-158`)",
+    "actual": "Баннер лежит внутри обёртки панели, под правило не попадает — печатается обычным баннером в отступах панели",
+    "kind": "не то место / не тот облик",
+    "severity": "существенное",
+    "code": "design-section.tsx:450-472",
+    "files": [
+      "design-section.tsx",
+      "editor-settings-target.html",
+      "tb-components.css"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-6",
+    "area": "F",
+    "place": "Оформление → Цвета, переключатель «Тема теста»",
+    "expected": "`ou-seg ou-seg--s` — размер s (`editor-settings-target.html:4001`)",
+    "actual": "`SegmentedControl` без `size`, то есть размер m (`ou-seg` без модификатора)",
+    "kind": "не тот размер контрола",
+    "severity": "косметическое",
+    "code": "design-section.tsx:787-793; vendor/ui-kit/src/components/SegmentedControl.tsx:33",
+    "files": [
+      "design-section.tsx",
+      "SegmentedControl.tsx",
+      "editor-settings-target.html"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-7",
+    "area": "F",
+    "place": "Оформление → Цвета, кнопка «Предпросмотр»",
+    "expected": "`design-theme-head` = `flex; gap: 16` без выравнивания по краям: кнопка стоит сразу за переключателем (`editor-settings-target.html:178`)",
+    "actual": "`justify-content: space-between; gap: 12` — кнопка прижата к правому краю панели (снимок `impl-t6-оформление--r3-цвета.png`)",
+    "kind": "не то место + шаг 12 px вне сетки",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:2178-2185",
+    "files": [
+      "tb-components.css",
+      "editor-settings-target.html"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "F-8",
+    "area": "F",
+    "place": "Оформление → Цвета, ячейка цвета",
+    "expected": "`.design-color-field { gap: 4 }` (`editor-settings-target.html:179`)",
+    "actual": "`gap: 8`",
+    "kind": "нарушение сетки 4/16/24",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:2165-2169",
+    "files": [
+      "tb-components.css",
+      "editor-settings-target.html"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "F-9",
+    "area": "F",
+    "place": "Оформление → Цвета, подсказка параметра в таблице",
+    "expected": "Шрифт `--ou-text-body-xs` = 400 11/15 (`editor-settings-target.html:180`)",
+    "actual": "Шрифт `--ou-text-caption` = 500 11/16 — другое начертание и интерлиньяж",
+    "kind": "расхождение облика текста",
+    "severity": "косметическое",
+    "code": "client/src/styles/tb-components.css:2196-2199",
+    "files": [
+      "tb-components.css",
+      "editor-settings-target.html"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "F-10",
+    "area": "F",
+    "place": "Комментарии, панель управления",
+    "expected": "Три элемента: «Добавить комментарий» (primary s), фильтр, «Следующий комментарий» (secondary s) — `prd52-review-panel.html:159`",
+    "actual": "Кнопки «Следующий комментарий» нет",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/review/review-panel.tsx:93-113",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "F-11",
+    "area": "F",
+    "place": "Комментарии, фильтр «Только открытые»",
+    "expected": "Порядок: Switch, затем подпись (`prd52-review-panel.html:156-157`)",
+    "actual": "Порядок обратный: подпись `span.rvp__toggle-lbl`, затем Switch",
+    "kind": "расхождение порядка элементов",
+    "severity": "косметическое",
+    "code": "review-panel.tsx:104-112",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-12",
+    "area": "F",
+    "place": "Комментарии, шапка ветки и шапка ответа",
+    "expected": "Перед именем автора — аватар `ou-avatar ou-avatar--xs` с инициалами (`prd52-review-panel.html:167`, `:187`, `:198`, `:220`, `:231`)",
+    "actual": "Аватара нет: сразу имя автора",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "review-panel.tsx:164-169, :177-182",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "F-13",
+    "area": "F",
+    "place": "Комментарии, кнопка перехода в строке действий",
+    "expected": "«Перейти к вопросу» (`prd52-review-panel.html:176`, `:207`, `:447`)",
+    "actual": "«Перейти к месту»",
+    "kind": "расхождение подписи",
+    "severity": "косметическое",
+    "code": "review-panel.tsx:259",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "F-14",
+    "area": "F",
+    "place": "Комментарии, итоговая строка",
+    "expected": "«Всего 7 комментариев · открытых 3 · от двух экспертов» (`prd52-review-panel.html:246`)",
+    "actual": "«Всего {N} · открытых {M}» — потеряно слово «комментариев» и сведение о числе экспертов",
+    "kind": "расхождение текста, потеря сведения",
+    "severity": "существенное",
+    "code": "review-panel.tsx:294-298",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "F-15",
+    "area": "F",
+    "place": "Комментарии, заголовок группы",
+    "expected": "`div.tb-section-label` — body-s, 600, приглушённый; DS-mapping эскиза прямо называет этот класс (`prd52-review-panel.html:162`, `:215`, `:561`)",
+    "actual": "Собственный `.rvp__group-title` — caption, ПРОПИСНЫЕ, разрядка 0.04em",
+    "kind": "не тот компонент / облик",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/review/review-panel.css:9-14",
+    "files": [
+      "review-panel.css",
+      "prd52-review-panel.html"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-16",
+    "area": "F",
+    "place": "Комментарии, вкладка в риббоне",
+    "expected": "На вкладке тег-счётчик открытых `ou-tag--warning ou-tag--s` со значением «3» (`prd52-review-panel.html:147`, `:262`, `:318`, `:387`, `:430`; DS-mapping `:560`)",
+    "actual": "Счётчика нет — только подпись и общая точка состояния. Примечание: целевой эскиз счётчика тоже не рисует, эскизы расходятся",
+    "kind": "отсутствующий элемент",
+    "severity": "косметическое",
+    "code": "client/src/features/tests/editor/test-editor.tsx:479-487",
+    "files": [
+      "test-editor.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "F-17",
+    "area": "F",
+    "place": "Комментарии, форма нового комментария",
+    "expected": "Форма лежит в карточке `ou-card ou-card--outlined ou-card--sm` с заголовком «Новый комментарий» (`prd52-review-panel.html:391-393`)",
+    "actual": "Форма — голый `Stack.rvp__form`: ни карточки, ни заголовка",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "client/src/features/tests/review/review-comment-form.tsx:57-58",
+    "files": [
+      "review-comment-form.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "sections",
+    "status": "fixed"
+  },
+  {
+    "id": "F-18",
+    "area": "F",
+    "place": "Комментарии, форма нового комментария — выбор места",
+    "expected": "Два Select в `ou-formgroup--two`: «Место» и «Вопрос или страница» (выключен, значение «Выберите раздел», подсказка «Доступно после выбора раздела.») — `prd52-review-panel.html:395-404`, DS-mapping `:565`",
+    "actual": "Один Select «Место» во всю ширину; второго поля нет — из ящика нельзя поставить якорь на конкретный вопрос или страницу",
+    "kind": "отсутствующий элемент",
+    "severity": "существенное",
+    "code": "review-comment-form.tsx:42-55, :69-77",
+    "files": [
+      "review-comment-form.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "F-19",
+    "area": "F",
+    "place": "Комментарии, поле «Место»",
+    "expected": "Подсказка `ou-formfield__desc` «По умолчанию — тест в целом.» (`prd52-review-panel.html:399`)",
+    "actual": "Подсказки нет",
+    "kind": "отсутствующий текст подсказки",
+    "severity": "косметическое",
+    "code": "review-comment-form.tsx:69-77",
+    "files": [
+      "review-comment-form.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "F-20",
+    "area": "F",
+    "place": "Комментарии, поле «Место»",
+    "expected": "Select размера s — `ou-select ou-field--s` (`prd52-review-panel.html:398`)",
+    "actual": "`Select` без `size`, то есть размер m",
+    "kind": "не тот размер контрола",
+    "severity": "косметическое",
+    "code": "review-comment-form.tsx:70-76",
+    "files": [
+      "review-comment-form.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-21",
+    "area": "F",
+    "place": "Комментарии, поле текста комментария",
+    "expected": "`ou-textarea--m ou-textarea--full` БЕЗ подписи, только заполнитель (`prd52-review-panel.html:405`)",
+    "actual": "`Textarea` с подписью «Комментарий» (в ответе — «Ответ»)",
+    "kind": "лишний элемент",
+    "severity": "косметическое",
+    "code": "review-comment-form.tsx:79-86",
+    "files": [
+      "review-comment-form.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "cosmetics",
+    "status": "fixed"
+  },
+  {
+    "id": "F-22",
+    "area": "F",
+    "place": "Комментарии, форма исхода — выбор исхода",
+    "expected": "Поле с подписью «Исход» и переключателем `ou-seg ou-seg--s ou-seg--accent` (`aria-label=\"Исход комментария\"`) из пунктов «Учтено» / «Отклонено» (`prd52-review-panel.html:277-285`; DS-mapping `:563`)",
+    "actual": "Две отдельные кнопки «Учтено» и «Отклонено» (выбранная primary, вторая secondary), подписи поля нет",
+    "kind": "не тот тип контрола + отсутствующая подпись",
+    "severity": "существенное",
+    "code": "review-panel.tsx:201-218",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "components",
+    "status": "fixed"
+  },
+  {
+    "id": "F-23",
+    "area": "F",
+    "place": "Комментарии, форма исхода — поле «Ответ автора»",
+    "expected": "Заполнитель «Почему комментарий отклонён» (`prd52-review-panel.html:291`)",
+    "actual": "Заполнителя нет",
+    "kind": "отсутствующий текст",
+    "severity": "косметическое",
+    "code": "review-panel.tsx:219-228",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "actions",
+    "status": "fixed"
+  },
+  {
+    "id": "F-24",
+    "area": "F",
+    "place": "Комментарии, форма исхода — подсказка поля",
+    "expected": "«При отклонении ответ обязателен: эксперт должен увидеть причину.» (`prd52-review-panel.html:293`)",
+    "actual": "«При отклонении ответ обязателен: рецензент должен увидеть причину.»",
+    "kind": "расхождение текста в одном слове",
+    "severity": "косметическое",
+    "code": "review-panel.tsx:222",
+    "files": [
+      "review-panel.tsx",
+      "prd52-review-panel.html"
+    ],
+    "batch": "texts",
+    "status": "fixed"
+  },
+  {
+    "id": "G-1",
+    "area": "G",
+    "place": "`.ou-drawer__head` `padding`",
+    "expected": "24 px",
+    "actual": "20 px",
+    "kind": "нарушение сетки",
+    "severity": "существенное",
+    "code": "шапка ящика, все вкладки",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed",
+    "duplicateOf": "A-7",
+    "note": "Закрыта переносом ui-kit 0.3.0: `.ou-drawer__head` в бандле ДС теперь `var(--ou-space-6)`. Гейт меряет это правило и проходит."
+  },
+  {
+    "id": "G-2",
+    "area": "G",
+    "place": "`.ou-tabs__list` `padding-inline`",
+    "expected": "24 px",
+    "actual": "0 px",
+    "kind": "нарушение сетки",
+    "severity": "существенное",
+    "code": "риббон вкладок, все вкладки",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed",
+    "duplicateOf": "A-6",
+    "note": "Закрыта переносом ui-kit 0.3.0: `.ou-tabs__list` получил `padding-inline: var(--ou-space-6)`. Гейт меряет это правило и проходит."
+  },
+  {
+    "id": "G-3",
+    "area": "G",
+    "place": "`.ou-select` `gap`",
+    "expected": "4 px",
+    "actual": "СНЯТА: внутри ящика 4 px, замер был сделан вне его",
+    "kind": "нарушение сетки",
+    "severity": "снято",
+    "code": "ложное срабатывание",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "withdrawn"
+  },
+  {
+    "id": "G-4",
+    "area": "G",
+    "place": "`.ou-btn` `gap`",
+    "expected": "4 px",
+    "actual": "8 px",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "все вкладки",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "G-5",
+    "area": "G",
+    "place": "`.ou-radio-group__items` `gap`",
+    "expected": "4 px",
+    "actual": "8 px",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "«Оценка результата» / «Вердикт»",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "G-6",
+    "area": "G",
+    "place": "`.ou-banner__body` `gap`",
+    "expected": "4 px",
+    "actual": "2 px",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "«Правила прохождения» / «Навигация»",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "G-8",
+    "area": "G",
+    "place": "`.page-row` `gap`",
+    "expected": "4 px",
+    "actual": "8 px",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "«Состав и сценарий» / «Сценарий»",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "G-9",
+    "area": "G",
+    "place": "`.tb-fold-actions` `gap`",
+    "expected": "4 px",
+    "actual": "8 px",
+    "kind": "нарушение сетки",
+    "severity": "косметическое",
+    "code": "пары «Развернуть все / Свернуть все» на всех вкладках",
+    "files": [
+      "tb-components.css"
+    ],
+    "batch": "grid",
+    "status": "fixed"
+  },
+  {
+    "id": "G-7",
+    "area": "G",
+    "place": "Сворачиваемые карточки тем: «Оценка результата» / «Оценка ответа», «Оценка результата» / «Шкалы» (вклады вопросов), «Обратная связь и итоги» / «Во время теста», уровни шкал",
+    "expected": "DS-аккордеон `ou-acc ou-acc--separated` с `ou-acc__trigger`, `ou-acc__title`, `ou-acc__subtitle`, `ou-acc__chev`, `ou-acc__body`",
+    "actual": "headless-примитив `Collapsible` / `CollapsibleTrigger` / `CollapsibleContent` из ui-kit, без CSS-слоя `ou-acc`; в разметке класса `ou-acc` нет ни на одной вкладке ящика",
+    "kind": "не тот тип контрола",
+    "severity": "существенное",
+    "code": "",
+    "files": [
+      "scales-section.tsx",
+      "levels-editor.tsx"
+    ],
+    "batch": "components",
+    "status": "withdrawn"
+  }
+]

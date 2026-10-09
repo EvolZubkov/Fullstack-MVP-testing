@@ -15,12 +15,18 @@
  * Static visual evaluation only — interactions are demo-only and persist nothing.
  */
 import { useMemo } from "react";
-import { Banner, Button, ModalDialog } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog } from "@skillum/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
-import type { SequencePlacement } from "@shared/template/page-sequences";
+import {
+  buildPageContext,
+  sectionSubtitleOf,
+  passConditionShownOf,
+  type SequenceContentPage,
+  type SequencePlacement,
+} from "@shared/template/page-sequences";
 import { buildSectionIntroContext } from "@shared/template/result-context";
-import { buildTemplateCssVars } from "@shared/template/params-css";
+import { buildTemplateCssVars, buildTemplateDataAttrs } from "@shared/template/params-css";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
 import { useTemplateBundle } from "./use-template-bundle";
 
@@ -220,6 +226,9 @@ export function PagePreviewModal({
         topicName: section?.topicName ?? effectiveDemo?.course.topics?.[0]?.title ?? "Раздел",
         questionCount: section?.questionCount ?? effectiveDemo?.course.questionCount ?? 0,
         instruction: instr,
+        passConditionShown: passConditionShownOf({
+          settingsJson: page.settingsJson ?? null,
+        } as SequenceContentPage),
       });
       return {
         id: page.id,
@@ -227,7 +236,17 @@ export function PagePreviewModal({
         layoutKey: "section-intro",
         expectedSlots: [],
         input: {
-          context: { course: built.course, sectionIntro: built.sectionIntro },
+          context: {
+            course: built.course,
+            sectionIntro: built.sectionIntro,
+            // PRD-22 FR-42: the section subtitle is a page SETTING, and the preview has to
+            // show it the way both learner hosts do — otherwise the author edits blind.
+            page: buildPageContext(sequencePlacement, {
+              sectionSubtitle: sectionSubtitleOf({
+                settingsJson: page.settingsJson ?? null,
+              } as SequenceContentPage),
+            }),
+          },
           slots: { instruction: instr },
         },
       };
@@ -260,6 +279,9 @@ export function PagePreviewModal({
 
   // Draft branding → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(() => buildTemplateCssVars(params, bundle?.manifest.params), [params, bundle]);
+  // Той же парой едет выбор, объявленный атрибутом (`dataAttr`): предпросмотр должен
+  // показывать выбранный вариант ДО сохранения, а по атрибуту шаблон выбирает правило.
+  const dataAttrs = useMemo(() => buildTemplateDataAttrs(params, bundle?.manifest.params), [params, bundle]);
 
   if (!open) return null;
 
@@ -298,6 +320,7 @@ export function PagePreviewModal({
               content={spec.input.content}
               css={bundle.css}
               cssVars={cssVars}
+              dataAttrs={dataAttrs}
               shell={(bundle.manifest as { mountShell?: boolean }).mountShell ? bundle.layouts.shell : undefined}
             />
           </div>

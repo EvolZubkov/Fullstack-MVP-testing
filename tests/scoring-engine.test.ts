@@ -10,7 +10,7 @@
  * external pandas post-processor encoded.
  */
 import { describe, it, expect } from "vitest";
-import { scoreAnswer, type ScoreInput } from "../shared/scoring/engine";
+import { explainAnswer, scoreAnswer, type ScoreInput } from "../shared/scoring/engine";
 import type { QuestionScoring } from "../shared/schema";
 
 // ─── exact (absent / kind:'exact') ───────────────────────────────────────────
@@ -204,5 +204,51 @@ describe("scoreAnswer — sMax / ratio edges", () => {
     const r = scoreAnswer({ type: "single", correct: { correctIndex: 0 }, answer: 0, scoring: { kind: "weighted", weights: [5], sMax: 2 } });
     expect(r.ratio).toBe(1);
     expect(r.score).toBe(5);
+  });
+});
+
+// ─── explainAnswer — which tier fired ────────────────────────────────────────
+
+describe("explainAnswer — tierIndex", () => {
+  // Two tiers over a 2-option key: «всё верно» pays 2, «хоть что-то верно» pays 1.
+  const scoring: QuestionScoring = {
+    kind: "tiered",
+    tiers: [
+      { when: { all: [{ lhs: "c", op: "==", rhs: "T" }, { lhs: "x", op: "==", rhs: 0 }] }, score: 2 },
+      { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
+    ],
+  };
+  const base: ScoreInput = {
+    type: "multiple",
+    correct: { correctIndices: [0, 1] },
+    answer: [0, 1],
+    scoring,
+  };
+
+  it("reports the index of the tier that produced the score", () => {
+    expect(explainAnswer(base).tierIndex).toBe(0);
+    expect(explainAnswer({ ...base, answer: [0] }).tierIndex).toBe(1);
+  });
+
+  it("is null when no tier matched — the implicit «иначе → 0» row", () => {
+    const missed = explainAnswer({ ...base, answer: [] });
+    expect(missed.tierIndex).toBeNull();
+    expect(missed.score).toBe(0);
+  });
+
+  it("is null for an unanswered question", () => {
+    expect(explainAnswer({ ...base, answer: null }).tierIndex).toBeNull();
+  });
+
+  it("is null for the non-tiered methods", () => {
+    expect(explainAnswer({ type: "single", correct: { correctIndex: 0 }, answer: 0 }).tierIndex).toBeNull();
+    expect(
+      explainAnswer({
+        type: "single",
+        correct: { correctIndex: 0 },
+        answer: 0,
+        scoring: { kind: "weighted", weights: [2, 1] },
+      }).tierIndex,
+    ).toBeNull();
   });
 });

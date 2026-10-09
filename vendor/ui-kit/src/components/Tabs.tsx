@@ -26,12 +26,18 @@ export interface TabsProps<T extends string = string>
   align?: TabsAlign;
   /** Скрыть автоматический рендер `content`-панели (только TabList). */
   hidePanel?: boolean;
+  /**
+   * Имя списка вкладок для скринридера. Кладётся на `role="tablist"`, а не на внешнюю
+   * обёртку: `aria-label` из `...rest` достаётся `div.ou-tabs`, у которого роли нет, и
+   * список вкладок остаётся безымянным.
+   */
+  listAriaLabel?: string;
 }
 
 export function Tabs<T extends string = string>({
   items, value, defaultValue, onChange,
   variant = 'underline', size = 'm', align = 'start',
-  hidePanel, className, ...rest
+  hidePanel, listAriaLabel, className, ...rest
 }: TabsProps<T>) {
   const controlled = value !== undefined;
   const [internal, setInternal] = useState<T | undefined>(
@@ -77,7 +83,12 @@ export function Tabs<T extends string = string>({
       )}
       {...rest}
     >
-      <div className="ou-tabs__list" role="tablist" onKeyDown={onKeyDown}>
+      <div
+        className="ou-tabs__list"
+        role="tablist"
+        aria-label={listAriaLabel}
+        onKeyDown={onKeyDown}
+      >
         {items.map(it => {
           const isActive = it.id === active;
           return (

@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { ChevronLeft, RotateCcw } from "lucide-react";
-import { Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Text } from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+import { ChevronLeft, Lock, RotateCcw } from "lucide-react";
+import { Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Text, useToast } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
 import { downloadAttemptReport } from "@/features/learner/attempt-report";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
-import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
+import { isSingleIndexChoice, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
+import { createQuestionTime } from "@shared/questions/question-time";
 // PRD-10 (FR-12): мгновенный вердикт по ответу считает тот же движок, что и итоги
 // попытки и рантайм SCORM-пакета — второй копии правил оценивания на вебе нет.
 import {
@@ -24,6 +24,7 @@ import { buildQuestionProgress } from "@shared/template/question-progress-contex
 import { buildReviewContext } from "@shared/template/review-context";
 import { QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
+import { passConditionShownOf, type SequenceContentPage } from "@shared/template/page-sequences";
 import { buildTransitionContext } from "@shared/template/transition-context";
 import {
   buildProtectionSpec,
@@ -32,13 +33,27 @@ import {
 // PRD-12 FR-6: content pages render on the web from the SAME structure rules and
 // the SAME assembler as the SCORM package — no web-only copy of either.
 import { TemplateContentScreen, type ContentScreenTemplate } from "./template-content-screen";
-import { buildPageSequence, contentPagesFor, type FlowContentPage } from "@shared/flow/page-sequence";
+import { buildAfterZone, buildPageSequence, contentPagesFor, type FlowContentPage } from "@shared/flow/page-sequence";
 import { shouldShowReview } from "@shared/flow/review-gate";
+import { isSystemScreenHidden } from "@shared/flow/page-sequence";
 import {
   buildRouterHubHtml,
   isRouterReadyToFinish,
   type RouterTopicStatus,
+  type SectionUnlockRule,
 } from "@shared/flow/router-hub";
+
+/**
+ * PRD-4 v1.1 §4.7 — the router's gating as the attempt payload delivers it
+ * (`flowPayload` in `server/routes/attempts.ts`), already resolved server-side by
+ * `shared/flow/flow-policy`. Present only for a `router_by_topics` run; the hub
+ * hands both fields straight to the shared rules, so a section open in the LMS is
+ * open here and «Завершить» unlocks at the same moment on both hosts.
+ */
+type RouterPolicyPayload = {
+  completionPolicy?: string | null;
+  sectionUnlockRules?: Record<string, SectionUnlockRule | undefined>;
+};
 import type { RenderableContentPage } from "@shared/template/content-page";
 import {
   useSectionTimer,
@@ -46,11 +61,20 @@ import {
   prevAccessibleIndex,
   nextAccessibleIndex,
   forceAdvanceTarget,
+  type SectionStopReason,
 } from "./use-section-timer";
+import { testClosesOnLeave } from "@shared/flow/section-budget";
 import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
 import { useAuth } from "@/lib/auth";
 import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
+import type { Scenario } from "@shared/sim/contract";
+import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
+import { SimRulesDialog } from "@/features/questions/scenario/sim-rules-dialog";
+import { simRunReplaces } from "@shared/sim/cover";
+import { resolveSimScoring, type SimScoringLevel } from "@shared/sim/scoring";
+import { isScenarioItemKey } from "@shared/test-items";
+import type { ResolvedRule } from "@shared/scoring/pass-rule";
 
 /**
  * Вопрос попытки: строка банка плюс ЭФФЕКТИВНАЯ цена ответа этого теста
@@ -137,6 +161,34 @@ export function contentPagesBetween(
     if (item.kind === "content" && !item.isRouter) pages.push(item.page as RenderableContentPage);
   }
   return pages;
+}
+
+/** One section's pass condition as the server resolved it for this attempt. */
+interface SectionCondition {
+  passRule: ResolvedRule | null;
+  possiblePoints: number;
+  required: boolean;
+}
+
+/** The pass conditions of the delivered sections, keyed by topic, and the verdict policy. */
+interface SectionConditionsState {
+  policy: string | null;
+  byTopic: Record<string, SectionCondition>;
+}
+
+const NO_SECTION_CONDITIONS: SectionConditionsState = { policy: null, byTopic: {} };
+
+/**
+ * Reads `sectionConditions` / `passDecisionPolicy` off a start or resume attempt payload.
+ * Absent (an older server) — no conditions, and the section intro renders as before.
+ */
+export function readSectionConditions(payload: unknown): SectionConditionsState {
+  const p = (payload ?? {}) as { sectionConditions?: unknown; passDecisionPolicy?: unknown };
+  const byTopic =
+    p.sectionConditions && typeof p.sectionConditions === "object"
+      ? (p.sectionConditions as Record<string, SectionCondition>)
+      : {};
+  return { policy: typeof p.passDecisionPolicy === "string" ? p.passDecisionPolicy : null, byTopic };
 }
 
 interface FlatQuestion {
@@ -298,6 +350,12 @@ type RetakeGateState = {
   daysUntil: number | null;
 };
 
+/**
+ * PRD-67: how long the «leaving closes it» / «section closed» notices stay. Two sentences
+ * the learner must actually read — the default five seconds is too short.
+ */
+const LEAVE_NOTICE_MS = 8000;
+
 /** Start-screen facts derived from one `/api/learner/tests` entry (component state shape). */
 type TestMetadata = {
   totalQuestions: number;
@@ -306,6 +364,12 @@ type TestMetadata = {
   timeLimitMinutes: number | null;
   startPageContent: string | null;
   passPercent: number | null;
+  /** «Тест пройден, если» — decides whether the overall threshold is a condition at all. */
+  passDecisionPolicy: string | null;
+  /** `tests.overall_pass_rule_json` — resolves the «как у теста» topic rules. */
+  overallPassRule: unknown;
+  /** Section obligations and topic rules — what the cover's topic condition counts. */
+  passSections: Array<{ required: boolean | null; topicPassRule: unknown }>;
   /** Whether the test grades anything (false ⇒ measurement method, no pass threshold). */
   hasGradedContent: boolean;
   hasInProgress: boolean;
@@ -318,6 +382,10 @@ type TestMetadata = {
   retakeGate: RetakeGateState | null;
   // PRD-19 Block F (FR-19/20): prior-attempt summary («повтор: можно» + cooldown).
   priorResult: { percent: number; passed: boolean | null; attemptNumber: number | null; maxAttempts: number | null } | null;
+  /** Стартовый экран скрыт автором — попытка начинается без него (2026-09-20). */
+  startHidden: boolean;
+  /** PRD-67: leaving a started section closes it (`course.closesOnLeave`). */
+  closesOnLeave: boolean;
 };
 
 /**
@@ -341,6 +409,12 @@ function buildTestMetadataFromListEntry(test: any): TestMetadata {
     timeLimitMinutes: test.timeLimitMinutes || null,
     startPageContent: test.startPageContent || null,
     passPercent,
+    passDecisionPolicy: test.passDecisionPolicy ?? null,
+    overallPassRule: test.overallPassRuleJson ?? null,
+    passSections: (test.sections ?? []).map((s: any) => ({
+      required: s.required ?? null,
+      topicPassRule: s.topicPassRuleJson ?? null,
+    })),
     // Absent on a payload from a server that predates the flag ⇒ treat as grading,
     // i.e. exactly the behaviour this screen had before.
     hasGradedContent: test.hasGradedContent !== false,
@@ -359,6 +433,14 @@ function buildTestMetadataFromListEntry(test: any): TestMetadata {
         }
       : null,
     priorResult: test.priorResult ?? null,
+    // Сервер до этой правки поля не присылает — читается как «экран показывается».
+    startHidden: test.startHidden === true,
+    // PRD-67: the SAME rule the runtime applies — the setting is on and some limit exists.
+    closesOnLeave: testClosesOnLeave({
+      enabled: test.closeSectionOnLeave === true,
+      testLimitMinutes: test.timeLimitMinutes,
+      sectionLimitMinutes: (test.sections ?? []).map((s: any) => s.timeLimitMinutes),
+    }),
   };
 }
 
@@ -419,7 +501,7 @@ function StuckPreparingScreen({ diagnosis, timeoutMs = 10_000 }: { diagnosis: st
 export default function TakeTestPage() {
   const { testId } = useParams<{ testId: string }>();
   const [, navigate] = useLocation();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { user } = useAuth();
   // A magic-link session (assignment invitation) has no test list to return to —
   // the guard in ProtectedRoute would just bounce a "/learner" navigation back to
@@ -432,6 +514,20 @@ export default function TakeTestPage() {
   // Common state
   const [isStarting, setIsStarting] = useState(true);
   const [testMode, setTestMode] = useState<"standard" | "adaptive" | null>(null);
+  /**
+   * «Сценарий в ИС»: тест «Сценарий». Прохождение идёт СТАНДАРТНОЙ машиной (`testMode`
+   * остаётся `standard`): таймер, страницы автора, завершение и итоги — общие. Своё одно:
+   * на месте экрана вопроса — плеер сценария на весь экран.
+   */
+  const [scenarioTest, setScenarioTest] = useState(false);
+  /** Прогон закрыт участником, попытка отправляется: плеер больше не показывается. */
+  const [scenarioDone, setScenarioDone] = useState(false);
+  /**
+   * «Сценарий в ИС» в обычном разделе (техдолг №5): «Пройти» на обложке открывает окно правил
+   * (`rules`), «Старт» в нём — плеер на весь экран (`run`); закрытие окна результата плеера
+   * возвращает к экрану вопроса. Смена вопроса закрывает и то, и другое.
+   */
+  const [simDialog, setSimDialog] = useState<null | "rules" | "run">(null);
   const [testInfo, setTestInfo] = useState<Test | null>(null);
   const [phase, setPhase] = useState<"loading" | "start" | "question" | "content" | "finished" | "blocked">("loading");
   // PRD-12 FR-6: the author's structure, delivered with the attempt. `pageQueue`
@@ -441,11 +537,17 @@ export default function TakeTestPage() {
   const [flowStructure, setFlowStructure] = useState<{
     flowMode: string;
     contentPages: FlowContentPage[];
-  }>({ flowMode: "linear_flat", contentPages: [] });
+    /** PRD-4 v1.1 §4.7 router gating; `null` outside router mode. */
+    routerPolicy: RouterPolicyPayload | null;
+  }>({ flowMode: "linear_flat", contentPages: [], routerPolicy: null });
+  // The pass condition each «Введение раздела» states — resolved by the server against the
+  // delivered variant (the learner host has no prices), plus the «Тест пройден, если» policy
+  // that decides the «Обязательная тема» mark. Empty on an attempt served by an older server.
+  const [sectionConditions, setSectionConditions] = useState<SectionConditionsState>(NO_SECTION_CONDITIONS);
   const [contentTpl, setContentTpl] = useState<ContentScreenTemplate | null>(null);
   const [pageQueue, setPageQueue] = useState<RenderableContentPage[]>([]);
   /** Section order from the variant — the anchor for the per-topic zones. */
-  const [sections, setSections] = useState<{ topicId: string }[]>([]);
+  const [sections, setSections] = useState<{ topicId: string; required?: boolean }[]>([]);
   /**
    * The question advance deferred while a content zone plays. Applied verbatim
    * once the queue drains, so the boundary logic (section обзор / итоги раздела)
@@ -464,6 +566,8 @@ export default function TakeTestPage() {
   const [afterZonePlayed, setAfterZonePlayed] = useState(false);
   /** Submit deferred while that zone plays; fired when the queue drains. */
   const [pendingSubmit, setPendingSubmit] = useState(false);
+  /** Очередь «После теста» доигрывается после отправки — дальше выход из прохождения. */
+  const [pendingExit, setPendingExit] = useState(false);
   /**
    * Pages owed to the learner on ARRIVAL at a question — the entered section's
    * «перед темой» zone. Held until `currentIndex` actually reaches that question,
@@ -484,7 +588,7 @@ export default function TakeTestPage() {
   // Frozen per-section pass/fail, so the hub card can show its outcome (green/red)
   // when the test reveals section results — parity with the SCORM `state.sectionResults`.
   const [routerSectionResults, setRouterSectionResults] = useState<
-    Record<string, { passed?: boolean | null }>
+    Record<string, { passed?: boolean | null; pending?: boolean }>
   >({});
   const [currentRouterTopic, setCurrentRouterTopic] = useState<string | null>(null);
   /**
@@ -506,10 +610,10 @@ export default function TakeTestPage() {
     // `pendingSubmit` is excluded: the queue is empty on purpose while the attempt
     // is being sent, and bouncing to the question phase would flash that screen
     // between the last content page and the results.
-    if (phase === "content" && !pendingSubmit && (!contentTpl || pageQueue.length === 0)) {
+    if (phase === "content" && !pendingSubmit && !pendingExit && (!contentTpl || pageQueue.length === 0)) {
       setPhase("question");
     }
-  }, [phase, contentTpl, pageQueue.length, pendingSubmit]);
+  }, [phase, contentTpl, pageQueue.length, pendingSubmit, pendingExit]);
   const [testMetadata, setTestMetadata] = useState<TestMetadata | null>(null);
   // PRD-12 web-host: start screen template assets (null -> legacy React markup).
   const [startTpl, setStartTpl] = useState<{
@@ -517,6 +621,7 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -531,6 +636,7 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -546,6 +652,7 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -560,6 +667,7 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -582,6 +690,7 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -596,6 +705,7 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -632,6 +742,8 @@ export default function TakeTestPage() {
   // Standard mode state
   const [attempt, setAttempt] = useState<AttemptWithQuestions | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  // «Сценарий в ИС»: смена вопроса закрывает окно правил и плеер вопроса-сценария.
+  useEffect(() => setSimDialog(null), [currentIndex]);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
   const [standardFeedbackShown, setStandardFeedbackShown] = useState(false);
   const [standardAnswerResult, setStandardAnswerResult] = useState<{
@@ -645,7 +757,6 @@ export default function TakeTestPage() {
     feedback?: string;
   } | null>(null);
   // Timer state
-  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -663,19 +774,25 @@ export default function TakeTestPage() {
   // the response populates them.
   const [navSettings, setNavSettings] = useState<{
     allowReturnToUnanswered: boolean;
+    /** PRD-19 (FR-11a): свободная навигация внутри раздела; сервер уже погасил её адаптиву. */
+    allowFreeSectionNavigation: boolean;
     allowAnswerChange: boolean;
     // PRD-43: independent of allowReturnToUnanswered.
     quickAdvance: boolean;
     showSectionResults: boolean;
     /** Авторское «когда отвечено всё, обзор не нужен» — правило в `review-gate`. */
     skipReviewWhenComplete: boolean;
+    /** PRD-67: leaving a started section with a time limit closes it. */
+    closeSectionOnLeave: boolean;
     answerCommitScope: "test" | "section";
   }>({
     allowReturnToUnanswered: false,
+    allowFreeSectionNavigation: false,
     allowAnswerChange: false,
     quickAdvance: true,
     showSectionResults: true,
     skipReviewWhenComplete: false,
+    closeSectionOnLeave: false,
     answerCommitScope: "test",
   });
   // PRD-34 (FR-01): настройки защиты текста задания. Как и navSettings, приходят с
@@ -693,13 +810,28 @@ export default function TakeTestPage() {
   // PRD-4 v1.1 §3.2 — per-topic (section) timer for the standard flow. The
   // expiry handler is invoked via a ref so it can read the freshest state
   // (lockedTopics / answers / currentIndex) without re-subscribing the hook.
-  const sectionExpireRef = useRef<(topicId: string) => void>(() => {});
-  const { sectionRemainingSeconds, lockedTopics } = useSectionTimer({
+  const sectionExpireRef = useRef<(topicId: string, reason: SectionStopReason) => void>(() => {});
+  const {
+    sectionRemainingSeconds,
+    lockedTopics,
+    closedTopics,
+    syncedTopicId: sectionTimerTopicId,
+  } = useSectionTimer({
     attemptId: attempt?.id ?? null,
     questions: flatQuestions,
     currentIndex,
-    enabled: testMode === "standard" && phase === "question" && flatQuestions.length > 0,
-    onExpire: (topicId) => sectionExpireRef.current(topicId),
+    // PRD-67: under «Закрывать раздел при выходе» the section-results screen and the router
+    // hub are past the section — the learner has left it. Without the setting both keep the
+    // old behaviour (the section clock is not stopped there).
+    // «Сценарий в ИС»: у теста «Сценарий» время ведёт плеер (его лимит — остаток времени теста),
+    // часов раздела у него нет; без этого хук доотправлял их уже после завершения попытки.
+    enabled:
+      testMode === "standard" &&
+      !scenarioTest &&
+      phase === "question" &&
+      flatQuestions.length > 0 &&
+      !(navSettings.closeSectionOnLeave && (sectionResultView || showHub)),
+    onExpire: (topicId, reason) => sectionExpireRef.current(topicId, reason),
   });
 
   // Tracks mount so the adaptive expiry retry loop stops after navigation away.
@@ -708,6 +840,13 @@ export default function TakeTestPage() {
 
   // Adaptive mode state
   const [adaptiveState, setAdaptiveState] = useState<AdaptiveState | null>(null);
+
+  // PRD-66 FR-37a: секундомер задания — ОДИН на оба хоста (`shared/questions/question-time`).
+  // Живёт в ref, а не в состоянии: его показания меняются каждую миллисекунду, и перерисовывать
+  // экран прохождения ради них нельзя. Своя копия на каждую попытку: страница переживает
+  // несколько прохождений подряд, и общий счётчик перенёс бы секунды одного в следующее.
+  const questionTimeRef = useRef(createQuestionTime());
+  const questionTime = questionTimeRef.current;
 
   // PRD-34 (FR-30): решение о защите принимает ОДИН общий построитель — тот же, что и в
   // пакете, поэтому веб и SCORM не могут разойтись. Отметка знака обезличена (FR-17):
@@ -821,13 +960,14 @@ export default function TakeTestPage() {
   useEffect(() => {
     if (remainingSeconds === 0) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Время истекло",
         description: "Тест будет автоматически завершён",
       });
 
-      // Автоматически завершаем тест
-      if (testMode === "standard" && attempt) {
+      // Автоматически завершаем тест. У теста «Сценарий» время ведёт плеер: его лимит — остаток
+      // времени теста, исход `timeout` он запишет сам и отправит попытку по закрытию итога.
+      if (testMode === "standard" && attempt && !scenarioTest) {
         // Принудительное завершение без проверки ответов
         const forceSubmit = async () => {
           setIsSubmitting(true);
@@ -837,14 +977,18 @@ export default function TakeTestPage() {
               headers: { "Content-Type": "application/json" },
               credentials: "include",
               // PRD-19 Block E (FR-15): timeout auto-finish — drafts don't count in flexible.
-              body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered), timeExpired: true }),
+              body: JSON.stringify({
+                answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered),
+                timeExpired: true,
+                latencyMs: questionTime.totals(),
+              }),
             });
 
             if (!res.ok) throw new Error("Failed to submit");
-            navigate(`/learner/result/${attempt.id}`);
+            finishRun();
           } catch (err) {
             toast({
-              variant: "destructive",
+              tone: "error",
               title: "Ошибка отправки",
               description: "Не удалось отправить ответы",
             });
@@ -854,13 +998,38 @@ export default function TakeTestPage() {
         };
         forceSubmit();
       } else if (testMode === "adaptive" && adaptiveState && !adaptiveState.isFinished) {
-        // Для адаптивного теста - принудительно завершаем
-        setAdaptiveState(prev => prev ? {
-          ...prev,
-          isFinished: true,
-          result: { topicResults: [], timeExpired: true },
-          currentQuestion: null,
-        } : null);
+        // The adaptive run ends on the SERVER too — the standard branch above is not a
+        // special case. Flipping only local state used to leave `finished_at` and
+        // `result_json` NULL while the effect below walked the learner to the result
+        // page of that still-open attempt: «Результаты не найдены», run lost.
+        const finishAdaptive = async () => {
+          setIsSubmitting(true);
+          try {
+            const res = await fetch(`/api/attempts/${adaptiveState.attemptId}/finish-adaptive`, {
+              method: "POST",
+              credentials: "include",
+            });
+            if (!res.ok) throw new Error("Failed to finish");
+            const data = await res.json();
+            setAdaptiveState(prev => prev ? {
+              ...prev,
+              isFinished: true,
+              result: data.result ?? { topicResults: [], timeExpired: true },
+              currentQuestion: null,
+            } : null);
+          } catch (err) {
+            // Leave the attempt OPEN on failure: it stays resumable, which beats
+            // sending the learner to a result page that has nothing to show.
+            toast({
+              tone: "error",
+              title: "Не удалось завершить тест",
+              description: "Время истекло, но результат не сохранён. Обновите страницу.",
+            });
+          } finally {
+            setIsSubmitting(false);
+          }
+        };
+        finishAdaptive();
       }
     }
   }, [remainingSeconds]);
@@ -882,7 +1051,8 @@ export default function TakeTestPage() {
         }
 
         setTestInfo(test);
-        setTestMode(test.mode || "standard");
+        setTestMode(test.mode === "scenario" ? "standard" : test.mode || "standard");
+        setScenarioTest(test.mode === "scenario");
         setTestMetadata(buildTestMetadataFromListEntry(test));
 
         // PRD-12 web-host: fetch the screen templates. Best-effort per screen —
@@ -943,7 +1113,7 @@ export default function TakeTestPage() {
       } catch (err) {
         console.error("Init test error:", err);
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.common.error,
           description: t.common.failedToStartTest,
         });
@@ -959,6 +1129,12 @@ export default function TakeTestPage() {
   // Функция начала теста
   const handleStartTest = async () => {
     if (!testInfo) return;
+    // «Сценарий в ИС»: полный экран просится ЗДЕСЬ, синхронно в щелчке «Начать» — браузер
+    // даёт его только жесту пользователя, а плеер появится уже после запроса к серверу.
+    if (scenarioTest) {
+      setScenarioDone(false);
+      requestScenarioFullscreen();
+    }
 
     setIsStarting(true);
     try {
@@ -1053,7 +1229,7 @@ export default function TakeTestPage() {
       }
       console.error("Start test error:", err);
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.common.failedToStartTest,
       });
@@ -1061,6 +1237,20 @@ export default function TakeTestPage() {
       setIsStarting(false);
     }
   };
+
+  // Скрытый стартовый экран (решение владельца 2026-09-20): экрана с кнопкой «Начать»
+  // ученик не видит — попытка запускается сама, как только известны факты о тесте.
+  // Отдельным эффектом, а не прямо в инициализации: `handleStartTest` работает с уже
+  // применённым `testInfo`, которого в момент загрузки ещё нет. Незавершённая попытка
+  // важнее: её продолжают со стартового экрана, иначе автозапуск отнял бы у ученика
+  // выбор «продолжить или начать заново».
+  useEffect(() => {
+    if (phase !== "start") return;
+    if (!testMetadata?.startHidden || !testInfo) return;
+    if (isStarting || attempt || testMetadata.hasInProgress) return;
+    if (testMetadata.retakeGate) return; // cooldown рисуется НА стартовой — её и показываем
+    void handleStartTest();
+  }, [phase, testMetadata, testInfo, isStarting, attempt]);
 
   // Функция продолжения незавершённого теста
   const handleResumeTest = async () => {
@@ -1085,7 +1275,7 @@ export default function TakeTestPage() {
       if (testMode === "adaptive") {
         // TODO: Реализовать восстановление адаптивного теста
         toast({
-          variant: "info",
+          tone: "info",
           title: "Информация",
           description: "Восстановление адаптивного теста пока не поддерживается. Начинаем заново.",
         });
@@ -1101,6 +1291,8 @@ export default function TakeTestPage() {
       // PRD-19 (Block B): restore runtime settings + per-question statuses.
       setNavSettings({
         allowReturnToUnanswered: data.attempt.allowReturnToUnanswered ?? false,
+        // PRD-19 (FR-11c): отсутствие поля в ответе — прежний фронтир, свобода ВЫКЛ.
+        allowFreeSectionNavigation: data.attempt.allowFreeSectionNavigation ?? false,
         allowAnswerChange: data.attempt.allowAnswerChange ?? false,
         // PRD-43: same fallback rule as the DB backfill migration — derive from
         // allowReturnToUnanswered when the server response omits the field.
@@ -1110,6 +1302,7 @@ export default function TakeTestPage() {
             : !(data.attempt.allowReturnToUnanswered ?? false),
         showSectionResults: data.attempt.showSectionResults ?? true,
         skipReviewWhenComplete: data.attempt.skipReviewWhenComplete ?? false,
+        closeSectionOnLeave: data.attempt.closeSectionOnLeave ?? false,
         answerCommitScope: data.attempt.answerCommitScope ?? "test",
       });
       setProtectionSettings({
@@ -1121,6 +1314,24 @@ export default function TakeTestPage() {
       // Where the learner stopped inside each section — a re-entry from the hub
       // continues from that question instead of restarting the section.
       setSectionPositions(data.sectionPositions || {});
+      // Хаб роутера: какие пункты начаты и завершены, какие разделы закрыты, где участник сейчас.
+      const hub = data.routerState as
+        | { topicStates?: Record<string, RouterTopicStatus>; committed?: Record<string, boolean>; current?: string | null }
+        | null
+        | undefined;
+      // Прогон сценария, оборванный перезагрузкой, не продолжается: его нельзя продолжить, только
+      // начать заново (user-journey.md, 5.5 — прерванный прогон не сохраняется). Участник
+      // возвращается в хаб, пункт снова «Не начат», и сценарий он запускает сам, карточкой — на весь
+      // экран (решение владельца 2026-10-08, паритет с пакетом). Тема возобновляется внутри, как прежде.
+      const cutScenario = !!hub?.current && isScenarioItemKey(hub.current);
+      const resumeAtHub = data.attempt.flowMode === "router_by_topics" && !!hub && (!hub.current || cutScenario);
+      if (hub) {
+        const topicStates = { ...(hub.topicStates ?? {}) };
+        if (cutScenario && topicStates[hub.current!] === "inProgress") delete topicStates[hub.current!];
+        setRouterTopicStates(topicStates);
+        setSectionCommitted(hub.committed ?? {});
+        setCurrentRouterTopic(cutScenario ? null : (hub.current ?? null));
+      }
 
       // Инициализация таймера (с учётом прошедшего времени)
       if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
@@ -1130,12 +1341,11 @@ export default function TakeTestPage() {
         const totalSeconds = data.attempt.timeLimitMinutes * 60;
         const remaining = Math.max(0, totalSeconds - elapsedSeconds);
 
-        setTimeLimitMinutes(data.attempt.timeLimitMinutes);
         setRemainingSeconds(remaining);
 
         if (remaining <= 0) {
           toast({
-            variant: "destructive",
+            tone: "error",
             title: "Время истекло",
             description: "Время на тест истекло пока вы отсутствовали",
           });
@@ -1212,18 +1422,28 @@ export default function TakeTestPage() {
       setFlowStructure({
         flowMode: (data.attempt.flowMode as string) ?? "linear_flat",
         contentPages: (data.attempt.contentPages as FlowContentPage[]) ?? [],
+        routerPolicy: (data.attempt.routerPolicy as RouterPolicyPayload | undefined) ?? null,
       });
-      setSections((variant.sections || []).map((s: any) => ({ topicId: s.topicId })));
+      setSectionConditions(readSectionConditions(data.attempt));
+      setSections(
+        (variant.sections || []).map((s: any) => ({
+          topicId: s.topicId,
+          // Absent on an attempt started before obligation was carried ⇒ required.
+          required: s.required !== false,
+        })),
+      );
       setPhase("question");
+      // Участник был в хабе — туда и возвращается, а не к последнему вопросу пройденного пункта.
+      if (resumeAtHub) setShowHub(true);
 
       toast({
-        title: "Тест восстановлен",
-        description: `Продолжаем с вопроса ${data.currentIndex + 1}`,
+        tone: "success", title: "Тест восстановлен",
+        description: resumeAtHub ? "Продолжаем с выбора раздела" : `Продолжаем с вопроса ${data.currentIndex + 1}`,
       });
     } catch (err) {
       console.error("Resume test error:", err);
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: "Не удалось восстановить тест",
       });
@@ -1243,7 +1463,7 @@ export default function TakeTestPage() {
     const attemptId = testMetadata?.lastCompletedAttemptId;
     if (!attemptId || reportBusy.current) return;
     reportBusy.current = true;
-    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    toast({ tone: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
     try {
       const res = await fetch(`/api/attempts/${attemptId}/result`, { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1256,7 +1476,7 @@ export default function TakeTestPage() {
       await downloadAttemptReport(data.report, data.reportRender, data.measures ?? undefined);
     } catch (e) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Не удалось сформировать отчёт",
         description: (e as Error).message,
       });
@@ -1298,6 +1518,8 @@ export default function TakeTestPage() {
     // PRD-19 (Block B): runtime navigation settings from the start response.
     setNavSettings({
       allowReturnToUnanswered: data.allowReturnToUnanswered ?? false,
+      // PRD-19 (FR-11c): отсутствие поля в ответе — прежний фронтир, свобода ВЫКЛ.
+      allowFreeSectionNavigation: data.allowFreeSectionNavigation ?? false,
       allowAnswerChange: data.allowAnswerChange ?? false,
       // PRD-43: same fallback rule as the DB backfill migration — derive from
       // allowReturnToUnanswered when the server response omits the field.
@@ -1307,6 +1529,7 @@ export default function TakeTestPage() {
           : !(data.allowReturnToUnanswered ?? false),
       showSectionResults: data.showSectionResults ?? true,
       skipReviewWhenComplete: data.skipReviewWhenComplete ?? false,
+      closeSectionOnLeave: data.closeSectionOnLeave ?? false,
       answerCommitScope: data.answerCommitScope ?? "test",
     });
     setProtectionSettings({
@@ -1318,7 +1541,6 @@ export default function TakeTestPage() {
 
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
-      setTimeLimitMinutes(data.timeLimitMinutes);
       setRemainingSeconds(data.timeLimitMinutes * 60);
     }
     const variant = data.variantJson as any;
@@ -1381,9 +1603,16 @@ export default function TakeTestPage() {
     const structure = {
       flowMode: (data.flowMode as string) ?? "linear_flat",
       contentPages: (data.contentPages as FlowContentPage[]) ?? [],
+      routerPolicy: (data.routerPolicy as RouterPolicyPayload | undefined) ?? null,
     };
     setFlowStructure(structure);
-    const variantSections = (variant.sections || []).map((s: any) => ({ topicId: s.topicId }));
+    setSectionConditions(readSectionConditions(data));
+    const variantSections =(variant.sections || []).map((s: any) => ({
+      topicId: s.topicId,
+      // PRD-4 v1.1 §4.7: obligation rides on the delivered section, as it does in
+      // TEST_DATA.sections. Absent on an attempt started before it shipped ⇒ required.
+      required: s.required !== false,
+    }));
     setSections(variantSections);
     const built = buildPageSequence({
       flowMode: structure.flowMode,
@@ -1452,7 +1681,6 @@ export default function TakeTestPage() {
 
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
-      setTimeLimitMinutes(data.timeLimitMinutes);
       setRemainingSeconds(data.timeLimitMinutes * 60);
     }
   };
@@ -1480,6 +1708,14 @@ export default function TakeTestPage() {
         currentIndex: nextIndex,
         questionStatus: nextStatus,
         sectionPositions: positions,
+        // Состояние хаба роутера — двойник `rt`/`sc`/`crt` сеанса пакета: возобновление продолжает
+        // с хаба или изнутри пункта, а не с вопроса уже завершённой темы.
+        ...(flowStructure.flowMode === "router_by_topics"
+          ? { routerState: { topicStates: routerTopicStates, committed: sectionCommitted, current: currentRouterTopic } }
+          : {}),
+        // PRD-66 FR-37a: замер едет с каждым сохранением — брошенная попытка тоже наблюдение,
+        // и время, измеренное до ухода, теряться не должно.
+        latencyMs: questionTime.totals(),
       }),
     }).catch((err) => console.error("Auto-save error:", err));
   };
@@ -1547,7 +1783,7 @@ export default function TakeTestPage() {
 
     if (currentAnswer === undefined || currentAnswer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос",
       });
@@ -1556,7 +1792,7 @@ export default function TakeTestPage() {
 
     if (currentQ.question.type === "multiple" && Array.isArray(currentAnswer) && currentAnswer.length === 0) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, выберите хотя бы один вариант ответа",
       });
@@ -1568,7 +1804,7 @@ export default function TakeTestPage() {
     // issue #34: текст пояснения выбирает ОБЩЕЕ правило по режиму вопроса, то же,
     // что и рантайм пакета. Читать один `feedback` было нельзя: у вопроса с условной
     // обратной связью редактор обнуляет это поле, и баннер выходил без пояснения.
-    const feedback = feedbackTextFor(currentQ.question, scoreRatio === 1);
+    const feedback = feedbackTextFor(currentQ.question, scoreRatio === 1, currentAnswer);
 
     setStandardAnswerResult({
       isCorrect: scoreRatio === 1,
@@ -1603,7 +1839,7 @@ export default function TakeTestPage() {
 
     if (currentAnswer === undefined || currentAnswer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос перед продолжением",
       });
@@ -1612,7 +1848,7 @@ export default function TakeTestPage() {
 
     if (currentQ.question.type === "multiple" && Array.isArray(currentAnswer) && currentAnswer.length === 0) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, выберите хотя бы один вариант ответа",
       });
@@ -1627,7 +1863,7 @@ export default function TakeTestPage() {
       for (let i = 0; i < leftItems.length; i++) {
         if (pairs[i] === undefined || pairs[i] === null) {
           toast({
-            variant: "destructive",
+            tone: "error",
             title: "Требуется ответ",
             description: "Пожалуйста, сопоставьте все элементы",
           });
@@ -1673,8 +1909,15 @@ export default function TakeTestPage() {
   /** Sectional flows commit answers per section; flat commits the whole test. */
   const sectionScope = navSettings.answerCommitScope === "section";
 
-  /** True when `topicId` is the LAST section in delivery order (no later topic). */
+  /**
+   * True when `topicId` is the LAST section in delivery order (no later topic).
+   *
+   * В роутере последнего раздела нет: порядок выбирает участник, и после раздела всегда идёт хаб —
+   * его «Завершить» и закрывает тест. Иначе раздел, последний в ВЫДАЧЕ, терял экран итогов, а
+   * кнопка итогов обещала «Завершить тест», хотя вела в хаб (паритет с пакетом).
+   */
   const isLastSectionWeb = (topicId: string): boolean => {
+    if (flowStructure.flowMode === "router_by_topics") return false;
     const last = flatQuestions[flatQuestions.length - 1];
     return !last || last.topicId === topicId;
   };
@@ -1693,7 +1936,7 @@ export default function TakeTestPage() {
    * sequence the SCORM package walks. Used to find which author pages fall
    * between two questions.
    */
-  const pageSequence = useMemo(
+  const builtSequence = useMemo(
     () =>
       buildPageSequence({
         flowMode: flowStructure.flowMode,
@@ -1701,9 +1944,17 @@ export default function TakeTestPage() {
         sections,
         contentPages: flowStructure.contentPages,
         flatQuestions,
-      }).sequence,
+      }),
     [flowStructure, sections, flatQuestions],
   );
+  const pageSequence = builtSequence.sequence;
+  /**
+   * Страницы «После теста», стоящие ЗА границей «Итоги»: пакет играет их после экрана
+   * итогов, и веб обязан вести себя так же (PRD-12 FR-6). Пока экран итогов живёт
+   * отдельным маршрутом `/learner/result/:id`, веб успевает отыграть их только когда
+   * итоги СКРЫТЫ, — тогда порядок совпадает с пакетом ровно.
+   */
+  const postResultsPages = builtSequence.postResultsPages as RenderableContentPage[];
 
   // Deliver the entered section's «перед темой» zone once the learner has actually
   // arrived at its first question — i.e. after the previous section's обзор /
@@ -1716,7 +1967,94 @@ export default function TakeTestPage() {
     setPhase("content");
   }, [phase, contentTpl, arrivalZone, currentIndex, showReview, sectionResultView]);
 
+  // PRD-66 FR-37a: сколько времени участник провёл на каждом задании. Засечки ставятся там же,
+  // где хост показывает вопрос, — тем же счётчиком, что и в пакете (`shared/questions/
+  // question-time`): два хоста, меряющие время по-разному, сделали бы источники несравнимыми.
+  //
+  // Показом считается ИМЕННО экран задания: обзор, итоги раздела и страницы содержания счёт
+  // останавливают — время, проведённое в обзоре, не есть время на задании.
+  useEffect(() => {
+    const onQuestion = phase === "question" && !showReview && !sectionResultView;
+    const shownId = testMode === "adaptive"
+      ? adaptiveState?.currentQuestion?.id
+      : flatQuestions[currentIndex]?.question.id;
+    if (onQuestion && shownId) questionTime.show(shownId);
+    else questionTime.leave();
+  }, [
+    phase, showReview, sectionResultView, currentIndex, flatQuestions,
+    testMode, adaptiveState?.currentQuestion?.id, questionTime,
+  ]);
+
+  // Автор мог скрыть системный экран целиком (решение владельца 2026-09-20). Признак
+  // читается ТЕМ ЖЕ общим хелпером, которым пользуется пакет: иначе хосты разойдутся в
+  // том, что ученику показано.
+  const reviewScreenHidden = useMemo(
+    () => isSystemScreenHidden(flowStructure.contentPages, "review"),
+    [flowStructure.contentPages],
+  );
+  const resultsScreenHidden = useMemo(
+    () => isSystemScreenHidden(flowStructure.contentPages, "results"),
+    [flowStructure.contentPages],
+  );
+  /** Обзор: сперва спрашиваем, не скрыт ли экран, и лишь потом — есть ли там что делать. */
+  const wantsReview = (input: Parameters<typeof shouldShowReview>[0]) =>
+    !reviewScreenHidden && shouldShowReview(input);
+
   const isRouterMode = flowStructure.flowMode === "router_by_topics";
+
+  // Состояние хаба уезжает на сервер при каждом его изменении (вход в пункт, возврат, закрытие
+  // раздела) — не только вместе с ответом: возврат в хаб ответа не несёт, а без записи
+  // перезагрузка вернула бы участника внутрь уже завершённого пункта.
+  const hubStateSaved = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isRouterMode || !attempt || phase === "start") return;
+    const snapshot = JSON.stringify([routerTopicStates, sectionCommitted, currentRouterTopic]);
+    if (hubStateSaved.current === null) {
+      hubStateSaved.current = snapshot; // первое состояние — восстановленное или пустое: писать нечего
+      return;
+    }
+    if (hubStateSaved.current === snapshot) return;
+    hubStateSaved.current = snapshot;
+    saveProgress(answers, currentIndex, questionStatus);
+    // Сохраняется только при смене состояния хаба; ответы сохраняет их собственный путь.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRouterMode, attempt, phase, routerTopicStates, sectionCommitted, currentRouterTopic]);
+
+  /*
+   * Техдолг №8: исход каждого завершённого пункта роутера — тем же серверным расчётом раздела, что
+   * у экрана итогов раздела. Без него «Открывается после успешного прохождения» и политика «все
+   * обязательные пройдены» знали исход только там, где тест показывает итоги раздела, а после
+   * перезагрузки — нигде. Пока оценка в пути (`pending`), пункт не открывает зависимых и не считается
+   * проваленным окончательно: ни зависимый пункт, ни «Завершить» не мелькнут открытыми. Ошибка запроса — исход неизвестен (`null`), и пункт не запирает других, как
+   * пункт без порога. Адаптивную тему оценивает движок, а не этот расчёт.
+   */
+  const sectionGrading = useRef(new Set<string>());
+  useEffect(() => {
+    if (!isRouterMode || !attempt || testMode === "adaptive") return;
+    const completed = new Set(closedTopics);
+    for (const [topicId, status] of Object.entries(routerTopicStates)) {
+      if (status === "completed") completed.add(topicId);
+    }
+    for (const topicId of completed) {
+      if (topicId in routerSectionResults || sectionGrading.current.has(topicId)) continue;
+      sectionGrading.current.add(topicId);
+      setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed: false, pending: true } }));
+      const settle = (passed: boolean | null) => {
+        sectionGrading.current.delete(topicId);
+        setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed } }));
+      };
+      fetch(`/api/attempts/${attempt.id}/section-result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ topicId, answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d: { passed?: boolean | null } | null) => settle(typeof d?.passed === "boolean" ? d.passed : null))
+        .catch(() => settle(null));
+    }
+  }, [isRouterMode, attempt, testMode, closedTopics, routerTopicStates, routerSectionResults, answers, questionStatus, navSettings.allowReturnToUnanswered]);
+
   /** The hub page itself (the `router` content page the author placed). */
   const hubPage = useMemo(
     () => flowStructure.contentPages.find((p) => p.kind === "router") as RenderableContentPage | undefined,
@@ -1733,6 +2071,9 @@ export default function TakeTestPage() {
           topicName: q?.topicName || s.topicId,
           drawCount: flatQuestions.filter((fq) => fq.topicId === s.topicId).length,
           timeLimitMinutes: q?.sectionTimeLimitMinutes ?? null,
+          // PRD-4 v1.1 §4.7: an OPTIONAL section never blocks «Завершить» — the same
+          // rule the package applies, from the same field.
+          required: s.required !== false,
         };
       }),
     [sections, flatQuestions],
@@ -1747,10 +2088,21 @@ export default function TakeTestPage() {
     const first =
       typeof saved === "number" && flatQuestions[saved]?.topicId === topicId ? saved : firstOfTopic;
     setRouterTopicStates((prev) => ({ ...prev, [topicId]: "inProgress" }));
+    // Техдолг №8: повторный прогон сценария — прежний исход не действует; новый оценит возврат.
+    setRouterSectionResults((prev) => {
+      if (!(topicId in prev)) return prev;
+      const next = { ...prev };
+      delete next[topicId];
+      return next;
+    });
     setCurrentRouterTopic(topicId);
     setShowHub(false);
     const pre = contentPagesFor(flowStructure.contentPages, topicId, "before_topic") as RenderableContentPage[];
     if (pre.length > 0 && contentTpl) {
+      // Текущим становится первый вопрос раздела ДО его заставки: отложенный переход судит о
+      // границе раздела от текущего вопроса, и вопрос прежнего пункта (в начале прогона — первого
+      // в выдаче) принял бы вход в раздел за выход из чужого и показал бы обзор чужого раздела.
+      if (first >= 0) setCurrentIndex(first);
       setPageQueue(pre);
       setPendingAdvance({ nextIdx: first < 0 ? null : first, answers, status: questionStatus });
       setPhase("content");
@@ -1777,9 +2129,12 @@ export default function TakeTestPage() {
   /** «Завершить» on the hub: the «После теста» zone, then submit. */
   const finishFromHub = () => {
     setShowHub(false);
+    // Только то, что стоит ДО «Итогов теста»: страницы за ними играются после экрана
+    // итогов (`buildAfterZone`, тем же правилом, что в пакете и в «Структуре»).
     const after = contentTpl && !afterZonePlayed
-      ? (contentPagesFor(flowStructure.contentPages, null, "after") as RenderableContentPage[])
-          .filter((p) => (p as { type?: string }).type !== "summary")
+      ? (buildAfterZone(flowStructure.contentPages).preResults
+          .map((item) => (item.kind === "content" ? item.page : null))
+          .filter(Boolean) as RenderableContentPage[])
       : [];
     if (after.length > 0) {
       setAfterZonePlayed(true);
@@ -1820,7 +2175,7 @@ export default function TakeTestPage() {
         // passed with questions the learner had deliberately skipped.
         if (!sectionCommitted[currentRouterTopic]) {
           if (
-            shouldShowReview({
+            wantsReview({
               allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
               allowAnswerChange: navSettings.allowAnswerChange,
               hasUnanswered: hasUnansweredIn(nextStatus, currentRouterTopic),
@@ -1908,7 +2263,7 @@ export default function TakeTestPage() {
       const crossing = !!curTopic && (nextIdx === null || flatQuestions[nextIdx].topicId !== curTopic);
       if (crossing && !sectionCommitted[curTopic!]) {
         if (
-          shouldShowReview({
+          wantsReview({
             allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
             allowAnswerChange: navSettings.allowAnswerChange,
             hasUnanswered: hasUnansweredIn(nextStatus, curTopic!),
@@ -1928,7 +2283,7 @@ export default function TakeTestPage() {
       }
     } else if (
       nextIdx === null &&
-      shouldShowReview({
+      wantsReview({
         allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
         allowAnswerChange: navSettings.allowAnswerChange,
         hasUnanswered: hasUnansweredIn(nextStatus, null),
@@ -2061,7 +2416,7 @@ export default function TakeTestPage() {
     // incorrect (FR-07). The обзор / finish-confirm warning is added in Block D.
     if (unansweredQuestions.length > 0 && !navSettings.allowReturnToUnanswered) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Не все вопросы отвечены",
         description: `Осталось ${unansweredQuestions.length} вопросов без ответа.`,
       });
@@ -2085,6 +2440,30 @@ export default function TakeTestPage() {
     await submitAttempt(fresh);
   };
 
+  /**
+   * Куда ученик попадает, когда попытка отправлена. ОДНА точка на все пути завершения
+   * (обычная отправка, истёкшее время, добивка последнего раздела) — иначе конец
+   * прохождения расходится сам с собой.
+   *
+   * Порядок повторяет пакет (PRD-12 FR-6): экран итогов → страницы «После теста» →
+   * выход. Скрытый экран итогов выпадает из этой цепочки, а не уводит ученика сразу:
+   * авторские страницы за ним автор писал для того, чтобы их прочли.
+   */
+  const finishRun = () => {
+    if (!attempt) return;
+    if (!resultsScreenHidden) {
+      navigate(`/learner/result/${attempt.id}`);
+      return;
+    }
+    if (contentTpl && postResultsPages.length > 0) {
+      setPendingExit(true);
+      setPageQueue(postResultsPages);
+      setPhase("content");
+      return;
+    }
+    navigate("/learner");
+  };
+
   /** Sends the attempt and moves to the results page. `fresh` — see {@link handleSubmit}. */
   const submitAttempt = async (fresh?: GradedSnapshot) => {
     if (!attempt) return;
@@ -2100,15 +2479,18 @@ export default function TakeTestPage() {
             fresh?.status ?? questionStatus,
             navSettings.allowReturnToUnanswered,
           ),
+          // Попытку часто завершают прямо с вопроса: открытый заход входит в итог, иначе
+          // время последнего задания осталось бы недосчитанным.
+          latencyMs: questionTime.totals(),
         }),
       });
 
       if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
-      navigate(`/learner/result/${attempt.id}`);
+      finishRun();
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка отправки",
         description: "Не удалось отправить ответы",
       });
@@ -2128,14 +2510,17 @@ export default function TakeTestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
+        body: JSON.stringify({
+          answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered),
+          latencyMs: questionTime.totals(),
+        }),
       });
       if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
-      navigate(`/learner/result/${attempt.id}`);
+      finishRun();
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка отправки",
         description: "Не удалось отправить ответы",
       });
@@ -2146,17 +2531,42 @@ export default function TakeTestPage() {
   // Section-timer expiry (PRD-4 v1.1 §3.2): the viewed topic ran out of time.
   // Force-advance past it to the next non-locked topic (or finish the test).
   // `lockedTopics` lags the just-expired topic by a tick, so union it in.
-  const handleSectionExpire = (expiredTopicId: string) => {
+  const handleSectionExpire = (expiredTopicId: string, reason: SectionStopReason = "time") => {
+    setStandardFeedbackShown(false);
+    setStandardAnswerResult(null);
+    // PRD-67: a test without sections was left — it is one section, so the attempt is over.
+    // The server already froze every answer; this only hands the run in.
+    if (reason === "test-closed") {
+      toast({
+        tone: "info",
+        duration: LEAVE_NOTICE_MS,
+        icon: <Lock size={18} aria-hidden="true" />,
+        title: "Попытка завершена",
+        description: "Вы вышли из теста до завершения. Засчитаны ответы, данные до выхода.",
+      });
+      void forceFinishStandard();
+      return;
+    }
     const locked = new Set(lockedTopics);
     locked.add(expiredTopicId);
     const target = forceAdvanceTarget(flatQuestions, expiredTopicId, currentIndex, locked);
-    setStandardFeedbackShown(false);
-    setStandardAnswerResult(null);
-    toast({
-      variant: "destructive",
-      title: "Время темы истекло",
-      description: target === null ? "Завершаем тест" : "Переходим к следующей теме",
-    });
+    if (reason === "closed") {
+      // PRD-67 (FR-12): the learner came back into a section they had left.
+      const topicName = flatQuestions.find((q) => q.topicId === expiredTopicId)?.topicName;
+      toast({
+        tone: "info",
+        duration: LEAVE_NOTICE_MS,
+        icon: <Lock size={18} aria-hidden="true" />,
+        title: topicName ? `Раздел «${topicName}» закрыт` : "Раздел закрыт",
+        description: "Вы вышли из него до завершения. Ответы, данные до выхода, сохранены.",
+      });
+    } else {
+      toast({
+        tone: "error",
+        title: "Время темы истекло",
+        description: target === null ? "Завершаем тест" : "Переходим к следующей теме",
+      });
+    }
     if (target === null) {
       void forceFinishStandard();
     } else {
@@ -2230,7 +2640,7 @@ export default function TakeTestPage() {
     const attemptId = adaptiveState?.attemptId;
     if (!attemptId) return;
     toast({
-      variant: "destructive",
+      tone: "error",
       title: "Время темы истекло",
       description: "Переходим к следующей теме",
     });
@@ -2251,7 +2661,7 @@ export default function TakeTestPage() {
   const handleAdaptiveConfirm = async () => {
     if (!adaptiveState || !adaptiveState.currentQuestion || adaptiveState.answer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос",
       });
@@ -2267,6 +2677,8 @@ export default function TakeTestPage() {
         body: JSON.stringify({
           questionId: adaptiveState.currentQuestion.id,
           answer: adaptiveState.answer,
+          // PRD-66 FR-37a: адаптив отдаёт задание по одному, и ответ — его последняя точка.
+          latencyMs: questionTime.totals(),
         }),
       });
 
@@ -2298,7 +2710,7 @@ export default function TakeTestPage() {
 
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка",
         description: "Не удалось отправить ответ",
       });
@@ -2374,7 +2786,7 @@ export default function TakeTestPage() {
   const handleAdaptiveSubmit = async () => {
     if (!adaptiveState || !adaptiveState.currentQuestion || adaptiveState.answer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос",
       });
@@ -2390,6 +2802,8 @@ export default function TakeTestPage() {
         body: JSON.stringify({
           questionId: adaptiveState.currentQuestion.id,
           answer: adaptiveState.answer,
+          // PRD-66 FR-37a: адаптив отдаёт задание по одному, и ответ — его последняя точка.
+          latencyMs: questionTime.totals(),
         }),
       });
 
@@ -2462,7 +2876,7 @@ export default function TakeTestPage() {
       }
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка",
         description: "Не удалось отправить ответ",
       });
@@ -2528,6 +2942,7 @@ export default function TakeTestPage() {
           layout={blockedTpl.layout}
           css={blockCss}
           cssVars={blockedTpl.cssVars}
+          dataAttrs={blockedTpl.dataAttrs}
           themeCss={blockedTpl.themeCss}
           dataTheme={blockedTpl.dataTheme}
           themed={blockedTpl.themed}
@@ -2562,14 +2977,20 @@ export default function TakeTestPage() {
   // wrapper with the SHARED hub markup in its page-content slot — the same cards,
   // classes and open/locked rules the SCORM package renders.
   if (showHub && contentTpl && hubPage) {
+    // PRD-67 (FR-09): a section closed by a leave is done — the hub shows it «Пройдена» and
+    // never reopens it, including after a reload that emptied the local hub state.
+    const hubTopicStates: Record<string, RouterTopicStatus | undefined> = { ...routerTopicStates };
+    for (const topicId of closedTopics) hubTopicStates[topicId] = "completed";
     const hubHubState = {
-      topicStates: routerTopicStates,
+      topicStates: hubTopicStates,
       sectionResults: routerSectionResults,
-      unlockRules: {},
-      completionPolicy: null,
-      // Same gate as SCORM: only reveal a section's pass/fail on the card when the
-      // test shows section results; otherwise the card stays a neutral «Завершена».
-      showSectionResults: navSettings.showSectionResults,
+      // PRD-4 v1.1 §4.7: the SAME gating the package runs — resolved server-side by
+      // `shared/flow/flow-policy` and delivered with the attempt. A hub built with
+      // empty rules is a hub that opens sections the LMS keeps locked.
+      unlockRules: flowStructure.routerPolicy?.sectionUnlockRules ?? {},
+      completionPolicy: flowStructure.routerPolicy?.completionPolicy ?? null,
+      // Техдолг №7: «менять ответ» разрешает пройти завершённый пункт-сценарий заново.
+      rerunScenarios: navSettings.allowAnswerChange,
     };
     const hubReady = isRouterReadyToFinish(hubSections, hubHubState);
     return (
@@ -2581,7 +3002,11 @@ export default function TakeTestPage() {
         bodyHtml={buildRouterHubHtml(hubSections, hubHubState)}
         onBodyAction={(action) => {
           if (action.startsWith("router-select:")) {
-            selectRouterTopic(action.slice("router-select:".length));
+            const key = action.slice("router-select:".length);
+            // «Сценарий в ИС»: пункт-сценарий играется на весь экран, а браузер даёт его только
+            // жесту — просим здесь, в самом щелчке по карточке.
+            if (isScenarioItemKey(key)) requestScenarioFullscreen();
+            selectRouterTopic(key);
           }
         }}
         // «Завершить» is the standard footer nav button, inert until every required
@@ -2615,6 +3040,12 @@ export default function TakeTestPage() {
             sectionsTotal: sections.length,
             courseTitle: testInfo?.title || attempt?.testTitle || "",
             instruction: String((page.valuesJson?.values as any)?.instruction ?? ""),
+            // The threshold of this topic by the delivered variant, resolved server-side.
+            passRule: sectionConditions.byTopic[introTopicId]?.passRule ?? null,
+            possiblePoints: sectionConditions.byTopic[introTopicId]?.possiblePoints ?? null,
+            required: sectionConditions.byTopic[introTopicId]?.required ?? null,
+            passDecisionPolicy: sectionConditions.policy,
+            passConditionShown: passConditionShownOf(page as SequenceContentPage),
           })
         : undefined;
     return (
@@ -2649,6 +3080,13 @@ export default function TakeTestPage() {
           const rest = pageQueue.slice(1);
           setPageQueue(rest);
           if (rest.length > 0) return;
+          // Страницы «После теста» доиграны — прохождение закончено (зеркало пакета:
+          // там за ними идёт «Завершить»).
+          if (pendingExit) {
+            setPendingExit(false);
+            navigate("/learner");
+            return;
+          }
           // The zone played before submitting — finish now, without flashing the
           // question screen on the way out.
           if (pendingSubmit) {
@@ -2695,15 +3133,26 @@ export default function TakeTestPage() {
       info: {
         title: testInfo.title,
         description: testInfo.description || "",
+        // PRD-59 FR-12: the format rides with the text; the markup is built by the
+        // shared builder, not here.
+        descriptionFormat: testInfo.descriptionFormat,
         // Adaptive draws from its levels, not from the section quotas, so the
         // count is unknown up front: omit the fact instead of promising «0
         // вопросов» (the layout hides a fact it is not given).
-        questionCount: testMode === "adaptive" ? undefined : testMetadata.totalQuestions,
+        // У адаптивного теста число вопросов заранее не известно; у теста «Сценарий» задание
+        // одно, и «1 вопрос» на обложке читался бы как опрос (согласованный эскиз, экран 5).
+        questionCount: testMode === "adaptive" || scenarioTest ? undefined : testMetadata.totalQuestions,
         passPercent: testMetadata.passPercent,
+        passDecisionPolicy: testMetadata.passDecisionPolicy,
+        // The topic condition of the cover, counted from the same rules the grader applies.
+        // An adaptive test passes by its levels, not by topic thresholds.
+        overallPassRule: testMetadata.overallPassRule,
+        sections: testMode === "adaptive" ? [] : testMetadata.passSections,
         hasGradedContent: testMetadata.hasGradedContent,
         timeLimitMinutes: testMetadata.timeLimitMinutes,
         maxAttempts: testMetadata.maxAttempts,
         startPageContent: testMetadata.startPageContent || "",
+        closesOnLeave: testMetadata.closesOnLeave,
       },
       maxAttempts: testMetadata.maxAttempts,
       completedAttempts: testMetadata.completedAttempts,
@@ -2754,6 +3203,7 @@ export default function TakeTestPage() {
           layout={startTpl.layout}
           css={startTpl.css}
           cssVars={startTpl.cssVars}
+          dataAttrs={startTpl.dataAttrs}
           themeCss={startTpl.themeCss}
           dataTheme={startTpl.dataTheme}
           themed={startTpl.themed}
@@ -2811,6 +3261,7 @@ export default function TakeTestPage() {
           layout={transitionTpl.layout}
           css={transitionTpl.css}
           cssVars={transitionTpl.cssVars}
+          dataAttrs={transitionTpl.dataAttrs}
           themeCss={transitionTpl.themeCss}
           dataTheme={transitionTpl.dataTheme}
           themed={transitionTpl.themed}
@@ -2872,6 +3323,12 @@ export default function TakeTestPage() {
           protection={questionProtection}
           testTitle={testTitle}
           counterLabel={counter}
+          // The adaptive screen used to pass no timers at all, so a learner on a timed
+          // adaptive test saw NO countdown anywhere — the limit only made itself known
+          // when the run ended. Same header timers as the standard screen and the
+          // package: the test limit plus the topic's own budget (the adaptive flow's
+          // section clock, PRD-4 v1.1 §3.2).
+          timers={{ testSeconds: remainingSeconds, sectionSeconds: adaptiveSectionRemaining }}
           progressPercent={(currentQuestion.questionNumber / currentQuestion.totalInLevel) * 100}
           question={currentQ}
           answer={adaptiveState.answer}
@@ -2907,6 +3364,8 @@ export default function TakeTestPage() {
     // position) or committed are «delivered» — the обзор must not reveal not-yet-issued
     // questions. Mid-flow entry («Вернуться») additionally offers «Назад» + highlights
     // the current question.
+    const freeNavWeb =
+      navSettings.allowReturnToUnanswered && navSettings.allowFreeSectionNavigation;
     const built = buildReviewContext({
       questions: flatQuestions.map((fq, i) => {
         const st = questionStatus[fq.question.id];
@@ -2914,7 +3373,11 @@ export default function TakeTestPage() {
           id: fq.question.id,
           topicId: fq.topicId,
           prompt: fq.question.prompt,
-          delivered: i <= currentIndex || st === "answered" || st === "skipped",
+          // FR-11a: при свободной навигации «невыданных» внутри охвата нет — обзор
+          // обязан перечислить их все, иначе он умолчит о вопросе, к которому ученик мог
+          // перейти в один клик. Охват ниже фильтруется разделом, как и прежде.
+          delivered:
+            freeNavWeb || i <= currentIndex || st === "answered" || st === "skipped",
         };
       }),
       statuses: questionStatus,
@@ -2944,6 +3407,7 @@ export default function TakeTestPage() {
           layout={reviewTpl.layout}
           css={reviewTpl.css}
           cssVars={reviewTpl.cssVars}
+          dataAttrs={reviewTpl.dataAttrs}
           themeCss={reviewTpl.themeCss}
           dataTheme={reviewTpl.dataTheme}
           timers={{ testSeconds: remainingSeconds, sectionSeconds: sectionRemainingSeconds }}
@@ -3059,6 +3523,7 @@ export default function TakeTestPage() {
           layout={sectionResultsTpl.layout}
           css={sectionResultsTpl.css}
           cssVars={sectionResultsTpl.cssVars}
+          dataAttrs={sectionResultsTpl.dataAttrs}
           themeCss={sectionResultsTpl.themeCss}
           dataTheme={sectionResultsTpl.dataTheme}
           timers={{ testSeconds: remainingSeconds, sectionSeconds: sectionRemainingSeconds }}
@@ -3077,6 +3542,67 @@ export default function TakeTestPage() {
         />
       </div>
     );
+  }
+
+  // «Сценарий в ИС»: задание-сценарий играется плеером на весь экран вместо экрана вопроса —
+  // и в тесте «Сценарий», и пунктом роутера. Результат прогона — ответ на вопрос: сохраняется,
+  // как только прогон окончен. Закрытие окна результата в тесте «Сценарий» отправляет попытку
+  // (дальше — страницы «После теста» и экран итогов), а в роутере возвращает в хаб.
+  const scenarioTaskIndex = scenarioTest
+    ? 0
+    : flatQuestions[currentIndex] && isScenarioItemKey(flatQuestions[currentIndex].topicId)
+      ? currentIndex
+      : -1;
+  if (attempt && phase === "question" && scenarioTaskIndex >= 0 && flatQuestions[scenarioTaskIndex]) {
+    const task = flatQuestions[scenarioTaskIndex].question;
+    const itemKey = flatQuestions[scenarioTaskIndex].topicId;
+    const scenario = (task.dataJson as { scenario?: Scenario } | null)?.scenario;
+    // Г5 паритета хостов: у пункта-сценария свой лимит времени, и прогон ограничен остатком ЕГО
+    // часов. Их ведёт сервер, а плеер берёт лимит один раз, при монтировании, — поэтому плеер ждёт,
+    // пока сервер назовёт остаток именно этого пункта (одна короткая сверка), а не берёт число
+    // прежнего пункта или лимит теста. Полный экран уже запрошен в щелчке по карточке.
+    const itemClockPending =
+      !scenarioTest && !!flatQuestions[scenarioTaskIndex].sectionTimeLimitMinutes && sectionTimerTopicId !== itemKey;
+    if (scenario && !scenarioDone && itemClockPending) {
+      return <LoadingState message="Открываем сценарий…" />;
+    }
+    if (scenario && !scenarioDone) {
+      return (
+        <ScenarioRun
+          scenario={scenario}
+          caption={testInfo?.title}
+          showDetails={showCorrectAnswers}
+          closeLabel={scenarioTest ? "Перейти к итогам" : "Вернуться к разделам"}
+          // Лимит прогона — остаток таймера раздела (у пункта-сценария свой лимит времени), если он
+          // идёт, иначе теста (user-journey.md, 5.9) — как в обычном разделе ниже и как в пакете.
+          remainingSeconds={sectionRemainingSeconds ?? remainingSeconds}
+          onFinish={(result) => {
+            // Техдолг №7: досрочный выход из повторного прогона не затирает завершённый.
+            if (!simRunReplaces(answers[task.id], result)) return;
+            const nextAnswers = { ...answers, [task.id]: result };
+            const nextStatus = { ...questionStatus, [task.id]: "answered" as const };
+            setAnswers(nextAnswers);
+            setQuestionStatus(nextStatus);
+            saveProgress(nextAnswers, scenarioTaskIndex, nextStatus);
+          }}
+          onClose={(result) => {
+            const nextAnswers = result && simRunReplaces(answers[task.id], result) ? { ...answers, [task.id]: result } : answers;
+            const nextStatus = result ? { ...questionStatus, [task.id]: "answered" as const } : questionStatus;
+            if (scenarioTest) {
+              setScenarioDone(true);
+              void handleSubmit({ answers: nextAnswers, status: nextStatus });
+              return;
+            }
+            // Роутер: пункт закрыт — как раздел темы после его последнего вопроса.
+            returnToHub(itemKey);
+          }}
+          data-testid="scenario-task"
+        />
+      );
+    }
+    if (scenarioDone) {
+      return <LoadingState message="Отправка результата…" />;
+    }
   }
 
   if (
@@ -3138,6 +3664,10 @@ export default function TakeTestPage() {
         // PRD-19 D5: a committed (finished) section's pills are locked (FR-06/FR-11).
         sectionCommitted,
         allowReturn: navSettings.allowReturnToUnanswered,
+        // PRD-19 (FR-11a): свободная навигация открывает фронтир на весь текущий охват.
+        // Зависит от возврата (FR-11c): без него карта — индикатор, открывать нечего.
+        freeNavigation:
+          navSettings.allowReturnToUnanswered && navSettings.allowFreeSectionNavigation,
         scopeLabel:
           navSettings.answerCommitScope === "section"
             ? `Вопросы раздела «${currentQ.topicName}»`
@@ -3202,8 +3732,46 @@ export default function TakeTestPage() {
         return committedCurrent ? handleStandardContinue() : handleNext();
       }
     };
+    // «Сценарий в ИС» в обычном разделе (техдолг №5, эскиз sim-scenario-learner.html): прогон —
+    // плеер на весь экран поверх страницы; результат — ответ на вопрос, как у любого типа, и
+    // фиксируется обычным «Далее». Закрытие окна результата возвращает к экрану вопроса.
+    const currentScenario = isSimulation(currentQ.question.type)
+      ? (currentQ.question.dataJson as { scenario?: Scenario } | null)?.scenario ?? null
+      : null;
+    if (currentScenario && simDialog === "run") {
+      return (
+        <ScenarioRun
+          scenario={currentScenario}
+          caption={testInfo?.title}
+          showDetails={showCorrectAnswers}
+          closeLabel="Вернуться к вопросу"
+          remainingSeconds={sectionRemainingSeconds ?? remainingSeconds}
+          onFinish={(result) => {
+            // Техдолг №7: досрочный выход из «Пройти заново» не затирает завершённый прогон.
+            if (simRunReplaces(answers[currentQ.question.id], result)) handleAnswer(currentQ.question.id, result);
+          }}
+          onClose={() => setSimDialog(null)}
+          data-testid="scenario-task"
+        />
+      );
+    }
+    // Штрафы — для строки о балле в окне правил: сервер присылает цену сценария всегда.
+    const simScoring = (currentQ.question as GradedQuestion).scoring as SimScoringLevel | null | undefined;
+    const simPenalties = currentScenario && simScoring ? resolveSimScoring(null, simScoring).penalties : null;
     return (
+      <>
+      {currentScenario && (
+        <SimRulesDialog
+          open={simDialog === "rules"}
+          scenario={currentScenario}
+          penalties={simPenalties}
+          onCancel={() => setSimDialog(null)}
+          onStart={() => setSimDialog("run")}
+        />
+      )}
       <TemplateQuestionScreen
+        simRetake={navSettings.allowAnswerChange}
+        onSimOpen={() => setSimDialog("rules")}
         tpl={questionTpl}
         protection={questionProtection}
         testTitle={attempt.testTitle}
@@ -3237,6 +3805,7 @@ export default function TakeTestPage() {
         questionsProgress={questionsProgress}
         onNavigateToQuestion={navigateToQuestion}
       />
+      </>
     );
   }
 

@@ -1,0 +1,1 @@
+ALTER TABLE "content_pages" ADD COLUMN "hidden" boolean DEFAULT false NOT NULL;

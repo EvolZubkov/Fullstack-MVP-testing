@@ -209,7 +209,7 @@ body {
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Simulated DS components — remove this section when @universityrt/ui-kit
+   Simulated DS components — remove this section when @skillum/ui-kit
    is consumed by the product. All values use --ou-* tokens only.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -258,7 +258,11 @@ body {
 .ou-input::placeholder { color: var(--ou-fg-muted); }
 
 /* ── Select ──────────────────────────────────────────────────────────────── */
-.ou-select {
+/* ТОЛЬКО нативный `<select class="ou-select">`: рамку, фон и поля ему рисовать
+   больше нечем. Составной Select дизайн-системы (`div.ou-select` с внутренней
+   кнопкой `.ou-select__trigger`) красится самим компонентом, и это правило
+   добавляло ему ВТОРУЮ рамку — вокруг поля вместе с подписью. */
+select.ou-select {
   box-sizing: border-box;
   padding: var(--ou-space-2) var(--ou-space-3);
   border: var(--wf-border-w) solid var(--ou-border-default);
@@ -302,20 +306,12 @@ body {
 .ou-button--xs                { height: var(--ou-space-7); padding: 0 var(--ou-space-3); }
 .ou-button[disabled]          { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Tag / Badge ─────────────────────────────────────────────────────────── */
-.ou-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--wf-space-half) var(--ou-space-2);
-  border-radius: var(--ou-radius-xs);
-  font: var(--ou-text-caption);
-  font-weight: 500;
-}
-
-.ou-tag--success { background: var(--ou-success-bg); color: var(--ou-success-fg); }
-.ou-tag--warning { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
-.ou-tag--error   { background: var(--ou-error-soft);   color: var(--ou-error-on-soft);   }
-.ou-tag--neutral { background: var(--ou-bg-hover);   color: var(--ou-fg-muted);   }
+/* ── Tag / Badge ─────────────────────────────────────────────────────────────
+   Правил здесь нет намеренно: `Tag` — компонент ДС, и его собственные правила
+   лежат в skillum-ds.css. Прежний блок дублировал их и, грузясь следом,
+   перебивал: `.ou-tag--success` ссылался на несуществующие `--ou-success-bg`
+   и `--ou-success-fg`, и тег оставался без фона, а размеры `--s/--m/--l` и
+   тона `--accent/--info` не работали вовсе.                                 */
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
 .ou-table-wrap {
@@ -380,20 +376,12 @@ body {
 .ou-pagination-pages button:hover:not(.active) { background: var(--ou-bg-hover); }
 
 /* ── Banner ──────────────────────────────────────────────────────────────── */
-.ou-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--ou-space-3);
-  padding: var(--ou-space-4);
-  border-radius: var(--ou-radius-m);
-  margin-bottom: var(--ou-space-4);
-}
-
-.ou-banner--error {
-  background: var(--ou-error-soft);
-  color: var(--ou-error-on-soft);
-  border: var(--wf-border-w) solid var(--ou-border-error, var(--ou-error-on-soft));
-}
+/* `.ou-banner` и `.ou-banner--error` живут в дизайн-системе: здесь их копии стояли
+   с прошлых эскизов и, загружаясь позже, перебивали её. Копия несла собственный
+   `margin-bottom`, который складывался с интервалом контейнера и давал под каждым
+   баннером 32px вместо 16px — отступ вне модульной сетки. Расстояния между блоками
+   задаёт контейнер, а не элемент. Ниже остались только эскизные классы с одинарным
+   дефисом: в дизайн-системе их нет. */
 
 .ou-banner-icon  { font-size: var(--wf-size-18); flex-shrink: 0; margin-top: var(--wf-border-w); }
 .ou-banner-title { font-weight: 600; margin-bottom: var(--ou-space-1); }

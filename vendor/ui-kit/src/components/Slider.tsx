@@ -2,9 +2,24 @@ import React, {
   forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
 } from 'react';
 import { cn, cssStyleClass } from '../utils';
+import { Tooltip } from './Tooltip';
 
 type SliderTone = 'accent' | 'success' | 'warning' | 'error';
 export type SliderOrientation = 'horizontal' | 'vertical';
+
+/**
+ * Ориентир над шкалой: значение, с которым сверяют выбранное, — например, какой величина
+ * оказалась на деле. Треугольник вершиной вниз, по наведению и фокусу — подсказка.
+ */
+export interface SliderLandmark {
+  value: number;
+  /** Имя ориентира для экранного диктора: «Сложность по ответам: 40». */
+  label: string;
+  /** Заголовок подсказки. */
+  title?: React.ReactNode;
+  /** Пояснение: что значит ориентир. */
+  hint: React.ReactNode;
+}
 
 export interface SliderProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange' | 'defaultValue'> {
@@ -22,6 +37,8 @@ export interface SliderProps
   disabled?: boolean;
   /** Метки на шкале. */
   marks?: number[];
+  /** Ориентиры над горизонтальной шкалой. */
+  landmarks?: SliderLandmark[];
   /** Заголовок над треком. */
   label?: React.ReactNode;
   /** Подпись справа от заголовка (по умолчанию — значение). */
@@ -37,7 +54,7 @@ export const Slider = forwardRef<HTMLDivElement, SliderProps>(
     min = 0, max = 100, step = 1,
     value, defaultValue, onChange,
     range, orientation = 'horizontal', tone = 'accent',
-    disabled, marks, label, valueLabel, formatValue,
+    disabled, marks, landmarks, label, valueLabel, formatValue,
     ariaLabel, className, style, ...rest
   }, ref) => {
     const isRange = !!range;
@@ -199,6 +216,22 @@ export const Slider = forwardRef<HTMLDivElement, SliderProps>(
               })}
             </div>
           )}
+          {isH && landmarks?.map((landmark, index) => (
+            <Tooltip
+              key={`${landmark.value}-${index}`}
+              placement="top"
+              wrap
+              title={landmark.title}
+              content={landmark.hint}
+              tabIndex={0}
+              aria-label={landmark.label}
+              className={cn('ou-slider__landmark', cssStyleClass({ left: `${pctOf(landmark.value)}%` }, 'ou-slider-landmark'))}
+              // Щелчок по ориентиру — чтение подсказки, а не перенос ползунка.
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <span className="ou-slider__landmark-mark" aria-hidden="true" />
+            </Tooltip>
+          ))}
           {isRange ? (
             <>
               <div

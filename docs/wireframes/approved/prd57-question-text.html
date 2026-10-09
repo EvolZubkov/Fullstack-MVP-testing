@@ -1,0 +1,1146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: поле «Текст вопроса» — режимы ввода и вставка листинга, формулы
+    и пропуска.
+    Файл: docs/wireframes/approved/prd57-question-text.html
+    Спека: docs/specs/prd-57/open-response-and-formatting.md
+           (§4.1 FR-01..FR-05 листинг, §4.2 FR-06..FR-10 формулы,
+            §6 FR-24, FR-24b, FR-24f, FR-24j пропуски).
+    Issue: #40 (PRD-57, Э0) — дополнение по решению владельца 2026-09-18.
+    Статус: СОГЛАСОВАН 2026-09-18, взят в реализацию.
+
+    Один эскиз на одно поле. Поле «Текст вопроса» стоит и в эскизе правила
+    (prd57-answer-rule.html), и в эскизе пропусков (prd57-blanks-editor.html);
+    его панель и режимы нарисованы ЗДЕСЬ, чтобы два файла не разошлись
+    в изображении одного и того же контрола.
+
+    Решения владельца 2026-09-18:
+      - у текста задания ЕСТЬ режимы ввода;
+      - режим «Разметка» — это нынешнее поведение задания (markdown-подмножество),
+        поэтому миграции не требуется и ни один написанный вопрос не меняется;
+        подпись «Разметка», а не «Обычный»: у обратной связи «Обычный» значит
+        «экранировать и показать разметку текстом», и одно слово не должно
+        значить в продукте разное;
+      - механики трека — пропуски и формулы — работают во ВСЕХ режимах;
+      - листинг кода идёт С ПОДСВЕТКОЙ СИНТАКСИСА, языки: python, sql,
+        javascript. Это ОТМЕНЯЕТ FR-03 спеки, где подсветка выведена
+        из охвата; §4.1 требует правки;
+      - движок подсветки — highlight.js (BSD-3-Clause), согласован
+        2026-09-18 ТОЛЬКО как серверная зависимость;
+      - ТИПОГРАФИКА РАБОТАЕТ ВО ВСЕХ ТРЁХ РЕЖИМАХ ОДИНАКОВО (FR-09d). Решение
+        принято 2026-09-18 ПОЗЖЕ первой редакции этого файла, где модалка
+        перехода обещала обратное («в режиме HTML она больше не работает»).
+        Подпись исправлена 2026-09-20 по факту реализации: в HTML проход идёт
+        по текстовым узлам и не заходит внутрь листинга, значений атрибутов и
+        имён пропусков.
+
+    Состояния (переключатель в навбаре):
+      s-md        — режим «Разметка»: панель вставки, огорождённый блок кода
+      s-rich      — режим «Форматированный»: панель форматирования + та же вставка
+      s-html      — режим «HTML»: сырая разметка, листинг тегами
+      s-lang      — выбор языка при вставке листинга
+      s-diag      — режим «HTML»: диагностика вырезанного при сохранении
+      s-switch      — переход «Разметка» -> HTML: что преобразуется
+      s-switch-html — переход HTML -> «Форматированный»: что панель не умеет
+      Предпросмотр — не состояние ящика, а модальное окно поверх него: кнопка
+      стоит в подвале. Во всех режимах ввода он выглядит одинаково. Поправлено
+      2026-09-18: постоянного блока в ящике не будет, приём взят у
+      предпросмотра страницы.
+      s-notes     — пояснения и DS Mapping
+  -->
+  <title>PRD-57 · Текст вопроса: режимы ввода</title>
+
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+
+  <style>
+    /* Окно предпросмотра — под навбаром эскиза. Правило для `hidden` обязательно:
+       собственный `display` компонента сильнее браузерного правила атрибута. */
+    #qt-preview { top: var(--wf-nav-offset, var(--wf-size-52)); bottom: 0; height: auto; }
+    #qt-preview[hidden] { display: none; }
+    /* ─── Эскизный фрейм ──────────────────────────────────────────────────
+       Перенесён из approved/question-scale.html без изменений. */
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    .wf-annot-wrap--block { position: relative; display: block; }
+    .wf-annot {
+      display: none;
+      position: absolute;
+      top: calc(-1 * var(--ou-space-2));
+      right: calc(-1 * var(--ou-space-1));
+      z-index: 200;
+      background: var(--ou-warning-default);
+      color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s);
+      padding: 0 var(--ou-space-1);
+      font-weight: 700;
+      font-size: var(--wf-space-10);
+      line-height: var(--ou-space-5);
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-annots-on .wf-annot { display: block; }
+
+    .wf-state > .ou-drawer-root { top: var(--wf-nav-offset, var(--wf-size-52)); bottom: 0; height: auto; }
+    .wf-state > .ou-drawer-root > .ou-drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+
+    /* ─── Кандидат в tb-components.css: авторский ввод моноширинным ─────────
+       Поле, в котором автор набирает разметку, обязано быть моноширинным:
+       в огорождённом блоке значимы ведущие пробелы, а в сырой разметке —
+       позиция символа. Это свойство ПОЛЯ РЕДАКТОРА, не сцены. */
+    .tb-src .ou-textarea__input { font-family: var(--ou-font-family-mono); font-size: var(--ou-text-mono-s-size); }
+
+    /* ─── Кандидаты в theme.css шаблона: листинг и формула на сцене ─────────
+       Оформление СЦЕНЫ: его видит участник, и оно одно у веб-хоста и пакета.
+       Блок кода не переносит строки, а прокручивается в своём контейнере
+       (FR-04): перенос в коде меняет смысл. */
+    .tb-code {
+      display: block; overflow-x: auto;
+      font-family: var(--ou-font-family-mono); font-size: var(--ou-text-mono-s-size);
+      background: var(--ou-bg-surface-2); border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m); padding: var(--ou-space-3) var(--ou-space-4);
+      white-space: pre; tab-size: 4;
+    }
+    /* ─── Кандидат в tb-components.css: атомарный узел в WYSIWYG ────────────
+       Листинг, формула и пропуск внутри редактируемой области объявлены
+       `contenteditable="false"`. Браузер трактует такой узел как ОДИН
+       неделимый символ: курсор внутрь не попадает, `execCommand` его не рвёт,
+       удаление уносит целиком. Это и есть гарантия сохранности — по
+       построению, а не проверкой после сохранения: иначе браузер вправе
+       вставить `<span>` в середину маркера, и пропуск молча перестанет быть
+       пропуском. Класс добавляет только видимую границу объекта. */
+    .tb-atom { -webkit-user-select: all; -moz-user-select: all; user-select: all; cursor: default; }
+    .tb-atom:hover { outline: var(--wf-border-w) dashed var(--ou-border-strong); outline-offset: var(--wf-border-w); }
+    .tb-atom.is-selected { outline: var(--wf-border-w-2) solid var(--ou-accent-default); outline-offset: var(--wf-border-w); }
+
+    /* Палитра подсветки. Ролей ПЯТЬ, и это осознанно: подсветка не должна знать
+       язык глубоко, ей достаточно отличить ключевое слово от строки, числа,
+       комментария и имени. Цвета — токены ШАБЛОНА, а не тема библиотеки:
+       иначе светлая и тёмная темы шаблона разойдутся с палитрой библиотеки,
+       и контраст перестанет проходить гейт проекта.
+       Имена классов СВОИ, не библиотечные: пререндер переводит вывод движка
+       в эти пять ролей, поэтому таблица стилей шаблона не зависит от того,
+       какой движок в итоге выбран. */
+    .tb-code__kw  { color: var(--ou-accent-on-soft); font-weight: 600; }
+    .tb-code__str { color: var(--ou-success-on-soft); }
+    .tb-code__num { color: var(--ou-warning-on-soft); }
+    .tb-code__com { color: var(--ou-fg-muted); font-style: italic; }
+    .tb-code__fn  { color: var(--ou-info-on-soft); }
+
+    /* Код пропуска — тот же класс, что в эскизе пропусков: машинное имя
+       моноширинным на мягкой акцентной подложке. */
+    .tb-blank-code { font-family: var(--ou-font-family-mono); font-size: var(--ou-text-mono-s-size); color: var(--ou-accent-on-soft); background: var(--ou-accent-soft); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); }
+
+    .tb-code-inline {
+      font-family: var(--ou-font-family-mono); font-size: var(--ou-text-mono-s-size);
+      background: var(--ou-bg-surface-2); border-radius: var(--ou-radius-s);
+      padding: 0 var(--ou-space-1);
+    }
+    /* Формула — картинка с явными размерами (FR-07): без них html2canvas
+       печатает её в PDF-отчёт непредсказуемо. */
+    .tb-formula { display: inline-block; vertical-align: middle; }
+    /* Якорь выпадающего меню. Компонент `ou-menu` собственного позиционирования
+       не имеет — место ему задаёт вызывающий код; в эскизе это делает рамка.
+       Якорь обязан быть `inline-flex`: он живёт внутри флекс-строки панели
+       и без этого растягивается, разрывая строку. */
+    .wf-anchor { position: relative; display: inline-flex; }
+    .wf-anchor > .ou-menu {
+      position: absolute; top: calc(100% + var(--ou-space-1)); left: 0; z-index: 50;
+    }
+
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Режим ввода:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-md')">Разметка</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-rich')">Форматированный</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-html')">HTML</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-lang')">Язык листинга</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-diag')">Вырезано при сохранении</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-switch')">Смена: в HTML</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-switch-html')">Смена: из HTML</button>
+  <button class="wf-btn" type="button" onclick="showPreview(this)">Предпросмотр</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-notes')">Пояснения</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Light</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+  <button class="wf-btn" type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- Пиктограммы панели вставки. Значки из lucide-react: code (листинг),
+     sigma (формула), braces (пропуск) — тот же набор, что у типов вопроса. -->
+<svg class="wf-sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+  <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/></symbol>
+  <symbol id="i-braces" viewBox="0 0 24 24"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></symbol>
+  <symbol id="i-bold" viewBox="0 0 24 24"><path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/></symbol>
+  <symbol id="i-italic" viewBox="0 0 24 24"><line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></symbol>
+</svg>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-md — режим «Разметка»
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state active" id="s-md">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="md-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="md-title" class="ou-drawer__title">Вопрос</h1>
+          <p class="ou-drawer__desc">Тема: Работа с базой данных</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ou-stack ou-stack--gap-5">
+
+          <div class="ou-rte ou-rte--full">
+            <label class="ou-rte__lbl" for="qt-md">Текст вопроса</label>
+            <div class="ou-rte__bar">
+              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Разметка</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Форматированный</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">HTML</button>
+              </div>
+              <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование и вставка">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-code"/></svg></span>Листинг</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sigma"/></svg></span>Формула</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-braces"/></svg></span>Пропуск</button>
+              </div>
+            </div>
+            <div class="ou-rte__box">
+              <textarea id="qt-md" class="ou-rte__input" rows="9">Что выведет запрос, если таблица `orders` пуста?
+
+```sql
+SELECT COUNT(*)
+  FROM orders
+ WHERE status = 'new';
+```
+
+Долю выполненных заказов считают по формуле $$\frac{n_{вып}}{n_{всего}}$$, а порог приёмки — {{porog}} процентов.</textarea>
+            </div>
+            <span class="ou-rte__msg">Жирный и курсив — звёздочками, ссылка — квадратными скобками. Листинг — тремя обратными кавычками с языком: python, sql или javascript. Формула — двумя долларами, пропуск — двойными фигурными скобками.</span>
+          </div>
+
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showPreview(null)">Предпросмотр</button>
+        <div style="margin-right:auto"></div>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-rich — режим «Форматированный»
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-rich">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="rich-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="rich-title" class="ou-drawer__title">Вопрос</h1>
+          <p class="ou-drawer__desc">Тема: Работа с базой данных</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ou-stack ou-stack--gap-5">
+
+          <div class="ou-rte ou-rte--full">
+            <label class="ou-rte__lbl" for="qt-rich">Текст вопроса</label>
+            <div class="ou-rte__bar">
+              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                <button type="button" class="ou-seg__item" aria-pressed="false">Разметка</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Форматированный</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">HTML</button>
+              </div>
+              <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование и вставка">
+                <span class="ou-tip" data-placement="top"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Жирный"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bold"/></svg></button><span class="ou-tip__bubble" role="tooltip">Жирный</span></span>
+                <span class="ou-tip" data-placement="top"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Курсив"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-italic"/></svg></button><span class="ou-tip__bubble" role="tooltip">Курсив</span></span>
+                <span class="ou-tip" data-placement="top"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Список"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-list"/></svg></button><span class="ou-tip__bubble" role="tooltip">Список</span></span>
+                <span class="ou-tip" data-placement="top"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Ссылка"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-link"/></svg></button><span class="ou-tip__bubble" role="tooltip">Ссылка</span></span>
+                <span class="ou-rte__tools-sep" aria-hidden="true"></span>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-code"/></svg></span>Листинг</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sigma"/></svg></span>Формула</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-braces"/></svg></span>Пропуск</button>
+              </div>
+            </div>
+            <div class="ou-rte__box">
+              <div
+                id="qt-rich"
+                class="ou-rte__area"
+                contenteditable="true"
+                role="textbox"
+                aria-multiline="true"
+              >
+              <p>Что выведет запрос, если таблица <span class="tb-atom tb-code-inline" contenteditable="false">orders</span> пуста?</p>
+              <p><span class="tb-atom tb-code" contenteditable="false"><span class="tb-code__com">-- заказы, ожидающие обработки</span>
+<span class="tb-code__kw">SELECT</span> <span class="tb-code__fn">COUNT</span>(*)
+  <span class="tb-code__kw">FROM</span> orders
+ <span class="tb-code__kw">WHERE</span> status = <span class="tb-code__str">'new'</span>;</span></p>
+              <p>Долю выполненных заказов считают по формуле <span class="tb-atom tb-formula" contenteditable="false"><svg width="52" height="34" viewBox="0 0 52 34" fill="none" role="img" aria-label="дробь: n вып делить на n всего"><text x="26" y="14" text-anchor="middle" font-size="12" fill="currentColor">n вып</text><line x1="6" y1="18" x2="46" y2="18" stroke="currentColor" stroke-width="1"/><text x="26" y="31" text-anchor="middle" font-size="12" fill="currentColor">n всего</text></svg></span>, а порог приёмки — <span class="tb-atom tb-blank-code" contenteditable="false">{{porog}}</span> процентов.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showPreview(null)">Предпросмотр</button>
+        <div style="margin-right:auto"></div>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-html — режим «HTML»
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-html">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="html-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="html-title" class="ou-drawer__title">Вопрос</h1>
+          <p class="ou-drawer__desc">Тема: Работа с базой данных</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ou-stack ou-stack--gap-5">
+
+          <div class="ou-rte ou-rte--full">
+            <label class="ou-rte__lbl" for="qt-html">Текст вопроса</label>
+            <div class="ou-rte__bar">
+              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                <button type="button" class="ou-seg__item" aria-pressed="false">Разметка</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Форматированный</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">HTML</button>
+              </div>
+              <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование и вставка">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-code"/></svg></span>Листинг</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sigma"/></svg></span>Формула</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-braces"/></svg></span>Пропуск</button>
+              </div>
+            </div>
+            <div class="ou-rte__box">
+              <textarea id="qt-html" class="ou-rte__input ou-rte__input--code" rows="9">&lt;p&gt;Что выведет запрос, если таблица &lt;code&gt;orders&lt;/code&gt; пуста?&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="language-sql"&gt;SELECT COUNT(*)
+  FROM orders
+ WHERE status = 'new';
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Долю выполненных заказов считают по формуле $$\frac{n_{вып}}{n_{всего}}$$,
+а порог приёмки — {{porog}} процентов.&lt;/p&gt;</textarea>
+            </div>
+            <span class="ou-rte__msg">Листинг — <code>&lt;pre&gt;&lt;code class="language-…"&gt;</code>; угловые скобки внутри листинга пишутся как <code>&amp;lt;</code> и <code>&amp;gt;</code>. Формула и пропуск пишутся так же, как в режиме «Разметка».</span>
+          </div>
+
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showPreview(null)">Предпросмотр</button>
+        <div style="margin-right:auto"></div>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-lang — выбор языка при вставке листинга
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-lang">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="lang-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="lang-title" class="ou-drawer__title">Вопрос</h1>
+          <p class="ou-drawer__desc">Тема: Работа с базой данных</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ou-stack ou-stack--gap-5">
+
+          <div class="ou-rte ou-rte--full">
+            <label class="ou-rte__lbl" for="qt-lang">Текст вопроса</label>
+            <div class="ou-rte__bar">
+              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Разметка</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Форматированный</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">HTML</button>
+              </div>
+              <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование и вставка">
+                <span class="wf-anchor">
+        <span class="wf-annot">открыто кнопкой «Листинг»</span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs is-active"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-code"/></svg></span>Листинг</button>
+        <div class="ou-menu" role="menu" aria-label="Язык листинга">
+          <div class="ou-menu__label">Язык листинга</div>
+          <button type="button" class="ou-menu__item" role="menuitem">Python</button>
+          <button type="button" class="ou-menu__item" role="menuitem">SQL</button>
+          <button type="button" class="ou-menu__item" role="menuitem">JavaScript</button>
+          <div class="ou-menu__divider"></div>
+          <button type="button" class="ou-menu__item" role="menuitem">Без подсветки</button>
+        </div>
+      </span>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sigma"/></svg></span>Формула</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-braces"/></svg></span>Пропуск</button>
+              </div>
+            </div>
+            <div class="ou-rte__box">
+              <textarea id="qt-lang" class="ou-rte__input" rows="9">Что выведет запрос, если таблица `orders` пуста?</textarea>
+            </div>
+          </div>
+
+
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showPreview(null)">Предпросмотр</button>
+        <div style="margin-right:auto"></div>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-diag — что вырезано при сохранении
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-diag">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="diag-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="diag-title" class="ou-drawer__title">Вопрос</h1>
+          <p class="ou-drawer__desc">Тема: Работа с базой данных</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ou-stack ou-stack--gap-5">
+
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">диагностика санитайзера</span>
+            <div class="ou-banner ou-banner--subtle ou-banner--warning" role="alert">
+              <span class="ou-banner__ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="ou-banner__body">
+                <span class="ou-banner__title">Часть разметки удалена при сохранении</span>
+                <span class="ou-banner__desc">Удалено: <code>&lt;script&gt;</code> — 1, обработчик <code>onclick</code> — 2, внешний <code>src</code> — 1. Остальная разметка сохранена без изменений.</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="ou-rte ou-rte--full">
+            <label class="ou-rte__lbl" for="qt-diag">Текст вопроса</label>
+            <div class="ou-rte__bar">
+              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                <button type="button" class="ou-seg__item" aria-pressed="false">Разметка</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Форматированный</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">HTML</button>
+              </div>
+              <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование и вставка">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-code"/></svg></span>Листинг</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sigma"/></svg></span>Формула</button>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-braces"/></svg></span>Пропуск</button>
+              </div>
+            </div>
+            <div class="ou-rte__box">
+              <textarea id="qt-diag" class="ou-rte__input ou-rte__input--code" rows="9">&lt;p&gt;Что выведет запрос, если таблица &lt;code&gt;orders&lt;/code&gt; пуста?&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="language-sql"&gt;SELECT COUNT(*) FROM orders;&lt;/code&gt;&lt;/pre&gt;</textarea>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showPreview(null)">Предпросмотр</button>
+        <div style="margin-right:auto"></div>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-switch — предупреждение при смене режима
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-switch">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="sw-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--s">
+      <header class="ou-modal__head ou-modal__head--icon">
+        <span class="ou-modal__icon ou-modal__icon--warning" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        </span>
+        <div class="ou-modal__head-text">
+          <h2 id="sw-title" class="ou-modal__title">Перевести текст в режим «HTML»?</h2>
+          <p class="ou-modal__desc">Разметка будет преобразована один раз, и вернуться к прежней записи автоматически не получится.</p>
+        </div>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-stack ou-stack--gap-3">
+          <span>Жирный, курсив, списки и ссылки станут тегами. Листинг станет <code>&lt;pre&gt;&lt;code&gt;</code>, и дальше экранировать угловые скобки внутри него придётся вручную.</span>
+          <span>Формулы и пропуски сохранятся как есть — они пишутся одинаково во всех режимах.</span>
+          <span>Кавычки и тире останутся такими, какими их сделала типографика: она работает во всех трёх режимах одинаково и не заходит внутрь листинга, значений атрибутов и имён пропусков.</span>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(document.querySelectorAll('.wf-nav .wf-btn')[0],'s-md')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(document.querySelectorAll('.wf-nav .wf-btn')[2],'s-html')">Перевести</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     s-switch-html — переход HTML -> «Форматированный»: что панель не умеет
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-switch-html">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="swh-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head ou-modal__head--icon">
+        <span class="ou-modal__icon ou-modal__icon--warning" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+        <div class="ou-modal__head-text">
+          <h2 id="swh-title" class="ou-modal__title">Открыть текст в режиме «Форматированный»?</h2>
+          <p class="ou-modal__desc">Панель форматирования не умеет часть разметки, которая есть в этом тексте. Если продолжить и что-нибудь изменить, она упростится.</p>
+        </div>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-stack ou-stack--gap-4">
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Найдено в тексте</span>
+            <div class="ou-tbl ou-tbl--compact">
+              <table><tbody>
+                <tr><td>Таблица</td><td class="is-numeric">1</td><td>станет строками текста</td></tr>
+                <tr><td>Стиль на абзаце</td><td class="is-numeric">3</td><td>будет снят</td></tr>
+                <tr><td>Атрибут <code>class</code></td><td class="is-numeric">2</td><td>будет снят</td></tr>
+                <tr><td>Изображение</td><td class="is-numeric">1</td><td>сохранится</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+          <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+            <span class="ou-banner__ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+            <span class="ou-banner__body">
+              <span class="ou-banner__desc">Листинг, формула и пропуск не пострадают: в режиме «Форматированный» они ведут себя как единые объекты — правятся целиком и не разрываются при наборе.</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(document.querySelectorAll('.wf-nav .wf-btn')[2],'s-html')">Остаться в HTML</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(document.querySelectorAll('.wf-nav .wf-btn')[1],'s-rich')">Открыть и упростить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- Предпросмотр — тот же приём, что у страницы (features/tests/editor/sections/
+     page-preview-modal.tsx) и у пропусков: модальное окно, задание рисуется ТЕМ ЖЕ
+     рендером, что и сцена прохождения, поля демонстрационные и ничего не сохраняют.
+     Постоянным блоком в ящике он не стоит: смотреть на него нужно в момент
+     проверки, а не всё время правки. -->
+<div class="ou-modal-root" id="qt-preview" role="dialog" aria-modal="true" aria-labelledby="pv-title" hidden>
+  <div class="ou-modal__backdrop"></div>
+  <div class="ou-modal ou-modal--l">
+    <header class="ou-modal__head">
+      <div class="ou-modal__head-text">
+        <h2 id="pv-title" class="ou-modal__title">Предпросмотр вопроса</h2>
+        <p class="ou-modal__desc">Так задание увидит участник — одинаково во всех режимах ввода</p>
+      </div>
+      <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="hidePreview()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </header>
+    <div class="ou-modal__body">
+<div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-04 · FR-07</span>
+              <div style="--tb-answer-fs:17px;border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-l);background:var(--ou-bg-surface-2);padding:var(--ou-space-5);display:flex;flex-direction:column;gap:var(--ou-space-4)">
+                <p style="margin:0;font:var(--ou-text-body-l);color:var(--ou-fg-default)">Что выведет запрос, если таблица <span class="tb-code-inline">orders</span> пуста?</p>
+                <span class="tb-code"><span class="tb-code__com">-- заказы, ожидающие обработки</span>
+<span class="tb-code__kw">SELECT</span> <span class="tb-code__fn">COUNT</span>(*)
+  <span class="tb-code__kw">FROM</span> orders
+ <span class="tb-code__kw">WHERE</span> status = <span class="tb-code__str">'new'</span>
+   <span class="tb-code__kw">AND</span> amount &gt; <span class="tb-code__num">0</span>;</span>
+                <p style="margin:0;font:var(--ou-text-body-l);color:var(--ou-fg-default)">Долю выполненных заказов считают по формуле <span class="tb-formula"><svg width="52" height="34" viewBox="0 0 52 34" fill="none" role="img" aria-label="дробь: n вып делить на n всего"><text x="26" y="14" text-anchor="middle" font-size="12" fill="currentColor">n вып</text><line x1="6" y1="18" x2="46" y2="18" stroke="currentColor" stroke-width="1"/><text x="26" y="31" text-anchor="middle" font-size="12" fill="currentColor">n всего</text></svg></span>, а порог приёмки —
+                  <span class="ou-field ou-field--m" style="width:8ch"><span class="ou-field__box" style="padding-inline:var(--ou-space-2)"><input class="ou-field__input" type="text" value="" aria-label="Пропуск porog" /></span></span>
+                  процентов.</p>
+              </div>
+            </div>
+    </div>
+    <footer class="ou-modal__foot">
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="hidePreview()">Закрыть</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+  /* Wireframe-only controls, идентичны approved/question-scale.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  function markNavButton(btn) {
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      var a = b.getAttribute('onclick') || '';
+      if (a.indexOf('showState') >= 0 || a.indexOf('showPreview') >= 0) {
+        b.classList.toggle('active', b === btn);
+      }
+    });
+  }
+
+  window.showPreview = function showPreview(btn) {
+    document.getElementById('qt-preview').hidden = false;
+    if (btn) markNavButton(btn);
+  };
+
+  window.hidePreview = function hidePreview() {
+    document.getElementById('qt-preview').hidden = true;
+  };
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.getElementById('qt-preview').hidden = true;
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      var a = b.getAttribute('onclick') || '';
+      if (a.indexOf('showState') >= 0) b.classList.toggle('active', b === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ПОЯСНЕНИЯ И DS MAPPING — отдельным состоянием, иначе их перекрывает
+     подложка ящика.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-notes">
+<div class="wf-page">
+
+<section class="wf-notes" aria-label="Решения">
+  <h3 class="wf-notes-title">Режимы ввода — принятые решения</h3>
+  <p class="wf-notes-text">Решение владельца 2026-09-18: у текста задания появляются режимы ввода.
+  До этого <code>questions.prompt</code> хранился обычной текстовой колонкой без поля формата
+  и рендерился markdown-подмножеством (<code>renderInlineMarkdown</code>: жирный, курсив,
+  ссылки, автоссылки).</p>
+  <table>
+    <thead>
+      <tr><th>Решение</th><th>Почему так</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>«Разметка» — это нынешнее поведение задания</strong>, то есть markdown-подмножество, расширенное узлами листинга и формулы.</td>
+        <td>Миграции не требуется, ни один написанный вопрос не меняется, и сохраняется главное свойство нынешнего пайплайна — безопасность по построению: типографика, затем экранирование, затем генерация только собственных тегов. Ничему ниже по течению доверять не нужно.</td>
+      </tr>
+      <tr>
+        <td><strong>Подпись «Разметка», а не «Обычный».</strong></td>
+        <td>У обратной связи «Обычный» означает «экранировать и показать разметку текстом» (<code>richTextToHtml</code>). Одно слово не должно значить в продукте разное, иначе автор, знающий редактор обратной связи, будет ошибаться в редакторе вопроса.</td>
+      </tr>
+      <tr>
+        <td><strong>Листинг, формула и пропуск работают во ВСЕХ режимах</strong> и пишутся одинаково.</td>
+        <td>Это содержание задания, а не оформление. «Переключил режим — потерял механику» — ловушка, которую пришлось бы объяснять каждому автору. Маркеры ищутся только в ТЕКСТОВЫХ узлах готовой разметки, поэтому не попадут ни в атрибут, ни внутрь листинга.</td>
+      </tr>
+      <tr>
+        <td><strong>Панель вставки одна на три кнопки</strong>, в подвале поля.</td>
+        <td>Три разные панели означали бы три места, где автор ищет вставку. Кнопка вставки — обязательная часть редактора, а не удобство (FR-24b): без неё автор помнит синтаксис наизусть, и механикой не пользуются.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Подсветка синтаксиса">
+  <h3 class="wf-notes-title">Подсветка синтаксиса — решение и следствия</h3>
+  <p class="wf-notes-text">Решение владельца 2026-09-18: листинг кода показывается с подсветкой;
+  поддерживаются <strong>python, sql, javascript</strong>. Тема зарегистрирована в BRD как открытый вопрос BR-28-03 («Нужна ли подсветка синтаксиса»)
+  с тревогой «тянет в SCORM-пакет стороннюю библиотеку», а в PRD-57 FR-03 выведена из охвата
+  по той же причине. Решение эту тревогу СНИМАЕТ: при серверном пререндере в пакет не уезжает
+  ни байта библиотеки. Поэтому правка документов — это закрытие BR-28-03 решением и
+  перезапись FR-03, а не отмена требования на пустом месте.</p>
+  <table>
+    <thead>
+      <tr><th>Решение эскиза</th><th>Почему так</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Подсветка считается на СЕРВЕРЕ при сохранении вопроса</strong> движком <code>highlight.js</code> (согласован 2026-09-18). Хранятся исходный код, язык и размеченный результат; в SCORM-пакет уезжает только результат и небольшая таблица стилей темы.</td>
+        <td>Ровно та же развилка, что у формул, и решённая там же (FR-07, §4.2.1): вопрос не в качестве рендера, а в том, где живёт зависимость и что уезжает в чужую LMS. Библиотека подсветки в пакете означала бы её вес в КАЖДОМ ZIP и исполнение в неизвестном парке браузеров корпоративных порталов. На сервере она — обычная зависимость сборки.</td>
+      </tr>
+      <tr>
+        <td><strong>Ролей подсветки пять:</strong> ключевое слово, строка, число, комментарий, имя функции или таблицы. Всё остальное печатается основным цветом.</td>
+        <td>Подсветке не нужно знать язык глубоко — ей достаточно отличить эти пять сущностей, и такой набор одинаково работает на всех трёх языках. Богатая палитра на коде из пяти строк превращается в рябь.</td>
+      </tr>
+      <tr>
+        <td><strong>Цвета — токены ШАБЛОНА, а не тема библиотеки.</strong> Классы в разметке тоже СВОИ (<code>tb-code__kw</code> и родня), пререндер переводит вывод движка в эти пять ролей.</td>
+        <td>Тема библиотеки не знает ни про светлую и тёмную темы шаблона, ни про гейт контраста проекта. Свои имена классов к тому же отвязывают таблицу стилей шаблона от выбора движка: сменить движок можно, не трогая оформление.</td>
+      </tr>
+      <tr>
+        <td><strong>Язык выбирается из списка, а не набирается.</strong> Четвёртый пункт — «Без подсветки».</td>
+        <td>Автор не должен гадать, как пишется язык в огорождённом блоке. Неизвестный или не указанный язык — не ошибка: листинг печатается моноширинным без цвета, как и сегодня.</td>
+      </tr>
+      <tr>
+        <td><strong>Служебная перегенерация обязательна.</strong></td>
+        <td>То же следствие, что у формул: смена темы или палитры не должна требовать ручной правки каждого вопроса.</td>
+      </tr>
+      <tr>
+        <td><strong>Типографика внутри кода по-прежнему не выполняется</strong> (FR-02).</td>
+        <td>Подсветка работает по исходному тексту и ничего в нём не заменяет: она добавляет разметку вокруг символов, а не меняет символы.</td>
+      </tr>
+      <tr>
+        <td><strong>Копирование кода участником не ломается.</strong></td>
+        <td>Подсветка — это вложенные <code>span</code> без собственного текста, поэтому выделение и копирование отдают ровно исходный код. Это преимущество перед формулами, которые уезжают картинкой и не выделяются.</td>
+      </tr>
+      <tr>
+        <td><strong>PDF-отчёт переживает подсветку.</strong></td>
+        <td><code>html2canvas</code> рисует CSS-боксы, а подсвеченный код — это обычный текст с цветом. В отличие от MathML, отвергнутого в §4.2.1 именно потому, что отчёт на нём ломается.</td>
+      </tr>
+      <tr>
+        <td><strong>Палитра обязана пройти гейт контраста проекта</strong> (<code>npm run check:contrast</code>) в обеих темах.</td>
+        <td>Пять цветов на подложке блока кода — ровно тот случай, ради которого гейт заводился. Значения в эскизе взяты из токенов, но проверку надо прогнать на реальной палитре.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Блочный листинг и макеты">
+  <h3 class="wf-notes-title">Блок кода в тексте задания — что он тянет</h3>
+  <p class="wf-notes-text">Вопрос зарегистрирован в BRD как BR-28-02 и звучит так: где допускается
+  блок кода — только на контентной странице или и в тексте вопроса. Причина в том, что текст
+  задания сегодня печатается В ЗАГОЛОВОК: <code>&lt;h2 class="tb-scene__qtitle"
+  data-slot="question-text"&gt;</code> в <code>layouts/question.html</code>, а блочные теги внутри
+  заголовка невалидны.</p>
+  <p class="wf-notes-text">Эскиз рисует блочный листинг внутри текста задания, то есть выбирает
+  второй вариант: <strong>слот текста задания перестаёт быть заголовком и становится блочным
+  контейнером</strong>. Это выбор, а не мелочь оформления, и цена у него названа в том же BR-28-02 —
+  правка макетов обоих поставляемых шаблонов.</p>
+  <p class="wf-notes-text">Из правки макетов следует полный круг сопровождения, а не только бамп
+  контракта: спека платформы шаблонов, руководство разработчика, пересборка PDF, <code>version</code>
+  в <code>manifest.json</code> КАЖДОГО встроенного шаблона (<code>templates/default</code>,
+  <code>templates/certification</code>) и порт во внешний репозиторий
+  <code>skillum-template-standard-rt</code>, который живёт отдельно и одним <code>git push</code>
+  из основного репозитория не обновляется. Пропустить любой из пяти — значит выпустить шаблоны,
+  которые не умеют того, что умеет ядро.</p>
+  <p class="wf-notes-text">Альтернатива, которую BR-28-02 оставляет открытой: оставить в тексте
+  задания только ИНЛАЙНОВЫЙ код, а блочный листинг разрешить лишь на контентной странице. Она
+  дешевле на всю пятёрку, но закрывает ровно тот сценарий, ради которого листинг в трек и вошёл, —
+  «что выведет этот фрагмент» в самом вопросе.</p>
+</section>
+
+<section class="wf-notes" aria-label="Подсветка в SCORM-пакете">
+  <h3 class="wf-notes-title">Как это работает в SCORM-пакете</h3>
+  <p class="wf-notes-text">Библиотека подсветки серверная, поэтому в пакете её нет. Считать там
+  нечего: в пакет уезжает УЖЕ РАЗМЕЧЕННЫЙ HTML, посчитанный на сервере при сохранении вопроса.
+  Ниже — как это ложится на то, что в пакете устроено сегодня.</p>
+  <table>
+    <thead>
+      <tr><th>Звено</th><th>Сегодня</th><th>После трека</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Что лежит в <code>test.json</code></td>
+        <td>Исходный текст задания: <code>prompt: q.prompt</code> (<code>builders/test-json.ts</code>).</td>
+        <td>Рядом появляется готовая разметка. Исходник ОСТАЁТСЯ: он нужен машинным путям — экрану обзора (PRD-19 печатает его через <code>renderPlainText</code>), подбору кегля <code>fitQuestionScene</code>, хешированию содержимого и пину комментариев рецензента (PRD-52).</td>
+      </tr>
+      <tr>
+        <td>Кто строит разметку</td>
+        <td>РАНТАЙМ ПАКЕТА, в браузере участника: <code>authorTextHtml(q.prompt)</code> зовёт <code>TBTemplate.renderInlineMarkdown</code> (<code>app/utils/escapeHtml.js</code>).</td>
+        <td>Никто: рантайм берёт готовую разметку. Это ЕДИНСТВЕННАЯ содержательная правка контракта, и она уменьшает работу рантайма, а не увеличивает.</td>
+      </tr>
+      <tr>
+        <td>Стили пяти ролей</td>
+        <td><code>styles.css</code> пакета генерируется из <code>theme.css</code> шаблона при сборке — той же таблицы, что грузит веб-хост (<code>scorm/index.ts</code>).</td>
+        <td>Не меняется вовсе. Правила <code>tb-code__*</code> объявляются в <code>theme.css</code> и приезжают в пакет сами, потому что механизм уже есть.</td>
+      </tr>
+      <tr>
+        <td>Вес пакета</td>
+        <td>—</td>
+        <td>Плюс несколько десятков байт разметки на листинг и пять правил в таблице стилей. Библиотеки нет ни байта.</td>
+      </tr>
+      <tr>
+        <td>Паритет хостов</td>
+        <td>Обеспечивается общим кодом рендера (PRD-12).</td>
+        <td>Обеспечивается ПО ПОСТРОЕНИЮ: веб и пакет показывают один и тот же HTML, посчитанный один раз на сервере. Расходиться нечему.</td>
+      </tr>
+      <tr>
+        <td>Старые пакеты</td>
+        <td>—</td>
+        <td>Не ломаются: рантайм берёт готовую разметку, если она есть, и рендерит по-старому, если её нет. Перевыпускать собранные ранее пакеты не требуется.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="wf-notes-text"><strong>Считается при СОХРАНЕНИИ вопроса, а не при сборке пакета</strong>
+  — по трём причинам. Веб-хост тоже показывает готовое и не считает на каждый показ. Снимок
+  публикации (PRD-15) фиксирует разметку вместе с вопросом: пересчёт на сборке дал бы разный вид
+  у одной и той же опубликованной версии. И перенос теста между установками (PRD-48) везёт
+  результат, а не пересчитывает его на чужом контуре — FR-07 требует того же для формул, иначе
+  вид зависит от версии библиотеки на приёмнике.</p>
+  <p class="wf-notes-text"><strong>Гоча, которую легко пропустить:</strong> путей записи текста
+  задания НЕ ОДИН. Кроме <code>POST</code> и <code>PUT /api/questions</code> есть импорт книги
+  Excel (PRD-14, <code>questions-import.ts</code>), а дальше появятся ещё перенос теста и
+  восстановление из снимка. Пререндер обязан стоять на ВСЕХ путях записи, иначе импортированный
+  вопрос приедет в пакет без подсветки, и заметят это на выдаче, а не на импорте.</p>
+</section>
+
+<section class="wf-notes" aria-label="Сохранность разметки при правке">
+  <h3 class="wf-notes-title">Что гарантирует сохранность вставленного</h3>
+  <p class="wf-notes-text">Вопрос владельца: что не даст разметке, выставленной в «Разметке» или
+  HTML, потеряться при правке в режиме «Форматированный». Своими силами WYSIWYG этого не
+  гарантирует: он работает над <code>contenteditable</code>, а значение читается обратно как
+  <code>el.innerHTML</code> — то есть сохраняется то, что осталось в DOM после того, как браузер и
+  <code>execCommand</code> его переписали.</p>
+  <table>
+    <thead>
+      <tr><th>Что под угрозой</th><th>Как теряется</th><th>Чем закрыто</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Листинг</td>
+        <td><code>&lt;pre&gt;&lt;code&gt;</code> разрывается на <code>&lt;div&gt;</code> и <code>&lt;br&gt;</code> при первом же переносе строки, <code>class="language-…"</code> теряется при любой операции форматирования.</td>
+        <td rowspan="3">Все три становятся АТОМАРНЫМИ узлами: <code>contenteditable="false"</code>. Браузер трактует такой узел как один неделимый символ — курсор внутрь не попадает, форматирование его не рвёт, удаление уносит целиком. Правка — по клику, в своём окне. Гарантия ПО ПОСТРОЕНИЮ, а не проверкой после сохранения.</td>
+      </tr>
+      <tr>
+        <td>Формула</td>
+        <td>Курсор встаёт внутрь записи, браузер вставляет <code>&lt;span&gt;</code> в середину — и маркер перестаёт быть маркером.</td>
+      </tr>
+      <tr>
+        <td>Пропуск</td>
+        <td>То же самое, и молча: ни ошибки, ни предупреждения — поле просто исчезает у участника.</td>
+      </tr>
+      <tr>
+        <td>Произвольная разметка из HTML</td>
+        <td>Таблицы, атрибуты и стили панель не моделирует; любая правка рядом может переписать поддерево.</td>
+        <td>Гарантировать нельзя — панель умеет только то, что умеет. Поэтому переход из HTML спрашивается подтверждением, где перечислено ФАКТИЧЕСКИ найденное в этом тексте, а не общая фраза о возможных потерях (состояние «Смена: из HTML»).</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Соответствие разметки и HTML">
+  <h3 class="wf-notes-title">Что переводится между режимами</h3>
+  <p class="wf-notes-text">Вперёд перевод полный, назад — с потерями. Это не изъян реализации,
+  а свойство подмножества: в разметке узлов меньше, чем тегов в HTML.</p>
+  <table>
+    <thead>
+      <tr><th>Узел разметки</th><th>В HTML</th><th>Обратно из HTML</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Жирный <code>**текст**</code></td><td><code>&lt;strong&gt;</code></td><td>восстанавливается</td></tr>
+      <tr><td>Курсив <code>*текст*</code></td><td><code>&lt;em&gt;</code></td><td>восстанавливается</td></tr>
+      <tr><td>Ссылка <code>[подпись](адрес)</code></td><td><code>&lt;a href&gt;</code></td><td>восстанавливается</td></tr>
+      <tr><td>Голый адрес, почта</td><td><code>&lt;a href&gt;</code></td><td>восстанавливается как ссылка</td></tr>
+      <tr><td>Перенос строки</td><td><code>&lt;br&gt;</code></td><td>восстанавливается</td></tr>
+      <tr><td>Абзац (пустая строка)</td><td><code>&lt;p&gt;</code></td><td>восстанавливается</td></tr>
+      <tr><td>Инлайн-код <code>`фрагмент`</code></td><td><code>&lt;code&gt;</code></td><td><strong>теряется</strong> — остаётся текстом</td></tr>
+      <tr><td>Листинг (огорождённый блок)</td><td><code>&lt;pre&gt;&lt;code class="language-*"&gt;</code></td><td><strong>теряется</strong> — остаётся текстом без отступов</td></tr>
+      <tr><td>Формула <code>$$…$$</code></td><td>тот же маркер</td><td>сохраняется: маркер одинаков во всех режимах</td></tr>
+      <tr><td>Пропуск <code>{{имя}}</code></td><td>тот же маркер</td><td>сохраняется: маркер одинаков во всех режимах</td></tr>
+      <tr><td>—</td><td>Заголовки, таблицы, изображения, стили, атрибуты</td><td><strong>теряются</strong> — узла в разметке нет</td></tr>
+    </tbody>
+  </table>
+  <p class="wf-notes-text">Обратное преобразование выполняет существующий модуль
+  <code>shared/text/html-to-markdown</code> — тот же, что обслуживает импорт книги Excel
+  и вставку в редактор. Он знает пять преобразований (<code>a</code>, <code>b</code>/<code>strong</code>,
+  <code>i</code>/<code>em</code>, <code>br</code>, закрытие блочных тегов), а остальные теги вырезает,
+  оставляя слова. Его собственная документация это и декларирует: всё, что не выражается
+  подмножеством, сводится к словам.</p>
+</section>
+
+<section class="wf-notes" aria-label="Асимметрии перевода">
+  <h3 class="wf-notes-title">Три асимметрии, которые автор заметит</h3>
+  <table>
+    <thead>
+      <tr><th>Что</th><th>В чём проявляется</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Типографика</strong></td>
+        <td>В «Разметке» проход типографики превращает кавычки в ёлочки, дефисы в тире, три точки в многоточие. При переводе в HTML это УЖЕ применено и запекается в результат. Но в самом режиме HTML типографика не выполняется вовсе — текст печатается как есть. Значит переведённый текст выглядит правильно, а всё, что автор допишет в HTML, останется с прямыми кавычками: одно поле, два поведения. Требует решения — либо типографику гонят и по HTML, либо автора предупреждают.</td>
+      </tr>
+      <tr>
+        <td><strong>Экранирование листинга</strong></td>
+        <td>При переводе конвертер обязан экранировать <code>&lt;</code>, <code>&gt;</code> и <code>&amp;</code> внутри кода, иначе листинг HTML станет разметкой. Дальше это на авторе — и это главная цена режима.</td>
+      </tr>
+      <tr>
+        <td><strong>Разрешённые ссылки</strong></td>
+        <td>В «Разметке» протокол ограничен белым списком (<code>http</code>, <code>https</code>, <code>mailto</code>), остальное показывается текстом. В HTML ограничение накладывает уже не грамматика, а санитайзер, и у него другой набор правил: режет <code>javascript:</code> и внешние <code>src</code>/<code>href</code>. Один и тот же адрес может вести себя в двух режимах по-разному.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Листинг в разных режимах">
+  <h3 class="wf-notes-title">Как записывается листинг кода</h3>
+  <table>
+    <thead>
+      <tr><th>Режим</th><th>Запись</th><th>Что с экранированием</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Разметка</td>
+        <td>Огорождённый блок: три обратные кавычки, за ними язык.</td>
+        <td>Автоматическое. Угловые скобки внутри блока остаются символами — блок экранирует сам.</td>
+      </tr>
+      <tr>
+        <td>Форматированный</td>
+        <td>Кнопка «Листинг» на панели; в поле блок виден моноширинным.</td>
+        <td>Автоматическое. Панель сама кладёт содержимое в код-узел.</td>
+      </tr>
+      <tr>
+        <td>HTML</td>
+        <td><code>&lt;pre&gt;&lt;code class="language-sql"&gt;…&lt;/code&gt;&lt;/pre&gt;</code> — прямой аналог огорождённого блока: CommonMark кладёт язык именно в <code>class="language-*"</code>.</td>
+        <td><strong>На авторе.</strong> Листинг HTML внутри режима HTML пишется как <code>&amp;lt;div&amp;gt;</code>. Это главная цена режима, и предупреждение о ней стоит при переключении.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Пояснения">
+  <h3 class="wf-notes-title">Пояснения — поведение поля</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент</th><th>Условие</th><th>Примечание</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Переключатель режима</td>
+        <td>всегда</td>
+        <td>Стоит НАД полем, а не в его подвале: он меняет смысл всего содержимого, а подвал занят вставкой. Три пункта помещаются в ленту с запасом.</td>
+      </tr>
+      <tr>
+        <td>Поле ввода</td>
+        <td>«Разметка», «HTML»</td>
+        <td>Моноширинное: в огорождённом блоке значимы ведущие пробелы, а в сырой разметке — позиция символа. В режиме «Форматированный» поле пропорциональное, потому что автор видит результат, а не запись.</td>
+      </tr>
+      <tr>
+        <td>Счётчик механик</td>
+        <td>всегда</td>
+        <td>Называет то, что в тексте есть: «1 листинг · 1 формула · 1 пропуск». Счётчика символов у текста задания нет — у него нет и предела длины. Когда считать нечего, счётчик МОЛЧИТ: строка «ничего нет» — шум, автор и так видит свой текст. Нужен он прежде всего после переключения режима, чтобы убедиться, что вставленное пережило перевод.</td>
+      </tr>
+      <tr>
+        <td>Выбор языка листинга</td>
+        <td>нажата кнопка «Листинг»</td>
+        <td>Язык выбирается из списка, а не набирается: автор не должен гадать, как он пишется в огорождённом блоке. Список закрытый — python, sql, javascript, — потому что подсветка считается на сервере и умеет ровно те грамматики, которые туда положены. Четвёртый пункт «Без подсветки» — не отказ от листинга, а листинг без цвета: моноширинный шрифт и сохранённые отступы остаются. Тот же исход у неизвестного или не указанного языка: это НЕ ошибка и не повод отказать в сохранении.</td>
+      </tr>
+      <tr>
+        <td>Смена режима</td>
+        <td>в тексте есть разметка</td>
+        <td>Преобразование одноразовое и необратимое, поэтому спрашивается подтверждением. Формулы и пропуски переживают его без изменений — они пишутся одинаково во всех режимах; меняются только жирный, курсив, списки, ссылки и листинг.</td>
+      </tr>
+      <tr>
+        <td>Что вырезается при сохранении</td>
+        <td>«Форматированный», «HTML»</td>
+        <td>Тот же санитайзер, что уже применяется к контентным страницам (<code>shared/security/html-sanitize</code>), и та же диагностика по полю: автору называют, что именно удалено и сколько раз. Санитайзер — чёрный список: <code>script</code>, <code>iframe</code>, <code>svg</code>, <code>object</code>, <code>embed</code>, <code>link</code>, <code>meta</code>, обработчики <code>on*</code>, <code>javascript:</code> и внешние <code>src</code>/<code>href</code>; <code>pre</code>, <code>code</code> и <code>class</code> проходят.</td>
+      </tr>
+      <tr>
+        <td>Подсказки у значковых кнопок</td>
+        <td><code>Tooltip</code> (<code>ou-tip</code> + <code>ou-tip__bubble</code>, <code>data-placement</code>)</td>
+        <td><code>--ou-neutral-900</code>, <code>--ou-neutral-0</code></td>
+        <td>Существующий компонент, работает на чистом CSS (<code>:hover</code> и <code>:focus-within</code>), поэтому доступен и с клавиатуры. Нужен именно зрячему автору: <code>aria-label</code> у кнопок есть, но он невидим, а глифы <code>&lt;&gt;</code>, <code>Σ</code> и <code>{}</code> сами по себе не читаются. <strong>Гоча ДС:</strong> модификатор <code>ou-tip__bubble--wrap</code> на узкой кнопке непригоден — абсолютно спозиционированный блок сжимается по ширине содержащего блока, а им служит сама кнопка в два десятка пикселей, и подсказка встаёт вертикальным столбиком по слову в строке. Для значковых кнопок годится только однострочная подсказка.</td>
+      </tr>
+      <tr>
+        <td>Формула</td>
+        <td>всегда</td>
+        <td>Пререндер в SVG при сохранении (FR-07), хранятся и исходная запись, и картинка. Картинка получает явные размеры, иначе <code>html2canvas</code> печатает её в PDF-отчёт непредсказуемо. Текстовая альтернатива обязательна (FR-09): без неё ломаются и экранный диктор, и машинные пути — <code>stripMarkdown</code>, хеширование содержимого, подбор кегля.</td>
+      </tr>
+      <tr>
+        <td>Листинг на экране участника</td>
+        <td>всегда</td>
+        <td>Не переносит длинные строки, а прокручивается в своём контейнере (FR-04): перенос в коде меняет смысл. Подсветка синтаксиса ЕСТЬ (решение владельца 2026-09-18), поэтому язык в <code>language-*</code> — рабочее значение, а не задел.</td>
+      </tr>
+      <tr>
+        <td>Типографика внутри кода</td>
+        <td>всегда</td>
+        <td>Не выполняется (FR-02): кавычки, дефисы и многоточия остаются теми символами, которые набрал автор. Решается в грамматике, а не в стилях.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-mapping" aria-label="DS mapping">
+  <h3 class="wf-mapping-title">DS Mapping</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент холста</th><th>Компонент DS</th><th>Токены</th><th>Примечания</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Переключатель режима</td>
+        <td><code>SegmentedControl</code> (<code>ou-seg ou-seg--s</code>)</td>
+        <td><code>--ou-bg-surface-2</code>, <code>--ou-accent-*</code></td>
+        <td>Существующий компонент, три взаимоисключающих пункта — ровно его случай.</td>
+      </tr>
+      <tr>
+        <td>Поле целиком: метка, переключатель режимов, панель, область ввода, подпись</td>
+        <td><code>RichTextEditor</code> (<code>ou-rte</code>, <code>__lbl</code> / <code>__bar</code> / <code>__tools</code> / <code>__tools-sep</code> / <code>__box</code> / <code>__area</code> / <code>__input</code> / <code>__input--code</code> / <code>__msg</code>; тон <code>ou-rte--error</code>)</td>
+        <td><code>--ou-border-*</code>, <code>--ou-bg-input</code></td>
+        <td>СУЩЕСТВУЮЩИЙ компонент ДС, и он уже применяется в продукте: описание теста собрано ровно на нём (<code>basic-settings-section.tsx</code>) с теми же тремя режимами. Переключатель режимов — его штатная часть, внутри <code>ou-rte__bar</code>, поэтому отдельного контрола над полем не заводится. <strong>Пробел компонента, требующий дополнения ui-kit:</strong> панель <code>ou-rte__tools</code> показывается ТОЛЬКО в режиме WYSIWYG (<code>current === 'rich'</code>), а кнопки вставки листинга, формулы и пропуска нужны во ВСЕХ трёх режимах — механики работают везде. Нужен слот дополнительных инструментов, видимый в любом режиме. <strong>Вторая находка:</strong> компонент вешает <code>ou-rte--{size}</code>, но правил под размеры в таблице стилей нет вовсе — только <code>--full</code> и <code>--error</code>; класс размера молча не делает ничего.</td>
+      </tr>
+      <tr>
+        <td>Атомарный узел вставленного</td>
+        <td><code>tb-atom</code> (кандидат в <code>tb-components.css</code>) + <code>contenteditable="false"</code></td>
+        <td><code>--ou-border-strong</code>, <code>--ou-accent-default</code></td>
+        <td>Класс добавляет только видимую границу объекта; сохранность даёт сам атрибут. Оформление самого содержимого — листинга, формулы, пропуска — нужно И сцене, И редактору, то есть правила обязаны жить в одном месте и подключаться обоим. Сегодня сцена берёт их из <code>theme.css</code>, а авторский интерфейс этой таблицы не грузит — это надо решить до реализации.</td>
+      </tr>
+      <tr>
+        <td>Старое поле и панель вставки</td>
+        <td><code>Textarea</code> (<code>ou-textarea</code>, <code>__box</code> / <code>__footer</code> / <code>__toolbar</code> / <code>__tool</code> / <code>__count</code> / <code>__msg</code>); режим «Форматированный» — <code>ou-textarea__rich</code></td>
+        <td><code>--ou-border-soft</code>, <code>--ou-bg-hover</code></td>
+        <td>СУЩЕСТВУЮЩИЙ компонент целиком, включая редактируемую область и панель. Отдельного редактора не заводится. Кнопки трёх механик в «Разметке» и «HTML» подписаны (<code>Button</code>), в «Форматированном» — значками, как остальные инструменты панели.</td>
+      </tr>
+      <tr>
+        <td>Листинг и инлайн-код на сцене</td>
+        <td><code>tb-code</code> / <code>tb-code-inline</code> (кандидаты в <code>theme.css</code> шаблона)</td>
+        <td><code>--ou-font-family-mono</code>, <code>--ou-text-mono-s-size</code>, <code>--ou-bg-surface-2</code></td>
+        <td>Оформление СЦЕНЫ: одно у веб-хоста и пакета. В ДС аналога нет и быть не должно — это подача содержания задания.</td>
+      </tr>
+      <tr>
+        <td>Моноширинное поле ввода</td>
+        <td><code>tb-src</code> (кандидат в <code>tb-components.css</code>)</td>
+        <td><code>--ou-font-family-mono</code></td>
+        <td>Свойство поля РЕДАКТОРА, не сцены, поэтому место в проектном слое авторского интерфейса.</td>
+      </tr>
+      <tr>
+        <td>Формула</td>
+        <td>Инлайн-SVG с явными размерами и <code>aria-label</code></td>
+        <td><code>currentColor</code></td>
+        <td>Результат серверного пререндера (FR-07). В эскизе нарисована схематично — движок рендера выбирается на Э2.</td>
+      </tr>
+      <tr>
+        <td>Диагностика санитайзера, подтверждение смены режима</td>
+        <td><code>Banner</code> (<code>ou-banner--subtle ou-banner--warning</code>), <code>Modal</code> (<code>ou-modal--s</code>, <code>__head--icon</code> + <code>__icon--warning</code>)</td>
+        <td><code>--ou-warning-soft</code></td>
+        <td>Существующие компоненты; диагностика повторяет ту, что уже показывается на контентных страницах.</td>
+      </tr>
+      <tr>
+        <td>Метанавигация состояний, метки требований, «Пояснения», «DS Mapping»</td>
+        <td><code>Wireframe utility</code> (<code>wf-nav</code>, <code>wf-annot</code>, <code>wf-notes</code>, <code>wf-mapping</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code></td>
+        <td>Каркас эскиза, в продуктовый UI не мигрирует.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Вопросы к согласованию">
+  <h3 class="wf-notes-title">Вопросы к согласованию</h3>
+  <table>
+    <thead>
+      <tr><th>Место</th><th>Неоднозначность</th><th>Решение в эскизе</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>0. Внешняя зависимость на подсветку</strong> — СОГЛАСОВАНА 2026-09-18</td>
+        <td>Подсветка синтаксиса без библиотеки означала бы писать разбор трёх языков самостоятельно: для SQL это выполнимо, для Python сложнее (тройные кавычки, f-строки), для JavaScript плохо — отличить регулярное выражение от деления и разобрать шаблонные строки без настоящего парсера не выйдет, и ошибки увидел бы участник.</td>
+        <td>Согласован <code>highlight.js</code> 11.12.0, лицензия BSD-3-Clause. Условие, при котором санкция дана и которое не подлежит пересмотру: зависимость <strong>ТОЛЬКО серверная</strong> — ни в SCORM-пакет, ни в клиентский бандл она не попадает ни при каких обстоятельствах. Импортируется ядро плюс три грамматики (python, sql, javascript), а не пакет целиком. Ставится на Э1 вместе с кодом, который её вызывает: зависимость без потребителя — мёртвый груз.</td>
+      </tr>
+      <tr>
+        <td><strong>0a. Блочный листинг в тексте задания</strong> — BR-28-02</td>
+        <td>Текст задания печатается в <code>&lt;h2&gt;</code>, где блочные теги невалидны. Либо код в вопросе остаётся инлайновым, либо слот перестаёт быть заголовком.</td>
+        <td>Эскиз выбирает второй вариант — иначе задание «что выведет этот фрагмент» недостижимо, а ради него листинг в трек и вошёл. Цена названа выше: правка макетов обоих поставляемых шаблонов и полный круг сопровождения из пяти артефактов. Требуется подтверждение владельца: это решение о ЦЕНЕ, а не об оформлении.</td>
+      </tr>
+      <tr>
+        <td><strong>1. Маркер формулы</strong></td>
+        <td>Спека называет нотацию (LaTeX, FR-06), но НЕ называет, чем формула отделяется от текста. Без маркера нечего искать ни при сохранении, ни при рендере.</td>
+        <td>Предложены двойные доллары: <code>$$…$$</code>. Это общепринятое написание, и оно не конфликтует с зарезервированными префиксами пропуска (FR-24j резервирует <code>{{$…}}</code>, а не <code>$$</code>). Требуется решение владельца — от него зависит и грамматика, и хелпер вставки.</td>
+      </tr>
+      <tr>
+        <td>2. Обратимость смены режима</td>
+        <td>Преобразование «Разметка → HTML» однозначно, обратное — нет: из произвольного HTML markdown восстанавливается не всегда.</td>
+        <td>В эскизе смена необратима и спрашивается подтверждением. Проверено: существующий <code>shared/text/html-to-markdown</code> знает пять преобразований и вырезает остальные теги, поэтому инлайн-код, листинг, заголовки и таблицы обратный перевод НЕ переживут. Разрешать его можно только с честным предупреждением о том, что именно потеряется, — либо не разрешать вовсе.</td>
+      </tr>
+      <tr>
+        <td>3. Счётчик вместо предела длины</td>
+        <td>У короткого и развёрнутого ОТВЕТА предел длины есть, у текста ЗАДАНИЯ его нет.</td>
+        <td>В подвале показан счётчик механик, а не символов. Если предел длины задания понадобится, счётчик встанет рядом — место в подвале для этого и предусмотрено.</td>
+      </tr>
+      <tr>
+        <td>4. Режим по умолчанию у нового вопроса</td>
+        <td>Существующие вопросы остаются в «Разметке» по построению. Какой режим предлагать новому.</td>
+        <td>«Разметка». Он безопасен по построению и покрывает всё, ради чего трек заводился; HTML — осознанный выбор автора, а не состояние по умолчанию.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+</div>
+</body>
+</html>

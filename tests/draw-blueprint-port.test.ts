@@ -19,8 +19,11 @@ if (!match) throw new Error("drawSection not found in assets/app.js");
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
 const portDraw = new Function(`${match[0]}\n;return drawSection;`)() as typeof tsDraw;
 
-const identity = <T,>(a: T[]): T[] => a;
-const reverse = <T,>(a: T[]): T[] => a.slice().reverse();
+// PRD-55 (FR-24): оба движка принимают ОТБОР `pick(pool, k)`, а не перемешивание. Заглушки
+// честно соблюдают `k` — та, что его игнорирует, вернула бы весь пул и перестала бы проверять
+// размеры страт, оставаясь при этом зелёной.
+const identity = <T,>(a: T[], k: number): T[] => a.slice(0, k);
+const reverse = <T,>(a: T[], k: number): T[] => a.slice().reverse().slice(0, k);
 
 function q(id: string, ...tags: string[]): DrawableQuestion {
   return { id, tags };

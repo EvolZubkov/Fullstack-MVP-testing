@@ -15,8 +15,16 @@
  * Чистый модуль: ни DOM, ни Node, ни PDF-библиотек.
  */
 
-import type { ResultInput, AdaptiveResultInput, AdaptiveTopicInput } from "../template/result-context";
+import type {
+  ResultInput,
+  AdaptiveResultInput,
+  AdaptiveTopicInput,
+  BreakdownDisplaySetting,
+  ResultHeadings,
+} from "../template/result-context";
 import type { FeedbackBlock } from "../scales/interpretation";
+import type { BarFillSetting } from "../template/bar-fill";
+import type { IntroBlockLike } from "./report-intro";
 
 /** What the report prints besides the result itself. */
 export interface ReportMeta {
@@ -27,6 +35,15 @@ export interface ReportMeta {
   adaptive?: boolean;
   /** Test title (the card headline). */
   testName: string;
+  /**
+   * Заголовки итога этого теста — свойства узла «Итоги теста» в структуре сценария.
+   *
+   * Лежат во ВХОДЕ отчёта по той же причине, что и {@link feedback}: оба хоста собирают
+   * вход там, где этот факт известен, — веб в маршруте результата, пакет в рантайме из
+   * `TEST_DATA`. Отсутствие оставляет документ прежним: название теста в шапке и «Тест
+   * пройден» / «Тест не пройден» над сводкой.
+   */
+  headings?: ResultHeadings;
   /** Learner's full name — LMS `cmi.learner_name` in SCORM, session user on the web. */
   learnerName?: string | null;
   /** ISO timestamp of the attempt being reported. */
@@ -56,12 +73,53 @@ export interface ReportMeta {
    */
   hasPassThreshold?: boolean;
   /**
-   * Вводный блок ОТЧЁТА (`tests.intro_json.report`) — текст и его формат.
+   * Вводный блок ОТЧЁТА (`tests.intro_json.report`) — общее вступление и тексты по исходу.
    *
    * Отдельный от текста экрана: документ уносят с собой и показывают специалисту, поэтому
    * вводное слово у него своё. Отсутствие = блока в отчёте нет.
+   *
+   * PRD-61: ветвь приезжает ЦЕЛИКОМ, а какой текст исхода печатать, решает построитель
+   * контекста — он один знает вердикт этого прогона.
    */
-  intro?: { text?: string | null; format?: "plain" | "richText" | "html" | null } | null;
+  intro?: IntroBlockLike | null;
+  /**
+   * PRD-50 FR-13: the test's breakdown display setting (`tests.breakdown_display_json`) —
+   * the SAME class of fact as {@link feedback} and {@link hasPassThreshold} above: a
+   * property of the test's results screen, which the report must show identically to the
+   * screen it was downloaded from (§5.2), not something the report layer re-derives.
+   *
+   * Absent = the byte-identical report a test built before PRD-50 has always produced: no
+   * topic in {@link ResultInput.topicResults} gains a `breakdown` view even when its raw
+   * `breakdown` records are present (see {@link module:shared/template/result-context}'s
+   * `topicView`, which gates the rows on this flag first).
+   */
+  breakdownDisplay?: BreakdownDisplaySetting | null;
+  /**
+   * Окраска полос подтем (параметр оформления `breakdownBarFill`, разрешённый
+   * {@link module:shared/template/bar-fill barFillFromParams}) — тот же класс факта, что
+   * {@link breakdownDisplay}: свойство экрана итогов, которое документ обязан повторить
+   * (PRD-51 §5.2). Живёт во ВХОДЕ по той же причине: хост собирает вход там, где известны
+   * параметры оформления теста.
+   *
+   * Отсутствие = режим «по вердикту», то есть отчёт байт в байт прежний.
+   */
+  barFill?: BarFillSetting | null;
+  /**
+   * PRD-50 FR-50: общее проходное правило теста (`tests.overall_pass_rule_json`) — та
+   * величина, с которой сравнивается доля БАЛЛОВ подтемы, когда решается, печатать ли её
+   * текст с рекомендациями.
+   *
+   * Тот же класс факта, что {@link hasPassThreshold} и {@link breakdownDisplay} рядом:
+   * свойство теста, которое отчёт обязан показать так же, как экран, с которого документ
+   * скачали (PRD-51 §5.2), а не выводить заново. И ровно как они, оно живёт во ВХОДЕ
+   * отчёта: оба хоста собирают вход там, где факт известен.
+   *
+   * Отсутствие поля НЕ безобидно и означает «порога нет»: правило тогда печатает всё
+   * написанное автором (потерять текст хуже, чем показать лишний раз). Пока поле сюда не
+   * доезжало, документ печатал тексты ВСЕХ подтем, включая стопроцентные, — расхождение с
+   * экраном, запрещённое §5.2.
+   */
+  overallPassRule?: { type?: string | null; value?: number | null } | null;
 }
 
 /** Standard-mode report input — the SAME normalized result the results screen takes. */

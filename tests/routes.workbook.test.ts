@@ -162,6 +162,71 @@ describe("POST /api/workbook/inspect", () => {
     expect(res.body.code).toBe("too_large");
   });
 
+  // Э6: единая точка импорта — разбор открыт любым правом на импорт, отказ — по виду файла.
+  const usersRow = { email: "ivanova@example.ru", name: "Иванова Мария", role: "learner" };
+
+  it("список пользователей в .xlsx → kind=users с числом строк", async () => {
+    const buf = await makeWorkbook({ "Лист1": [usersRow, { ...usersRow, email: "petrov@example.ru" }] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: "users", rows: 2 });
+  });
+
+  it("список пользователей в .csv (UTF-8 с BOM, «;») → kind=users", async () => {
+    const csv = Buffer.from("﻿Email;ФИО;role\r\nivanova@example.ru;Иванова Мария;learner\r\n", "utf8");
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", csv, "users.csv");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: "users", rows: 1 });
+  });
+
+  it("список пользователей в .csv windows-1251 → kind=users", async () => {
+    // «Иванова» в windows-1251 — байты, которые не являются корректным UTF-8.
+    const name = Buffer.from([0xc8, 0xe2, 0xe0, 0xed, 0xee, 0xe2, 0xe0]);
+    const csv = Buffer.concat([Buffer.from("email;name\r\nivanova@example.ru;"), name, Buffer.from("\r\n")]);
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", csv, "users.csv");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: "users", rows: 1 });
+  });
+
+  it("менеджер: книга с вопросами → 403 без пояснений, вид назван", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["manager"]);
+    const buf = await makeWorkbook({ "Вопросы": [questionRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ kind: "workbook", error: "Недостаточно прав для выполнения операции" });
+  });
+
+  it("менеджер: список пользователей разбирается", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["manager"]);
+    const buf = await makeWorkbook({ "Лист1": [usersRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body.kind).toBe("users");
+  });
+
+  it("автор: список пользователей → 403", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    const buf = await makeWorkbook({ "Лист1": [usersRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(403);
+    expect(res.body.kind).toBe("users");
+  });
+
+  it("участник без прав на импорт → 403 до разбора", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+    const buf = await makeWorkbook({ "Лист1": [usersRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(403);
+    expect(res.body.kind).toBeUndefined();
+  });
+
   it("zip с испорченной частью книги → 400 с кодом unparsable", async () => {
     const zip = new JSZip();
     zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types/>');
@@ -206,6 +271,19 @@ describe("POST /api/workbook/import-new", () => {
     );
     expect(storageMock.setTestOwner).toHaveBeenCalledWith("test-new", "user-1");
     expect(storageMock.createScale).toHaveBeenCalled();
+  });
+
+  it("новая шкала без колонки SCORM уходит в отчёт LMS (PRD-54, решение 13)", async () => {
+    const buf = await makeWorkbook({ "Шкалы": [scaleRow] });
+    await request(makeApp()).post("/api/workbook/import-new").field("newTestTitle", "Новый тест").attach("file", buf, "wb.xlsx");
+    expect(storageMock.createScale).toHaveBeenCalledWith(expect.objectContaining({ key: "ee", scormTarget: "interaction" }));
+  });
+
+  it("у существующей шкалы пустая ячейка SCORM выбор автора не меняет", async () => {
+    storageMock.getScales.mockResolvedValue([{ id: "scale-1", key: "ee", scormTarget: "none", configJson: {}, sortOrder: 0 }]);
+    const buf = await makeWorkbook({ "Шкалы": [scaleRow] });
+    await request(makeApp()).post("/api/workbook/import-new").field("newTestTitle", "Новый тест").attach("file", buf, "wb.xlsx");
+    expect(storageMock.updateScale).toHaveBeenCalledWith("scale-1", expect.objectContaining({ scormTarget: "none" }));
   });
 
   it("со «Структурой»: создаёт тест и применяет разделы", async () => {
@@ -257,6 +335,8 @@ describe("POST /api/workbook/import-new", () => {
   });
 
   it("сценарий из «Настроек» применяется и к новому тесту", async () => {
+    // Параметр назван СТАРЫМ именем намеренно (Э5.1): книга, скачанная до переименования,
+    // живёт у автора на диске, и весь путь импорта обязан продолжать её применять.
     const buf = await makeWorkbook({
       "Настройки": [{ "Параметр": "Сценарий прохождения", "Значение": "Через страницу-маршрутизатор" }],
       "Вопросы": [questionRow],

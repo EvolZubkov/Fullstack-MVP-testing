@@ -14,7 +14,10 @@ const toast = vi.fn();
 vi.mock("wouter", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toast, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import ForgotPasswordPage from "../forgot-password";
 
@@ -72,7 +75,7 @@ describe("<ForgotPasswordPage />", () => {
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "user@e.test" } });
     fireEvent.click(screen.getByRole("button", { name: /Отправить/ }));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(screen.queryByText("Ссылка отправлена")).not.toBeInTheDocument();
   });

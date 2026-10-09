@@ -5,7 +5,8 @@
  * form, the first-login gate is bypassed, and a scope violation redirects too.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
+import { ToastProvider } from "@skillum/ui-kit";
 import { raiseScopeViolation, resetScopeViolation } from "@/lib/magic-scope";
 
 let currentLocation = "/learner/test/t1";
@@ -28,6 +29,10 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { ProtectedRoute } from "../App";
+
+/** Components under test push notifications, and the ui-kit hook needs a provider. */
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+  rtlRender(ui, { wrapper: ToastProvider });
 
 const scopedUser = {
   id: "u1",

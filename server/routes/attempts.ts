@@ -1,9 +1,12 @@
 import { Router } from "express";
 import path from "node:path";
 import { logger } from "../logger";
+import { config } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
+import { withEffectiveMaxLength } from "@shared/questions/short-answer";
+import { resolvePsychoHash } from "@shared/questions/psycho-hash";
 import {
   aggregateStandardResult,
   aggregateAdaptiveResult,
@@ -11,7 +14,9 @@ import {
   type AggregateSection,
 } from "@shared/scoring/aggregate";
 import type { CorrectData, Answer } from "@shared/scoring/engine";
+import { resolveOverallRule, resolveTopicRule, type ResolvedRule } from "@shared/scoring/pass-rule";
 import { drawSection } from "@shared/draw/blueprint";
+import { computeWeights, weightedPick } from "@shared/draw/exposure";
 import { selectForm } from "@shared/draw/forms";
 import { orderQuestions } from "@shared/draw/order-questions";
 import {
@@ -21,6 +26,8 @@ import {
 } from "@shared/draw/assemble-delivery";
 import { ipsativeScalesForDelivery } from "../services/scale-composition";
 import { loadScoringConfig } from "../services/scoring-config";
+import { attachRegexVerdicts } from "../services/answer-check-verdicts";
+import { promptHtmlOf } from "../services/prompt-html";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, countAttemptsInAssignment } from "../services/retake-gate";
@@ -37,27 +44,43 @@ import {
   buildMeasuresInput,
   resolveScreenLabels,
   type MeasuresSource,
+  type TopicInterpretations,
 } from "../services/result-context";
 import type { MeasuresInput } from "@shared/template/result-context";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
+import type { ResultHeadings } from "@shared/template/result-context";
 import type { ChartKindSettings } from "@shared/template/scales-chart";
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
-import { pingSection } from "../services/section-timer";
+import {
+  pingSection,
+  buildLeavePolicy,
+  freezeLockedAnswers,
+  type LeavePolicy,
+} from "../services/section-timer";
 import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
 import {
   liveDataSource,
   snapshotDataSource,
   dataSourceForAttempt,
+  isScenarioSection,
+  deliverySectionName,
   type TestDataSource,
   type TestSnapshotContent,
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
-import { isMeasurementOnly } from "@shared/questions/question-type";
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
+import { buildAfterZone, type FlowContentPage } from "@shared/flow/page-sequence";
+import { isDeliverable, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
+import { replayRun } from "@shared/sim/replay";
+import type { Scenario } from "@shared/sim/contract";
+// PRD-50 FR-17: элементы разреза адаптивного прогона собирает хост — движок их вывести не может.
+import type { BreakdownItem } from "@shared/breakdown/types";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
 // the topic's feedback text — the same helpers the SCORM bake runs.
-import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
+import { feedbackAssets, normalizeFeedback, topicFeedbackTexts } from "@shared/template/result-context";
+import type { FeedbackBlock } from "@shared/scales/interpretation";
 // issue #34: общий/условный режим обратной связи вопроса — одно правило на оба хоста.
 import { feedbackTextFor } from "@shared/template/feedback-banner";
 import { isReportEnabled } from "@shared/schema";
@@ -90,21 +113,133 @@ function prd19RuntimeSettings(test: Test) {
   return {
     allowReturnToUnanswered: test.allowReturnToUnanswered ?? true,
     allowAnswerChange: test.allowAnswerChange ?? false,
+    // PRD-19 (FR-11a/FR-11b): free navigation inside the section. Resolved here rather than
+    // read raw, because an adaptive test IGNORES it — there the ladder of levels decides the
+    // order, and the author's value must not leak into a run it does not govern. Absence in
+    // an OLD publication snapshot reads as «off», i.e. today's frontier.
+    allowFreeSectionNavigation:
+      test.mode === "adaptive" ? false : (test.allowFreeSectionNavigation ?? false),
     // PRD-43: independent of allowReturnToUnanswered.
     quickAdvance: test.quickAdvance ?? false,
     showSectionResults: test.showSectionResults ?? true,
     // Отсутствие в СТАРОМ снимке публикации = прежнее поведение, обзор показывается.
     skipReviewWhenComplete: test.skipReviewWhenComplete ?? false,
+    // PRD-67: absence in an OLD publication snapshot = the pre-PRD-67 freeze-on-leave.
+    closeSectionOnLeave: test.closeSectionOnLeave ?? false,
     // PRD-34 (FR-01, FR-05): настройки защиты. Отсутствие поля в СТАРОМ снимке
     // публикации читается как умолчание — тест, опубликованный до PRD-34, получает защиту.
     copyProtection: test.copyProtection ?? true,
     protectionWatermark: test.protectionWatermark ?? false,
     protectionHideOnBlur: test.protectionHideOnBlur ?? false,
+    // The flow mode goes in RESOLVED, exactly as the bake feeds it
+    // (`builders/test-json.ts`): a mode this build does not know reads as
+    // `linear_flat` in the package, and the web host must not scope answers by a
+    // mode the package never saw.
     answerCommitScope: resolveAnswerCommitScope({
       mode: test.mode,
-      flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode,
+      flowMode: resolveFlowPolicy(test.flowPolicyJson).mode,
     }),
   };
+}
+
+/**
+ * PRD-66 FR-09b: карта «задание -> отпечаток редакции» по фактически выданному составу.
+ *
+ * Отпечаток берётся со строки задания, а если его там нет — считается по содержанию:
+ * снимок публикации, замороженный до появления колонки, и строка, не прошедшая засыпку,
+ * несут полное содержание, и терять на них серию наблюдений незачем.
+ */
+function stampsOfDelivery(questions: Question[]): Record<string, string> {
+  const stamps: Record<string, string> = {};
+  for (const question of questions) stamps[question.id] = resolvePsychoHash(question);
+  return stamps;
+}
+
+/**
+ * PRD-66 FR-37a: карта «задание -> миллисекунды», очищенная от того, что измерением быть не может.
+ *
+ * Значение приходит от клиента — как и у пакета, другого источника времени на задании нет.
+ * Подделка чисел в ту или другую сторону этим не лечится и лечиться здесь не должна; отсекается
+ * мусор — строки, отрицательные величины, `NaN`, — который отравил бы медиану времени молча.
+ *
+ * `null` означает «клиент времени не прислал»: молчание старого клиента не должно стирать уже
+ * измеренное.
+ */
+function sanitizeLatency(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const clean: Record<string, number> = {};
+  for (const [questionId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) clean[questionId] = value;
+  }
+  return clean;
+}
+
+/**
+ * Состояние хаба роутера в вебе — двойник `rt`/`sc`/`crt` сеанса пакета: какие пункты начаты и
+ * завершены, какие разделы закрыты и в каком пункте участник сейчас. Без него возобновлённый прогон
+ * не знал хаба: участник попадал внутрь уже завершённой темы и проходил её обзор и итоги заново.
+ *
+ * Приходит от клиента; отсекается то, что состоянием хаба быть не может. `null` — клиент состояния
+ * не прислал (не роутер или старый клиент), и прежнее не стирается.
+ */
+function sanitizeRouterState(raw: unknown): { topicStates: Record<string, string>; committed: Record<string, boolean>; current: string | null } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw as { topicStates?: unknown; committed?: unknown; current?: unknown };
+  const topicStates: Record<string, string> = {};
+  for (const [key, value] of Object.entries((src.topicStates ?? {}) as Record<string, unknown>)) {
+    if (value === "inProgress" || value === "completed") topicStates[key] = value;
+  }
+  const committed: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries((src.committed ?? {}) as Record<string, unknown>)) {
+    if (value === true) committed[key] = true;
+  }
+  return { topicStates, committed, current: typeof src.current === "string" && src.current ? src.current : null };
+}
+
+/**
+ * PRD-66 FR-09b: штампы выдачи, сверенные с редакцией на момент завершения.
+ *
+ * Расхождение значит, что задание правили ПОСРЕДИ прохождения. Такое наблюдение не
+ * принадлежит чисто ни одной редакции: приписать его новой — испортить её статистику
+ * ответами, которых по ней не давали; оставить за старой — сделать вид, что правки не
+ * было. Штамп становится `null`, и наблюдение уходит в серию «версия неизвестна»
+ * (FR-09c). Обе серии его теряют, и это честнее, чем приписать его одной из них.
+ *
+ * Попытка, начатая до появления штампа, его не выдумывает: что видел участник, никто не
+ * знает, и нынешняя редакция была бы догадкой, выданной за факт.
+ */
+function reconcileStamps(
+  delivered: Record<string, string | null> | undefined,
+  atFinish: Record<string, string>,
+): Record<string, string | null> | undefined {
+  if (!delivered) return undefined;
+  const reconciled: Record<string, string | null> = {};
+  for (const [questionId, stamp] of Object.entries(delivered)) {
+    const now = atFinish[questionId];
+    // Задание, которого к завершению уже нет (удалено из банка), сверить не с чем —
+    // штамп выдачи остаётся: он и есть то, что участник видел.
+    reconciled[questionId] = now === undefined || now === stamp ? stamp : null;
+  }
+  return reconciled;
+}
+
+/**
+ * PRD-67: the attempt's leave policy — does leaving a section close it, and what unit a
+ * leave closes (the topic, or the whole test when it has no sections). Read from the SAME
+ * version the attempt plays: a snapshot published before the setting carries none and
+ * reads as «off», the pre-PRD-67 freeze.
+ */
+async function leavePolicyForAttempt(snapshotId: string | null, testId: string): Promise<LeavePolicy> {
+  const src = await dataSourceForAttempt(snapshotId);
+  const test = await src.getTest(testId);
+  if (!test) return buildLeavePolicy({ closeSectionOnLeave: false, testLimitMinutes: null, sectionLimits: new Map(), flat: false });
+  const sections = await src.getTestSections(testId);
+  return buildLeavePolicy({
+    closeSectionOnLeave: test.closeSectionOnLeave ?? false,
+    testLimitMinutes: test.timeLimitMinutes,
+    sectionLimits: new Map(sections.map((s) => [s.topicId, s.timeLimitMinutes])),
+    flat: resolveFlowPolicy(test.flowPolicyJson).mode === "linear_flat",
+  });
 }
 
 /**
@@ -131,13 +266,34 @@ async function questionsForClient(
   test: Test,
   questions: Question[],
 ): Promise<Array<Question & { scoring?: QuestionScoring }>> {
-  if (!test.showCorrectAnswers) {
-    return questions.map((q) => ({ ...q, correctJson: undefined })) as Question[];
+  // PRD-57 FR-28v: действующий предел длины подставляется ЗДЕСЬ, а не на клиенте:
+  // настройку инстанса знает только сервер, а рендер поля общий с пакетом.
+  const withLimit = (q: Question): Question =>
+    ({
+      ...q,
+      dataJson: withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength),
+      // PRD-57 FR-03a: подсветка листинга печётся ЗДЕСЬ. Библиотека серверная, и ни в
+      // клиентский бандл, ни в пакет она не попадает — хост получает готовую разметку.
+      ...promptHtmlOf(q),
+    }) as Question;
+
+  // «Сценарий в ИС»: штрафы сценария — не ключ ответа, а правила, которые участник читает в окне
+  // перед стартом. Поэтому вопрос-сценарий получает разрешённую цену ВСЕГДА — как и в пакете, где
+  // она печатается для сценария всегда (иначе пропал бы уровень теста).
+  const hasSimulation = questions.some((q) => isSimulation(q.type));
+  if (!test.showCorrectAnswers && !hasSimulation) {
+    return questions.map((q) => ({ ...withLimit(q), correctJson: undefined })) as Question[];
   }
   const scoring = await loadTestScoringContext(test.id, src);
   return questions.map((q) => {
     const effective = scoring.resolve(q);
-    return effective.source.scoring === "system" ? q : { ...q, scoring: effective.scoring };
+    const base = withLimit(q);
+    if (isSimulation(q.type)) {
+      const sim = test.showCorrectAnswers ? base : { ...base, correctJson: undefined };
+      return { ...sim, scoring: effective.scoring };
+    }
+    if (!test.showCorrectAnswers) return { ...base, correctJson: undefined } as Question;
+    return effective.source.scoring === "system" ? base : { ...base, scoring: effective.scoring };
   });
 }
 
@@ -154,8 +310,23 @@ async function questionsForClient(
  */
 async function flowPayload(src: TestDataSource, test: Test) {
   const contentPages = await src.getContentPages(test.id);
+  // PRD-4 v1.1 §4.7: the router's gating travels with the structure, resolved by the
+  // SAME shared normaliser the package bake runs. Before this the payload carried the
+  // raw `mode` and nothing else, so the web hub was built with no unlock rules and no
+  // completion policy: a section locked behind a prerequisite in the LMS was open on
+  // the web, and «Завершить» under `all_required_passed` unlocked as soon as the
+  // required sections were merely finished. The fields are absent outside router mode.
+  const flowPolicy = resolveFlowPolicy(test.flowPolicyJson);
   return {
-    flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode ?? "linear_flat",
+    flowMode: flowPolicy.mode,
+    ...(flowPolicy.mode === "router_by_topics"
+      ? {
+          routerPolicy: {
+            completionPolicy: flowPolicy.routerCompletionPolicy ?? null,
+            sectionUnlockRules: flowPolicy.sectionUnlockRules ?? {},
+          },
+        }
+      : {}),
     contentPages: contentPages.map((p) => ({
       id: p.id,
       kind: p.kind,
@@ -172,8 +343,93 @@ async function flowPayload(src: TestDataSource, test: Test) {
       settingsJson: p.settingsJson,
       autoAdvance: p.autoAdvance,
       autoAdvanceDelayMs: p.autoAdvanceDelayMs,
+      // «Экран есть, но ученику не выдаётся»: общее правило порядка (`contentPagesFor`)
+      // отбрасывает такие страницы, но только если признак до него доехал.
+      hidden: p.hidden === true,
     })),
   };
+}
+
+/**
+ * The pass condition of each delivered section, for the «Введение раздела» screen of the
+ * web run: the topic rule resolved against the overall one and the DELIVERED variant, the
+ * Σ prices of the delivered graded questions, and the obligation. The same resolution the
+ * grader runs at finish (`aggregateStandardResult`), so the intro promises exactly the
+ * threshold the verdict will apply. Computed here because the learner host receives no
+ * prices unless the test shows correctness.
+ *
+ * Read through `src`, so a snapshot-pinned attempt states the PUBLISHED thresholds.
+ */
+async function sectionConditionsPayload(
+  src: TestDataSource,
+  testId: string,
+  variant: { sections?: Array<{ topicId: string; questionIds?: string[]; formId?: string }> } | null,
+  questions: Question[],
+): Promise<Record<string, { passRule: ResolvedRule | null; possiblePoints: number; required: boolean }>> {
+  // A line on an intro screen must never cost the learner the attempt start: on any
+  // failure the intro simply renders without a condition, as it did before.
+  try {
+    return await resolveSectionConditions(src, testId, variant, questions);
+  } catch (error) {
+    logger.warn("Условия прохождения разделов не рассчитаны — " + (error as Error).message);
+    return {};
+  }
+}
+
+/** The body of {@link sectionConditionsPayload}, without the failure guard. */
+async function resolveSectionConditions(
+  src: TestDataSource,
+  testId: string,
+  variant: { sections?: Array<{ topicId: string; questionIds?: string[]; formId?: string }> } | null,
+  questions: Question[],
+): Promise<Record<string, { passRule: ResolvedRule | null; possiblePoints: number; required: boolean }>> {
+  const test = await src.getTest(testId);
+  if (!test || !Array.isArray(variant?.sections)) return {};
+  const sections = await src.getTestSections(testId);
+  const scoring = await loadTestScoringContext(testId, src);
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const overall = resolveOverallRule(test.overallPassRuleJson);
+  const out: Record<string, { passRule: ResolvedRule | null; possiblePoints: number; required: boolean }> = {};
+  for (const vs of variant!.sections!) {
+    const section = sections.find((s) => s.topicId === vs.topicId);
+    let possiblePoints = 0;
+    for (const id of vs.questionIds ?? []) {
+      const q = byId.get(id);
+      // A measurement-only question brings no points to the grader, so none here either.
+      if (q && !isMeasurementOnly(q)) possiblePoints += scoring.resolve(q).points;
+    }
+    out[vs.topicId] = {
+      passRule: resolveTopicRule(section?.topicPassRuleJson ?? null, overall, { formId: vs.formId ?? null }),
+      possiblePoints,
+      required: section?.required ?? true,
+    };
+  }
+  return out;
+}
+
+/**
+ * Страницы «После теста», стоящие ЗА «Итогами теста», — в той версии теста, которую
+ * выдали этой попытке.
+ *
+ * Отбирает их ТО ЖЕ общее правило, что строит прохождение (`buildAfterZone`), поэтому
+ * экран итогов предлагает «Далее» ровно тогда, когда пакет, и к тем же страницам. Раньше
+ * веб их не показывал вовсе: экран итогов живёт на своём маршруте, а прохождение с этими
+ * страницами к тому моменту уже закончено.
+ *
+ * @param attempt Попытка: тест и приколотый снимок.
+ * @returns Страницы в порядке показа; пусто, если их нет или структура не прочиталась.
+ */
+async function postResultsPagesForAttempt(attempt: { testId: string; snapshotId: string | null }) {
+  try {
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
+    if (!test) return [];
+    const flow = await flowPayload(src, test);
+    const pages = buildAfterZone(flow.contentPages as FlowContentPage[]).postResultsPages;
+    return pages as typeof flow.contentPages;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -220,6 +476,107 @@ async function sourceForStart(
  * (`server/services/result-context.ts`), off the emptiness of these two arrays; this
  * function only reads. `undefined` therefore means «could not be read», nothing else.
  */
+/**
+ * PRD-50 FR-50: карта «раздел -> (подтема -> её текст)» по разделам ВЫДАННОЙ версии.
+ *
+ * Ключ карты — `topicId`, а не идентификатор раздела: сохранённый результат попытки
+ * знает тему, и по ней же общий построитель находит свои записи разреза. Раздел без
+ * текстов в карту не попадает — отсутствие ключа и означает «текстов нет».
+ */
+async function readBreakdownFeedback(
+  src: { getTestSections(testId: string): Promise<Array<{ topicId: string; breakdownFeedbackJson?: unknown }>> },
+  testId: string,
+): Promise<Record<string, Record<string, FeedbackBlock>>> {
+  try {
+    return breakdownFeedbackByTopic(await src.getTestSections(testId));
+  } catch (error) {
+    logger.warn("PRD-50 FR-50: тексты подтем не прочитаны — " + (error as Error).message);
+    return {};
+  }
+}
+
+function breakdownFeedbackByTopic(
+  sections: Array<{ topicId: string; breakdownFeedbackJson?: unknown }>,
+): Record<string, Record<string, FeedbackBlock>> {
+  const out: Record<string, Record<string, FeedbackBlock>> = {};
+  for (const section of sections) {
+    const declared = section.breakdownFeedbackJson as
+      | { keys?: Record<string, Partial<FeedbackContent>> }
+      | null
+      | undefined;
+    const keys = declared?.keys;
+    if (!keys) continue;
+    const byKey: Record<string, FeedbackBlock> = {};
+    for (const [key, content] of Object.entries(keys)) {
+      // Через тот же нормализатор, что и обратная связь темы и теста: адреса вложений
+      // и формат текста разрешаются в ОДНОМ месте, иначе подтема печаталась бы иначе,
+      // чем соседний источник того же блока.
+      const block = normalizeFeedback(content);
+      if (block) byKey[key] = block;
+    }
+    if (Object.keys(byKey).length > 0) out[section.topicId] = byKey;
+  }
+  return out;
+}
+
+/**
+ * Толкования по разделам ВЫДАННОЙ версии — `topicId` -> текст темы, текст этого теста и
+ * тексты подтем.
+ *
+ * Тема читается своим запросом на раздел, а не общим `getTopics()`: живое хранилище отдало
+ * бы им ВСЕ темы инстанса ради двух-трёх нужных, а снимок и так держит их списком.
+ *
+ * Раздел без единого написанного текста в карту не попадает: отсутствие ключа и означает
+ * «толкований нет», и тест, не пользовавшийся ими, идёт прежним путём до поля.
+ */
+async function readInterpretations(
+  src: TestDataSource,
+  testId: string,
+): Promise<Record<string, TopicInterpretations>> {
+  try {
+    const sections = await src.getTestSections(testId);
+    const topics = await Promise.all(sections.map((section) => src.getTopic(section.topicId)));
+    const out: Record<string, TopicInterpretations> = {};
+    sections.forEach((section, i) => {
+      const topic = topics[i];
+      const texts: TopicInterpretations = {
+        ...(topic?.interpretationJson ? { topic: topic.interpretationJson } : {}),
+        ...(section.interpretationJson ? { section: section.interpretationJson } : {}),
+        ...(section.breakdownInterpretationJson?.keys
+          ? { breakdown: section.breakdownInterpretationJson.keys }
+          : {}),
+      };
+      if (Object.keys(texts).length > 0) out[section.topicId] = texts;
+    });
+    return out;
+  } catch (error) {
+    // Своим `try`, как и у текстов подтем: не прочитались толкования — нет только их,
+    // а балл, темы и обратная связь обязаны дойти до экрана.
+    logger.warn("Толкования не прочитаны — " + (error as Error).message);
+    return {};
+  }
+}
+
+/**
+ * Заголовки итога из свойств узла «Итоги теста».
+ *
+ * Ключи те же, что объявляет манифест шаблона (`settings[]` варианта `results.*`). Пустые
+ * и незаполненные не кладутся вовсе: отсутствие поля и есть «печатать умолчание», и
+ * тест, ничего не заполнивший, отдаёт `null` — материал экрана остаётся прежним до ключа.
+ */
+function readResultHeadings(settings: Record<string, unknown>): ResultHeadings | null {
+  const pick = (key: string) => {
+    const value = settings[key];
+    return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  };
+  const headings: ResultHeadings = {
+    ...(pick("headingDocument") ? { document: pick("headingDocument") } : {}),
+    ...(pick("headingPassed") ? { passed: pick("headingPassed") } : {}),
+    ...(pick("headingFailed") ? { failed: pick("headingFailed") } : {}),
+  };
+  return Object.keys(headings).length > 0 ? headings : null;
+}
+
 async function resultsMaterialForAttempt(
   attempt: { testId: string; snapshotId: string | null },
   liveTest: Test | undefined,
@@ -234,7 +591,8 @@ async function resultsMaterialForAttempt(
     const pages = await src.getContentPages(attempt.testId);
     // No `results` page, or a page with no settings: all three blocks stay on
     // «Автоматически» and the state of the test decides.
-    const blockSettings = (pages.find((p) => p.kind === "results")?.settingsJson ?? {}) as ResultsBlockSettings;
+    const resultsSettings = (pages.find((p) => p.kind === "results")?.settingsJson ?? {}) as Record<string, unknown>;
+    const blockSettings = resultsSettings as ResultsBlockSettings;
     const passRule = deliveredTest?.overallPassRuleJson as PassRule | null | undefined;
     // PRD-47 §5.3: у отчёта свой переключатель вида, и «авто» в нём требует того же
     // признака. `tests.report_settings_json` ветвится по РЕЖИМУ теста, а не по виду
@@ -276,10 +634,38 @@ async function resultsMaterialForAttempt(
         reportChartSettings,
       ),
       hasPassThreshold: !!passRule && passRule.type !== "none",
+      // PRD-50 FR-50: САМО правило, а не только признак — тексты подтем выдаются
+      // сравнением их результата с ЭТИМ порогом.
+      overallPassRule: passRule ?? null,
+      // PRD-50 FR-50: тексты подтем разделов ВЫДАННОЙ версии. Раздел без текстов ключа
+      // ничего в карту не кладёт, поэтому тест, не пользовавшийся настройкой, идёт по
+      // прежнему пути до байта.
+      //
+      // Своим `try` — не общим: не прочитались тексты ПОДТЕМ, значит нет только их, а
+      // шкалы, показатели и обратная связь теста обязаны дойти. Общий `catch` ниже
+      // обнулил бы весь материал экрана из-за необязательной его части.
+      breakdownFeedbackByTopic: await readBreakdownFeedback(src, attempt.testId),
+      // Толкования темы и её подтем — из той же ВЫДАННОЙ версии. Правило «текст теста
+      // заменяет текст темы» здесь не применяется: его применит общий построитель, тот же,
+      // что и у пакета SCORM.
+      interpretationsByTopic: await readInterpretations(src, attempt.testId),
       testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
       // Вводные блоки: экрана и отчёта. Берутся из ВЫДАННОЙ версии теста, как и всё
       // остальное здесь, — попытка показывает то содержание, на котором её проходили.
       intro: (deliveredTest?.introJson as TestIntro | null) ?? null,
+      // PRD-50 FR-13: subtotal-by-key display setting, read from the SAME delivered
+      // version as everything else here. Absent (test predates PRD-50, or the column
+      // was never set) leaves it `null`, which `buildResultContext` resolves to
+      // «hidden» — the byte-identical results screen this test has always shown.
+      breakdownDisplayJson: deliveredTest?.breakdownDisplayJson ?? null,
+      // PRD-50 FR-11: блоки разделов теста, из той же ВЫДАННОЙ версии, что и всё
+      // остальное здесь. Отсутствие (тест блоков не заводил) оставляет `null`, и экран
+      // печатает плоский список тем — ровно тот, что печатал до этого PRD (FR-27).
+      sectionGroupsJson: deliveredTest?.sectionGroupsJson ?? null,
+      // Заголовки итога — свойства того же узла «Итоги теста», из которого читаются
+      // переключатели блоков выше. Пустые строки отбрасывает общий построитель, здесь
+      // только доставка написанного.
+      resultHeadings: readResultHeadings(resultsSettings),
     };
   } catch (error) {
     // The results screen must not fail because this material could not be read: the
@@ -315,10 +701,12 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
 
     const testsWithSections = await Promise.all(
       assignedTests.map(async (test) => {
-        const sections = await storage.getTestSections(test.id);
+        // Через источник выдачи, а не хранилище: у теста «Сценарий» его пункт приходит разделом
+        // темы-банка, и «оценивается ли тест» ниже считается по нему.
+        const sections = await liveDataSource().getTestSections(test.id);
         const sectionsWithNames = sections.map((s) => ({
           ...s,
-          topicName: topicMap.get(s.topicId) || "Unknown",
+          topicName: deliverySectionName(s, (id) => topicMap.get(id)),
         }));
 
         const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
@@ -397,6 +785,12 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
               }
             : null;
 
+        // Скрытый стартовый экран (решение владельца 2026-09-20): ученику не показывают
+        // страницу с кнопкой «Начать» — попытка начинается сразу. Знать об этом надо ДО
+        // старта, а страницы теста приезжают только вместе с попыткой, поэтому признак
+        // резолвится здесь, на том же экране, где живут остальные факты о запуске.
+        const startPage = (await storage.getContentPages(test.id)).find((p) => p.kind === "start");
+
         return {
           ...test,
           sections: sectionsWithNames,
@@ -407,6 +801,7 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
           lastCompletedAttemptId: lastCompleted?.id || null,
           retakeGate,
           priorResult,
+          startHidden: startPage?.hidden === true,
         };
       })
     );
@@ -439,7 +834,7 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
  * The delivered set of an abandoned run, stripped of its progress. `sections`
  * (composition, PRD-17 variant pins, PRD-4 per-topic budgets) and `deliveryOrder`
  * (the PRD-30 stream) are exactly what was handed out; `currentIndex`,
- * `questionStatus` and `sectionPositions` are progress the runtime wrote on top,
+ * `questionStatus`, `sectionPositions` and `routerState` are progress the runtime wrote on top,
  * and a restart drops them. Returns null when the stored variant holds no
  * questions — there is then nothing to carry and the caller draws anew.
  */
@@ -559,8 +954,65 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     // of the whole test is decided once, by `assembleDelivery`, after the loop.
     const drawnSections: DeliverySection<Question>[] = [];
 
+    // PRD-55 (FR-26): банки разделов читаются ДО отбора, чтобы счётчики экспозиции ушли ОДНИМ
+    // запросом на попытку, а не по запросу на раздел. Индексы массива соответствуют `sections`:
+    // два раздела могут стоять на одной теме, и ключ по `topicId` их бы схлопнул.
+    const sectionBanks: Question[][] = [];
     for (const section of sections) {
-      const questions = await src.getQuestionsByTopic(section.topicId);
+      // «Сценарий в ИС»: у пункта-сценария свой пул — сценарии его темы (или один фиксированный).
+      // Дальше он идёт обычным отбором одного вопроса со взвешиванием по экспозиции (PRD-55).
+      sectionBanks.push(
+        isScenarioSection(section)
+          ? await src.getScenarioPool(section.scenarioItem)
+          : await src.getQuestionsByTopic(section.topicId),
+      );
+    }
+
+    /**
+     * PRD-56 FR-17a: задания, исключённые из выдачи ЭТОГО теста.
+     *
+     * Фильтр применяется только к ЖИВОЙ выдаче. Прохождение по снимку состав не меняет
+     * (PRD-15): опубликованная версия — это обещание, данное тем, кто уже её проходит, и
+     * исключение задания сегодня не имеет права переписать вчерашнюю публикацию.
+     */
+    if (snapshotId === null) {
+      const excluded = new Set(
+        (await storage.getTestQuestionScoring(test.id))
+          .filter(row => row.excludedFromDelivery)
+          .map(row => row.questionId),
+      );
+      if (excluded.size > 0) {
+        for (const [index, bank] of sectionBanks.entries()) {
+          sectionBanks[index] = bank.filter(question => !excluded.has(question.id));
+        }
+      }
+    }
+
+    // Веса считаются ВНУТРИ каждого пула отдельно (FR-12), поэтому здесь достаточно собрать
+    // счётчики по всем заданиям теста. Сбой чтения не имеет права ронять старт попытки: без
+    // счётчиков веса выходят равными, то есть выдача просто остаётся сегодняшней (FR-17).
+    let exposureCounts = new Map<string, number>();
+    try {
+      const windowStart = new Date();
+      windowStart.setMonth(windowStart.getMonth() - config.delivery.exposureWindowMonths);
+      exposureCounts = await storage.getDeliveryCounts(
+        sectionBanks.flat().map((q) => q.id),
+        windowStart,
+      );
+    } catch (error) {
+      logger.warn("PRD-55: счётчики выдач не прочитаны — " + (error as Error).message);
+    }
+
+    /** Отбор, взвешенный по экспозиции; нормировка — по переданному пулу (FR-12/FR-18). */
+    const exposurePick = <T extends { id: string }>(pool: T[], k: number): T[] =>
+      weightedPick(pool, k, computeWeights(pool.map((q) => q.id), exposureCounts), Math.random);
+
+    for (const [sectionIndex, section] of sections.entries()) {
+      const questions = sectionBanks[sectionIndex];
+      // «Сценарий в ИС»: пункт без единого сценария (тема-банк опустела, фиксированный удалён в
+      // черновике) не выдаётся вовсе — иначе хаб показал бы карточку, которую нечем пройти.
+      // Публикацию такого изменения охрана содержимого блокирует; это страховка для черновика.
+      if (isScenarioSection(section) && questions.length === 0) continue;
       const byId = new Map(questions.map((q) => [q.id, q]));
       let qIds: string[];
       let formId: string | undefined;
@@ -587,7 +1039,12 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       } else {
         // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
         // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
-        const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
+        const { selected } = drawSection(
+          questions,
+          section.drawCount,
+          section.drawBlueprintJson,
+          exposurePick,
+        );
         // PRD-30 (FR-06): selection stays as it was — quotas and the random pick
         // are untouched; the ORDER is decided for the whole test below.
         qIds = selected.map((q) => q.id);
@@ -596,7 +1053,7 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
 
       variant.sections.push({
         topicId: section.topicId,
-        topicName: topicMap.get(section.topicId) || "Unknown",
+        topicName: deliverySectionName(section, (id) => topicMap.get(id)),
         questionIds: qIds,
         // PRD-17 (FR-08): pin the chosen variant id for rotation history (omitted
         // for non-variant sections).
@@ -604,6 +1061,12 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
         // PRD-4 v1.1 §3.2: carry the per-topic time budget so the web runtime
         // can run a per-topic timer (parity with the SCORM package).
         timeLimitMinutes: section.timeLimitMinutes ?? null,
+        // PRD-4 v1.1 §4.7: and the obligation, for the same reason. It is what the
+        // router's «all_required_*» policy counts, and the package has always baked
+        // it (`builders/test-json.ts`); without it here an OPTIONAL section blocked
+        // «Завершить» on the web while the LMS let the learner through. Absent in an
+        // attempt started before this reads as `true` — the old behaviour.
+        required: section.required ?? true,
       });
 
       allQuestionIds.push(...qIds);
@@ -617,7 +1080,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     const assembled = assembleDelivery(
       drawnSections,
       test.questionOrder,
-      (test.flowPolicyJson as { mode?: string } | null)?.mode,
+      // Resolved, like every other read of the column: «полное перемешивание» is a
+      // property of the FLAT flow, and an unrecognised mode is a flat flow.
+      resolveFlowPolicy(test.flowPolicyJson).mode,
       shuffleInPlace,
     );
     assembled.sections.forEach((questions, i) => {
@@ -630,6 +1095,10 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     }
 
     const allQuestions = await src.getQuestionsByIds(allQuestionIds);
+    // PRD-66 FR-09b: запоминаем, КАКУЮ РЕДАКЦИЮ заданий увидел участник. Именно здесь, а не в
+    // момент ответа: содержание веб отдаёт один раз, и правка задания посреди прохождения не
+    // меняет того, что уже на экране у отвечающего.
+    variant.psychoHashes = stampsOfDelivery(allQuestions);
 
     // The carried-over run is now superseded, and an abandoned row left behind would
     // both pile up orphans and give the resume lookup (`find(finishedAt === null)`) an
@@ -652,6 +1121,16 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       finishedAt: null,
     });
 
+    // PRD-55 (FR-01/FR-02): выдачей считается НАЧАТАЯ попытка — состав формы уже зафиксирован,
+    // и ответы для учёта не нужны: брошенная попытка показала содержание так же, как доведённая
+    // до конца. Счётчик не имеет права ронять старт попытки, поэтому сбой уходит в лог: это
+    // статистика качества банка, а не условие прохождения.
+    try {
+      await storage.recordDeliveries(allQuestionIds, test.id, new Date());
+    } catch (error) {
+      logger.warn("PRD-55: выдача заданий не записана — " + (error as Error).message);
+    }
+
     res.status(201).json({
       ...attempt,
       testTitle: test.title,
@@ -663,6 +1142,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       // follows the same structure as the SCORM package.
       ...(await flowPayload(src, test)),
       questions: await questionsForClient(src, test, allQuestions),
+      // The threshold each section intro states (and the «Обязательная тема» mark).
+      sectionConditions: await sectionConditionsPayload(src, test.id, variant, allQuestions),
+      passDecisionPolicy: test.passDecisionPolicy ?? null,
     });
   } catch (error) {
     logger.error("Start attempt error: " + (error as Error).message);
@@ -751,6 +1233,54 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     // the per-test override wins over the question's base value.
     const scoring = await loadTestScoringContext(test.id, src);
 
+    /**
+     * PRD-56 FR-17a: задания, исключённые из выдачи ЭТОГО теста.
+     *
+     * То же правило и с той же оговоркой, что у обычной выдачи выше: фильтр применяется
+     * только к ЖИВОЙ выдаче, потому что прохождение по снимку состав не меняет (PRD-15).
+     * Уровни собираются здесь, мимо `drawSection`, — и правило сюда сначала не доехало
+     * вовсе: у опубликованного теста его выполнял снимок, а черновик выдавал снятое
+     * задание. Дефект найден 2026-09-14 разбором техдолга.
+     */
+    const excludedFromDelivery = new Set<string>();
+    if (snapshotId === null) {
+      for (const row of await storage.getTestQuestionScoring(test.id)) {
+        if (row.excludedFromDelivery) excludedFromDelivery.add(row.questionId);
+      }
+    }
+
+    /**
+     * PRD-55 (FR-26): накопленные выдачи за окно наблюдения.
+     *
+     * Читаются ОДНИМ запросом на попытку — как в обычной выдаче: тем у адаптивного теста
+     * бывает несколько, и запрос на тему превратил бы старт в пачку обращений к базе. Сбой
+     * чтения не имеет права ронять старт: без счётчиков веса равны, то есть выдача
+     * деградирует до прежней случайной (FR-17).
+     */
+    const topicIds = adaptiveSettings.map((settings) => settings.topicId);
+    const questionsByTopic = new Map<string, Question[]>();
+    for (const topicId of topicIds) {
+      questionsByTopic.set(
+        topicId,
+        (await src.getQuestionsByTopic(topicId))
+          .filter((question) => !excludedFromDelivery.has(question.id))
+          // «Сценарий в ИС»: адаптивный обход сценарий не играет — см. `isDeliverable`.
+          .filter((question) => isDeliverable(question.type, "adaptive")),
+      );
+    }
+
+    let exposureCounts = new Map<string, number>();
+    try {
+      const windowStart = new Date();
+      windowStart.setMonth(windowStart.getMonth() - config.delivery.exposureWindowMonths);
+      exposureCounts = await storage.getDeliveryCounts(
+        [...questionsByTopic.values()].flat().map((question) => question.id),
+        windowStart,
+      );
+    } catch (error) {
+      logger.warn("PRD-55: счётчики выдач не прочитаны — " + (error as Error).message);
+    }
+
     // Build adaptive variant
     const adaptiveTopics: any[] = [];
 
@@ -761,7 +1291,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
 
       if (topicLevels.length === 0) continue;
 
-      const allQuestions = await src.getQuestionsByTopic(topicSettings.topicId);
+      const allQuestions = questionsByTopic.get(topicSettings.topicId) ?? [];
       const levelsState: any[] = [];
 
       for (const level of topicLevels) {
@@ -772,8 +1302,22 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
           return difficulty >= level.minDifficulty && difficulty <= level.maxDifficulty;
         });
 
-        const shuffled = levelQuestions.sort(() => Math.random() - 0.5);
-        const selected = shuffled.slice(0, level.questionsCount);
+        /**
+         * PRD-55 (FR-12): вес считается ВНУТРИ пула отбора — здесь это полоса трудности
+         * уровня. Шкала сравнительная: она отвечает на «какое из ЭТИХ заданий выдавалось
+         * реже», и горячее задание лёгкого уровня не имеет права отодвинуть свежее задание
+         * сложного — они никогда не конкурируют между собой.
+         *
+         * До этого уровень отбирался `sort(() => Math.random() - 0.5)`: и поправки не знал,
+         * и перестановку давал неравномерную. Банк уровня узок — полоса трудности отсекает
+         * большую часть темы, — поэтому выработка головы здесь заметнее, чем в обычной выдаче.
+         */
+        const selected = weightedPick(
+          levelQuestions,
+          level.questionsCount,
+          computeWeights(levelQuestions.map((q) => q.id), exposureCounts),
+          Math.random,
+        );
         // PRD-30 §6.3: ordering applies INSIDE the level — which questions the
         // level got (the random pick above) and the order of the levels
         // themselves are not touched.
@@ -856,6 +1400,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     if (firstQuestionId) {
       const questions = await src.getQuestionsByIds([firstQuestionId]);
       firstQuestion = questions[0] || null;
+      await recordAdaptiveDelivery(firstQuestionId, test.id);
     }
 
     res.status(201).json({
@@ -922,6 +1467,19 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       return res.status(400).json({ error: "Unexpected question ID" });
     }
 
+    // PRD-67 FR-10: a topic whose time ran out or that was closed by a leave takes no
+    // more answers. The client moves on via `expire-topic-adaptive`; this refuses a
+    // request that did not.
+    const timerLocked = freezeLockedAnswers(
+      { [questionId]: answer },
+      {},
+      [{ topicId: currentTopic.topicId, questionIds: [questionId] }],
+      attempt.sectionTimerJson,
+    );
+    if (!Object.prototype.hasOwnProperty.call(timerLocked, questionId)) {
+      return res.status(409).json({ error: "section_locked", topicId: currentTopic.topicId });
+    }
+
     const questions = await src.getQuestionsByIds([questionId]);
     const question = questions[0];
     if (!question) {
@@ -932,6 +1490,12 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
     const scoring = await loadTestScoringContext(test.id, src);
     const isCorrect = checkAnswer(question, answer, scoring.resolve(question).scoring) === 1;
     const updatedAnswers = { ...((attempt.answersJson as any) || {}), [questionId]: answer };
+    // PRD-66 FR-09b: в адаптивном прохождении задание выдаётся по одному и читается прямо
+    // здесь, поэтому штамп снимается в момент ответа — он и есть момент выдачи.
+    variant.psychoHashes = { ...(variant.psychoHashes || {}), [questionId]: resolvePsychoHash(question) };
+    // PRD-66 FR-37a: время на задании приходит той же точкой — другой у адаптива нет.
+    const adaptiveLatency = sanitizeLatency(req.body?.latencyMs);
+    if (adaptiveLatency) variant.latencyMs = adaptiveLatency;
 
     currentLevel.answeredQuestionIds.push(questionId);
     if (isCorrect) {
@@ -1057,6 +1621,8 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       finishedAt: isFinished ? new Date() : null,
     });
 
+    if (nextQuestionData?.id) await recordAdaptiveDelivery(nextQuestionData.id, test.id);
+
     const response: any = {
       isCorrect,
       nextQuestion: nextQuestionData,
@@ -1072,7 +1638,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       // у стандартного режима и у рантайма пакета. Отдавать один `feedback` было
       // нельзя: у вопроса с условной обратной связью редактор обнуляет это поле, и
       // ученик на вебе получал вердикт без пояснения.
-      response.feedback = feedbackTextFor(question, isCorrect);
+      response.feedback = feedbackTextFor(question, isCorrect, answer);
     }
 
     res.json(response);
@@ -1172,6 +1738,63 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
   }
 });
 
+// POST /api/attempts/:attemptId/finish-adaptive — the WHOLE-TEST timer ran out.
+//
+// The standard flow ends such a run through `/finish`; the adaptive flow had no
+// server-side counterpart at all, so the host finished the run in its own state and
+// walked the learner to the result page of an attempt that was still open —
+// `finished_at` and `result_json` NULL, «Результаты не найдены», the run lost.
+//
+// Unlike `expire-topic-adaptive` this does NOT advance anything: the run is over, so
+// whatever topics and levels were not reached simply stay unplayed, and the result is
+// computed from the answers already stored (nothing new can arrive after the buzzer).
+// Idempotent: a duplicate/retried request on a finished attempt returns the stored result.
+router.post("/attempts/:attemptId/finish-adaptive", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) {
+      return res.status(404).json({ error: "Attempt not found" });
+    }
+    if (attempt.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const variant = attempt.variantJson as any;
+    if (variant?.mode !== "adaptive") {
+      return res.status(400).json({ error: "This is not an adaptive attempt" });
+    }
+
+    if (attempt.finishedAt) {
+      return res.json({ isFinished: true, result: attempt.resultJson ?? null });
+    }
+
+    // PRD-15 block B: measurements read questions/adaptive config from the pinned
+    // snapshot, the same source the attempt was delivered from.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+
+    const result = await buildAdaptiveResult(
+      variant,
+      test.id,
+      src,
+      (attempt.answersJson ?? {}) as Record<string, unknown>,
+    );
+
+    await storage.updateAttempt(attempt.id, {
+      resultJson: result,
+      finishedAt: new Date(),
+    });
+
+    res.json({ isFinished: true, result });
+  } catch (error) {
+    logger.error("Finish adaptive attempt error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to finish attempt" });
+  }
+});
+
 // POST /api/attempts/:attemptId/section-timer — пинг «я в этом разделе».
 //
 // The SERVER owns the remaining time of a section (see services/section-timer):
@@ -1187,15 +1810,27 @@ router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.ta
     if (attempt.finishedAt) return res.status(400).json({ error: "Attempt already finished" });
 
     const topicId = typeof req.body?.topicId === "string" ? req.body.topicId : null;
+    // PRD-67: identity of the page run. A different one while a section is open is how
+    // the server learns the page was reloaded or reopened. Bounded so a forged body cannot
+    // bloat the attempt row.
+    const rawRunId = req.body?.runId;
+    const runId = typeof rawRunId === "string" && rawRunId.length > 0 && rawRunId.length <= 64
+      ? rawRunId
+      : null;
     // The limit comes from the TEST, never from the client: a forged body must not
-    // be able to widen a section's budget.
-    let limitMinutes: number | null = null;
-    if (topicId) {
-      const sections = await storage.getTestSections(attempt.testId);
-      limitMinutes = sections.find((s) => s.topicId === topicId)?.timeLimitMinutes ?? null;
-    }
+    // be able to widen a section's budget. Read through the attempt's delivery source:
+    // raw `test_sections` has no scenario items (`scenario:<id>`), so an item's own limit
+    // went unseen and the web ran its scenario under the test limit (host parity, Г5);
+    // the source also pins the limit to the version the attempt plays (PRD-15 block B).
+    const sections = await (await dataSourceForAttempt(attempt.snapshotId)).getTestSections(attempt.testId);
+    const limitMinutes = topicId
+      ? (sections.find((s) => s.topicId === topicId)?.timeLimitMinutes ?? null)
+      : null;
+    // PRD-67: the leave policy is read from the version the attempt plays (snapshot or
+    // live), like every other runtime setting of the attempt.
+    const policy = await leavePolicyForAttempt(attempt.snapshotId, attempt.testId);
 
-    const view = await pingSection(attempt.id, topicId, limitMinutes);
+    const view = await pingSection(attempt.id, topicId, limitMinutes, runId, policy);
     if (!view) return res.status(400).json({ error: "Attempt already finished" });
     res.json(view);
   } catch (error) {
@@ -1220,12 +1855,19 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
       return res.status(400).json({ error: "Attempt already finished" });
     }
 
-    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions } = req.body;
+    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions, latencyMs, routerState } = req.body;
 
     const updatedVariant: any = {
       ...(attempt.variantJson as any),
       currentIndex,
     };
+
+    // PRD-66 FR-37a: время, проведённое на каждом задании, — материал анализа пунктов: оно
+    // отличает задание, над которым думают, от того, что пролистывают не читая. Живёт рядом с
+    // составом выдачи, а не в карте ответов: та плоская, «задание -> значение ответа», и второй
+    // величине в ней места нет. Клиент, который поля не шлёт, прежде измеренное НЕ стирает.
+    const measured = sanitizeLatency(latencyMs);
+    if (measured) updatedVariant.latencyMs = measured;
 
     if (shuffleMappings) {
       updatedVariant.shuffleMappings = shuffleMappings;
@@ -1245,8 +1887,21 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
       updatedVariant.sectionPositions = sectionPositions;
     }
 
+    // Состояние хаба роутера: возобновление продолжает с хаба или изнутри пункта, как в пакете.
+    const hub = sanitizeRouterState(routerState);
+    if (hub) updatedVariant.routerState = hub;
+
+    // PRD-67 FR-10: a locked section (time spent or closed by a leave) keeps the answers
+    // stored before the lock — the lock is enforced here, not only painted by the client.
+    const frozenAnswers = freezeLockedAnswers(
+      answers,
+      attempt.answersJson as Record<string, unknown> | null,
+      ((attempt.variantJson as TestVariant | null)?.sections ?? []),
+      attempt.sectionTimerJson,
+    );
+
     await storage.updateAttempt(attempt.id, {
-      answersJson: answers,
+      answersJson: frozenAnswers,
       variantJson: updatedVariant,
     });
 
@@ -1291,12 +1946,15 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
         // PRD-12 (FR-6): structure (content pages + flow mode) for the resumed run.
         ...(await flowPayload(src, test)),
         questions: await questionsForClient(src, test, allQuestions),
+        sectionConditions: await sectionConditionsPayload(src, test.id, variant, allQuestions),
+        passDecisionPolicy: test.passDecisionPolicy ?? null,
       },
       savedAnswers: inProgressAttempt.answersJson || {},
       currentIndex: variant.currentIndex || 0,
       // PRD-19 (Block B): restore per-question statuses; absent = all-'unanswered'.
       questionStatus: variant.questionStatus || {},
       sectionPositions: variant.sectionPositions || {},
+      routerState: (variant as { routerState?: unknown }).routerState ?? null,
     });
   } catch (error) {
     logger.error("Resume attempt error: " + (error as Error).message);
@@ -1341,17 +1999,27 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
       questions: questions.map((q) => {
         const effective = scoring.resolve(q);
         return {
+          id: q.id,
           type: q.type as QuestionType,
           correct: (q.correctJson ?? {}) as CorrectData,
           scoring: effective.scoring,
           points: effective.points,
           answer: (answers ?? {})[q.id] as Answer,
+          // PRD-50 FR-15: ключи разреза этого вопроса. Пустой список не кладём,
+          // чтобы результат теста без тегов не менялся ни на байт.
+          ...(Array.isArray(q.tags) && q.tags.length ? { axisKeys: { tag: q.tags } } : {}),
         };
       }),
     };
     // Same overall pass rule as /finish so a topic with an inherit/none rule
     // resolves its verdict identically (resolveTopicRule -> overall).
-    const agg = aggregateStandardResult({ sections: [aggSection], overallPassRule: test.overallPassRuleJson });
+    // PRD-50 FR-53: гейт подтем передаётся и сюда — иначе вердикт темы на экране итогов
+    // раздела разошёлся бы с тем же вердиктом на экране итогов теста.
+    const agg = aggregateStandardResult({
+      sections: [aggSection],
+      overallPassRule: test.overallPassRuleJson,
+      breakdownGateEnabled: test.breakdownGateEnabled === true,
+    });
     const tr = agg.topicResults[0];
     // PRD-49: надписи ЭТОГО экрана (`section.eyebrow`, `facts.*`). Разрешает СЕРВЕР — тем
     // же адаптером и против того же манифеста, что и надписи экрана итогов, — а браузер
@@ -1393,8 +2061,15 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const { answers } = req.body;
     const variant = attempt.variantJson as TestVariant;
+    // PRD-67 FR-10: grade the answers a locked section had BEFORE its lock, whatever the
+    // finishing request carries for it.
+    const answers = freezeLockedAnswers<Answer>(
+      req.body?.answers,
+      attempt.answersJson as Record<string, Answer> | null,
+      variant?.sections ?? [],
+      attempt.sectionTimerJson,
+    );
     // PRD-15 block B: grade against the pinned snapshot, not the live bank.
     const src = await dataSourceForAttempt(attempt.snapshotId);
     const test = await src.getTest(attempt.testId);
@@ -1423,9 +2098,14 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       recommendedAssets: { title: string; url: string }[];
       feedbackTexts: string[];
     }>[] = [];
+    // PRD-66 FR-09b: редакция заданий НА МОМЕНТ ЗАВЕРШЕНИЯ — для сверки с той, что была
+    // выдана. Собирается попутно: вопросы всё равно читаются здесь, отдельного запроса
+    // сверка не стоит.
+    const stampsAtFinish: Record<string, string> = {};
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
       const questions = await src.getQuestionsByIds(variantSection.questionIds);
+      Object.assign(stampsAtFinish, stampsOfDelivery(questions));
       const courses = await src.getTopicCourses(variantSection.topicId);
       const events = await src.getTopicEvents(variantSection.topicId);
       // PRD-32: PDF attachments of the topic AND of this test's section over it — two
@@ -1442,15 +2122,38 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         formId: variantSection.formId ?? null,
         // «Тест пройден, если»: the `*_required_topics*` policies gate on this flag.
         required: section?.required ?? true,
+        // Пороги подтем в расчёт не идут: вердикт темы — её собственное правило
+        // (решение владельца 2026-09-03). Сохранённые пороги остаются легаси-данными.
+        // PRD-50 FR-11: блок разделов, в котором раздел был ВЫДАН. Из того же источника,
+        // что и порог раздела: попытка обязана помнить принадлежность, с которой её
+        // оценивали, даже если автор перегруппирует тест завтра.
+        groupKey: section?.groupKey ?? null,
         questions: questions.map((q) => {
           questionTypes[q.id] = q.type as QuestionType;
           const effective = scoring.resolve(q);
+          // «Сценарий в ИС»: присланному исходу сервер не верит — его подделать проще, чем
+          // ответ с эталоном. Протокол переигрывается тем же движком по хранимому сценарию, и
+          // оценивается и сохраняется ТОТ результат (`shared/sim/replay`).
+          if (isSimulation(q.type) && answers && answers[q.id] != null) {
+            const scenario = (q.dataJson as { scenario?: Scenario } | null)?.scenario;
+            if (scenario) {
+              const verdict = replayRun(scenario, answers[q.id]);
+              if (!verdict.consistent) {
+                logger.warn(`Сценарий ${q.id}: присланный результат расходится с протоколом (попытка ${attempt.id})`);
+              }
+              answers[q.id] = verdict.result as unknown as Answer;
+            }
+          }
           return {
-            type: q.type as QuestionType,
+            id: q.id,
+          type: q.type as QuestionType,
             correct: (q.correctJson ?? {}) as CorrectData,
             scoring: effective.scoring,
             points: effective.points,
             answer: answers?.[q.id] as Answer,
+            // PRD-50 FR-15: ключи разреза этого вопроса. Пустой список не кладём,
+            // чтобы результат теста без тегов не менялся ни на байт.
+            ...(Array.isArray(q.tags) && q.tags.length ? { axisKeys: { tag: q.tags } } : {}),
           };
         }),
         extra: {
@@ -1465,6 +2168,14 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       });
     }
 
+    // PRD-57 FR-28q: авторские выражения считаются ДО оценки, в рабочем потоке с
+    // бюджетом. Node однопоточен: без этого одно плохое выражение останавливает
+    // обслуживание всех, а не одну попытку.
+    await attachRegexVerdicts(
+      aggSections.flatMap((section) => section.questions),
+      config.limits.answerCheckBudgetMs,
+    );
+
     const agg = aggregateStandardResult({
       sections: aggSections,
       overallPassRule: test.overallPassRuleJson,
@@ -1473,6 +2184,10 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       // published with. A snapshot taken before the column existed carries none,
       // and the engine then falls back to the pre-policy verdict.
       passDecisionPolicy: test.passDecisionPolicy,
+      // PRD-50 FR-53: учитывать ли подтемы в вердикте темы. Читается из ТОЙ ЖЕ версии
+      // теста, против которой попытка и оценивается (снимок или живая): попытка,
+      // приколотая к снимку без этого поля, судится как судилась.
+      breakdownGateEnabled: test.breakdownGateEnabled === true,
     });
     const totalCorrect = agg.correct;
     const totalQuestions = agg.totalQuestions;
@@ -1494,7 +2209,17 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       recommendedEvents: t.extra!.recommendedEvents,
       recommendedAssets: t.extra!.recommendedAssets,
       feedbackTexts: t.extra!.feedbackTexts,
+      breakdown: t.breakdown,
+      // PRD-50 FR-11: ключ блока ставится ТОЛЬКО у раздела, который в блок попал —
+      // `aggregateStandardResult` возвращает поле лишь тогда. Результат теста без блоков
+      // поэтому остаётся прежним, вплоть до отсутствия ключа в JSON.
+      ...(t.groupKey ? { groupKey: t.groupKey } : {}),
     }));
+
+    // PRD-50 FR-35/FR-36: both scopes in ONE flat array — the engine returns the
+    // test-scope records on `breakdowns` and the section-scope ones on each topic
+    // result, and `tag()` needs to reach either.
+    const allBreakdowns = [...agg.breakdowns, ...agg.topicResults.flatMap((t) => t.breakdown)];
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
     // shared engines, mirroring the SCORM runtime. No-op when the test has none.
@@ -1515,6 +2240,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         {
           percent: overallPercent,
           topicResults: topicResults.map((t) => ({ ...t, code: topicCodeById.get(t.topicId) ?? null })),
+          breakdowns: allBreakdowns,
         },
       );
       if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
@@ -1540,11 +2266,42 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       ...(scaleResults ? { scaleResults } : {}),
       ...(resultVariables ? { resultVariables } : {}),
       ...(status ? { status } : {}),
+      // PRD-50 FR-39: records of the TEST scope travel with the attempt. Section-scope
+      // ones already live on the topics (`topicResults[].breakdown`), so only the test
+      // scope goes here — an empty list is not stored at all, so a tag-less test's result
+      // does not change by a single byte.
+      ...(agg.breakdowns.length ? { breakdowns: agg.breakdowns } : {}),
+      // PRD-57 (#43): исходы ответов сохраняются вместе со сводкой — ради них аналитика
+      // и перестаёт пересчитывать верность по живым вопросам. Поля здесь перечислены
+      // поимённо, поэтому незаявленное срезается молча: ровно так это поле и потерялось
+      // при первой приёмке.
+      ...(agg.questionOutcomes?.length ? { questionOutcomes: agg.questionOutcomes } : {}),
+      // PRD-57 FR-36: признак завершённости оценки хранится ВМЕСТЕ с результатом. Поле,
+      // посчитанное агрегатом, но не перенесённое сюда, срезается без единой ошибки —
+      // `AttemptResult` перечисляет поля поимённо, и это уже подводило на Э3.
+      gradingComplete: agg.gradingComplete,
     };
+
+    // PRD-66 FR-09b: правка задания посреди прохождения обесценивает штамп выдачи —
+    // сверка отмечает это до того, как наблюдение уйдёт в статистику.
+    const reconciled = reconcileStamps(variant.psychoHashes, stampsAtFinish);
+    // PRD-66 FR-37a: попытку часто завершают прямо с вопроса, и последний заход приходит
+    // именно здесь — без него время этого задания осталось бы недосчитанным.
+    const measured = sanitizeLatency(req.body?.latencyMs);
+    const variantChanged = reconciled || measured;
 
     await storage.updateAttempt(attempt.id, {
       answersJson: answers,
       resultJson: result,
+      ...(variantChanged
+        ? {
+            variantJson: {
+              ...variant,
+              ...(reconciled ? { psychoHashes: reconciled } : {}),
+              ...(measured ? { latencyMs: measured } : {}),
+            },
+          }
+        : {}),
       finishedAt: new Date(),
     });
 
@@ -1617,6 +2374,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     // `variables`): у сборщика в нём не было `indicators`, и скачивание отчёта у теста
     // со шкалами или показателями падало.
     let measures: MeasuresInput | undefined;
+    let postResultsPages: Awaited<ReturnType<typeof postResultsPagesForAttempt>> = [];
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1682,6 +2440,9 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // block). «Скачать отчёт» is on now that the web host produces the report from
       // the SHARED generator (shared/report/*) — the same PDF the package hands out,
       // unless the author switched the report off for this test (`report.enabled`).
+      // Страницы «После теста» за «Итогами теста»: экран итогов ведёт к ним «Далее».
+      // Только у обычного итога — адаптивный экран пакета их тоже не предлагает.
+      if (resultJson.mode !== "adaptive") postResultsPages = await postResultsPagesForAttempt(attempt);
       if (render?.context && typeof render.context === "object") {
         const ctx = render.context as { result?: Record<string, unknown> };
         if (ctx.result) {
@@ -1691,7 +2452,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             // Attempts alone — the adaptive footer re-runs the test rather than
             // offering a remedy, so a pass does not close it (see results-nav).
             canRetake,
-            hasPostPages: false,
+            hasPostPages: postResultsPages.length > 0,
             finishLabel: "К списку тестов",
           });
         }
@@ -1710,10 +2471,15 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // ТОТ ЖЕ сборщик, что рисует экран, и ему нужны те же два факта, которых нет в
       // результате попытки, — обратная связь теста и наличие порога. Отчёт строит
       // браузер, поэтому они едут с ВХОДОМ отчёта, а не параметром сборки.
+      //
+      // Материал дополняется параметрами оформления ЭТОГО экрана (`render.params`, уже с
+      // умолчаниями манифеста) — тем же правилом, что и измерения выше: окраску полос подтем
+      // документ обязан взять ту же, что у экрана, с которого его скачали.
+      const reportMaterial = material ? completeMeasuresSource(material, render?.params, resultJson) : material;
       report =
         resultJson.mode === "adaptive"
-          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta, material)
-          : buildReportInput(resultJson, test?.title || "", reportMeta, material);
+          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta, reportMaterial)
+          : buildReportInput(resultJson, test?.title || "", reportMeta, reportMaterial);
 
       // PRD-27 Фаза 2: страницу отчёта рисует МАКЕТ шаблона. Активный шаблон, не
       // объявивший нужного вида, отчёта не лишает: макет берётся из «Стандартного», а
@@ -1748,6 +2514,29 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         values: (test?.designSettingsJson as DesignSettings | null)?.labels ?? null,
         overrides: (deliveredTest?.reportSettingsJson as ReportSettings | null)?.labels ?? null,
       };
+      // PRD-51 §5.3: документ отчёта для ВЕБ-выдачи. Строки берутся из того же источника,
+      // что и остальная выдача попытки: у попытки, прикреплённой к снапшоту, — из него.
+      // Иначе слушатель, скачавший документ спустя месяц, получил бы состав, собранный
+      // автором уже после его попытки.
+      const documentMode = resultJson.mode === "adaptive" ? "adaptive" : "standard";
+      const snapshotRows = attempt.snapshotId
+        ? ((await storage.getSnapshot(attempt.snapshotId))?.contentJson as
+            | { reportBlocks?: Array<Record<string, unknown>> }
+            | undefined)?.reportBlocks
+        : undefined;
+      const rawRows =
+        snapshotRows ?? (await storage.listReportBlocks(attempt.testId, documentMode));
+      const documentRows = (rawRows as Array<Record<string, unknown>>)
+        .filter((r) => !r.mode || r.mode === documentMode)
+        .map((r) => ({
+          block: String(r.block ?? ""),
+          sortOrder: Number(r.sortOrder ?? 0),
+          enabled: r.enabled !== false,
+          templateKey: typeof r.templateKey === "string" ? r.templateKey : null,
+          valuesJson: (r.valuesJson ?? {}) as Record<string, unknown>,
+          settingsJson: (r.settingsJson ?? {}) as Record<string, unknown>,
+        }))
+        .filter((r) => r.block.length > 0);
       reportRender = readReportRenderPayload(
         activeDir,
         reportKind,
@@ -1756,6 +2545,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         activeDir,
         templateId,
         reportLabelLayers,
+        documentRows,
       );
       if (!reportRender) {
         const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
@@ -1771,6 +2561,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             activeDir,
             "default",
             reportLabelLayers,
+            documentRows,
           );
         }
       }
@@ -1791,6 +2582,8 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // в отчёте; включает ли он диаграмму — решает СВОЙ переключатель варианта
       // отчёта, который лежит в `reportRender.values`.
       measures,
+      // Страницы «После теста» за «Итогами теста»: «Далее» экрана итогов ведёт к ним.
+      postResultsPages,
       attemptsInfo:
         maxAttempts !== null
           ? {
@@ -1889,6 +2682,26 @@ router.get("/learner/attempts", requirePermission("attempts.self.read"), async (
 });
 
 // ===== Helper Functions =====
+
+/**
+ * PRD-55 / PRD-56 FR-20: записать выдачу вопроса адаптивного прогона.
+ *
+ * У адаптива нет состава, зафиксированного на старте: уровень решает, какой вопрос будет
+ * следующим, и большая часть вопросов уровня так и не показывается. Поэтому выдачей здесь
+ * считается ПОКАЗ — первый вопрос на старте и каждый следующий, отданный в ответе. Вопрос
+ * показывается один раз за прогон, так что пара «попытка × задание» и здесь даёт одну выдачу
+ * (FR-03). Сбой счётчика не роняет прохождение — как и у обычного старта.
+ *
+ * @param questionId показанный вопрос
+ * @param testId тест прогона
+ */
+async function recordAdaptiveDelivery(questionId: string, testId: string): Promise<void> {
+  try {
+    await storage.recordDeliveries([questionId], testId, new Date());
+  } catch (error) {
+    logger.warn("PRD-55: выдача адаптивного вопроса не записана — " + (error as Error).message);
+  }
+}
 
 async function getNextQuestionData(level: any, topic: any, questionIndex: number, storage: any) {
   const questionId = level.questionIds[questionIndex];
@@ -2047,6 +2860,47 @@ async function buildAdaptiveResult(
     recommendedAssets: { title: string; url: string }[];
   }>({ topics });
 
+  // PRD-50 FR-17: выданные элементы адаптивного прогона — каждый вопрос, который лестница
+  // действительно задала, отнесённый к теме, которая его задала. Читаются БЕЗУСЛОВНО, а не
+  // только под шкалы: записи сохраняются вместе с попыткой (FR-39), а экран итогов рисуется
+  // из сохранённого результата.
+  const answeredIds = Object.keys(answers);
+  const answeredQuestions = answeredIds.length > 0 ? await storage.getQuestionsByIds(answeredIds) : [];
+  const questionById = new Map<string, any>(answeredQuestions.map((q: any) => [q.id, q]));
+  // PRD-15 block D: тем же разрешением цены/ступеней, что и стандартная выдача, — иначе
+  // «верно» здесь и «верно» в счётчике уровня разошлись бы на ступенчатом вопросе.
+  const adaptiveScoring = await loadTestScoringContext(testId, storage);
+  const breakdownItems: BreakdownItem[] = [];
+  for (const topic of variant.topics as any[]) {
+    for (const level of topic.levelsState as any[]) {
+      for (const qId of level.answeredQuestionIds as string[]) {
+        const q = questionById.get(qId);
+        if (!q || !Array.isArray(q.tags) || q.tags.length === 0) continue;
+        // Цена вопроса в адаптиве равна единице — тот же пересказ, что делает
+        // `adaptiveResultAsStandard` для итогов (earnedPoints = correct), и тот же
+        // двоичный признак, каким лестница наращивает `correctCount`.
+        const correct = checkAnswer(q, (answers as Record<string, unknown>)[qId], adaptiveScoring.resolve(q).scoring) === 1;
+        breakdownItems.push({
+          sectionId: topic.topicId,
+          axisKeys: { tag: q.tags },
+          earned: correct ? 1 : 0,
+          possible: 1,
+          answered: true,
+        });
+      }
+    }
+  }
+  // PRD-50 §16: общее правило прохождения теста — ЕДИНСТВЕННЫЙ порог, которым адаптив может
+  // судить подтемы: у ступени лестницы своего порога нет. Тот же столбец, что читает
+  // стандартная ветка (`tests.overall_pass_rule_json`); нет правила — подтемы молчат.
+  const adaptiveTest = await storage.getTest(testId);
+  const flat = adaptiveResultAsStandard(
+    aggregated,
+    breakdownItems,
+    adaptiveTest?.overallPassRuleJson ?? null,
+  );
+  const breakdownByTopic = new Map(flat.topicResults.map((t) => [t.topicId, t.breakdown]));
+
   // issue #33: scales and indicators of THIS attempt, through the SAME shared engines the
   // standard `/finish` runs. No-op for a test that declares neither — an adaptive result
   // then keeps exactly the shape it has always had, and attempts finished before this
@@ -2058,14 +2912,13 @@ async function buildAdaptiveResult(
     // Types of the questions actually ANSWERED: the scale engine needs them to decide
     // which measurement units fired, and it bounds `percent` normalization by the
     // DELIVERED set — which in the adaptive mode is precisely what the ladder asked.
-    const answeredIds = Object.keys(answers);
-    const answeredQuestions = answeredIds.length > 0 ? await storage.getQuestionsByIds(answeredIds) : [];
+    // The rows themselves are the ones already read above for the breakdown items.
     const questionTypes: Record<string, QuestionType> = {};
     for (const q of answeredQuestions) questionTypes[q.id] = q.type as QuestionType;
     // The formulas of PRD-2 speak percent / score / topicById(...).passed — words the
     // level ladder does not have. The shared restatement gives them those words, and it
-    // is the very one the package feeds them through (`getAdaptiveResultForScorm`).
-    const flat = adaptiveResultAsStandard(aggregated);
+    // is the very one the package feeds them through (`getAdaptiveResultForScorm`) — see
+    // `flat` above, computed once with the breakdown items.
     const topicCodeById = new Map(
       ((await storage.getTopics()) as Array<{ id: string; code?: string | null }>).map(
         (t) => [t.id, t.code ?? null] as const,
@@ -2074,6 +2927,8 @@ async function buildAdaptiveResult(
     const computation = computeAttemptResult(scoringConfig, answers as Record<string, Answer>, questionTypes, {
       percent: flat.percent,
       topicResults: flat.topicResults.map((t) => ({ ...t, code: topicCodeById.get(t.topicId) ?? null })),
+      // PRD-50 FR-35/FR-36: обе области одним массивом, как в стандартной ветке.
+      breakdowns: [...flat.breakdowns, ...flat.topicResults.flatMap((t) => t.breakdown)],
     });
     if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
     if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;
@@ -2092,9 +2947,14 @@ async function buildAdaptiveResult(
       ...t,
       feedbackTexts: extra?.feedbackTexts ?? [],
       recommendedAssets: extra?.recommendedAssets ?? [],
+      // PRD-50 FR-17/FR-39: записи области этой темы — тем же путём, каким сюда попадают
+      // тексты и вложения: они едут ВМЕСТЕ с попыткой, потому что экран рисуется из
+      // сохранённого результата.
+      breakdown: breakdownByTopic.get(t.topicId) ?? [],
     })),
     ...(scaleResults ? { scaleResults } : {}),
     ...(resultVariables ? { resultVariables } : {}),
+    ...(flat.breakdowns.length ? { breakdowns: flat.breakdowns } : {}),
   };
 }
 

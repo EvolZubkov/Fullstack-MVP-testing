@@ -17,8 +17,27 @@ function initAdaptiveTest() {
         return q.difficulty >= level.minDifficulty && q.difficulty <= level.maxDifficulty;
       });
 
-      // Shuffle and select questionsCount
-      var selectedQuestions = shuffle(eligibleQuestions.slice()).slice(0, level.questionsCount);
+      /**
+       * PRD-55 (FR-28): отбор ВЗВЕШЕН по экспозиции, а не случаен.
+       *
+       * Счётчиков у пакета нет — вес запечён в `TEST_DATA` на момент сборки (`exposureWeight`),
+       * нормированный по теме; отсутствие поля означает единицу, то есть прежнее поведение для
+       * пакетов, собранных до внедрения (FR-30). Шкала сравнительная, поэтому внутри полосы
+       * трудности уровня отношение весов работает так же, как в разделе обычного теста.
+       *
+       * Здесь была тасовка всего пула: уровень не знал поправки вовсе, и его узкий банк —
+       * полоса трудности отсекает большую часть темы — вырабатывался головой.
+       */
+      var levelWeights = new Map();
+      eligibleQuestions.forEach(function (q) {
+        levelWeights.set(q.id, q.exposureWeight === undefined ? 1 : q.exposureWeight);
+      });
+      var selectedQuestions = weightedPick(
+        eligibleQuestions.slice(),
+        level.questionsCount,
+        levelWeights,
+        Math.random,
+      );
       
       return {
         levelIndex: level.levelIndex,
@@ -229,9 +248,11 @@ function submitAdaptiveAnswer(questionId, answer) {
     options: answerOptions,
     leftItems: leftItems,
     rightItems: rightItems,
-    items: rankingItems
+    items: rankingItems,
+    // Время на задании — тот же накопитель, что и в обычном режиме.
+    latencyMs: (typeof TBQuestionTime !== 'undefined') ? TBQuestionTime.totalMsFor(question.id) : null
   });
-  
+
   console.log('Answer correct:', isCorrect);
 
   // Update level state
@@ -550,6 +571,48 @@ function buildAdaptiveResult() {
 }
 
 /**
+ * PRD-50 FR-17: the delivered items of an adaptive run, in the shape the shared breakdown
+ * engine takes.
+ *
+ * The ladder has no per-question price — one asked question is worth one point, the very
+ * restatement `adaptiveResultAsStandard` performs for the totals — so `possible` is 1 and
+ * `earned` is 1 only on a fully correct answer, the same binary the level's `correctCount`
+ * is grown by. Untagged questions are skipped, so a package whose adaptive topics carry no
+ * tags produces an empty list and nothing downstream changes (FR-18).
+ *
+ * `checkAnswer` lives in `render/resultsPage.js` — a sibling in the same flat bundle. The
+ * `typeof` guard is not decoration: the concatenation order is not a contract, and a missing
+ * grader must cost the breakdown, not the whole results screen.
+ *
+ * @returns {Array} Breakdown items for `TBTemplate.adaptiveResultAsStandard`.
+ */
+function adaptiveBreakdownItems() {
+  var items = [];
+  if (!state.adaptiveState || !state.adaptiveState.topics) return items;
+  if (typeof checkAnswer !== 'function') return items;
+  state.adaptiveState.topics.forEach(function (topic) {
+    var topicData = TEST_DATA.adaptiveTopics.find(function (t) {
+      return t.topicId === topic.topicId;
+    });
+    if (!topicData) return;
+    topic.levelsState.forEach(function (level) {
+      (level.answeredQuestionIds || []).forEach(function (qId) {
+        var question = topicData.questions.find(function (q) { return q.id === qId; });
+        if (!question || !question.tags || !question.tags.length) return;
+        items.push({
+          sectionId: topic.topicId,
+          axisKeys: { tag: question.tags },
+          earned: checkAnswer(question, state.answers[qId]) === 1 ? 1 : 0,
+          possible: 1,
+          answered: true
+        });
+      });
+    });
+  });
+  return items;
+}
+
+/**
  * The adaptive result restated in the STANDARD result's words — for the LMS report and
  * for the PRD-2 result-variable formulas, neither of which knows what a level is.
  *
@@ -564,5 +627,23 @@ function getAdaptiveResultForScorm() {
   if (!state.adaptiveState || !state.adaptiveState.result) {
     return null;
   }
-  return window.TBTemplate.adaptiveResultAsStandard(state.adaptiveState.result);
+  // PRD-50 §16: the test's OVERALL pass rule is the only threshold the adaptive mode can
+  // judge subtopics by — a ladder step has none of its own. Read from `TEST_DATA`, the very
+  // place the standard branch reads it from, so the two modes cannot judge a key differently.
+  var flat = window.TBTemplate.adaptiveResultAsStandard(
+    state.adaptiveState.result,
+    adaptiveBreakdownItems(),
+    (typeof TEST_DATA !== 'undefined' && TEST_DATA && TEST_DATA.overallPassRule) || null
+  );
+  // PRD-50 FR-35/FR-36: ONE flat array for `tag()`, assembled exactly as `calculateResults`
+  // assembles it in the standard mode — the shared engine returns the test scope on
+  // `breakdowns` and the section scopes on each topic result, and the accessor must reach
+  // either. `buildResultVarContext` reads this one field and nothing else.
+  var breakdowns = (flat.breakdowns || []).slice();
+  for (var i = 0; i < flat.topicResults.length; i++) {
+    var secEntries = flat.topicResults[i].breakdown || [];
+    for (var j = 0; j < secEntries.length; j++) breakdowns.push(secEntries[j]);
+  }
+  flat.breakdowns = breakdowns;
+  return flat;
 }

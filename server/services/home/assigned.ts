@@ -48,7 +48,10 @@ export async function buildAssigned(
   const built = await Promise.all(
     assigned.map(async (test) => {
       const sections = await storage.getTestSections(test.id);
-      const questionCount = sections.reduce((sum, s) => sum + (s.drawCount ?? 0), 0);
+      const questionCount = test.mode === "scenario"
+        // «Сценарий в ИС»: у теста «Сценарий» нет разделов — его задание один пункт-сценарий.
+        ? 1
+        : sections.reduce((sum, s) => sum + (s.drawCount ?? 0), 0);
       const attempts = await storage.getAttemptsByUserAndTest(userId, test.id);
       const inProgress = attempts.find((a) => a.finishedAt === null) ?? null;
       // PRD-31: the assignment is the unit of access, so both the counter and the

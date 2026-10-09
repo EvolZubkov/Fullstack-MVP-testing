@@ -15,11 +15,12 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { templateFile, templateLayouts } from "./helpers/template-roots";
 import { renderScreenInto } from "../shared/template/render-screen";
 import { buildResultContext } from "../shared/template/result-context";
 import { buildResultsNav } from "../shared/template/results-nav";
 
-const layoutsDir = path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts");
+const layoutsDir = templateLayouts("default");
 const resultsLayout = fs.readFileSync(path.join(layoutsDir, "results.html"), "utf8");
 const adaptiveLayout = fs.readFileSync(path.join(layoutsDir, "results.adaptive.html"), "utf8");
 /**
@@ -33,7 +34,7 @@ const adaptiveLayouts: Array<[string, string]> = [
   [
     "certification",
     fs.readFileSync(
-      path.join(process.cwd(), "templates", "certification", "layouts", "results.adaptive.html"),
+      templateFile("certification", "layouts/results.adaptive.html"),
       "utf8",
     ),
   ],
@@ -44,7 +45,7 @@ const standardLayouts: Array<[string, string]> = [
   ["default", resultsLayout],
   [
     "certification",
-    fs.readFileSync(path.join(process.cwd(), "templates", "certification", "layouts", "results.html"), "utf8"),
+    fs.readFileSync(templateFile("certification", "layouts/results.html"), "utf8"),
   ],
 ];
 

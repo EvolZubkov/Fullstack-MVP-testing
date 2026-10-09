@@ -154,3 +154,40 @@ describe("planImport", () => {
     }
   });
 });
+
+describe("planImport — пункты-сценарии роутера", () => {
+  /** Роутер: тема и пункт-сценарий на ней, общий порядок и правило разблокировки по ключам. */
+  function routerFixture(): TestTransferPackage {
+    const pkg = packageFixture();
+    const content = pkg.content as unknown as Record<string, unknown>;
+    (content.test as Record<string, unknown>).flowPolicyJson = {
+      mode: "router_by_topics",
+      router: {
+        itemOrder: ["scenario:old-scn", "topic:old-topic"],
+        sectionUnlockRules: { "scenario:old-scn": { mode: "after_sections_completed", sectionIds: ["old-topic"] } },
+      },
+    };
+    content.scenarios = [{ id: "old-scn", testId: "old-test", topicId: "old-topic", questionId: "old-q1" }];
+    return pkg;
+  }
+
+  it("перенумеровывает пункт, его тему и фиксированный сценарий", () => {
+    const plan = planImport(routerFixture(), { newId: idGen(), ownerId: "importer" });
+    const [item] = plan.scenarios ?? [];
+    expect(item.id).not.toBe("old-scn");
+    expect(item.testId).toBe(plan.test.id);
+    expect(item.topicId).toBe(plan.topics[0].id);
+    expect(item.questionId).toBe(plan.questionsByTopic[plan.topics[0].id][0].id);
+  });
+
+  it("составные ключи пунктов в порядке и правилах роутера следуют за идентификаторами", () => {
+    const plan = planImport(routerFixture(), { newId: idGen(), ownerId: "importer" });
+    const itemId = plan.scenarios?.[0].id;
+    const topicId = plan.topics[0].id;
+    const router = (plan.test as unknown as { flowPolicyJson: { router: Record<string, Record<string, unknown> | string[]> } }).flowPolicyJson.router;
+    expect(router.itemOrder).toEqual([`scenario:${itemId}`, `topic:${topicId}`]);
+    expect(router.sectionUnlockRules).toEqual({
+      [`scenario:${itemId}`]: { mode: "after_sections_completed", sectionIds: [topicId] },
+    });
+  });
+});

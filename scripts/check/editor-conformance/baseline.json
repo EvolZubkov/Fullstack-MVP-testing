@@ -1,0 +1,2338 @@
+[
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Все вопросы темы",
+    "index": 16,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Случайный",
+    "index": 21,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Квоты по подтемам (тегам)",
+    "index": 24,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Пороги по подтемам (тегам)",
+    "index": 26,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Подтема (тег вопроса)",
+    "index": 31,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Стратегия компании",
+    "index": 32,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Сколько вопросов",
+    "index": 33,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Режим квоты",
+    "index": 37,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Ровно",
+    "index": 38,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Не менее",
+    "index": 39,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Порог по подтеме",
+    "index": 40,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Не менее, %",
+    "index": 41,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Значение порога, %",
+    "index": 42,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Варианты теста",
+    "index": 52,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "table",
+    "text": "Вариант | Вопросов",
+    "index": 53,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Настроить варианты…",
+    "index": 54,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "button",
+    "text": "Перемешивание",
+    "index": 4,
+    "state": "composition",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "Как в тесте",
+    "index": 4,
+    "state": "composition",
+    "finding": "wf:test-order-value"
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 4,
+    "state": "scenario",
+    "finding": "data:scenario-pages"
+  },
+  {
+    "op": "missing",
+    "role": "banner",
+    "text": "Недоступно при включённом показе правильных ответов (раздел «Ограничения»): иначе ученик увидит правильный ответ и переправит свой.",
+    "index": 7,
+    "state": "rules",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "banner",
+    "text": "Недоступно при включённом показе правильных ответов (раздел «Ограничения»): нужно увидеть правильный ответ, прежде чем переходить дальше.",
+    "index": 10,
+    "state": "rules",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "banner",
+    "text": "Недоступно при включённом показе правильных ответов («Обратная связь и итоги» → «Во время теста»): иначе ученик увидит правильный ответ и переправит свой.",
+    "index": 7,
+    "state": "rules",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "banner",
+    "text": "Недоступно при включённом показе правильных ответов («Обратная связь и итоги» → «Во время теста»): нужно увидеть правильный ответ, прежде чем переходить дальше.",
+    "index": 10,
+    "state": "rules",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать уровень сложности при прохождении",
+    "index": 6,
+    "state": "rules-during",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "hint",
+    "text": "Что считает индикатор в шапке: выданные вопросы, страницы или ничего.",
+    "index": 3,
+    "state": "rules-during",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "hint",
+    "text": "Полоса заполнения под счётчиком в шапке.",
+    "index": 6,
+    "state": "rules-during",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "banner",
+    "text": "Уровень сложности показывает только адаптивный тест. Режим теста выбирается во вкладке «Основное».",
+    "index": 7,
+    "state": "rules-during",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 5,
+    "state": "rules-during",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "table",
+    "text": "Тема | Лимит",
+    "index": 7,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Разделять период по результату попытки",
+    "index": 19,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Разный период охлаждения в зависимости от того, пройден тест или нет.",
+    "index": 20,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "После неуспешной попытки, дней",
+    "index": 21,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "После успешной попытки, дней",
+    "index": 25,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Способ проверки (плагин)",
+    "index": 29,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "WebTutor: по названию курса",
+    "index": 30,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Название курса в WebTutor",
+    "index": 31,
+    "state": "rules-limits",
+    "finding": "data:webtutor-plugin-off"
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "По этому названию проверка находит прошлые попытки в WebTutor, поэтому оно должно совпадать точно. Если поле пустое, используется название теста.",
+    "index": 33,
+    "state": "rules-limits",
+    "finding": "data:webtutor-plugin-off"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "При ошибке проверки допуска",
+    "index": 34,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Разрешить старт",
+    "index": 35,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Заблокировать",
+    "index": 36,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Если проверку не удалось выполнить — открыть курс или показать экран блокировки.",
+    "index": 37,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Следующая попытка внутри назначения открывается не сразу.",
+    "index": 40,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Интервал, часов",
+    "index": 41,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "banner",
+    "text": "Период охлаждения действует между назначениями, ограничение между попытками — внутри одного назначения.",
+    "index": 45,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "hint",
+    "text": "Выключено — попытки внутри одного назначения идут подряд.",
+    "index": 19,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 18,
+    "state": "rules-limits",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 11,
+    "state": "scoring",
+    "finding": "main:prd50-gate-switch"
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Полосы по подтемам (тегам вопросов) на карточке темы: итоги раздела, итоги теста и отчёт. «Не показывать» убирает подытоги совсем и прячет два поля ниже.",
+    "index": 14,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Сводный блок печатает подтему, живущую в нескольких разделах, одной строкой по всему тесту. В адаптивном тесте карточка темы говорит подтверждённым уровнем и полос не печатает — там работает только сводный блок.",
+    "index": 19,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "heading",
+    "text": "Надписи и заголовки",
+    "index": 23,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Заголовок блока по темам",
+    "index": 28,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Пусто — печатается формулировка шаблона.",
+    "index": 32,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Заголовок блока по шкалам",
+    "index": 33,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Выключено — надпись не печатается на экране итогов и в отчёте.",
+    "index": 37,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Первый уровень",
+    "index": 21,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Заголовок рекомендаций",
+    "index": 26,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Второй уровень",
+    "index": 30,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подзаголовок сводки баллов",
+    "index": 31,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подзаголовок шкал",
+    "index": 35,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подзаголовок показателей",
+    "index": 39,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подзаголовок тем",
+    "index": 43,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Заголовок блока разреза",
+    "index": 47,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Группы рекомендаций",
+    "index": 51,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подпись группы курсов",
+    "index": 52,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подпись группы мероприятий",
+    "index": 56,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подпись группы материалов",
+    "index": 60,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Числа сводки",
+    "index": 64,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подпись числа вопросов",
+    "index": 65,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подпись числа верных",
+    "index": 69,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Подпись числа баллов",
+    "index": 73,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Карточка темы",
+    "index": 77,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Строка «Правильно»",
+    "index": 78,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Строка «Баллов»",
+    "index": 82,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Вердикт: пройдено",
+    "index": 86,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Вердикт: не пройдено",
+    "index": 90,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Вердикт: нет порога",
+    "index": 94,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Группы разделов",
+    "index": 98,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Формат счётчика блока",
+    "index": 99,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "heading",
+    "text": "Итоги раздела",
+    "index": 103,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Надпись над итогами раздела",
+    "index": 104,
+    "state": "feedback",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 4,
+    "state": "texts",
+    "finding": "data:intro-outcome-empty"
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 5,
+    "state": "topic-feedback",
+    "finding": "data:topic-feedback-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Итоги и разбор по темам",
+    "index": 4,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "У этого варианта нет полей: он печатает данные попытки, а не авторский текст.",
+    "index": 15,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Заголовок блока",
+    "index": 20,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 21,
+    "state": "report",
+    "finding": "data:report-block-expanded"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Текст",
+    "index": 22,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "textarea",
+    "index": 23,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Подпись",
+    "index": 24,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 25,
+    "state": "report",
+    "finding": "data:report-block-expanded"
+  },
+  {
+    "op": "extra",
+    "role": "button",
+    "text": "Отчёт: сертификация",
+    "index": 4,
+    "state": "report",
+    "finding": "data:report-variant-name"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Диаграмма по шкалам",
+    "index": 5,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "button",
+    "text": "Выберите…",
+    "index": 6,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Предел оси радара",
+    "index": 7,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "button",
+    "text": "Выберите…",
+    "index": 8,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 10,
+    "state": "report",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "banner",
+    "text": "Шаблон «Сертификация (РТК)» перезагружен, версия v1.11.0. Сохранённое оформление могло устареть.",
+    "index": 0,
+    "state": "design",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Обновить оформление",
+    "index": 1,
+    "state": "design",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "banner",
+    "text": "Шаблон «Сертификация (РТК)» был перезагружен (версия v1.26.0). Сохранённое оформление могло устареть. Обновите его, чтобы применить актуальные параметры шаблона.",
+    "index": 0,
+    "state": "design",
+    "finding": "data:template-reloaded"
+  },
+  {
+    "op": "extra",
+    "role": "button",
+    "text": "Обновить оформление",
+    "index": 1,
+    "state": "design",
+    "finding": "data:template-reloaded"
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Тест открывается в теме «Светлая» у всех участников независимо от их системных настроек.",
+    "index": 5,
+    "state": "design-colors",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "table",
+    "text": "Параметр | Светлая | Тёмная | Акцент | Фон | Текст | Успех | Ошибка",
+    "index": 6,
+    "state": "design-colors",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "hint",
+    "text": "Тест открывается в теме, выбранной у участника. Задайте цвета для обеих — иначе часть участников увидит не то, что вы задумали.",
+    "index": 5,
+    "state": "design-colors",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "table",
+    "text": "Параметр | Светлая | Тёмная | Цвет | Фон | Цвет | Фон | Граница | Границы | Фон | Подсветка | Цвет | Цвет | Цвет",
+    "index": 6,
+    "state": "design-colors",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Добавить уровень",
+    "index": 5,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 6,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 7,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Название",
+    "index": 8,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 9,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Сложность от",
+    "index": 10,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 11,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 12,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 13,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "до",
+    "index": 14,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 15,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 16,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 17,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Вопросов",
+    "index": 18,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 19,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 20,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 21,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Тип порога",
+    "index": 22,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Процент",
+    "index": 23,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Порог",
+    "index": 24,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 25,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 26,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 27,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 28,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 29,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Название",
+    "index": 30,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 31,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Сложность от",
+    "index": 32,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 33,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 34,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 35,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "до",
+    "index": 36,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 37,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 38,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 39,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Вопросов",
+    "index": 40,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 41,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 42,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 43,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Тип порога",
+    "index": 44,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Сумма баллов",
+    "index": 45,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Порог",
+    "index": 46,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 47,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 48,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 49,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "fold",
+    "text": "",
+    "index": 5,
+    "state": "adaptive",
+    "finding": null
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Средний»",
+    "index": 7,
+    "state": "difficulty-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 7,
+    "state": "difficulty-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Ключ *",
+    "index": 5,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 6,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Метка",
+    "index": 7,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 8,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Агрегация",
+    "index": 9,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Сумма",
+    "index": 10,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Источник",
+    "index": 11,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Вопросы",
+    "index": 12,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Другие шкалы",
+    "index": 13,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Пересчёт итога",
+    "index": 14,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Проценты",
+    "index": 15,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Передавать в LMS",
+    "index": 16,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Не передавать",
+    "index": 17,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровни шкалы",
+    "index": 18,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Код уровня публикуется как scale.{ключ}.level и доступен формулам показателей.",
+    "index": 19,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Начало",
+    "index": 20,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 21,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Покрытие шкалы",
+    "index": 22,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Конец",
+    "index": 23,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 24,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Название для обучающегося",
+    "index": 29,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 30,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Код уровня",
+    "index": 31,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 32,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Как трактовать",
+    "index": 33,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Авто",
+    "index": 34,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Благоприятный",
+    "index": 35,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Нейтральный",
+    "index": 36,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Внимание",
+    "index": 37,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Критический",
+    "index": 38,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 39,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Название для обучающегося",
+    "index": 42,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 43,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Код уровня",
+    "index": 44,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 45,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Как трактовать",
+    "index": 46,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Авто",
+    "index": 47,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Благоприятный",
+    "index": 48,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Нейтральный",
+    "index": 49,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Внимание",
+    "index": 50,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Критический",
+    "index": 51,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 52,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Название для обучающегося",
+    "index": 55,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 56,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Код уровня",
+    "index": 57,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 58,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Как трактовать",
+    "index": 59,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Авто",
+    "index": 60,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Благоприятный",
+    "index": 61,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Нейтральный",
+    "index": 62,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Внимание",
+    "index": 63,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Критический",
+    "index": 64,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Добавить уровень",
+    "index": 65,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Границы шкалы и показ результата",
+    "index": 66,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 67,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Задать границы шкалы вручную",
+    "index": 68,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано».",
+    "index": 69,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Минимум шкалы",
+    "index": 70,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 72,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Максимум шкалы",
+    "index": 74,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 76,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Рассчитать по вкладам",
+    "index": 78,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 79,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Задать предел показа на диаграмме",
+    "index": 80,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Читается, только когда у экрана итогов выбран предел оси «заданный автором».",
+    "index": 81,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Благоприятное направление",
+    "index": 82,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Чем больше, тем лучше",
+    "index": 83,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать обучающемуся",
+    "index": 84,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Уровень, толкование и значение",
+    "index": 85,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Слоты карточки",
+    "index": 86,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 87,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать название",
+    "index": 88,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 89,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать уровень",
+    "index": 90,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "hint",
+    "text": "Выключается показ слота — на экране итогов и в отчёте. Название и метка уровня остаются в данных: их берут аналитика и выгрузка.",
+    "index": 91,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "order",
+    "role": "button",
+    "text": "",
+    "index": 3,
+    "state": "scales",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "banner",
+    "text": "32 вопроса пока не привязаны ни к одной шкале — проверьте покрытие.",
+    "index": 1,
+    "state": "contributions",
+    "finding": "data:contrib-card-state"
+  },
+  {
+    "op": "missing",
+    "role": "table",
+    "text": "Вариант | COMPANY_CULTURE | LEADERSHIP",
+    "index": 8,
+    "state": "contributions",
+    "finding": "data:contrib-card-state"
+  },
+  {
+    "op": "order",
+    "role": "fold",
+    "text": "",
+    "index": 7,
+    "state": "contributions",
+    "finding": "data:contrib-card-state"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Имя *",
+    "index": 7,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 8,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Метка",
+    "index": 9,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:text",
+    "index": 10,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Формула",
+    "index": 11,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Конструктор",
+    "index": 12,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "DSL",
+    "index": 13,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Функции",
+    "index": 14,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "textarea",
+    "index": 15,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "banner",
+    "text": "Синтаксис корректен. Тип возврата — булево.",
+    "index": 16,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Толкование результата",
+    "index": 17,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "table",
+    "text": "Код | Метка | Оценка | Действия",
+    "index": 18,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Добавить исход",
+    "index": 19,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Вывод",
+    "index": 20,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать обучающемуся",
+    "index": 21,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Не показывать",
+    "index": 22,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Управление статусом курса",
+    "index": 23,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "Успех (success_status)",
+    "index": 24,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Передавать в LMS",
+    "index": 25,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "И то, и другое",
+    "index": 26,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Слоты карточки",
+    "index": 27,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 28,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать название",
+    "index": 29,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "control",
+    "text": "input:checkbox",
+    "index": 30,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Показывать уровень",
+    "index": 31,
+    "state": "metrics",
+    "finding": null
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровень «Норма»",
+    "index": 4,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 5,
+    "state": "metric-levels",
+    "finding": "data:levels-other-metric"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровень «Внимание»",
+    "index": 6,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 7,
+    "state": "metric-levels",
+    "finding": "data:levels-other-metric"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровень «Риск»",
+    "index": 8,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 9,
+    "state": "metric-levels",
+    "finding": "data:levels-other-metric"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 6,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 7,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 8,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 9,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 10,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 11,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 12,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 13,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 14,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 15,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 16,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 17,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 18,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 19,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «Стили, не вошедшие в ваш профиль»",
+    "index": 20,
+    "state": "metric-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровень «Базовый»",
+    "index": 4,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 5,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровень «Уверенный»",
+    "index": 6,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 7,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "label",
+    "text": "Уровень «Продвинутый»",
+    "index": 8,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "missing",
+    "role": "button",
+    "text": "",
+    "index": 9,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «low»",
+    "index": 4,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «moderate»",
+    "index": 5,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «high»",
+    "index": 6,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «low»",
+    "index": 8,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «moderate»",
+    "index": 9,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «high»",
+    "index": 10,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «high»",
+    "index": 12,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «moderate»",
+    "index": 13,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  },
+  {
+    "op": "extra",
+    "role": "label",
+    "text": "Уровень «low»",
+    "index": 14,
+    "state": "scale-levels",
+    "finding": "data:levels-demo-content"
+  }
+]

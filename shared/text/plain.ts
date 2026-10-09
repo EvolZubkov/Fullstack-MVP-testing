@@ -15,6 +15,7 @@
  *
  * Pure `string -> string`, no DOM.
  */
+import { renderBlanksText } from "../questions/blanks-render";
 import { applyTypography } from "./typography";
 
 /** `[label](url)` — the same shape the renderer accepts. */
@@ -48,5 +49,9 @@ export function stripMarkdown(text: string): string {
  */
 export function renderPlainText(text: string): string {
   if (!text) return "";
+  // PRD-57 FR-24i: маркер пропуска не должен утекать туда, где полей ввода нет — в
+  // обзор, в PDF-отчёт, в комментарий рецензента. Сырой `{{organ}}` там читается как
+  // сбой продукта. Подстановку делает общая функция, одна на все такие места.
+  text = renderBlanksText(text, { mode: "dash" });
   return applyTypography(stripMarkdown(text));
 }

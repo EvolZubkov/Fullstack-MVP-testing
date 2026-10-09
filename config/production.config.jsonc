@@ -19,7 +19,10 @@
   //   access.superadminEmails
   // =========================================================================
   "log": {
-    "fileName": "",
+    // File sink in the logs volume (/app/logs -> /srv/logs/<project>). The app never rotates it:
+    // the host's logrotate rule for /srv/logs/<project>/*.log does, with copytruncate (pino keeps
+    // the file open).
+    "fileName": "./logs/app.log",
     "level": { "common": "info", "console": "info", "file": "info", "objects": {} }
   },
   "server": {
@@ -50,6 +53,16 @@
     }
   },
   "access": { "superadminEmails": { "env": "SUPERADMIN_EMAILS" } },
+  // PRD-54. Импорт выгрузок отчётов LMS.
+  "analytics": {
+    "lmsImport": {
+      // Хранить ли ФИО и организацию участника. true = в базе только псевдоним.
+      // Псевдоним считается в любом случае: на нём держится ключ повторной загрузки.
+      "anonymizeParticipants": true
+    }
+  },
+  // Пакет SCORM: адрес приёма телеметрии — см. config/config.jsonc.
+  "scorm": { "telemetryBaseUrl": "https://test.edtech-rtk.ru" },
   // Operational ceilings — see config/config.jsonc for what each one bounds.
-  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3 }
+  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3, "shortAnswerMaxLength": 250, "answerCheckBudgetMs": 1000, "answerCheckWarnMs": 200 }
 }

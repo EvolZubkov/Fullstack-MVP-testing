@@ -488,6 +488,40 @@ describe("PUT /api/tests/:id/content-pages/:pageId", () => {
     expect(res.status).toBe(200);
     expect(storageMock.updateContentPage).toHaveBeenCalledOnce();
   });
+
+  // Решение владельца 2026-09-20: скрыть можно любую карточку полотна, кроме блока
+  // вопросов и маршрутизатора. Запрет живёт и на сервере: прохождение без вопросов или
+  // маршрутизаторный сценарий без хаба — сломанный тест, каким бы клиентом его ни правили.
+  it("скрывает страницу", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/content-pages/page-1")
+      .send({ hidden: true });
+    expect(res.status).toBe(200);
+    expect(storageMock.updateContentPage).toHaveBeenCalledWith(
+      "page-1",
+      expect.objectContaining({ hidden: true }),
+    );
+  });
+
+  it("отказывает в скрытии блока вопросов и маршрутизатора", async () => {
+    for (const kind of ["questions", "router"]) {
+      storageMock.getContentPage.mockResolvedValue({ ...basePage, kind });
+      const res = await request(makeApp())
+        .put("/api/tests/test-1/content-pages/page-1")
+        .send({ hidden: true });
+      expect(res.status).toBe(422);
+      expect(res.body.field).toBe("hidden");
+    }
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+  });
+
+  it("разрешает СНЯТЬ скрытие даже у неснимаемого вида — это возврат к норме", async () => {
+    storageMock.getContentPage.mockResolvedValue({ ...basePage, kind: "questions", hidden: true });
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/content-pages/page-1")
+      .send({ hidden: false });
+    expect(res.status).toBe(200);
+  });
 });
 
 // ─── DELETE /api/tests/:id/content-pages/:pageId ─────────────────────────────

@@ -5,7 +5,7 @@
  * The application takes colour from DS tokens (`--ou-*`), but a letter cannot:
  * mail clients (Outlook, the Gmail web client, most mobile readers) strip CSS
  * custom properties and do not implement `color-mix()`. So the DS values are
- * resolved ONCE here — anchors copied from `vendor/ui-kit/css/university-rt.css`,
+ * resolved ONCE here — anchors copied from `vendor/ui-kit/css/skillum-ds.css`,
  * soft tints computed with the same oklch mix the design system uses — and the
  * letters in `server/email.ts` reference nothing else. `tests/email-ds-colors`
  * re-derives every entry straight from the ui-kit stylesheet, so a change on the
@@ -64,7 +64,7 @@ export function tintWithWhite(anchor: string, whitePercent: number): string {
   return oklabToHex([0, 1, 2].map((i) => white[i] * w + a[i] * (1 - w)) as [number, number, number]);
 }
 
-// ── DS anchors (1:1 with vendor/ui-kit/css/university-rt.css) ────────────────
+// ── DS anchors (1:1 with vendor/ui-kit/css/skillum-ds.css) ────────────────
 
 const PURPLE_500 = "#7700FF";
 const WARNING_500 = "#FFB608";

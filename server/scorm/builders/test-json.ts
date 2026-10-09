@@ -1,15 +1,21 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring } from "@shared/schema";
+import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring, ReportBlockRow } from "@shared/schema";
 import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { effectiveSectionOrder } from "@shared/draw/assemble-delivery";
+import { computeWeights } from "@shared/draw/exposure";
+import { withEffectiveMaxLength } from "@shared/questions/short-answer";
+import { config } from "../../config";
+import { promptHtmlOf } from "../../services/prompt-html";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { withResolvedScaleIcons } from "../../services/scale-icons";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
 import { hasGradedContent } from "@shared/questions/question-type";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
 // the topic's feedback text — the same helpers the web grader runs.
-import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
+import { hasOptionFeedback } from "@shared/questions/option-feedback";
+import { feedbackAssets, normalizeFeedback, topicFeedbackTexts } from "@shared/template/result-context";
 import type { ReportBake } from "@shared/report/report-variants";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -81,6 +87,15 @@ interface DesignSettingsExport {
 
 interface ExportData {
   test: Test;
+  /**
+   * PRD-56 FR-19a: номер версии публикации (`test_snapshots.version`), из снимка которой
+   * собран пакет. Рантайм сообщает его телеметрией и служебным блоком отчёта LMS, так что
+   * прохождение из пакета попадает в свою версию, а не в текущую.
+   *
+   * Отсутствует у черновика и у отладочной сборки: версии у них нет, и пакет такого теста
+   * обязан остаться байт-в-байт прежним (FR-02).
+   */
+  publicationVersion?: number;
   sections: (TestSection & { topic: Topic; questions: Question[]; courses: TopicCourse[]; events: TopicEvent[] })[];
   /**
    * PRD-15 block D (FR-32): per-(test, question) scoring overrides. The bake
@@ -93,6 +108,14 @@ interface ExportData {
   questionScoring?: TestQuestionScoring[];
   adaptiveSettings?: AdaptiveSettingsExport | null;
   contentPages?: ContentPage[];
+  /**
+   * PRD-51: строки ДОКУМЕНТА ОТЧЁТА теста для его режима — состав и порядок блоков,
+   * которые автор собрал. Разрешает их в печатный документ сборщик пакета
+   * (`resolveReportBundle`), а не рантайм: манифеста шаблона в LMS нет.
+   *
+   * Отсутствуют/пусты ⇒ документ по умолчанию шаблона.
+   */
+  reportBlocks?: ReportBlockRow[];
   resultVariables?: ResultVariable[];
   scales?: Scale[];
   measurements?: QuestionMeasurement[];
@@ -104,6 +127,13 @@ interface ExportData {
    * exactly what a package built before this PRD does.
    */
   ipsativeScales?: boolean;
+  /**
+   * PRD-55 (FR-27): накопленные выдачи заданий за окно наблюдения, собранные ассемблером
+   * (`build-export-data`) на момент СБОРКИ пакета. Сборщик превращает их в вес, нормированный
+   * в пределах раздела; сам счётчик в пакет не уезжает — рантайм всё равно не смог бы его
+   * обновлять. Отсутствует/пусто ⇒ все веса равны единице, то есть выдача как до PRD-55.
+   */
+  exposureCounts?: Map<string, number>;
   designSettings?: DesignSettingsExport;
   /**
    * Already-resolved on-disk directory of the selected template (built-in or
@@ -127,6 +157,52 @@ interface ExportData {
   } | null;
 }
 
+/**
+ * PRD-50 FR-50: тексты подтем раздела для пакета — `{ ключ: блок }` либо `null`.
+ *
+ * `null` вместо пустого объекта не украшение: раздел без текстов НЕ добавляет ключа в
+ * `TEST_DATA`, и пакет теста, не пользовавшегося настройкой, остаётся прежним до байта.
+ */
+function bakeBreakdownFeedback(raw: unknown): Record<string, unknown> | null {
+  const keys = (raw as { keys?: Record<string, unknown> } | null | undefined)?.keys;
+  if (!keys) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, content] of Object.entries(keys)) {
+    const block = normalizeFeedback(content);
+    if (block) out[key] = block;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Толкование для пакета: запись с непустым текстом либо `null`.
+ *
+ * Тот же гейт на ТЕКСТЕ, что и в общем разрешителе: запись с пустой строкой (автор написал
+ * и стёр) не должна ни ехать в пакет, ни печатать пустой блок.
+ */
+function bakeInterpretation(raw: unknown): { format: string; text: string } | null {
+  const value = raw as { format?: string; text?: string | null } | null | undefined;
+  const text = typeof value?.text === "string" ? value.text : "";
+  return text.trim().length > 0 ? { format: value?.format ?? "plain", text } : null;
+}
+
+/**
+ * Толкования подтем раздела для пакета — `{ ключ: запись }` либо `null`.
+ *
+ * `null` по той же причине, что и у {@link bakeBreakdownFeedback}: раздел без толкований не
+ * добавляет ключа в `TEST_DATA`, и пакет теста, их не заводившего, остаётся прежним до байта.
+ */
+function bakeBreakdownInterpretation(raw: unknown): Record<string, unknown> | null {
+  const keys = (raw as { keys?: Record<string, unknown> } | null | undefined)?.keys;
+  if (!keys) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, content] of Object.entries(keys)) {
+    const value = bakeInterpretation(content);
+    if (value) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 export function buildTestJson(data: ExportData): string {
   const testMode = data.test.mode || "standard";
   // PRD-15 block D (FR-32): one resolution context for the whole bake. With no
@@ -146,7 +222,10 @@ export function buildTestJson(data: ExportData): string {
       difficulty: scoringCtx.difficultyOf(q) || 50,
       // PRD-10: included only when authored (override or legacy) so packages
       // for unscored questions stay byte-identical (FR-02).
-      ...(eff.source.scoring !== "system" ? { scoring: eff.scoring } : {}),
+      // «Сценарий в ИС»: штрафы сценария печатаются ВСЕГДА — их задаёт и уровень теста, которого
+      // в источнике оценки вопроса не видно (`source` остаётся «system»), а без них пакет считал бы
+      // по системным умолчаниям. Пакетов со сценариями до Э5а не было, байт-идентичности беречь нечего.
+      ...(eff.source.scoring !== "system" || eff.scoring.kind === "simulation" ? { scoring: eff.scoring } : {}),
     };
   };
   // Effective per-topic draw count. `drawAll` (or adaptive mode, which always
@@ -160,6 +239,22 @@ export function buildTestJson(data: ExportData): string {
   const totalQuestions = data.sections.reduce((sum, s) => sum + effectiveDraw(s), 0);
   const overallPassRule = data.test.overallPassRuleJson as PassRule;
 
+  // PRD-36 FR-02/FR-18: канонический список ключей разреза пакета. Запись разреза в
+  // состоянии прогона адресует ключ НОМЕРОМ в этом списке, поэтому список обязан быть
+  // полным и детерминированным: порядок — первое появление при обходе разделов, состав —
+  // и теги вопросов (из них ключи и возникают, PRD-50 FR-15), и ключи порогов раздела,
+  // у которых собственного вопроса в банке может не оказаться вовсе.
+  const breakdownKeys: string[] = [];
+  const seenBreakdownKey = new Set<string>();
+  const noteBreakdownKey = (key: unknown): void => {
+    if (typeof key !== "string" || !key || seenBreakdownKey.has(key)) return;
+    seenBreakdownKey.add(key);
+    breakdownKeys.push(key);
+  };
+  for (const s of data.sections) {
+    for (const q of s.questions) for (const tag of q.tags ?? []) noteBreakdownKey(tag);
+  }
+
   const passPercent =
     overallPassRule.type === "percent"
       ? overallPassRule.value
@@ -172,40 +267,26 @@ export function buildTestJson(data: ExportData): string {
   // router-specific gating (routerCompletionPolicy, sectionUnlockRules).
   // Missing flowPolicyJson defaults to `{ mode: "linear_flat" }` per FR-40
   // to keep legacy SCORMs identical to pre-v1.1 behaviour.
-  const flowPolicyJson = data.test.flowPolicyJson as {
-    mode?: string;
-    routerCompletionPolicy?: string;
-    sectionUnlockRules?: Record<string, unknown>;
-  } | null;
-  const exportedFlowPolicy: {
-    mode: "linear_flat" | "linear_by_topics" | "router_by_topics";
-    routerCompletionPolicy?: "all_required_completed" | "all_required_passed";
-    sectionUnlockRules?: Record<string, unknown>;
-  } = {
-    mode:
-      flowPolicyJson?.mode === "linear_by_topics" ||
-      flowPolicyJson?.mode === "router_by_topics"
-        ? flowPolicyJson.mode
-        : "linear_flat",
-  };
-  // PRD-4 v1.1 §4.7: router-specific fields are only meaningful in router
-  // mode. Default routerCompletionPolicy to all_required_completed (the
-  // softer rule — counts any achievedLevel as «pass» for navigation).
-  if (exportedFlowPolicy.mode === "router_by_topics") {
-    exportedFlowPolicy.routerCompletionPolicy =
-      flowPolicyJson?.routerCompletionPolicy === "all_required_passed"
-        ? "all_required_passed"
-        : "all_required_completed";
-    if (flowPolicyJson?.sectionUnlockRules) {
-      exportedFlowPolicy.sectionUnlockRules = flowPolicyJson.sectionUnlockRules;
-    }
-  }
+  //
+  // Resolved by the SHARED normaliser, which the web attempt payload also runs:
+  // the two hosts used to clamp the mode and carry the router gating by their own
+  // rules, and that is exactly how the web run ended up with no unlock rules and no
+  // completion policy at all.
+  const exportedFlowPolicy = resolveFlowPolicy(data.test.flowPolicyJson);
 
   const test: any = {
     id: data.test.id,
     title: data.test.title,
     description: data.test.description,
+    // PRD-59 FR-12: формат рядом с текстом. Исходник остаётся исходником — разметку
+    // строит рантайм тем же общим строителем, что и веб.
+    descriptionFormat: data.test.descriptionFormat ?? "plain",
     mode: data.test.mode || "standard",
+    // PRD-56 FR-19a: версия публикации, из снимка которой собран пакет. Печатается только
+    // когда ассемблер её дал (см. `publicationVersion` в `ExportData`).
+    ...(data.publicationVersion !== undefined
+      ? { publicationVersion: data.publicationVersion }
+      : {}),
     flowPolicy: exportedFlowPolicy,
     // PRD-30 FR-16/FR-23: the test-wide delivery order, and the default every
     // topic inherits. Baked only when it is not the default `random`, so packages
@@ -220,27 +301,53 @@ export function buildTestJson(data: ExportData): string {
     // verdict. Baked so the package decides exactly like the web host; a package built
     // before this shipped carries none and the shared engine then keeps the old rule.
     passDecisionPolicy: data.test.passDecisionPolicy ?? null,
-    webhookUrl: data.test.webhookUrl,
-    testFeedback: data.test.feedback || null,
-    // PRD-29 §7.1: the test's OWN feedback block (`tests.feedback_json`) is one of the
-    // three equal sources of the results-screen recommendations, so the WHOLE block
-    // travels — text, courses, events and PDF assets — not just the legacy plain-text
-    // `testFeedback` above (a different column, left untouched). Included only when
-    // authored, so a test without it keeps exactly the TEST_DATA shape it had (FR-02).
-    ...(data.test.feedbackJson ? { testFeedbackJson: data.test.feedbackJson } : {}),
+    // PRD-50 FR-53: выпекается ТОЛЬКО когда автор включил, поэтому пакет теста, который его не
+    // трогал, остаётся байт-в-байт прежним; рантайм читает отсутствие как «выключено».
+    ...(data.test.breakdownGateEnabled ? { breakdownGateEnabled: true } : {}),
+    // `webhookUrl` в пакет не запекается: рантайм его никогда не читал, а адрес, куда пакет
+    // шлёт данные, — это адрес телеметрии из конфигурации установки, а не настройка теста.
+    // PRD-61 §10: обратная связь УРОВНЯ ТЕСТА снята — ни легаси-текст (`tests.feedback`),
+    // ни блок (`tests.feedback_json`) в пакет больше не запекаются. Рантайм их и не ищет:
+    // сводный блок рекомендаций собирается из тем, шкал и показателей. Обратная связь ТЕМ
+    // и РАЗДЕЛОВ едет как ехала — снят ровно один уровень.
     // Вводные блоки экрана и отчёта (PRD-27 §7.1). Едут одним полем: рантайм сам берёт
     // свою ветвь — экран печатает свой текст, конвейер отчёта свой.
     ...(data.test.introJson ? { introJson: data.test.introJson } : {}),
+    // PRD-50 FR-13: key-breakdown display setting. Baked ONLY when the author saved
+    // one AND turned it on (`visibility !== "hidden"`), so packages of tests that
+    // never touched the setting stay byte-identical (FR-02); the runtime reads
+    // TEST_DATA.breakdownDisplay and an absent value means «no breakdown rows»,
+    // exactly the behaviour every package had before this PRD.
+    ...(data.test.breakdownDisplayJson && data.test.breakdownDisplayJson.visibility !== "hidden"
+      ? { breakdownDisplay: data.test.breakdownDisplayJson }
+      : {}),
+    // PRD-50 FR-11: блоки разделов теста. Выпекаются ТОЛЬКО когда автор их завёл, поэтому
+    // пакет теста без блоков остаётся байт-в-байт прежним (FR-02); рантайм читает
+    // `TEST_DATA.sectionGroups`, а отсутствие значит «блоков нет» — тот самый плоский
+    // список тем, который печатал каждый пакет до этого PRD.
+    ...(data.test.sectionGroupsJson?.length ? { sectionGroups: data.test.sectionGroupsJson } : {}),
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,
     // PRD-19 (Блок A): правила навигации/завершения для рантайма (применение — Блок B/C/D).
     allowReturnToUnanswered: data.test.allowReturnToUnanswered ?? true,
     allowAnswerChange: data.test.allowAnswerChange ?? false,
+    // PRD-19 (FR-11a/FR-11b): свободная навигация внутри раздела. Адаптивный тест её
+    // ИГНОРИРУЕТ — порядок там ведёт лестница уровней, поэтому значение автора в пакет
+    // такого теста не попадает.
+    allowFreeSectionNavigation:
+      data.test.mode === "adaptive" ? false : (data.test.allowFreeSectionNavigation ?? false),
     // PRD-43: independent of allowReturnToUnanswered.
     quickAdvance: data.test.quickAdvance ?? false,
     showSectionResults: data.test.showSectionResults ?? true,
+    // Что уходит в LMS при нескольких попытках. Выпекается ТОЛЬКО когда автор выбрал
+    // «последнюю»: рантайм читает отсутствие как «лучшая», поэтому пакет теста, который
+    // настройки не касался, остаётся байт-в-байт прежним.
+    ...(data.test.lmsAttemptResult === "last" ? { lmsAttemptResult: "last" } : {}),
     skipReviewWhenComplete: data.test.skipReviewWhenComplete ?? false,
+    // PRD-67: baked ONLY when on — the runtime reads absence as the old freeze-on-leave, so
+    // the package of a test that never touched the setting stays byte-for-byte the same.
+    ...(data.test.closeSectionOnLeave ? { closeSectionOnLeave: true } : {}),
     // PRD-34 (FR-01, FR-26): настройки защиты для рантайма пакета. `protectionActive`
     // отдельным полем: в отладочном прогоне защита и скрытие выключены, а водяной знак
     // остаётся (FR-19, FR-25).
@@ -269,6 +376,10 @@ export function buildTestJson(data: ExportData): string {
       ? {}
       : { hasGradedContent: false }),
     totalQuestions: totalQuestions,
+    // PRD-36 FR-02: адрес ключа разреза в состоянии прогона. Выпекается только когда ключи
+    // есть, поэтому пакет теста без тегов и порогов остаётся байт-в-байт прежним (FR-02
+    // стиля PRD-50), а рантайм читает отсутствие как «ключей нет».
+    ...(breakdownKeys.length ? { breakdownKeys } : {}),
     sections: data.sections.map((s) => {
       // PRD-32: attachments of the TOPIC and of THIS test's section over it, resolved
       // once per section (see where they are baked below).
@@ -276,6 +387,16 @@ export function buildTestJson(data: ExportData): string {
       // Feedback TEXTS of the same two authoring points, through the same shared rule the
       // web grader runs — source priority and the topic-before-section order included.
       const sectionFeedbackTexts = topicFeedbackTexts(s.topic, s.feedbackJson);
+      // PRD-50 FR-50: тексты ПОДТЕМ этого раздела (`test_sections.breakdown_feedback_json`)
+      // через тот же нормализатор, что и остальные источники блока рекомендаций: адреса
+      // вложений становятся `/api/media/<id>`, а упаковщик медиа переписывает их в
+      // внутрипакетные пути вместе со всем деревом.
+      const sectionBreakdownFeedback = bakeBreakdownFeedback(s.breakdownFeedbackJson);
+      // Толкования: своё у темы, своё у этого теста и по подтемам. Разрешение (что кого
+      // заменяет) здесь НЕ делается — см. комментарий у самих полей ниже.
+      const sectionTopicInterpretation = bakeInterpretation(s.topic.interpretationJson);
+      const sectionOwnInterpretation = bakeInterpretation(s.interpretationJson);
+      const sectionBreakdownInterpretation = bakeBreakdownInterpretation(s.breakdownInterpretationJson);
       return {
         topicId: s.topic.id,
         topicName: s.topic.name,
@@ -306,6 +427,13 @@ export function buildTestJson(data: ExportData): string {
         // degrades to a random pick (R-6). The whole bank ships (every variant's
         // questions+keys, R-7) — selection happens client-side.
         ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
+        // Пороги подтем в пакет НЕ пекутся: рантайм их больше не читает — вердикт темы
+        // считается её собственным правилом (решение владельца 2026-09-03). Сохранённые
+        // пороги остаются в базе и в переносе теста, но в доставке им делать нечего.
+        // PRD-50 FR-11: блок, в который автор поместил ЭТОТ раздел. Как и список блоков
+        // выше — только когда он есть, иначе пакет прежний до байта; ссылка на ключ,
+        // которого в списке нет, значит «без блока», и разрешает это ядро (FR-12).
+        ...(s.groupKey ? { groupKey: s.groupKey } : {}),
         // PRD-30 FR-02/FR-18/FR-23: the topic's OVERRIDE of the test-wide order.
         // Baked only when the topic actually overrides (a null column = «как в
         // тесте»), so packages of tests that never touched the setting stay
@@ -328,6 +456,21 @@ export function buildTestJson(data: ExportData): string {
         // without feedback stay byte-identical (FR-02); the runtime falls back to an
         // empty list.
         ...(sectionFeedbackTexts.length > 0 ? { feedbackTexts: sectionFeedbackTexts } : {}),
+        // PRD-50 FR-50: тексты подтем. Выпекаются только когда автор их написал, поэтому
+        // пакет теста без них байт-в-байт прежний; кого из них прочитает человек, решает
+        // ОБЩИЙ построитель по порогу теста — рантайм только отдаёт написанное.
+        ...(sectionBreakdownFeedback ? { breakdownFeedback: sectionBreakdownFeedback } : {}),
+        // Толкования: текст самой ТЕМЫ и текст, которым его заменил ЭТОТ тест, — обоими
+        // полями, не разрешённым значением. Правило замены применяет общий построитель
+        // (`shared/interpretation/resolve`), и применяет его в ОДНОЙ точке для обоих хостов:
+        // разреши сборка — правило жило бы в двух местах и разошлось бы первой же правкой.
+        // Имена полей — имена входа темы у построителя, рантайм отдаёт их как есть.
+        ...(sectionTopicInterpretation ? { interpretation: sectionTopicInterpretation } : {}),
+        ...(sectionOwnInterpretation ? { sectionInterpretation: sectionOwnInterpretation } : {}),
+        // Толкования подтем — того же раздела и по тем же ключам, что и их тексты выше.
+        ...(sectionBreakdownInterpretation
+          ? { breakdownInterpretation: sectionBreakdownInterpretation }
+          : {}),
         recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
         recommendedEvents: s.events.map((e) => ({ title: e.title })),
         // PRD-32: PDF attachments of the TOPIC (`topics.feedback_json`) and of THIS test's
@@ -339,15 +482,28 @@ export function buildTestJson(data: ExportData): string {
         // something is actually attached, so packages of tests that never used the feature
         // stay byte-identical (FR-02); the runtime falls back to an empty list.
         ...(sectionFeedbackAssets.length > 0 ? { recommendedAssets: sectionFeedbackAssets } : {}),
-        questions: s.questions.map((q) => {
+        questions: ((): unknown[] => {
+        // PRD-55 (FR-27): веса считаются ОДИН раз на раздел и нормируются в его пределах —
+        // ровно так же, как это делает веб внутри пула отбора. Пакет автономен, счётчика по
+        // популяции у него нет, поэтому в TEST_DATA уезжает готовое число.
+        const exposureWeights = computeWeights(
+          s.questions.map((q) => q.id),
+          data.exposureCounts ?? new Map<string, number>(),
+        );
+        return s.questions.map((q) => {
           // PRD-15 block D: effective price / graded config / difficulty are
           // resolved here, at bake time; the runtime keeps its plain reads.
           const baked = bakeScoring(q);
+          const exposureWeight = exposureWeights.get(q.id) ?? 1;
           return {
             id: q.id,
             type: q.type,
             prompt: q.prompt,
-            data: q.dataJson,
+            // PRD-57 FR-03a: подсветка листинга печётся в пакет готовой разметкой —
+            // библиотека подсветки в ZIP не едет.
+            ...promptHtmlOf(q),
+            // PRD-57 FR-28v: предел печётся в пакет — конфигурации в рантайме там нет.
+            data: withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength),
             correct: q.correctJson,
             points: baked.points,
             difficulty: baked.difficulty,
@@ -357,6 +513,10 @@ export function buildTestJson(data: ExportData): string {
             feedbackMode: q.feedbackMode || "general",
             feedbackCorrect: q.feedbackCorrect || null,
             feedbackIncorrect: q.feedbackIncorrect || null,
+            // Per-option feedback texts (single choice): the chosen option's text replaces
+            // the question's feedback in `feedbackTextFor`. Included only when some option
+            // has one, so packages of questions without them stay byte-identical.
+            ...(hasOptionFeedback(q.optionFeedbackJson) ? { optionFeedbackJson: q.optionFeedbackJson } : {}),
             // PRD-10: graded answer scoring. Included only when authored so packages
             // for unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
             ...(baked.scoring ? { scoring: baked.scoring } : {}),
@@ -379,8 +539,14 @@ export function buildTestJson(data: ExportData): string {
             typeof q.orderIndex === "number"
               ? { orderIndex: q.orderIndex }
               : {}),
+            // PRD-55 (FR-27/FR-30): вес по накопленной экспозиции, нормированный в пределах
+            // РАЗДЕЛА на момент сборки. Пишется только когда отличается от единицы — то же
+            // правило байт-идентичности, что у `tags` и `orderIndex` выше: рантайм читает
+            // отсутствие поля как вес 1, то есть как прежнее поведение.
+            ...(exposureWeight !== 1 ? { exposureWeight } : {}),
           };
-        }),
+        });
+        })(),
       };
     }),
   };
@@ -411,6 +577,9 @@ export function buildTestJson(data: ExportData): string {
       eligibilityPlugin: gatePlugin ? rp.eligibilityPlugin : null,
       blockedPageId: rp.blockedPageId ?? null,
       ...(intervalOn ? { attemptInterval: rp.attemptInterval } : {}),
+      // The WebTutor course name the gate matches records by; absent = the test title.
+      // Only a gated package needs it, and only when set — otherwise the key is left out.
+      ...(gatePlugin && rp.lmsCourseName?.trim() ? { lmsCourseName: rp.lmsCourseName.trim() } : {}),
     };
   }
   if (rp && gatePlugin) {
@@ -461,13 +630,27 @@ export function buildTestJson(data: ExportData): string {
         levels: levelsByTopic[s.topic.id] || [],
         // Include all questions for this topic (they will be filtered by difficulty
         // in runtime — against the baked EFFECTIVE difficulty, FR-34).
-        questions: s.questions.map((q) => {
+        questions: ((): unknown[] => {
+        // PRD-55 (FR-27): вес считается по ТЕМЕ — из неё уровень и отбирает, отсекая полосой
+        // трудности. Нормировка по теме, а не по уровню: полосы задаёт автор и они меняются
+        // правкой теста, а пакет уже собран. Внутри уровня шкала остаётся сравнительной —
+        // `weightedPick` смотрит на отношение весов, а не на их абсолют.
+        const exposureWeights = computeWeights(
+          s.questions.map((q) => q.id),
+          data.exposureCounts ?? new Map<string, number>(),
+        );
+        return s.questions.map((q) => {
           const baked = bakeScoring(q);
+          const exposureWeight = exposureWeights.get(q.id) ?? 1;
           return {
             id: q.id,
             type: q.type,
             prompt: q.prompt,
-            data: q.dataJson,
+            // PRD-57 FR-03a: подсветка листинга печётся в пакет готовой разметкой —
+            // библиотека подсветки в ZIP не едет.
+            ...promptHtmlOf(q),
+            // PRD-57 FR-28v: предел печётся в пакет — конфигурации в рантайме там нет.
+            data: withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength),
             correct: q.correctJson,
             points: baked.points,
             difficulty: baked.difficulty,
@@ -477,12 +660,20 @@ export function buildTestJson(data: ExportData): string {
             feedbackMode: q.feedbackMode || "general",
             feedbackCorrect: q.feedbackCorrect || null,
             feedbackIncorrect: q.feedbackIncorrect || null,
+            // Per-option feedback texts (see standard-section map above).
+            ...(hasOptionFeedback(q.optionFeedbackJson) ? { optionFeedbackJson: q.optionFeedbackJson } : {}),
             // PRD-10: graded answer scoring (see standard-section map above).
             ...(baked.scoring ? { scoring: baked.scoring } : {}),
             // PRD-16 FR-41 (see standard-section map above).
             ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
+            // PRD-50 FR-17: axis keys are needed in adaptive mode too. Include only
+            // a non-empty list so packages without tags stay byte-identical (FR-02).
+            ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
+            // Единица — прежнее поведение, поэтому поле не добавляется вовсе (FR-30).
+            ...(exposureWeight !== 1 ? { exposureWeight } : {}),
           };
-        }),
+        });
+        })(),
       };
     });
   }
@@ -567,6 +758,39 @@ export function buildTestJson(data: ExportData): string {
         settings: packedSettings,
         autoAdvance: page.autoAdvance,
         autoAdvanceDelayMs: page.autoAdvanceDelayMs,
+        // Скрытая страница едет в пакет ВМЕСТЕ с признаком, а не вырезается сборщиком:
+        // системные экраны (старт, итоги, обзор) — ещё и привязка макета, и без строки
+        // рантайм потерял бы оформление. Что не показывать, решает общий фильтр потока.
+        hidden: page.hidden ?? false,
+      };
+    });
+  }
+
+  // PRD-51: ДОКУМЕНТ ОТЧЁТА теста. В пакет едут СЫРЫЕ строки: связать их с раскладками
+  // блоков может только сторона, видящая манифест шаблона, и делает это сборщик
+  // (`resolveReportBundle`), а не рантайм.
+  //
+  // Значения областей чистятся повторно ТЕМ ЖЕ вызовом, каким чистятся значения
+  // контентных страниц: в пакете разметка попадает в НАСТОЯЩИЙ документ, где вставленное
+  // автором правило `body { … }` перекрасило бы плеер. Повторная очистка идемпотентна и
+  // заодно чинит строки, сохранённые до появления очистки на сервере.
+  if (data.reportBlocks && data.reportBlocks.length > 0) {
+    test.reportBlocks = data.reportBlocks.map((row) => {
+      const values: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(row.valuesJson ?? {})) {
+        values[k] = typeof v === "string" ? sanitizeHtml(v, { scope: placeholderScope(k) }) : v;
+      }
+      const settings: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(row.settingsJson ?? {})) {
+        settings[k] = typeof v === "string" ? sanitizeHtml(v) : v;
+      }
+      return {
+        block: row.block,
+        templateKey: row.templateKey,
+        sortOrder: row.sortOrder,
+        enabled: row.enabled,
+        values,
+        settings,
       };
     });
   }
@@ -635,6 +859,9 @@ export function buildTestJson(data: ExportData): string {
         // neither key and keeps both slots.
         showName: (s.configJson as Record<string, unknown>).showName !== false,
         showLevel: (s.configJson as Record<string, unknown>).showLevel !== false,
+        // PRD-53 §4.4: собственное описание шкалы — источник текста блока «вне профиля».
+        // Пустая строка вместо пропуска: рантайм читает поле безусловно.
+        description: s.description ?? "",
       };
     });
 

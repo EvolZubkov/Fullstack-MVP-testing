@@ -354,13 +354,17 @@ describe("POST /api/assignments/:id/resend (decrypt + errors)", () => {
     expect(res.body.error).toMatch(/cannot decrypt/i);
   });
 
-  it("sends with an empty recipient when the user has no email", async () => {
+  // PRD-54 BR-54-42: an account without email cannot receive the link — the server refuses
+  // explicitly, sends nothing and does NOT revoke the link the participant already holds.
+  it("refuses explicitly when the user has no email and keeps the existing link", async () => {
     storageMock.getAssignmentAccessTokensByAssignment.mockResolvedValue([makeToken({ userId: "noemail1" })]);
 
     const res = await asAuthor(request(makeApp()).post("/api/assignments/asgn1/resend"));
-    expect(res.status).toBe(200);
-    expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ to: "" }));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Account has no email", field: "email" });
+    expect(sendEmailMock).not.toHaveBeenCalled();
     expect(decryptEmailMock).not.toHaveBeenCalled();
+    expect(storageMock.revokeAssignmentAccessTokensByAssignment).not.toHaveBeenCalled();
   });
 });
 
@@ -540,6 +544,14 @@ describe("POST /api/assignments/:id/resend-user/:userId", () => {
     const res = await asAuthor(request(makeApp()).post("/api/assignments/asgn1/resend-user/enc1"));
     expect(res.status).toBe(200);
     expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ to: "real@corp.com" }));
+  });
+
+  it("refuses explicitly when the target user has no email and keeps their link (BR-54-42)", async () => {
+    const res = await asAuthor(request(makeApp()).post("/api/assignments/asgn1/resend-user/noemail1"));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Account has no email", field: "email" });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(storageMock.revokeAssignmentAccessTokensByAssignmentAndUser).not.toHaveBeenCalled();
   });
 
   it("returns 400 when the encrypted email cannot be decrypted", async () => {

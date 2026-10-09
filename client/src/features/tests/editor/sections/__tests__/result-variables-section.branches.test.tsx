@@ -36,12 +36,12 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     flowSettings: {},
     folderId: null,
     basic: {
-      title: "Sample", description: "", status: "draft",
+      title: "Sample", description: "", descriptionFormat: "plain", status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -95,7 +95,7 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
 /** Scale carrying two named band levels — feeds level pickers. */
 function scaleWithLevels(over: Partial<ScaleModel> = {}): ScaleModel {
   return {
-    key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
+    key: "comp", label: "Компетенция", description: "", type: "number", aggregation: "sum",
     normalization: "none", direction: "positive",
     bands: [
       { min: "0", max: "5", label: "Низкий", level: "low", text: "", tone: "" },
@@ -361,7 +361,7 @@ describe("<ResultVariablesSection /> — condition unit matrix", () => {
     // Threshold default condition targets the first scale with a numeric property.
     expect(screen.getByLabelText("Значение")).toBeInTheDocument();
     // Switch the property to «уровень» → the value becomes a level Select.
-    pickLabeledOption("Свойство", "уровень");
+    pickLabeledOption("Свойство", "Уровень");
     expect(screen.getByLabelText("Уровень")).toBeInTheDocument();
     // Level operators are only = / ≠ — open the operator select and pick «≠».
     pickLabeledOption("Оператор", "≠");
@@ -372,7 +372,7 @@ describe("<ResultVariablesSection /> — condition unit matrix", () => {
     expandFirstCard();
     // Threshold's default condition targets the level-less scale; the level unit
     // then renders a Select whose only option is the «—» placeholder.
-    pickLabeledOption("Свойство", "уровень");
+    pickLabeledOption("Свойство", "Уровень");
     expect(screen.getByLabelText("Уровень")).toBeInTheDocument();
   });
 
@@ -386,7 +386,7 @@ describe("<ResultVariablesSection /> — condition unit matrix", () => {
     );
     expandFirstCard();
     // Point the condition at a topic, then choose the boolean «пройдена» property.
-    pickLabeledOption("Элемент", "Тема А");
+    pickLabeledOption("Элемент", "Тема «Тема А»");
     pickLabeledOption("Свойство", "пройдена");
     // Boolean unit → no operator select and no numeric/level value control.
     expect(screen.queryByLabelText("Оператор")).toBeNull();

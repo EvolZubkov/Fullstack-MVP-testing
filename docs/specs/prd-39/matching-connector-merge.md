@@ -21,7 +21,7 @@
 используемый и вебом, и SCORM-пакетом (`server/scorm/template/app/render/questions/matching.js`
 лишь делегирует в него через `TBTemplate.renderMatching`).
 
-Дизайн-система (`vendor/ui-kit/css/university-rt.css` → `client/src/styles/vendor/university-rt.css`)
+Дизайн-система (`vendor/ui-kit/css/skillum-ds.css` → `client/src/styles/vendor/skillum-ds.css`)
 уже полностью реализует альтернативный визуальный режим зазора — `ou-match--gap-narrow`: стрелка
 скрыта, при соединении обе карточки и зазор между ними красятся одинаково и визуально сливаются
 в одну панель, шов помечен волнистой SVG-линией (`ou-match__seam`). Эталонная разметка этого

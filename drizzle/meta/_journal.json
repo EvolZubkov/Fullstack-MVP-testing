@@ -134,6 +134,279 @@
       "when": 1786612879081,
       "tag": "0018_prd28_external_participant",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786657520098,
+      "tag": "0019_prd50_breakdown_display",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786714823811,
+      "tag": "0020_prd50_breakdown_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786726026566,
+      "tag": "0021_prd50_section_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786804344844,
+      "tag": "0022_prd36_lms_attempt_result",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786808312426,
+      "tag": "0023_prd36_lms_attempt_result_default_last",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786825811944,
+      "tag": "0024_prd51_report_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788393401739,
+      "tag": "0025_prd52_review_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788400010501,
+      "tag": "0026_prd50_breakdown_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788463375751,
+      "tag": "0027_prd19_free_section_navigation",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1788588393722,
+      "tag": "0028_prd50_subtopic_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789154698942,
+      "tag": "0029_prd54_lms_import",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1789203724989,
+      "tag": "0030_question_latency",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789215557720,
+      "tag": "0031_prd55_question_exposure",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789334365219,
+      "tag": "0032_prd56_analytics_slices",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789392439896,
+      "tag": "0033_prd56_question_excluded",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789399978840,
+      "tag": "0034_prd56_lms_version_variant",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789738712842,
+      "tag": "0035_prd59_description_format",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789889522948,
+      "tag": "0036_content_page_hidden",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789899901721,
+      "tag": "0037_prd57_prompt_format",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789981747962,
+      "tag": "0038_rtk_interpretation",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790269349428,
+      "tag": "0039_prd67_close_section_on_leave",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790279679668,
+      "tag": "0040_prd66_psycho_observations",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790313492300,
+      "tag": "0041_analytics_slice_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790315885111,
+      "tag": "0042_lms_user_unit_position",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790317175777,
+      "tag": "0043_user_lms_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790612594998,
+      "tag": "0044_drop_single_status_controller",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1790771010321,
+      "tag": "0045_exposure_import_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790979197617,
+      "tag": "0046_drop_lms_batch_counted",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791050784892,
+      "tag": "0047_analytics_slices_per_test",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791223741703,
+      "tag": "0048_saved_list_filters",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1791291468012,
+      "tag": "0049_question_option_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791303157620,
+      "tag": "0050_lms_import_attempt_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791305636041,
+      "tag": "0051_lms_external_participants",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791403301224,
+      "tag": "0052_purge_deleted_test_lms",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791416235754,
+      "tag": "0053_test_scenarios",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791416269404,
+      "tag": "0054_test_scenarios_group_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791416281314,
+      "tag": "0055_sim_scoring",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791416454711,
+      "tag": "0056_scale_scorm_target_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791475258431,
+      "tag": "0057_scenario_pass_rule",
+      "breakpoints": true
     }
   ]
 }

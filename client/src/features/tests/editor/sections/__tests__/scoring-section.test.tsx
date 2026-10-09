@@ -38,6 +38,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     basic: {
       title: "Sample",
       description: "",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -46,7 +47,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: {
       decisionPolicy: "overall_only",
       overall: { type: "percent", value: 70 },
@@ -207,6 +208,27 @@ describe("<ScoringSection />", () => {
     expect(screen.queryByTestId("scoring-reset-q2")).toBeNull();
   });
 
+  it("a row that only carries the delivery exclusion is not an override", async () => {
+    // Analytics creates the row to exclude the question from delivery; scoring stays empty.
+    // Marking it «задано в тесте» and offering «Сбросить» used to return the question to
+    // delivery on save (the reset deleted the whole row).
+    const exclusionOnly: QuestionScoringOverride = {
+      id: "ov2", testId: "test-1", questionId: "q2",
+      points: null, scoringJson: null, difficulty: null, pinnedContentHash: null,
+    };
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: [exclusionOnly] },
+    });
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+
+    const row2 = await screen.findByTestId("scoring-row-q2");
+    expect(row2).not.toHaveClass("tb-qscoring__row--override");
+    expect(screen.queryByTestId("scoring-override-q2")).toBeNull();
+    expect(screen.queryByTestId("scoring-reset-q2")).toBeNull();
+    expect(screen.getByTestId("scoring-edit-q2")).toHaveAttribute("aria-label", "Настроить оценку вопроса");
+  });
+
   it("reset icon removes the override from the draft (no network)", async () => {
     const model = baseModel({
       sections: [buildSection()],
@@ -257,6 +279,28 @@ describe("<ScoringSection />", () => {
     );
   });
 
+  it("«Предпросмотр балла» scores a demo answer against the open config (issue #31)", async () => {
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: dbOverrides },
+    });
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+
+    fireEvent.click(await screen.findByTestId("scoring-edit-q1"));
+    fireEvent.click(await screen.findByTestId("qscoring-preview"));
+
+    // q1: ключ [0,1] из трёх вариантов, ступень «c = T» платит 2. Первый демо-ответ —
+    // полностью верный, поэтому строка срабатывает и балл максимальный.
+    const table = await screen.findByTestId("score-preview-table");
+    expect(table).toHaveTextContent("А, Б (T = 2)");
+    expect(screen.getByTestId("score-preview-verdict")).toHaveTextContent("Правильно");
+
+    // Возврат оставляет конструктор открытым — предпросмотр ничего не применяет.
+    fireEvent.click(screen.getByTestId("score-preview-back"));
+    await waitFor(() => expect(screen.queryByTestId("score-preview-table")).toBeNull());
+    expect(screen.getByTestId("qscoring-apply")).toBeInTheDocument();
+  });
+
   it("folds a section: the header toggle hides its question table", async () => {
     const model = baseModel({
       sections: [buildSection()],
@@ -284,10 +328,12 @@ describe("<ScoringSection />", () => {
     expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
   });
 
-  it("create mode: hint banner instead of question tables", () => {
+  // Черновик не требует сохранения, чтобы его настроить: вопросы приходят из банка,
+  // а переопределения лежат в модели и дописываются сразу после создания теста.
+  it("режим создания: таблица вопросов доступна без сохранённого теста", async () => {
     const model = baseModel({ id: undefined, sections: [buildSection()] });
     renderWithClient(<ScoringSection model={model} updateModel={() => {}} />);
-    expect(screen.getByTestId("scoring-create-hint")).toBeInTheDocument();
-    expect(screen.queryByTestId("scoring-row-q1")).toBeNull();
+    expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
+    expect(screen.queryByTestId("scoring-create-hint")).toBeNull();
   });
 });

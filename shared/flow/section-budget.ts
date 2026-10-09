@@ -24,6 +24,14 @@
  * changed system clock irrelevant: only time the learner actually spent in the run
  * counts against the section.
  *
+ * PRD-67 «Закрывать раздел при выходе»: the pause in rule 2 is exactly what makes the
+ * cheat above POSSIBLE in a milder form — read a question, close the tab, look the answer
+ * up while the clock stands still, come back. With the test setting on, leaving a started
+ * section CLOSES it instead of freezing it: its budget drops to zero and it joins the
+ * closed list for good. A test without sections is one implicit section
+ * ({@link WHOLE_TEST_SECTION}); closing it means the attempt is over. The gate state
+ * ({@link SectionGate}) lives next to the budgets on both hosts.
+ *
  * Pure: no DOM, no storage, no clock of its own — every function takes `activeMs`.
  */
 
@@ -104,4 +112,129 @@ export function pauseAll(budgets: SectionBudgets, activeMs: number): SectionBudg
     changed = true;
   }
   return changed ? next : budgets;
+}
+
+// ─── PRD-67: open / closed sections ──────────────────────────────────────────
+
+/**
+ * Key of the single implicit section of a test WITHOUT sections (`linear_flat`). Closing
+ * it closes the attempt. Chosen so it cannot collide with a topic id (UUIDs).
+ */
+export const WHOLE_TEST_SECTION = "__test__";
+
+/**
+ * Which section the learner is in and which ones are closed for good. `open` is the
+ * started, not-yet-left section: for a section with its own limit it mirrors the running
+ * budget, for one under the TEST limit it is the only trace of «the learner was inside».
+ */
+export interface SectionGate {
+  /** Section the learner is inside right now, or null. */
+  open: string | null;
+  /** Sections the learner left while the setting was on — never re-entered. */
+  closed: string[];
+}
+
+/** Gate of a run that has not entered anything yet. */
+export const EMPTY_GATE: SectionGate = Object.freeze({ open: null, closed: [] }) as SectionGate;
+
+/** Read a stored gate, tolerating legacy/absent/garbled values (absent = nothing closed). */
+export function readGate(raw: unknown): SectionGate {
+  const g = raw as Partial<SectionGate> | null | undefined;
+  if (!g || typeof g !== "object") return { open: null, closed: [] };
+  return {
+    open: typeof g.open === "string" ? g.open : null,
+    closed: Array.isArray(g.closed) ? g.closed.filter((id): id is string => typeof id === "string") : [],
+  };
+}
+
+/** True when `sectionId` was closed by a leave. */
+export function isClosed(gate: SectionGate, sectionId: string): boolean {
+  return gate.closed.includes(sectionId);
+}
+
+/**
+ * Does the PRD-67 setting act on this section? Only where a clock could be dodged: a
+ * section with its own limit, or any section while the whole test has one.
+ */
+export function closesOnLeave(opts: {
+  /** The test setting `closeSectionOnLeave`. */
+  enabled: boolean;
+  /** The test-wide limit in minutes, if any. */
+  testLimitMinutes: number | null | undefined;
+  /** This section's own limit in minutes, if any. */
+  sectionLimitMinutes: number | null | undefined;
+}): boolean {
+  if (!opts.enabled) return false;
+  return (opts.testLimitMinutes ?? 0) > 0 || (opts.sectionLimitMinutes ?? 0) > 0;
+}
+
+/**
+ * Does the setting act on ANY part of this test? True when it is on and some limit exists
+ * — the test-wide one or a section's own. What the start screen tells the learner.
+ */
+export function testClosesOnLeave(opts: {
+  enabled: boolean;
+  testLimitMinutes: number | null | undefined;
+  sectionLimitMinutes: ReadonlyArray<number | null | undefined>;
+}): boolean {
+  if (!opts.enabled) return false;
+  if ((opts.testLimitMinutes ?? 0) > 0) return true;
+  return opts.sectionLimitMinutes.some((m) => (m ?? 0) > 0);
+}
+
+/**
+ * Mark `sectionId` as the section the learner is in. A closed section is never reopened —
+ * the gate comes back unchanged. Returns the SAME object when nothing changes.
+ */
+export function openSection(gate: SectionGate, sectionId: string): SectionGate {
+  if (gate.open === sectionId || isClosed(gate, sectionId)) return gate;
+  return { open: sectionId, closed: gate.closed };
+}
+
+/**
+ * Close `sectionId` for good: it joins the closed list, stops being open, and its budget
+ * (when it has one) drops to zero — from here on every host treats it exactly like a
+ * section whose limit ran out.
+ */
+export function closeSection(
+  gate: SectionGate,
+  budgets: SectionBudgets,
+  sectionId: string,
+): { gate: SectionGate; budgets: SectionBudgets } {
+  const nextGate: SectionGate = {
+    open: gate.open === sectionId ? null : gate.open,
+    closed: isClosed(gate, sectionId) ? gate.closed : [...gate.closed, sectionId],
+  };
+  const nextBudgets = budgets[sectionId]
+    ? { ...budgets, [sectionId]: { remainingMs: 0, runningSince: null } }
+    : budgets;
+  return { gate: nextGate, budgets: nextBudgets };
+}
+
+/**
+ * The learner left the open section (or the run broke off inside it). With the setting
+ * on for that section it is CLOSED; otherwise it is merely paused, the pre-PRD-67 rule.
+ * Every running budget is frozen either way — nothing runs outside a section.
+ *
+ * @param closeOpen Whether the open section falls under the setting ({@link closesOnLeave}).
+ */
+export function leaveSection(
+  gate: SectionGate,
+  budgets: SectionBudgets,
+  activeMs: number,
+  closeOpen: boolean,
+): { gate: SectionGate; budgets: SectionBudgets; closed: string | null } {
+  const paused = pauseAll(budgets, activeMs);
+  if (!gate.open) return { gate, budgets: paused, closed: null };
+  if (!closeOpen) return { gate: { open: null, closed: gate.closed }, budgets: paused, closed: null };
+  const id = gate.open;
+  const done = closeSection(gate, paused, id);
+  return { ...done, closed: id };
+}
+
+/** Sections a host must keep locked: spent by time or closed by a leave. */
+export function lockedSections(gate: SectionGate, budgets: SectionBudgets, activeMs: number): string[] {
+  const out = spentTopics(budgets, activeMs);
+  for (const id of gate.closed) if (!out.includes(id)) out.push(id);
+  return out;
 }

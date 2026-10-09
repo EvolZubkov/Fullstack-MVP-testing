@@ -10,7 +10,7 @@
  * Differences from upstream: `--theme(...)` calls replaced with concrete font
  * stacks; the universal border reset carries the DS border colour
  * (hsl(var(--border))); no html `font-family` override that would fight the
- * `.ou` body font (RostelecomBasis) — body font is set in index.css.
+ * `.ou` body font (Roboto) — body font is set in index.css.
  */
 
 @layer base {

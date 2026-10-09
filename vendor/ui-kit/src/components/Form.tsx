@@ -109,17 +109,24 @@ export interface FormSectionProps extends Omit<React.HTMLAttributes<HTMLDivEleme
    * включить — нет.
    */
   stacked?: boolean;
+  /**
+   * Класс проектного слоя НА шапке секции (`ou-formsection__intro`). Шапка —
+   * колонка: подпись, подзаголовок и `meta` идут друг под другом. Экрану, который
+   * ставит рядом с заголовком действия раздела, нужна строка, а `className`
+   * достаёт только до корня секции.
+   */
+  headClassName?: string;
 }
 
 export const FormSection = forwardRef<HTMLDivElement, FormSectionProps>(
-  ({ title, subtitle, meta, stacked, className, children, ...rest }, ref) => (
+  ({ title, subtitle, meta, stacked, headClassName, className, children, ...rest }, ref) => (
     <div
       ref={ref}
       className={cn('ou-formsection', stacked && 'ou-formsection--stacked', className)}
       {...rest}
     >
       {(title || subtitle || meta) && (
-        <div className="ou-formsection__intro">
+        <div className={cn('ou-formsection__intro', headClassName)}>
           {title && <h3 className="ou-formsection__title">{title}</h3>}
           {subtitle && <p className="ou-formsection__sub">{subtitle}</p>}
           {meta && <span className="ou-formsection__meta">{meta}</span>}

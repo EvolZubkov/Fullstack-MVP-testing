@@ -54,12 +54,12 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     flowSettings: {},
     folderId: null,
     basic: {
-      title: "Sample", description: "", status: "draft",
+      title: "Sample", description: "", descriptionFormat: "plain", status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [buildSection()],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -75,7 +75,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
 function makeScale(over: Partial<ScaleModel> = {}): ScaleModel {
   return {
     clientKey: "scale-seed",
-    key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
+    key: "comp", label: "Компетенция", description: "", type: "number", aggregation: "sum",
     normalization: "none", direction: "positive", bands: [],
     domainMin: null, domainMax: null, displayMax: null, valence: "none",
     learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
@@ -128,14 +128,17 @@ function Harness({
   initial,
   testId,
   readOnly,
+  pane,
 }: {
   initial: TestEditorModel;
   testId?: string;
   readOnly?: boolean;
+  pane?: "list" | "contributions";
 }) {
   const [model, setModel] = useState(initial);
   return (
     <ScalesSection
+      pane={pane}
       model={model}
       testId={testId}
       updateModel={(updater) => setModel((m) => updater(m))}
@@ -144,11 +147,14 @@ function Harness({
   );
 }
 
-function renderStateful(initial: TestEditorModel, opts: { testId?: string; readOnly?: boolean } = {}) {
+function renderStateful(
+  initial: TestEditorModel,
+  opts: { testId?: string; readOnly?: boolean; pane?: "list" | "contributions" } = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <Harness initial={initial} testId={opts.testId} readOnly={opts.readOnly} />
+      <Harness initial={initial} testId={opts.testId} readOnly={opts.readOnly} pane={opts.pane} />
     </QueryClientProvider>,
   );
 }
@@ -204,8 +210,11 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     renderControlled(model);
 
     const covered = screen.getByTestId("scales-card-0");
-    expect(covered).toHaveTextContent("2 уровня");
-    expect(covered).toHaveTextContent("2 вопроса");
+    // Подзаголовок карточки — про расчёт и охват: агрегация, пересчёт, вклады. Число
+    // уровней в нём не считают, уровни целиком видны в теле карточки.
+    const summary = covered.querySelector(".tb-level-card__summary");
+    expect(summary?.textContent).not.toContain("уровня");
+    expect(summary?.textContent).toContain("2 вопроса");
     expect(covered.querySelector(".tb-status-dot--ok")).not.toBeNull();
 
     const bare = screen.getByTestId("scales-card-1");
@@ -226,9 +235,22 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("инверсия");
     selectOption("scales-recalc-0", "Проценты");
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("проценты");
+    // PRD-54, решение 13: шкала вне отчёта LMS — с предупреждением, в отчёте — без него.
+    expect(screen.getByTestId("scales-card-0")).toHaveTextContent("Аналитика по выгрузке отчёта LMS эту шкалу не увидит");
     selectOption("scales-target-0", "Столбцом в отчёте");
+    expect(screen.getByTestId("scales-card-0")).not.toHaveTextContent("Аналитика по выгрузке отчёта LMS эту шкалу не увидит");
     // Subtitle reflects the new aggregation label.
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("среднее");
+  });
+
+  it("новая шкала по умолчанию уходит в отчёт LMS — без предупреждения (PRD-54, решение 13)", () => {
+    renderStateful(baseModel({ scales: [] }));
+    fireEvent.click(screen.getAllByText("Добавить шкалу")[0]);
+    const expand = screen.queryByLabelText("Развернуть шкалу");
+    if (expand) fireEvent.click(expand);
+    const card = screen.getByTestId("scales-card-0");
+    expect(card).toHaveTextContent("Столбцом в отчёте");
+    expect(card).not.toHaveTextContent("Аналитика по выгрузке отчёта LMS эту шкалу не увидит");
   });
 
   it("levels editor: add, edit, and remove levels (from the empty state)", () => {
@@ -243,11 +265,13 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     expect(label.value).toBe("Низкий");
 
     fireEvent.click(screen.getByTestId("scales-level-add-0"));
-    expect(screen.getByLabelText("Порог между уровнями 1 и 2")).toBeInTheDocument();
+    // Подписи называют уровни КОДАМИ, а не номерами. Второй уровень получает первый
+    // СВОБОДНЫЙ код: `level1` освободился, когда первому заменили код на «low».
+    expect(screen.getByLabelText("Порог между уровнями «low» и «level1»")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить уровень 2"));
+    fireEvent.click(screen.getByLabelText("Удалить уровень «level1»"));
     // One level left → no threshold field, because a threshold needs two levels.
-    expect(screen.queryByLabelText("Порог между уровнями 1 и 2")).toBeNull();
+    expect(screen.queryByLabelText("Порог между уровнями «low» и «level1»")).toBeNull();
   });
 
   it("removing a scale also drops its measurements from the draft", () => {
@@ -384,13 +408,16 @@ describe("<ScalesSection /> — calculation preview", () => {
 // ─── «Вклады вопросов» ───────────────────────────────────────────────────────────
 
 describe("<ScalesSection /> — «Вклады вопросов»", () => {
+  // Вклады — отдельная сторона панели, её выбирает рейл вкладки. В тесте она
+  // запрашивается прямо, поэтому «открывать» нечего — достаточно проверить, что
+  // показана именно она.
   function openContributions() {
-    fireEvent.click(screen.getByRole("button", { name: "Вклады вопросов" }));
+    expect(screen.getByTestId("scales-pane-contributions")).toBeInTheDocument();
   }
 
   it("expands a question card and typing a contribution binds a measurement", async () => {
     questionsBody = [dbQuestions[0]]; // single q1 only
-    renderStateful(baseModel({ scales: [makeScale()] }));
+    renderStateful(baseModel({ scales: [makeScale()] }), { pane: "contributions" });
     openContributions();
 
     const card = await screen.findByTestId("contrib-card-0");
@@ -417,7 +444,7 @@ describe("<ScalesSection /> — «Вклады вопросов»", () => {
 
   it("shows the answer-unit hint for a matching question", async () => {
     questionsBody = [dbQuestions[2]]; // matching q3 only
-    renderStateful(baseModel({ scales: [makeScale()] }));
+    renderStateful(baseModel({ scales: [makeScale()] }), { pane: "contributions" });
     openContributions();
 
     const card = await screen.findByTestId("contrib-card-0");
@@ -427,14 +454,14 @@ describe("<ScalesSection /> — «Вклады вопросов»", () => {
 
   it("renders the no-questions empty state", async () => {
     questionsBody = [];
-    renderStateful(baseModel({ scales: [makeScale()] }));
+    renderStateful(baseModel({ scales: [makeScale()] }), { pane: "contributions" });
     openContributions();
     expect(await screen.findByTestId("contributions-no-questions")).toBeInTheDocument();
   });
 
   it("renders the load-error banner when the questions request fails", async () => {
     failQuestions = true;
-    renderStateful(baseModel({ scales: [makeScale()] }));
+    renderStateful(baseModel({ scales: [makeScale()] }), { pane: "contributions" });
     openContributions();
     expect(await screen.findByText("Не удалось загрузить вопросы теста.")).toBeInTheDocument();
   });

@@ -22,6 +22,7 @@ import {
   resolveReportValues,
   type ReportVariantDecl,
 } from "@shared/report/report-variants";
+import { blockVariants, type BlockVariant } from "@shared/report/report-document";
 
 /** Поле варианта, как его объявляет манифест (подмножество `settings[]`). */
 export interface ReportSettingDecl {
@@ -42,6 +43,11 @@ export interface ReportVariantOption extends ReportVariantDecl {
 interface TemplateCatalogue {
   name: string | undefined;
   variants: ReportVariantOption[];
+  /**
+   * Манифест целиком. Нужен ради `reportDocument` — документа по умолчанию (PRD-51 §5.1):
+   * состав по умолчанию объявляет ИМЕННО он, и вывести его из одних вариантов нельзя.
+   */
+  manifest: unknown;
 }
 
 async function fetchTemplateVariants(templateId: string): Promise<TemplateCatalogue> {
@@ -51,7 +57,11 @@ async function fetchTemplateVariants(templateId: string): Promise<TemplateCatalo
     name?: string;
     manifest?: { contentTemplates?: ReportVariantOption[] };
   };
-  return { name: data.name, variants: data.manifest?.contentTemplates ?? [] };
+  return {
+    name: data.name,
+    variants: data.manifest?.contentTemplates ?? [],
+    manifest: data.manifest ?? null,
+  };
 }
 
 /** Что блок настроек получает от хука. */
@@ -74,6 +84,14 @@ export interface UseReportVariantsResult {
   fields: ReportSettingDecl[];
   /** Выбранный вариант (авторский выбор, иначе `isDefault`, иначе первый). */
   selected: ReportVariantOption | null;
+  /**
+   * PRD-51: варианты БЛОКОВ документа для этого вида отчёта — тем же отбором, каким их
+   * видит рендерер ({@link blockVariants}). Пусто у шаблона, который блоков не объявил:
+   * такой печатает цельную раскладку, и собирать в нём нечего.
+   */
+  blocks: BlockVariant[];
+  /** Манифест активного шаблона; `null`, пока каталог не пришёл. */
+  manifest: unknown;
 }
 
 /**
@@ -115,8 +133,17 @@ export function useReportVariants(
     );
   }, [variants, selectedKey]);
 
+  // Блоки берутся из ТОГО ЖЕ ответа: второй запрос за тем же манифестом дал бы два ответа
+  // на один вопрос, а расходиться им нельзя — состав палитры и состав печати одно и то же.
+  const blocks = useMemo(
+    () => blockVariants({ contentTemplates: query.data?.variants ?? [] }, kind),
+    [query.data, kind],
+  );
+
   return {
     variants,
+    blocks,
+    manifest: query.data?.manifest ?? null,
     none: !query.isLoading && variants.length === 0,
     loading: query.isLoading,
     templateId,

@@ -18,13 +18,13 @@
   тестов. Справа — тема, имя, выход — без изменений.
 
   О подключении DS: здесь взяты client/src/styles/preflight.css и
-  client/src/styles/vendor/university-rt.css, а не обычная для эскизов копия
-  docs/wireframes/ds/university-rt.css. Причина: docs-копия отстала от рабочей (в ней нет,
+  client/src/styles/vendor/skillum-ds.css, а не обычная для эскизов копия
+  docs/wireframes/ds/skillum-ds.css. Причина: docs-копия отстала от рабочей (в ней нет,
   например, .ou-separator, который в шапке есть), а без preflight.css ссылки рисуются
   подчёркнутыми, чего в приложении нет. Расхождение копий вынесено отдельной находкой.
   -->
   <link rel="stylesheet" href="/client/src/styles/preflight.css" />
-  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
+  <link rel="stylesheet" href="/client/src/styles/vendor/skillum-ds.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
   <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
@@ -131,7 +131,7 @@
 
 <!-- DS Mapping -->
 <section class="wf-mapping">
-  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <h2 class="wf-mapping-title">DS Mapping — Skillum</h2>
   <p>Шапка повторяет <code>client/src/pages/learner/layout.tsx</code>. Форма входа берётся существующая, <code>client/src/pages/login.tsx</code>, и не меняется. Признак ограниченной сессии приходит из <code>GET /api/auth/me</code> в поле <code>user.magicScope</code>.</p>
   <table>
     <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>

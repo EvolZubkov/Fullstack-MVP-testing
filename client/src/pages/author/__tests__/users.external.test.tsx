@@ -17,6 +17,19 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import UsersPage from "../users";
+import { ToastProvider } from "@skillum/ui-kit";
+
+/**
+ * PRD-70 FR-76: the lists live in the filter panel — open it, pick in the field, apply.
+ * `current` is what the field shows now, `option` the value to pick.
+ */
+async function pickInFilter(current: string, option: string) {
+  fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+  const panel = await screen.findByRole("dialog", { name: "Фильтр" });
+  fireEvent.click(within(panel).getByText(current, { selector: ".ou-select__value, .ou-select__value *" }));
+  fireEvent.click(await screen.findByRole("option", { name: option }));
+  fireEvent.click(within(panel).getByRole("button", { name: "Применить" }));
+}
 
 const staffUser = {
   id: "u-staff", email: "i.petrov@company.ru", name: "Петров Иван",
@@ -56,9 +69,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <UsersPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -94,13 +107,12 @@ describe("<UsersPage /> — внешний участник в списке", ()
     renderPage();
     await screen.findByText("anna.frolova@partner.ru");
 
-    fireEvent.click(screen.getByText("Все виды"));
-    fireEvent.click(await screen.findByRole("option", { name: "Внешние участники" }));
+    await pickInFilter("Все виды", "Внешние участники");
+    expect(screen.getByText("Вид учётной записи: Внешние участники")).toBeInTheDocument();
     expect(screen.getByText("anna.frolova@partner.ru")).toBeInTheDocument();
     expect(screen.queryByText("i.petrov@company.ru")).toBeNull();
 
-    fireEvent.click(screen.getByText("Внешние участники"));
-    fireEvent.click(await screen.findByRole("option", { name: "Штатные" }));
+    await pickInFilter("Внешние участники", "Штатные");
     expect(screen.getByText("i.petrov@company.ru")).toBeInTheDocument();
     expect(screen.queryByText("anna.frolova@partner.ru")).toBeNull();
   });
@@ -191,5 +203,50 @@ describe("<UsersPage /> — признак в форме создания", () =
 
     expect(screen.getByPlaceholderText("Минимум 8 символов")).not.toBeDisabled();
     expect(screen.getByLabelText(/Отправить приглашение/)).toBeChecked();
+  });
+});
+
+// ─── Внешний участник из выгрузки LMS: почты нет (PRD-54 BR-54-42) ──────────
+
+describe("<UsersPage /> — внешняя запись без почты", () => {
+  const importedUser = {
+    id: "u-lms", email: null, name: "Участник a3f9c2d1",
+    roles: ["learner"], status: "active", isExternal: true,
+    mustChangePassword: false, gdprConsent: false,
+    lastLoginAt: null, expiresAt: null, createdAt: "2026-10-06T19:30:00Z",
+  };
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      const u = String(url);
+      if ((options?.method ?? "GET").toUpperCase() === "GET") {
+        if (u === "/api/users") return jsonResponse([staffUser, importedUser]);
+        return jsonResponse([]);
+      }
+      return jsonResponse({ success: true, sent: true });
+    });
+  });
+
+  it("вместо адреса «—» с отметкой «Внешний», а поиск по списку не падает", async () => {
+    renderPage();
+    const row = (await screen.findByText("Участник a3f9c2d1")).closest("tr")!;
+    // Ячейка адреса — первая; второе «—» в строке стоит в пустом «Последнем входе».
+    const emailCell = row.querySelector("td")!;
+    expect(within(emailCell).getByText("—")).toBeInTheDocument();
+    expect(within(emailCell).getByText("Внешний")).toBeInTheDocument();
+
+    // Поиск читает адрес у каждой строки: у этой его нет вовсе.
+    fireEvent.change(screen.getByPlaceholderText(/Поиск/), { target: { value: "a3f9" } });
+    expect(screen.getByText("Участник a3f9c2d1")).toBeInTheDocument();
+    expect(screen.queryByText("i.petrov@company.ru")).toBeNull();
+  });
+
+  it("«Сделать штатным» погашен до появления почты", async () => {
+    renderPage();
+    const row = (await screen.findByText("Участник a3f9c2d1")).closest("tr")!;
+    fireEvent.click(within(row).getByLabelText("Действия"));
+    const promote = await screen.findByRole("menuitem", { name: /Сделать штатным/ });
+    expect(promote).toBeDisabled();
+    expect(within(promote).getByText("Сначала задайте почту")).toBeInTheDocument();
   });
 });

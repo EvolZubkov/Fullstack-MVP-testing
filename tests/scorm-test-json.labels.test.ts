@@ -62,7 +62,12 @@ vi.mock("../server/services/template-dir", () => ({
 }));
 vi.mock("../server/services/test-snapshot", () => ({
   liveDataSource: () => source,
-  exportSourceForTest: async () => source,
+  // PRD-56 FR-19a: источник экспорта отдаёт и снимок, из которого он собран — его номер
+  // уезжает в пакет. Здесь снимка нет: тест проверяет надписи, а не версию.
+  exportSourceForTest: async () => ({ src: source, snapshot: null }),
+  // «Сценарий в ИС»: сборка спрашивает, не раздел ли это пункта-сценария. Здесь — нет.
+  isScenarioSection: () => false,
+  deliverySectionName: () => "",
 }));
 
 afterAll(() => {
@@ -127,6 +132,7 @@ const source = {
   getScales: async () => [],
   getQuestionMeasurements: async () => [],
   getTestQuestionScoring: async () => [],
+  getReportBlocks: async () => [],
 };
 
 const BASE_DESIGN = {

@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { Stack, Text } from "@universityrt/ui-kit";
+import { Stack, Text } from "@skillum/ui-kit";
 
 interface LoadingStateProps {
   message?: string;

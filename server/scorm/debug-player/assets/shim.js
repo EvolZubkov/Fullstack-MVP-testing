@@ -1,7 +1,7 @@
 // ─── SCORM 2004 RTE shim — records structured traffic so the inspector can show
 //     exactly what the module sends to the LMS and what the LMS answers back ──────
 (function () {
-  var cmi = {};
+  var cmi = defaults();
   var traffic = [];
   var seq = 0;
   var lastError = "0";
@@ -32,7 +32,30 @@
       "cmi.score.max": "",
       "cmi.mode": "normal",
       "cmi.credit": "credit",
+      "cmi.total_time": "PT0H0M0S",
     };
+  }
+
+  // cmi.total_time is kept the way an LMS keeps it: the sum of the sessions' committed
+  // cmi.session_time, credited when the NEXT session starts (a killed tab never reaches
+  // Terminate, so the last commit is what counts). A package of a timed test anchors its
+  // remaining time on it (PRD-20); without it every relaunch lost the attempt.
+  function durationSec(iso) {
+    var m = /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(String(iso || ""));
+    if (!m) return 0;
+    return (+(m[1] || 0)) * 86400 + (+(m[2] || 0)) * 3600 + (+(m[3] || 0)) * 60 + (+(m[4] || 0));
+  }
+  function isoDuration(sec) {
+    var cs = Math.round(sec * 100); // centiseconds: the precision of the SCORM timeinterval
+    var h = Math.floor(cs / 360000);
+    var min = Math.floor((cs % 360000) / 6000);
+    var s = (cs % 6000) / 100;
+    return "PT" + h + "H" + min + "M" + s + "S";
+  }
+  function creditSessionTime() {
+    if (cmi["cmi.session_time"] == null) return;
+    cmi["cmi.total_time"] = isoDuration(durationSec(cmi["cmi.total_time"]) + durationSec(cmi["cmi.session_time"]));
+    delete cmi["cmi.session_time"];
   }
 
   function persist() {
@@ -61,10 +84,13 @@
   }
 
   var API_1484_11 = {
-    Initialize: function () { lastError = "0"; record("Initialize", "", null, "true"); return "true"; },
+    Initialize: function () { creditSessionTime(); lastError = "0"; record("Initialize", "", null, "true"); return "true"; },
     Terminate: function () { lastError = "0"; persist(); record("Terminate", "", null, "true"); return "true"; },
     GetValue: function (k) { var v = cmi[k] != null ? String(cmi[k]) : ""; lastError = "0"; record("GetValue", k, null, v); return v; },
-    SetValue: function (k, v) { cmi[k] = v; lastError = "0"; record("SetValue", k, v, "true"); return "true"; },
+    SetValue: function (k, v) {
+      if (k === "cmi.total_time") { lastError = "404"; record("SetValue", k, v, "false"); return "false"; } // read-only element
+      cmi[k] = v; lastError = "0"; record("SetValue", k, v, "true"); return "true";
+    },
     Commit: function () { lastError = "0"; persist(); record("Commit", "", null, "true"); return "true"; },
     GetLastError: function () { return lastError; },
     GetErrorString: function () { return ""; },

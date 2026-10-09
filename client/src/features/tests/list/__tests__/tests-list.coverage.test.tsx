@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ROLES } from "@shared/access";
 import { TestsListPage } from "../tests-list";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // The list reads capabilities to gate row actions (PRD-13). Stub the auth
 // context so the component renders without an AuthProvider; every capability is
@@ -29,6 +30,13 @@ const { authMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
+    can: (cap: string) => authMock.can(cap),
+    hasRole: (role: string) => authMock.roles.includes(role),
+    user: { id: authMock.userId },
+  }),
+  // Ящик редактора читает пользователя НЕОБЯЗАТЕЛЬНО (`useOptionalAuth`): он
+  // собирается и без провайдера. Мок обязан знать оба чтения, иначе падает импорт.
+  useOptionalAuth: () => ({
     can: (cap: string) => authMock.can(cap),
     hasRole: (role: string) => authMock.roles.includes(role),
     user: { id: authMock.userId },
@@ -118,9 +126,9 @@ function installFetch(opts: {
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <TestsListPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -207,7 +215,7 @@ describe("<TestsListPage /> — toolbar sort + filters", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Черновик"));
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 
@@ -216,15 +224,15 @@ describe("<TestsListPage /> — toolbar sort + filters", () => {
     expect(chip).toBeInTheDocument();
 
     // Remove the single chip (commitFilter path).
-    fireEvent.click(screen.getByLabelText("Удалить"));
+    fireEvent.click(screen.getByLabelText(/^Снять условие/));
     await waitFor(() => expect(screen.queryByText(/Статус: Черновик/i)).toBeNull());
 
-    // Re-apply, then clear everything via «Очистить всё».
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
+    // Re-apply, then clear everything via «Сбросить фильтры».
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Черновик"));
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
     await screen.findByText(/Статус: Черновик/i);
-    fireEvent.click(screen.getByRole("button", { name: "Очистить всё" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
     await waitFor(() => expect(screen.queryByText(/Статус: Черновик/i)).toBeNull());
   });
 });
@@ -286,12 +294,26 @@ describe("<TestsListPage /> — test more-menu actions", () => {
     openSpy.mockRestore();
   });
 
-  it("exposes SCORM + Excel export links", async () => {
+  it("Э5: один пункт «Сохранить как…» открывает окно выгрузки и закрывает меню", async () => {
     await openMenu();
-    expect(screen.getByTestId("menu-export-t-1").getAttribute("href")).toBe("/api/tests/t-1/export/scorm");
-    expect(screen.getByTestId("menu-export-excel-t-1").getAttribute("href")).toBe("/api/tests/t-1/workbook/export");
-    // Clicking closes the menu (onClick handler).
-    fireEvent.click(screen.getByTestId("menu-export-excel-t-1"));
+    expect(screen.queryByTestId("menu-export-t-1")).toBeNull();
+    expect(screen.queryByTestId("menu-export-excel-t-1")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-save-as-t-1"));
+    expect(await screen.findByRole("dialog", { name: /Сохранить как/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-save-as-t-1")).toBeNull();
+  });
+
+  it("значок «Аналитика» ведёт на уровень теста — туда же, куда строка вкладки «Тесты» (Э3.1)", async () => {
+    await openMenu();
+    const link = screen.getByTestId("test-analytics-t-1").closest("a");
+    expect(link?.getAttribute("href")).toBe("/author/analytics/tests/t-1");
+  });
+
+  it("«Загрузить выгрузку LMS» ведёт в «Импорт» с этим тестом (Э6)", async () => {
+    await openMenu();
+    const item = screen.getByTestId("menu-import-lms-t-1");
+    expect(item).toHaveTextContent("Загрузить выгрузку LMS");
+    expect(item.getAttribute("href")).toBe("/author/import?testId=t-1");
   });
 
   it("«Опубликовать» fires a status PATCH", async () => {

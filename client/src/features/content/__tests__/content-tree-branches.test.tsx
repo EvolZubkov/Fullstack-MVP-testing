@@ -25,7 +25,10 @@ const { guardSpy, toastSpy } = vi.hoisted(() => ({ guardSpy: vi.fn(), toastSpy: 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ can: () => true, hasRole: () => false, user: { id: "u1", name: "Author" } }),
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/features/content-protection/use-content-guard", () => ({
   useContentGuard: () => ({ guard: guardSpy, dialogProps: { open: false } }),
 }));
@@ -103,18 +106,22 @@ function renderTree(data: TreeData = { folders, topics, questions, users }) {
 
 /** Open the facet panel from the toolbar. */
 function openFilters() {
-  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
 }
 /** Click «Применить» inside the facet panel. */
 function applyFilters() {
-  const panel = screen.getByRole("dialog", { name: "Фильтры" });
+  const panel = screen.getByRole("dialog", { name: "Фильтр" });
   fireEvent.click(within(panel).getByText("Применить"));
 }
 /** Remove the active-condition chip carrying the given label. */
 function removeChip(label: string) {
-  const chip = screen.getByText(label).closest(".ou-chip") as HTMLElement;
-  fireEvent.click(within(chip).getByLabelText("Удалить"));
+  // FilterBar names the condition in the remove label: «Снять условие: …».
+  fireEvent.click(screen.getByLabelText(`Снять условие: ${label}`));
 }
+
+// Дерево помнит фильтр в адресе и раскрытие в состоянии записи истории (возврат вглубь-назад);
+// jsdom делит их между тестами файла — каждый тест начинается с чистой записи.
+beforeEach(() => { window.history.replaceState(null, "", "/"); });
 
 beforeEach(() => { guardSpy.mockClear(); toastSpy.mockClear(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -199,7 +206,7 @@ describe("<ContentTree /> — scope facet (topicInScope)", () => {
   /** Open filters, pick a scope segment, apply. */
   function applyScope(segment: string) {
     openFilters();
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     fireEvent.click(within(panel).getByText(segment));
     applyFilters();
   }

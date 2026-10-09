@@ -87,15 +87,40 @@ function pdfTopicFeedback(topicResult) {
  * Both come from the same readers the results screen goes through, for the same reason
  * {@link pdfTopicFeedback} does.
  *
- * @returns {{feedback?: Object, hasPassThreshold?: boolean}} Report-input fields.
+ * @returns {{feedback?: Object, hasPassThreshold?: boolean, breakdownDisplay?: Object, barFill?: Object}} Report-input fields.
  */
 function pdfReportMeta() {
   var meta = {};
-  if (typeof vrTestFeedback === 'function') {
-    var feedback = vrTestFeedback();
-    if (feedback) meta.feedback = feedback;
-  }
+  // PRD-61 §10: обратная связь УРОВНЯ ТЕСТА снята — читать нечего и передавать нечего.
+  // Рекомендации ТЕМ едут в самих темах результата и документа не покидают.
   if (typeof vrHasPassThreshold === 'function') meta.hasPassThreshold = vrHasPassThreshold();
+  // Заголовки итога — те же свойства узла «Итоги теста», что читает экран
+  // (`resultHeadingsOf`, viewResults.js): документ печатает ту же шапку, что экран, с
+  // которого его скачали (PRD-51 §5.2).
+  if (typeof resultHeadingsOf === 'function') {
+    var headings = resultHeadingsOf();
+    if (headings) meta.headings = headings;
+  }
+  // PRD-50 FR-13: та же настройка, что читает экран итогов (`viewResults.js`, baked into
+  // `TEST_DATA.breakdownDisplay` only when the author turned it on — see `test-json.ts`).
+  // Без неё общий построитель держит строки полос погашенными, даже когда темы ниже несут
+  // сырые записи разреза.
+  if (typeof TEST_DATA !== 'undefined' && TEST_DATA && TEST_DATA.breakdownDisplay) {
+    meta.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  }
+  // Окраска полос подтем — та же, что у экрана итогов (`resultsBarFill`, viewResults.js):
+  // документ красит их так же, как экран, с которого его скачали.
+  if (typeof resultsBarFill === 'function') {
+    var barFill = resultsBarFill();
+    if (barFill) meta.barFill = barFill;
+  }
+  // PRD-50 FR-50: порог, по которому общий построитель отбирает тексты подтем. Тот же
+  // `TEST_DATA.overallPassRule`, что читает экран итогов (`viewResults.js`): без него
+  // правило теряет предмет сравнения и документ печатает рекомендации по подтемам,
+  // которые экран признал освоенными, — расхождение, запрещённое PRD-51 §5.2.
+  if (typeof TEST_DATA !== 'undefined' && TEST_DATA && TEST_DATA.overallPassRule) {
+    meta.overallPassRule = TEST_DATA.overallPassRule;
+  }
   // Вводный блок ОТЧЁТА — своя ветвь `intro_json`: у документа вводное слово не то же,
   // что на экране, и подмена одного другим была бы молчаливой ошибкой (PRD-27 §7.1).
   var intro = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.introJson : null;
@@ -115,7 +140,7 @@ function pdfReportMeta() {
 
 /** Map the runtime's standard result onto the shared report input. */
 function pdfStandardInput(results) {
-  return {
+  var input = {
     passed: !!results.passed,
     percent: results.percent,
     totalQuestions: results.totalQuestions,
@@ -125,7 +150,7 @@ function pdfStandardInput(results) {
     topicResults: (results.topicResults || []).map(function (tr) {
       var rec = pdfTopicRecommendations(tr);
       var fb = pdfTopicFeedback(tr);
-      return {
+      var row = {
         topicId: tr.topicId,
         topicName: tr.topicName,
         correct: tr.correct,
@@ -137,15 +162,38 @@ function pdfStandardInput(results) {
         recommendedCourses: rec.courses,
         recommendedEvents: rec.events,
         feedbackTexts: fb.feedbackTexts,
-        recommendedAssets: fb.recommendedAssets
+        recommendedAssets: fb.recommendedAssets,
+        // PRD-50: this topic's breakdown records — the SAME reader as the results
+        // screen (`viewResults.js`): §5.2 forbids the report from showing anything
+        // other than the screen it was downloaded from, and before this the report of
+        // a saved attempt printed no breakdown rows at all.
+        breakdown: (typeof vrTopicBreakdown === 'function') ? vrTopicBreakdown(tr, results.breakdowns) : [],
+        // PRD-50 FR-11: блок раздела — тот же читатель, что у экрана итогов (§5.2).
+        groupKey: (typeof vrTopicGroupKey === 'function') ? vrTopicGroupKey(tr) : null
       };
+      // ТОЛКОВАНИЯ темы, теста над ней и подтем — ТЕМ ЖЕ читателем, что у экрана итогов
+      // (§5.2), и по той же причине, что записи разреза выше: собранные здесь своим
+      // набором полей, они в документ не попадали вовсе, и тема с толкованием печаталась
+      // пустой правой колонкой. Правило замены применяет общий построитель — рантайм
+      // только доносит написанное.
+      return (typeof vrWithInterpretations === 'function') ? vrWithInterpretations(row, tr) : row;
     })
   };
+  // PRD-50 FR-11/FR-27: блоки теста, выпеченные в пакет. Отсутствие оставляет вход
+  // отчёта прежним — тем же плоским списком тем, что печатался до этого PRD.
+  if (typeof TEST_DATA !== 'undefined' && TEST_DATA && TEST_DATA.sectionGroups) {
+    input.sectionGroups = TEST_DATA.sectionGroups;
+  }
+  // PRD-50 FR-28: записи области ТЕСТА для сводного блока — тот же читатель, что у экрана
+  // итогов (§5.2: документ не вправе показать иное, чем экран, с которого его скачали).
+  var testRows = (typeof vrTestBreakdown === 'function') ? vrTestBreakdown(results) : [];
+  if (testRows.length) input.breakdowns = testRows;
+  return input;
 }
 
 /** Map the runtime's adaptive result onto the shared report input. */
 function pdfAdaptiveInput(results) {
-  return {
+  var input = {
     topicResults: (results.topicResults || []).map(function (tr) {
       var rec = pdfTopicRecommendations(tr);
       var fb = pdfTopicFeedback(tr);
@@ -163,6 +211,13 @@ function pdfAdaptiveInput(results) {
       };
     })
   };
+  // PRD-50 FR-28: записи области ТЕСТА — тот же читатель, что у адаптивного ЭКРАНА
+  // (§5.2: документ не вправе показать иное, чем экран, с которого его скачали).
+  // Приходят они здесь из результата, восстановленного в стандартную форму, — ровно то,
+  // что `renderAdaptiveResultsTemplated` отдаёт экрану.
+  var testRows = (typeof vrTestBreakdown === 'function') ? vrTestBreakdown(results) : [];
+  if (testRows.length) input.breakdowns = testRows;
+  return input;
 }
 
 /**
@@ -262,7 +317,8 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
       testName: testName,
       learnerName: learnerName,
       timestamp: timestamp,
-      attemptsCount: (typeof getAllAttempts === 'function') ? getAllAttempts().length : 1
+      // PRD-36 FR-03: «попытка N» берётся из счётчика — истории попыток в состоянии нет.
+      attemptsCount: (typeof getAttemptsUsed === 'function') ? getAttemptsUsed() : 1
     }, pdfReportMeta());
     var opts = {
       design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
@@ -291,7 +347,32 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
       ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)
       : TB.buildReportContext(Object.assign({}, meta, { result: pdfStandardInput(results) }), opts);
 
-    var fileName = await TB.exportReportPdf({ layout: layout, context: context }, testName, {
+    // PRD-51: ДОКУМЕНТ ИЗ БЛОКОВ. Состав разрешил СБОРЩИК пакета и запёк в `bake.document`
+    // — манифеста шаблона в LMS нет, и связать строку документа с раскладкой блока здесь
+    // нечем. Рантайму остаётся подставить каждому блоку его разметку тем же резолвером,
+    // каким он берёт макет оболочки, и отдать всё общей сборке.
+    //
+    // Пакет, собранный до PRD-51, поля не имеет — печатается прежняя цельная раскладка.
+    var page = { layout: layout, context: context };
+    var doc = bake && bake.document;
+    if (doc && doc.blocks && doc.blocks.length) {
+      var blocks = [];
+      for (var i = 0; i < doc.blocks.length; i++) {
+        var b = doc.blocks[i];
+        // Разрыв листа раскладки не имеет вовсе; у остальных блок без разметки
+        // пропускается: напечатать пустоту на месте раздела честнее, чем уронить весь
+        // документ из-за одного не доехавшего файла.
+        var markup = b.layoutFile ? pdfReportLayout(b.layoutFile) : '';
+        if (b.nature !== 'page-break' && !markup) continue;
+        blocks.push(Object.assign({}, b, { layout: markup }));
+      }
+      if (blocks.length) {
+        page.shell = layout;
+        page.blocks = blocks;
+      }
+    }
+
+    var fileName = await TB.exportReportPdf(page, testName, {
       jsPDF: window.jspdf && window.jspdf.jsPDF,
       html2canvas: window.html2canvas
     });

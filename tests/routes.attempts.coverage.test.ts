@@ -235,6 +235,38 @@ describe("POST .../attempts/start — branches", () => {
     expect(res.body.showSectionResults).toBe(false);
   });
 
+  // PRD-19 FR-11a/FR-11b: свободная навигация внутри раздела. Веб-хост читает её из
+  // ответа старта — это его аналог TEST_DATA пакета.
+  it("отдаёт свободную навигацию хосту, а адаптивному тесту гасит её (FR-11b)", async () => {
+    const liveRun = () => {
+      storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+      storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+      storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+      storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    };
+    liveRun();
+    storageMock.getTest.mockResolvedValue({ ...dbTest, allowFreeSectionNavigation: true });
+    const free = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(free.status).toBe(201);
+    expect(free.body.allowFreeSectionNavigation).toBe(true);
+
+    // Адаптивный порядок ведёт лестница уровней, поэтому настройка автора до выдачи не
+    // доходит — иначе она бы обещала свободу там, где её нет.
+    liveRun();
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest, mode: "adaptive", allowFreeSectionNavigation: true,
+    });
+    const adaptive = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(adaptive.body.allowFreeSectionNavigation).toBe(false);
+
+    // Тест, заведённый до этой колонки, получает прежний фронтир (FR-11c).
+    liveRun();
+    storageMock.getTest.mockResolvedValue({ ...dbTest });
+    const legacy = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(legacy.body.allowFreeSectionNavigation).toBe(false);
+  });
+
   it("falls back to live storage when a published test has no snapshot", async () => {
     storageMock.getTest.mockResolvedValue({ ...dbTest, status: "published" });
     storageMock.getLatestSnapshot.mockResolvedValue(undefined);
@@ -606,6 +638,72 @@ describe("POST .../save-progress — branches", () => {
     const res = await asLearner(request(app).post("/api/attempts/atmp1/save-progress").send({ answers: {} }));
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("Failed to save progress");
+  });
+
+  it("PRD-67 FR-10: keeps the stored answer of a closed section", async () => {
+    storageMock.getAttempt.mockResolvedValue({
+      ...dbAttempt,
+      answersJson: { q1: 0 },
+      sectionTimerJson: { gate: { open: null, closed: ["t1"] } },
+    });
+    storageMock.updateAttempt.mockResolvedValue(dbAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/save-progress").send({
+      answers: { q1: 1 }, currentIndex: 0,
+    }));
+    expect(res.status).toBe(200);
+    expect(storageMock.updateAttempt.mock.calls[0][1].answersJson).toEqual({ q1: 0 });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /attempts/:id/section-timer — PRD-67
+// ─────────────────────────────────────────────────────────────────────────────
+describe("POST .../section-timer — PRD-67 close on leave", () => {
+  const sections = [{ topicId: "t1", timeLimitMinutes: 10 }];
+
+  it("a ping from a new page run closes the open section when the test says so", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, closeSectionOnLeave: true });
+    storageMock.getTestSections.mockResolvedValue(sections);
+    storageMock.getAttempt.mockResolvedValue({
+      ...dbAttempt,
+      sectionTimerJson: {
+        budgets: { t1: { remainingMs: 600_000, runningSince: 0 } },
+        lastSeenAt: Date.now() - 5_000,
+        activeMs: 0,
+        runId: "run-1",
+        gate: { open: "t1", closed: [] },
+      },
+    });
+    storageMock.updateAttempt.mockResolvedValue(dbAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/section-timer").send({
+      topicId: "t1", runId: "run-2",
+    }));
+    expect(res.status).toBe(200);
+    expect(res.body.remainingSeconds).toBe(0);
+    expect(res.body.closedTopics).toEqual(["t1"]);
+    expect(storageMock.updateAttempt.mock.calls[0][1].sectionTimerJson.runId).toBe("run-2");
+  });
+
+  it("without the setting a new page run only resumes the frozen remainder", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue(sections);
+    storageMock.getAttempt.mockResolvedValue({
+      ...dbAttempt,
+      sectionTimerJson: {
+        budgets: { t1: { remainingMs: 600_000, runningSince: null } },
+        lastSeenAt: Date.now() - 5_000,
+        activeMs: 0,
+        runId: "run-1",
+        gate: { open: null, closed: [] },
+      },
+    });
+    storageMock.updateAttempt.mockResolvedValue(dbAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/section-timer").send({
+      topicId: "t1", runId: "run-2",
+    }));
+    expect(res.status).toBe(200);
+    expect(res.body.closedTopics).toEqual([]);
+    expect(res.body.remainingSeconds).toBeGreaterThan(590);
   });
 });
 

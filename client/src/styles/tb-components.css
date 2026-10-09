@@ -19,7 +19,7 @@
  * перенос в общий DS (ENGINERING_HANDBOOK/handbook/design-system/...),
  * иначе оставляем здесь.
  *
- * Tokens: --ou-* из UniversityRT DS (см. ds/university-rt.css).
+ * Tokens: --ou-* из Skillum DS (см. ds/skillum-ds.css).
  * ───────────────────────────────────────────────────────────────────────── */
 
 /* ── Local tb-* literal-token aliases ─────────────────────────────────── */
@@ -75,6 +75,22 @@
   min-height: 0;
 }
 
+/* ── Полоса вкладок ящика редактора ─────────────────────────────────────
+   Семь вкладок нового дерева с точками состояния в подписи шире, чем полоса
+   ящика: DS `.ou-tabs__list` — обычный flex без переноса и прокрутки, поэтому
+   последняя вкладка просто уезжала за правый край. Отступ вкладки внутри
+   ЯЩИКА уменьшен до 8px (ui-kit: 14px), а полосе разрешена прокрутка —
+   на узком экране или с длинными подписями седьмая вкладка достижима, а не
+   срезана. Правило живёт в `tb`-слое: сам DS не трогаем. */
+.ou-drawer > .ou-tabs--m .ou-tabs__tab {
+  padding-left: var(--ou-space-2);
+  padding-right: var(--ou-space-2);
+}
+.ou-drawer > .ou-tabs .ou-tabs__list {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
 /* ── Drawer body — flush variant for split layouts ──────────────────────
    DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
    When the body's child is a `.ou-drawer__split` (rail + content), we want
@@ -92,8 +108,8 @@
 /* ── Select popup escape from `overflow: hidden` containers ─────────────
    DS .ou-card sets `overflow: hidden` (rounded-corner clipping) and
    DS .ou-acc--bordered / .ou-acc--separated do the same on accordion items.
-   The ui-kit Select renders its `.ou-select__menu` as `position: absolute`
-   inside the trigger wrapper — without portaling — so any `overflow: hidden`
+   The ui-kit Select renders its `.ou-select__menu` (and Combobox its `.ou-combo__menu`) as
+   `position: absolute` inside the trigger wrapper — without portaling — so any `overflow: hidden`
    ancestor clips the popup. Allow these containers to expand temporarily
    while a Select inside is open. Modern browsers (Chromium 105+, Safari 15.4+,
    Firefox 121+) support `:has`, which is now baseline.
@@ -102,12 +118,12 @@
    `.ou-drawer__body`) we deliberately do NOT override overflow because they
    need to keep scrolling — the popup is small enough (max-height: 280px) to
    fit inside the body after the flush-layout fix above. */
-.ou-card:has(.ou-select.is-open),
-.ou-acc__item:has(.ou-select.is-open),
-.ou-acc--bordered:has(.ou-select.is-open),
-.ou-acc--separated:has(.ou-select.is-open),
-.tb-topic-row:has(.ou-select.is-open),
-.tb-structure-zone:has(.ou-select.is-open) {
+.ou-card:has(.ou-select.is-open, .ou-combo.is-open),
+.ou-acc__item:has(.ou-select.is-open, .ou-combo.is-open),
+.ou-acc--bordered:has(.ou-select.is-open, .ou-combo.is-open),
+.ou-acc--separated:has(.ou-select.is-open, .ou-combo.is-open),
+.tb-topic-row:has(.ou-select.is-open, .ou-combo.is-open),
+.tb-structure-zone:has(.ou-select.is-open, .ou-combo.is-open) {
   overflow: visible;
 }
 
@@ -124,16 +140,17 @@
 /* container-type: inline-size — точка отсчёта для @container ниже:
    адаптив реагирует на ширину самой колонки настроек, а не viewport
    (drawer может быть узким даже на широком экране). */
-.tb-settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--ou-space-5); container-type: inline-size; }
+/* Отступ от краёв — 6x (эскиз `editor-settings-target.html`: «проектный слой: 20 -> 24»). */
+.tb-settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--ou-space-6); container-type: inline-size; }
 
 /* Page-level баннеры сверху форм: остаются на виду при прокрутке. Z-index выше
    баннера, чтобы он перекрывал scroll-контент. Закрытие — через .ou-banner__close. */
 .tb-settings-content > .ou-banner,
 .tb-settings-content > .wf-annot-wrap--block:has(> .ou-banner) {
   position: sticky;
-  top: calc(var(--ou-space-5) * -1);
+  top: calc(var(--ou-space-6) * -1);
   z-index: 2;
-  margin: calc(var(--ou-space-5) * -1) calc(var(--ou-space-5) * -1) var(--ou-space-4);
+  margin: calc(var(--ou-space-6) * -1) calc(var(--ou-space-6) * -1) var(--ou-space-4);
   border-radius: 0;
   border-left: 0;
   border-right: 0;
@@ -145,7 +162,37 @@
   border-right: 0;
   border-top: 0;
 }
-.tb-settings-content .ou-formfield { display: flex; flex-direction: column; gap: var(--ou-space-2); margin-bottom: var(--ou-space-4); }
+/* Кольцо у поля, к которому увёл переход «Перейти к ошибкам». Программный `focus()` не
+   поднимает `:focus-visible`, поэтому класс ставит сам ящик — см. `goToError`. Значения
+   из эскиза: кольцо 2px и такой же отступ. */
+.ou-field.is-focused .ou-field__box,
+.ou-textarea.is-focused .ou-textarea__box,
+.ou-select.is-focused .ou-select__trigger {
+  outline: 2px solid var(--ou-focus-ring, var(--ou-primary-default));
+  outline-offset: 2px;
+}
+
+/* Стопка баннеров РАЗНЫХ уровней (ошибки выше предупреждений) липнет ЦЕЛИКОМ, одним блоком.
+   Два отдельных sticky-баннера с одинаковым `top` при прокрутке наезжают друг на друга:
+   нижний останавливается на той же линии и закрывает верхний вместе с его действием. */
+.tb-settings-content > .tb-alerts {
+  position: sticky;
+  top: calc(var(--ou-space-6) * -1);
+  z-index: 2;
+  margin: calc(var(--ou-space-6) * -1) calc(var(--ou-space-6) * -1) var(--ou-space-4);
+  display: flex;
+  flex-direction: column;
+}
+.tb-settings-content > .tb-alerts > .ou-banner {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  margin: 0;
+}
+/* Метка и контрол — одна пара: 1x. Интервал ДО соседнего блока задаёт панель, поэтому
+   собственной нижней отбивки у поля нет (иначе она складывалась бы с интервалом группы). */
+.tb-settings-content .ou-formfield { display: flex; flex-direction: column; gap: var(--ou-space-1); margin-bottom: 0; }
 .tb-settings-content .ou-formfield > .ou-field,
 .tb-settings-content .ou-formfield > .ou-textarea { display: flex; width: 100%; }
 .tb-settings-content .ou-formfield > .ou-select { width: 100%; }
@@ -154,6 +201,99 @@
    ширине; max-width: 100% сжимается на узких viewport. */
 .tb-settings-content > .ou-formfield > .ou-number { width: var(--tb-input-w-md); max-width: 100%; }
 
+/* ── Проектный слой панели настроек (модульная сетка 4px) ───────────────────
+   Источник — утверждённый эскиз `docs/wireframes/editor-settings-target.html`,
+   блок «проектный слой». Эскиз ссылается на ЭТОТ файл, поэтому значения берутся
+   из него дословно: правило со своими числами меняло бы и вид самого эскиза.
+   1x = 4px внутри компонента, 4x = 16px между разными блоками, 6x = 24px от краёв
+   и перед группой. Разделительных ЛИНИЙ в панели нет — их работу делает интервал. */
+
+.tb-settings-content > * { margin-top: var(--ou-space-4); }
+.tb-settings-content > *:first-child { margin-top: 0; }
+
+/* Панели «Оформления» обёрнуты в собственный контейнер ради `data-testid`, и правило
+   выше до их блоков не доставало: строки параметров, таблица цветов и баннеры шли
+   вплотную. `display: contents` убирает обёртку из раскладки, оставляя её в разметке
+   для приёмочных проверок. */
+.tb-settings-content > [data-testid$="-pane"] { display: contents; }
+.tb-settings-content > .ou-formsection { margin-top: var(--ou-space-6); }
+.tb-settings-content > .ou-formsection:first-child { margin-top: 0; }
+
+/* Карточка объекта (тема, шкала, уровень): края 6x, содержимое 4x. Правила взяты из
+   проектного слоя эскиза дословно — эскиз ссылается на ЭТОТ файл, и свои числа здесь
+   меняли бы и его вид. Прежде тело темы имело собственные 12/16px, а строки внутри
+   отбивались на 8px: ни одно из этих значений сетке не принадлежит. */
+.tb-settings-content .ou-acc__trigger { padding: var(--ou-space-4) var(--ou-space-6); }
+.tb-settings-content .ou-acc__body { padding: 0 var(--ou-space-6) var(--ou-space-6); }
+.tb-settings-content .ou-acc__body > * { margin-top: var(--ou-space-4); }
+.tb-settings-content .ou-acc__body > *:first-child { margin-top: 0; }
+.tb-settings-content .ou-acc__body > .tb-table { margin-top: var(--ou-space-4); }
+
+/* Шапка карточки объекта: триггер, действия и шеврон одной строкой. Кнопка удаления
+   стоит РЯДОМ с триггером, а не внутри него: кнопка в кнопке невалидна, и клик по
+   удалению заодно сворачивал бы карточку. */
+.tb-acc-head { display: flex; align-items: center; gap: var(--ou-space-1); padding-right: var(--ou-space-6); }
+.tb-acc-head > .ou-acc__trigger { flex: 1 1 auto; min-width: 0; padding-right: var(--ou-space-3); }
+/* Шеврон этой шапки — мишень разворота (клик висит на нём), поэтому курсор обязан об этом
+   говорить: в ДС он лежит внутри кнопки и курсор достаётся ему от неё. */
+.tb-acc-head > .ou-acc__chev { cursor: pointer; }
+.tb-topic-actions { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
+
+/* Числовое поле имеет свою ширину; в группе-flex оно растягивалось на весь ящик.
+   Прежнее правило адресовало только ПРЯМОГО потомка панели и до полей внутри раздела
+   не доставало — отсюда растянутые «Лимит времени» и «Максимум попыток». */
+.tb-settings-content .ou-formsection__body > .ou-number,
+.tb-settings-content .ou-formsection__body > .ou-formfield > .ou-number {
+  width: var(--tb-input-w-md); max-width: 100%;
+}
+/* Баннер ПОСЛЕ карточки: у sticky-правила выше отрицательная верхняя отбивка, но она
+   про баннер в шапке панели, а не про баннер в середине списка карточек. */
+.tb-settings-content > :is(.ou-card, .ou-banner) + :is(.ou-card, .ou-banner) {
+  margin-top: var(--ou-space-4);
+}
+/* Внутри карточки действует та же сетка: собственной отбивки поля больше не носят. */
+.tb-settings-content .ou-card__body > * + * { margin-top: var(--ou-space-4); }
+
+/* Группа полей: ни границы, ни вертикальных полей дизайн-системы. Заголовок принадлежит
+   своему содержимому (1x), а группы разделяет 6x. */
+.tb-settings-content .ou-formsection,
+.ou-card__body .ou-formsection {
+  padding-block: 0;
+  border-bottom: 0;
+  gap: var(--ou-space-1);
+}
+/* Третий селектор — обёртка: панель надписей кладёт группы в свой `div`, и её первая
+   группа отбивается от предыдущего блока так же, как группа от группы. */
+.tb-settings-content .ou-formsection + .ou-formsection,
+.ou-card__body .ou-formsection + .ou-formsection,
+.tb-settings-content > * + * > .ou-formsection:first-child {
+  margin-top: var(--ou-space-6);
+}
+
+/* Родственные пары внутри компонента — 1x. */
+/* `ou-switch-field` — единственное, что осталось за проектным слоем: правила зазора
+   «тумблер — текст» в дизайн-системе нет вовсе, задавать его там было бы не переносом
+   утверждённого значения, а новым решением за все продукты. */
+.tb-settings-content .ou-switch-field { gap: var(--ou-space-1); }
+
+/* Хром ящика редактора: 6x от краёв, однородные строки списка — 1x. Правила адресованы
+   ИМЕННО этому ящику (рейл живёт только в его вкладках, подвал найден по телу
+   редактора): у остальных ящиков свои утверждённые эскизы. */
+/* Шапка и полоса вкладок: те же 6x от краёв, что у подвала и панели. Без этого вкладки
+   прижаты к краю ящика, а поля тела начинаются правее — колонка визуально не собирается.
+   ui-kit даёт шапке 20 и полосе 0 (`skillum-ds.css`), эскиз перебивает и то и другое. */
+.ou-drawer:has([data-testid="test-editor-body"]) .ou-tabs__list {
+  padding-inline: var(--ou-space-6);
+}
+/* Аккордеон в панели настроек: между свёртками — 4x, как между разными блоками. ui-kit
+   ставит 8px (`--ou-space-2`), а эскиз требует 16: свёртки тем — это разные блоки, а не
+   родственная пара. Правило появилось, когда реестр обратной связи вопросов переехал с
+   самодельной свёртки на `ou-acc` и впервые привёл аккордеон в ящик. */
+
+/* Родственные пары внутри компонентов ящика — 1x: иконка и подпись кнопки, вариант и его
+   метка, иконка и текст баннера. ui-kit ставит 8, 12 и 2 соответственно. */
+
+
 /* Section caption (subdued uppercase-like heading внутри формы). */
 .tb-section-label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); display: inline-flex; align-items: center; gap: var(--ou-space-2); }
 
@@ -161,10 +301,33 @@
    A condition row is «Элемент(grow) · Свойство · Оператор · Значение · удалить»;
    the same primitive renders «Порог» (one row) and «Вердикт» (a list). */
 .tb-formula-builder { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-2); }
+/* Собранное конструктором выражение. Пунктирная рамка отличает ПОКАЗ от ввода: править
+   строку здесь нельзя, для этого есть режим «Выражение». */
+.tb-formula-preview {
+  font: var(--ou-text-body-s);
+  font-family: var(--ou-font-family-mono);
+  color: var(--ou-fg-muted);
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  overflow-x: auto;
+}
 .tb-rows { display: flex; flex-direction: column; gap: var(--ou-space-2); }
 .tb-rows-actions { margin-top: var(--ou-space-2); }
+/* PRD-53: шкалы группы профиля — список тумблеров в столбик.
+   `.ou-switch-field` строчный, и без контейнера тумблеры сходятся в одну строку,
+   где название одной шкалы упирается в ключ соседней. Шаг 1x: строки родственные. */
+/* PRD-53: перечень исходов — карточки одного списка, шаг 1x. Раньше это была
+   таблица, где строка показывала только первую строку значения. */
+.tb-outcome-list { display: flex; flex-direction: column; gap: var(--ou-space-1); margin-bottom: var(--ou-space-2); }
+.tb-profile-scales { display: flex; flex-direction: column; gap: var(--ou-space-1); align-items: flex-start; }
 .tb-cond-row { display: flex; align-items: flex-end; gap: var(--ou-space-2); }
 .tb-cond-row > .tb-cond-row__grow { flex: 1 1 auto; min-width: 0; }
+
+/* Users bulk preview: linking keys are long unbreakable ids (`accept_c_1790…`).
+   Without a break point they widen the column until the DS table clips «Действие»,
+   the one column a duplicate row is acted on from. */
+.tb-users-key { overflow-wrap: anywhere; }
 .tb-cond-sep { font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; padding-bottom: var(--ou-space-2); }
 
 /* DSL «Функции» reference (modal): toolbar trigger + grouped function rows. */
@@ -177,6 +340,89 @@
 
 /* Card body paragraph (muted info). */
 .tb-card-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
+
+/* PRD-29 §7.1a: шапка строки темы в карточке «По темам» — подпись источника слева,
+   «Сбросить до установок темы» справа, в одну строку над предпросмотром. */
+/* Переопределённый текст помечается ТОЛЬКО полосой слева: подпись рядом с ней была бы
+   второй раз о том же (решение эскиза 13). Цвет — предупреждающий: это не ошибка, а
+   отступление от текста темы. */
+.tb-feedback-preview.is-overridden { border-left: var(--ou-space-1) solid var(--ou-warning-default); }
+
+.tb-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+
+/* Поле текста внутри группы: метка, под ней предпросмотр. Интервал — из DS (`.ou-field`
+   задаёт 1X между меткой и полем), а не назначенный: полей в группе теперь два, и своя
+   вертикальная шкала развела бы их иначе, чем остальные поля формы.
+   `margin-bottom` шапки гасится: здесь интервал держит `gap` контейнера, а сложение двух
+   правил давало 16 px вместо 8. */
+.tb-textfield { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-textfield .tb-feedback-head { margin-bottom: 0; align-items: center; }
+/* Кнопка сброса выше строки метки: её собственные отступы вытягивают шапку и двигают поле
+   вниз ровно у тех полей, где она есть. Гасим их, чтобы интервал не плясал от наличия
+   кнопки. */
+.tb-textfield .tb-feedback-head .ou-iconbtn { margin-top: -6px; margin-bottom: -6px; }
+/* Правая часть шапки: тег источника и действие над ним. Высота фиксирована по строке
+   метки — по той же причине. */
+.tb-feedback-head__trail {
+  display: flex; align-items: center; gap: var(--ou-space-1); height: 16px;
+}
+
+/* Группа полей одной темы (или подтемы): подзаголовок, под ним поля через 16 px — столько
+   же, сколько DS держит между полями формы. Своя обёртка, а не переопределение
+   `.ou-formsection__body`: то правило действует на КАЖДУЮ карточку панели настроек, и
+   развести две из них за счёт всех остальных было бы правкой чужой вёрстки.
+   Между группами 32 px — следующая ступень шкалы, иначе соседние темы читаются как
+   продолжение одной. Складывается из `gap` секции (16) и этого margin (16). */
+/* Карточка группы тем на вкладке «Состав». Геометрия — карточки уровня (`tb-level-card`),
+   потому что группа и тема стоят в одном списке и обязаны читаться как вещи одного
+   порядка. Здесь только то, чего у карточки уровня нет: зазор между карточками, подсветка
+   зоны приёма и отступ кнопки «Добавить тему» от списка. */
+.tb-group-card + .tb-group-card { margin-top: var(--ou-space-3); }
+.tb-group-card.is-drop-target { border-color: var(--ou-border-focus); }
+.tb-group-card__foot { margin-top: var(--ou-space-2); }
+/* Ручка группы стоит первой в шапке — до поля с именем; зазор тот же, что у ручки темы. */
+.tb-group-card .tb-level-card__head > .drag-handle { margin-right: var(--ou-space-2); }
+
+.tb-textgroup { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-textgroup + .tb-textgroup { margin-top: var(--ou-space-4); }
+/* Подзаголовок группы несёт свой нижний отступ; внутри flex-контейнера он сложился бы с
+   `gap` и дал 24 px вместо 16. */
+.tb-textgroup > .tb-section-label { margin: 0; }
+
+/* Э2.4: реестр «По вопросам» — дерево «тема -> вопрос», только чтение. Тема сворачивается,
+   потому что у теста бывает десяток тем по десятку вопросов. Само дерево собрано из
+   `ou-acc` и `tb-table`; прежняя ручная раскладка строки (`__row`/`__q`/`__texts`, доли
+   40/45%) снята вместе с ней — но ШИРИНЫ, которые она задавала, таблице никто не передал,
+   и столбец «Текст» схлопывался. Ниже они возвращены столбцам. */
+.tb-qfeedback-table { table-layout: fixed; }
+.tb-qfeedback-table__q { width: 40%; }
+.tb-qfeedback-table__mode { width: 96px; }
+.tb-qfeedback-table__act { width: 136px; }
+.tb-qfeedback__line { display: flex; gap: var(--ou-space-2); font: var(--ou-text-body-s); }
+.tb-qfeedback__line-lbl { color: var(--ou-fg-muted); flex: 0 0 auto; }
+/* `break-word`, а НЕ `anywhere`: `anywhere` уменьшает min-content содержимого до одной
+   буквы, и в авторастяжке таблицы столбец «Текст» ужимался до нескольких пикселей —
+   «не задано» рассыпалось в столбик «не / зада / но». `break-word` рвёт только то, что
+   иначе вылезет за край, а собственную ширину столбца не занижает. */
+.tb-qfeedback__line-text { overflow-wrap: break-word; min-width: 0; }
+.tb-qfeedback__line-text.is-empty { color: var(--ou-fg-disabled); }
+
+/* Registry «Обратная связь вопросов»: an option override is its own SUB-ROW under the
+   question. No rule between a question and its sub-rows, so the group reads as one; the
+   rule comes after the last sub-row. Approved wireframe: approved/option-feedback.html.
+   Scoped under `.tb-table`: the generic `.tb-table td` rule further down has the same
+   specificity and would otherwise win by order. */
+.tb-table .tb-qfeedback-row--has-sub > td { border-bottom: none; }
+.tb-table .tb-qfeedback-row--sub > td { padding-top: 0; vertical-align: top; }
+.tb-table .tb-qfeedback-row--sub:not(.is-last) > td { border-bottom: none; }
+.tb-qfeedback-sub { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding-left: var(--ou-space-4); color: var(--ou-fg-muted); }
+.tb-qfeedback-sub > svg { flex: none; margin-top: var(--ou-space-1); }
 
 /* Meta-count — компактный indicator «иконка + число» (например, число
    назначений теста в шапке drawer-а). Не chip, не tag — просто tone-muted
@@ -219,6 +465,18 @@
    keeps its full-width auto layout. The answer-text column is widened and pinned;
    the scale-value columns are narrowed; the table scrolls horizontally inside the
    card body when the scale columns overflow the drawer width. */
+/* Таблица весов опций в модалке оценки вопроса. Колонка балла узкая и постоянной
+   ширины: иначе поле растягивается на половину модалки и текст варианта прижимается
+   к левому краю. 120px — ширина из эскиза (`--wf-w-rhs`). */
+/* Фиксированная раскладка: при автоматической колонку расширяет собственная ширина `<input>`
+   (около 20 символов), и правило 120px не действует. На стенде 2.44 колонка штрафов сценариев так
+   и вышла шириной 224px вместо 144px по эскизу (Э5а «штрафы в оценке»).
+   При фиксированной раскладке ширина колонки включает внутренние отступы ячейки (12 + 12), поэтому
+   144px — это поле 120px по эскизу. */
+.tb-weights { table-layout: fixed; }
+.tb-weights td:last-child,
+.tb-weights th:last-child { width: 144px; }
+
 .tb-contrib-grid-wrap { overflow-x: auto; }
 /* table-layout: fixed + an EXPLICIT table width = the exact column sum. With
    width:auto the table grows to max-content (the inputs' ~20ch intrinsic size)
@@ -226,9 +484,15 @@
    the width to (text col + N × value col) — N comes from the inline
    --tb-contrib-cols var — makes fixed layout honor each column exactly, and the
    table overflows the drawer when there are many scales → the wrapper scrolls. */
+/* 7rem хватало простому полю ввода, но в ячейке теперь счётчик со степперами, и две
+   кнопки съедают 56px из 112px: на число оставалось ~14px, туда не помещалось даже
+   «-1,5». 8.5rem возвращает полю ~40px под знаки — «-12,5» видно целиком. Ширина
+   объявлена ЗДЕСЬ, у таблицы: свойство наследуется, поэтому оба места ниже берут
+   одно значение и разъехаться не могут. */
 .tb-table.tb-contrib-grid {
+  --tb-contrib-val-w: 8.5rem;
   table-layout: fixed;
-  width: calc(var(--tb-contrib-unit-w, 18rem) + var(--tb-contrib-cols, 0) * var(--tb-contrib-val-w, 7rem));
+  width: calc(var(--tb-contrib-unit-w, 18rem) + var(--tb-contrib-cols, 0) * var(--tb-contrib-val-w));
 }
 
 /* Answer-text column: ~2x wider than its prior auto width, pinned on scroll. */
@@ -252,7 +516,7 @@
 .tb-contrib-grid__unit-text { min-width: 0; }
 
 /* Scale value columns: ~half their prior auto width (input fills the cell). */
-.tb-contrib-grid__val-col { width: var(--tb-contrib-val-w, 7rem); }
+.tb-contrib-grid__val-col { width: var(--tb-contrib-val-w); }
 /* A scale key ("EMOTIONAL_EXHAUSTION") is one unbreakable word — an underscore is
    not a break opportunity — so in a fixed-width column it overflows and paints
    over the neighbouring headers. The markup supplies <wbr> break points at each
@@ -328,7 +592,6 @@
 .tb-pass-card { margin-bottom: var(--ou-space-3); }
 .tb-pass-card > .ou-card__header { padding-bottom: var(--ou-space-2); }
 .tb-pass-card > .ou-card__body { padding-top: var(--ou-space-2); padding-bottom: var(--ou-space-3); }
-.tb-pass-card .ou-radio-group__items { gap: var(--ou-space-2); }
 
 .tb-pass-overall {
   display: grid;
@@ -347,6 +610,8 @@
 }
 .tb-pass-table th { font: var(--ou-text-body-s); font-weight: 500; }
 .tb-pass-table__topic-col { width: var(--wf-size-180); }
+/* Техдолг №8: строка пункта-сценария — значок сценария перед названием, как в «Составе». */
+.tb-pass-table__item { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
 
 /* Expand-row: 3-td layout. */
 .tb-pass-table__detail > td {
@@ -418,7 +683,14 @@
 /* Адаптив переехал в единый @container ниже (см. в конце файла). */
 
 /* ── Status dot (универсальный индикатор состояния) ──────────────────── */
+/* `display: inline-block` обязателен: размер точке задают `width`/`height`, а к
+   строчному элементу они не применяются. В рейле и в карточках точка попадала в
+   flex-контейнер и блокировалась им сама собой, а подпись вкладки ui-kit заворачивает
+   в `span.ou-tabs__label` с `display: block` — и там же точка схлопывалась в ноль
+   ширины: автор видел баннер «Название обязательно» и ни одной пометки на вкладке,
+   где это поле лежит. */
 .tb-status-dot {
+  display: inline-block; vertical-align: middle;
   width: var(--ou-space-3); height: var(--ou-space-3); border-radius: 50%;
   flex-shrink: 0; background: var(--ou-fg-muted);
 }
@@ -539,18 +811,20 @@
 /* Inline status dot for tabs / list rows (per prd7-editor-drawer.html
    и prd7-structure-*.html wireframes). Smaller than .tb-status-dot —
    renders next to text, not in a card lead slot. */
-.status-dot {
-  display: inline-block;
-  vertical-align: middle;
-  width: var(--ou-space-2);
-  height: var(--ou-space-2);
-  border-radius: 50%;
-  margin-left: var(--ou-space-1);
-  background: var(--ou-fg-muted);
-}
-.status-dot.dirty { background: var(--ou-accent-default); }
-.status-dot.warn  { background: var(--ou-warning-default); }
-.status-dot.error { background: var(--ou-error-default); }
+/* Точка состояния во вкладке и в рейле — тот же `tb-status-dot`, что и в карточках
+   объектов; своей копии больше нет. Отбивка от подписи — единственное, что нужно
+   добавить к общему правилу.
+
+   Во вкладке отбор ПОТОМКОМ, а не прямым ребёнком: подпись вкладки ui-kit кладёт в
+   собственную обёртку `span.ou-tabs__label`, и правило `>` молча переставало
+   действовать. Разметка обёртки — внутреннее дело DS, опираться на неё нельзя. */
+.ou-tabs__tab .tb-status-dot,
+.ou-drawer__rail-item > .tb-status-dot { margin-left: var(--ou-space-1); }
+/* Длинная подпись пункта ПЕРЕНОСИТСЯ (решение владельца 2026-10-01, названия тем в
+   «Вопросах теста»): у ДС высота пункта жёсткая — 36px, и вторая строка налезала на
+   соседний пункт. Высота становится минимальной, отступ по вертикали — 2x: однострочный
+   пункт остаётся прежних 36px. */
+.ou-drawer__rail-item { height: auto; min-height: 36px; padding-block: var(--ou-space-2); }
 
 /* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
 .tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
@@ -720,6 +994,18 @@
 .tb-test-order-row .ou-select__trigger,
 .tb-question-order-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
 
+/* PRD-50 FR-11/FR-43: the topic's block picker — same anatomy as
+   .tb-question-order-row (fixed-width label + Select), placed right below it. */
+.tb-group-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-group-row__lbl {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-group-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
+
 /* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
 .tb-draw-count-row {
   display: flex; align-items: center; gap: var(--ou-space-2);
@@ -730,6 +1016,10 @@
   width: var(--wf-size-150); flex-shrink: 0;
 }
 .tb-draw-count-row__max { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* PRD-55 (FR-33): хвост сводки темы «· увидят N%» — подкрашивается, когда банк вырабатывается.
+   Тон тот же, что у баннера под «Вопросов в тест»: это одна и та же величина, и разный цвет у
+   двух её показов читался бы как два разных сигнала. */
+.tb-exposure-hint--warn { color: var(--ou-warning-default); }
 /* Adaptive mode: draw_count заменяется bag-таггом + ссылкой на уровни (FR-36).
    `--adaptive` modifier добавляет flex-wrap, поскольку link-tail длиннее number-input. */
 .tb-draw-count-row--adaptive { flex-wrap: wrap; }
@@ -753,13 +1043,44 @@
   cursor: pointer;
 }
 .tb-quota-toggle .tb-section-label { margin: 0; }
+/* Квоты по подтемам — карточки: колонка с шагом 4x, как её задаёт проектный слой
+   эскиза. Собственные отступы у подвала блока при этом обнуляются: с общим шагом
+   колонки они складывались бы в двойной. */
 .tb-quota-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
   margin-top: var(--ou-space-3);
   padding-left: var(--ou-space-4);
   border-left: var(--wf-border-w) solid var(--ou-border-soft);
 }
+.tb-quota-block > .tb-quota-actions,
+.tb-quota-block > .tb-quota-sum { margin-top: 0; }
 .tb-quota-block__avail { color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+/* PRD-50 §16: знак тревоги рядом со значением строки квоты. Заменил чип в подвале таблицы —
+   тот говорил о таблице целиком и не показывал, какая именно строка виновата.
+   ТОН ЗНАКА = УРОВЕНЬ ПРОБЛЕМЫ (контракт редактора, «Индикация проблем»): жёлтый у
+   предупреждения, красный у ошибки. Нехватка вопросов под квоту сохранение не блокирует,
+   поэтому базовый тон здесь жёлтый, а красный включает модификатор. */
+/* Ячейка «Доступно»: значение и знак тревоги стоят одной строкой и центрируются по ней.
+   Без общей строки знак выравнивался бы по базовой линии текста и садился ниже числа. */
+.tb-quota-block__availrow { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
+.tb-quota-block__alarm { display: inline-flex; color: var(--ou-warning-default); }
+.tb-quota-block__alarm--error { color: var(--ou-error-default); }
+/* Пузырь подсказки внутри узкой ячейки таблицы ужимается по ширине ячейки, и текст встаёт
+   в колонку по одному слову. Ширина по содержимому это снимает; верхнюю границу по-прежнему
+   держит `--wrap` дизайн-системы. */
+.tb-quota-block .ou-tip__bubble--wrap { width: max-content; }
 .tb-quota-actions { margin-top: var(--ou-space-3); }
+/* Строка порядка подблоков итогов: имя слева, кнопки перемещения справа. Обведённая
+   строка, а не плоский текст — автор двигает СТРОКИ, и границу перетаскиваемого блока
+   надо видеть (эскиз `editor-settings-target.html`, `.wf-order-row`). */
+.tb-order-row {
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+}
+
 .tb-quota-sum {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--ou-space-3); margin-top: var(--ou-space-3);
@@ -853,8 +1174,11 @@
 .tb-feedback-preview__rich ul ul { list-style-type: circle; }
 .tb-feedback-preview__rich ul ul ul { list-style-type: square; }
 .tb-feedback-preview__rich ol { list-style: decimal outside; }
+/* Pencil on the EMPTY placeholder. There the whole card is the button, so this
+   is a decorative icon, not a control — it only has to sit where the real
+   pencil button sits on a filled card, so the two states read alike. */
 .tb-feedback-preview__edit-hint {
-  display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
+  display: inline-flex; align-items: center; flex-shrink: 0;
   color: var(--ou-fg-muted);
 }
 /* TD-02: head row (snippet/rich text + pencil edit button) */
@@ -919,7 +1243,11 @@
 .tb-changes-anchor { position: relative; display: flex; align-items: center; }
 .tb-changes-popover {
   position: absolute; bottom: calc(100% + var(--wf-space-10)); right: 0;
-  width: var(--wf-size-400); max-height: var(--wf-size-420); overflow: hidden;
+  /* Токены `--wf-size-400` / `--wf-size-420` не объявлены нигде в проекте, поэтому правило
+     было невалидным и поповер схлопывался по содержимому — вместо 420px около 170, значения
+     переносились по два-три слова. Эскиз задаёт ширину поповера и ограничивает высоту ЕГО
+     ТЕЛА, а не всего поповера: иначе шапка со счётчиком уезжает вместе с содержимым. */
+  width: 420px; overflow: hidden;
   background: var(--ou-bg-elevated);
   border: var(--wf-border-w) solid var(--ou-border-default);
   border-radius: var(--ou-radius-m);
@@ -934,7 +1262,7 @@
 }
 .tb-changes-popover__title { font: var(--ou-text-body-s); font-weight: 600; }
 .tb-changes-popover__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-.tb-changes-popover__body { flex: 1; overflow-y: auto; }
+.tb-changes-popover__body { flex: 1; max-height: 320px; overflow-y: auto; }
 .tb-changes-popover__group { padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-3); }
 .tb-changes-popover__group + .tb-changes-popover__group {
   border-top: var(--wf-border-w) solid var(--ou-border-default);
@@ -946,23 +1274,14 @@
 }
 .tb-changes-popover__item {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ou-space-2);
-  padding: var(--ou-space-2) 0; font: var(--ou-text-body-s);
-  border-top: var(--wf-border-w) dashed var(--ou-border-default);
+  padding: var(--ou-space-1) 0; font: var(--ou-text-body-s);
 }
-.tb-changes-popover__item:first-of-type { border-top: none; }
 .tb-changes-popover__label { font-weight: 500; flex-basis: 100%; }
 .tb-changes-popover__old {
-  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
-  font-family: ui-monospace, monospace;
-  color: var(--ou-error-on-soft); background: var(--ou-error-soft);
+  color: var(--ou-fg-muted);
   text-decoration: line-through;
 }
-.tb-changes-popover__new {
-  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
-  font-family: ui-monospace, monospace;
-  color: var(--ou-success-on-soft); background: var(--ou-success-soft);
-  font-weight: 500;
-}
+.tb-changes-popover__new { font-weight: 600; }
 .tb-changes-popover__arrow { color: var(--ou-fg-muted); }
 .tb-changes-popover__context { color: var(--ou-fg-muted); flex-basis: 100%; }
 
@@ -998,6 +1317,8 @@
  * ──────────────────────────────────────────────────────────────────────────── */
 
 .tb-topic-picker__search { margin-bottom: var(--ou-space-3); }
+/* «Создать тему» — другое действие, чем «Отмена»: слева в подвале, отдельно от неё. */
+.tb-topic-picker__create { margin-right: auto; }
 
 .tb-topic-picker__list {
   list-style: none;
@@ -1082,24 +1403,10 @@
   white-space: nowrap;
 }
 
-/* ── Structure tab — flow-mode-bar / zone-block / topic-block / page-row
+/* ── Structure tab — zone-block / topic-block / page-row
    Ported from prd7-structure-linear-flat.html / prd7-structure-linear-by-topics.html
    (wireframe-local CSS); now lives in DS-extensions for use in
    features/tests/editor/sections/start-pages-section.tsx. */
-
-/* Inline flow-mode summary at the top of the Structure tab. */
-.flow-mode-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--ou-space-2);
-  padding: var(--wf-space-7, 6px) 0 var(--ou-space-3);
-  font: var(--ou-text-body-s);
-  color: var(--ou-fg-muted);
-  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-  margin-bottom: var(--ou-space-4);
-}
-.flow-mode-label { font-weight: 600; color: var(--ou-fg-default); }
-.flow-mode-hint { font: var(--ou-text-caption); }
 
 /* Zone blocks — outer container for «До теста» / «Внутри теста» / «После теста». */
 .zone-block {
@@ -1224,7 +1531,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--ou-space-2);
+  /* 1x между бейджем, заголовком и действиями: это одна строка, а не разные блоки
+     (эскиз `editor-settings-target.html`, «проектный слой: 8 -> 4»). */
+  gap: var(--ou-space-1);
   padding: var(--wf-space-6, 6px) var(--wf-space-10, 10px) var(--wf-space-6, 6px) var(--wf-space-14, 14px);
   position: relative;
 }
@@ -1288,17 +1597,29 @@
   background: var(--ou-bg-surface-3);
   color: var(--ou-fg-default);
 }
-.tpl-page-marker {
-  font: var(--ou-text-caption);
-  color: var(--ou-fg-muted);
-  background: var(--ou-bg-surface-3);
-  border-radius: var(--wf-space-1q, 3px);
-  padding: var(--wf-border-w) var(--wf-space-tiny, 2px);
-  margin-left: var(--ou-space-1);
-}
 .page-title { font: var(--ou-text-body-s); flex: 1; min-width: 0; }
 .page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
 .page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+/* PRD-51 §7.2: строка документа отчёта. Выключенный блок читается приглушённым
+   названием — данные не печатаются, но строка остаётся на своём месте в списке. */
+.page-row.is-off .page-title,
+.page-row.is-off .page-variant-badge {
+  color: var(--ou-fg-muted);
+  opacity: 0.65;
+}
+
+/* Разрыв листа — не карточка и не страница, а строка-разделитель: следующий блок
+   начинается с нового листа. Пунктир справа договаривает то же самое. */
+/* Разрыв листа — такая же строка документа, как остальные: название обычным
+   регистром, без пунктирных линий по бокам. Отличает её ножницы перед названием и
+   отсутствие бейджа вида. */
+.page-row--break .page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  color: var(--ou-fg-muted);
+}
 
 /* PRD-19 FR-08a: «Обзор раздела/теста» navigation slot (section-finish /
    test-finish). Accent left-bar marks it as the navigation slot; the disabled
@@ -1313,6 +1634,19 @@
   opacity: 0.55;
 }
 .page-row--disabled .page-title { color: var(--ou-fg-muted); }
+
+/* Скрытая автором карточка (решение владельца 2026-09-20): заголовок и бейдж
+   приглушаются, а статус несёт ПИКТОГРАММА перед бейджем. Гасить строку целиком
+   (opacity, как у недоступного «Обзора») нельзя: погас бы и сам знак — единственное,
+   ради чего строка осталась в полотне. */
+.page-row--hidden .page-title { color: var(--ou-fg-muted); }
+.page-row--hidden .page-variant-badge { opacity: 0.6; }
+.page-hidden-ico {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--ou-fg-muted);
+}
 .page-comment {
   display: flex;
   align-items: flex-start;
@@ -1582,6 +1916,36 @@
 /* TemplateScreen's host fills the fixed reference frame so the scene lays out against
    a definite size (its `height:100%` resolves) before the frame is scaled. */
 .variant-picker__frame > * { width: 100%; height: 100%; display: block; }
+/* Схема блока отчёта в палитре: лист с крупными штрихами. Не рендер — блок документа
+   не самостоятельный экран (эскиз `editor-settings-target.html`, `.tb-sheet`). */
+.tb-sheet {
+  width: 100%;
+  max-width: var(--wf-w-sheet, 320px);
+  align-self: center;
+  background: var(--ou-bg-surface);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  padding: var(--ou-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+}
+.tb-sheet__title { height: var(--ou-space-4); width: 60%; border-radius: var(--ou-radius-s); background: var(--ou-border-default); }
+.tb-sheet__line { height: var(--ou-space-2); border-radius: var(--ou-radius-s); background: var(--ou-border-soft); }
+.tb-sheet__line--short { width: 70%; }
+.tb-sheet__block {
+  height: var(--ou-space-12);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+}
+/* Разрыв листа: единственный блок, который на листе не печатается, а делит его. */
+.tb-sheet__break {
+  height: 0;
+  margin: var(--ou-space-2) 0;
+  border-top: var(--wf-border-w) dashed var(--ou-border-default);
+}
+
 .variant-picker__empty {
   flex: 1;
   display: flex;
@@ -1599,6 +1963,43 @@
 }
 
 /* Variant picker list inside the «Добавить страницу» modal. */
+/* PRD-51 §7.3: поиск над списком палитры блоков. Иконка положена в поле, а не рядом:
+   строка поиска в модале узкая, и подпись съела бы её половину. */
+.variant-search { position: relative; margin-bottom: var(--ou-space-3); }
+.variant-search__icon {
+  position: absolute;
+  left: var(--ou-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ou-fg-muted);
+  pointer-events: none;
+}
+.variant-search__input {
+  width: 100%;
+  height: var(--ou-size-control-m);
+  padding: 0 var(--ou-space-3) 0 var(--ou-space-7);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-input);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  outline: none;
+}
+.variant-search__input:focus {
+  border-color: var(--ou-accent-default);
+  box-shadow: var(--ou-shadow-focus);
+}
+
+/* Заголовок группы внутри списка вариантов. */
+.variant-group {
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ou-fg-muted);
+  padding: var(--ou-space-2) var(--ou-space-3) var(--wf-space-tiny, 2px);
+}
+
 .variant-list {
   list-style: none;
   padding: var(--ou-space-1);
@@ -1790,6 +2191,79 @@
   gap: var(--ou-space-1);
   align-items: center;
 }
+/* Option previews of a design param (spec §6 `optionPreviews`): a template ships a
+   picture per option, so the choice is made by LOOK, not by a word in a dropdown.
+   Built on the gallery card above — one visual choice reads the same across the tab;
+   only the thumbnail differs, because a logo lockup is a wide strip, not a 16:9 cover. */
+.tpl-choice {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.tpl-choice__legend {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-soft);
+  padding: 0;
+  margin-bottom: var(--ou-space-2);
+}
+.tpl-choice__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--ou-space-3);
+}
+.tpl-choice__card {
+  cursor: pointer;
+  position: relative;
+}
+/* The radio stays a real input — keyboard and screen readers need it — but the CARD
+   is the visible control, so the circle itself is taken out of the layout. */
+.tpl-choice__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.tpl-choice__input:focus-visible + .tpl-choice__thumb {
+  outline: 2px solid var(--ou-accent-default);
+  outline-offset: -2px;
+}
+/* Подложка миниатюры — обычная поверхность темы: шаблон отдаёт превью ПОД ТЕМУ
+   интерфейса (пара путей в `optionPreviews`), поэтому подменять фон под картинку не
+   нужно — картинка сама приходит подходящая. */
+.tpl-choice__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Поле одинаковое у всех вариантов. `aspect-ratio` тут не годится: плитка —
+     элемент колоночного флекса карточки, у неё `min-height: auto`, и картинка выше
+     расчётной высоты растягивала поле: плитки выходили разной высоты, а локи —
+     разного масштаба. Фиксированная высота плюс `flex: none` снимают обе причины. */
+  flex: none;
+  height: 88px;
+  padding: var(--ou-space-3);
+  background: var(--ou-bg-surface-2);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+  overflow: hidden;
+}
+/* Вариант «ничего не показывать»: перечёркнутый квадрат вместо картинки, чтобы плитка
+   не читалась как незагрузившееся изображение. */
+.tpl-choice__empty {
+  color: var(--ou-fg-subtle);
+}
+/* Не `max-*`: мелкая картинка осталась бы в своём размере, и локи в ряду читались бы
+   разным кеглем. `contain` вписывает каждый в одно и то же поле. */
+.tpl-choice__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .tpl-gallery-foot {
   display: flex;
   align-items: center;
@@ -1948,7 +2422,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--ou-space-2);
+  gap: var(--ou-space-4);
 }
 .tpl-info__head {
   display: flex;
@@ -1958,14 +2432,14 @@
 }
 .tpl-name { font: var(--ou-text-body-m); font-weight: 600; }
 .tpl-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-.tpl-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1); }
+.tpl-actions { display: flex; gap: var(--ou-space-2); margin: 0; }
 
 /* Colour param row: the picker plus the origin of the current value — either
    «из шаблона» (no override yet) or the action that gives the colour back. */
 .design-color-field {
   display: flex;
   align-items: center;
-  gap: var(--ou-space-2);
+  gap: var(--ou-space-1);
 }
 .design-color-field__origin {
   font: var(--ou-text-body-s);
@@ -1978,8 +2452,7 @@
 .design-theme-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--ou-space-3);
+  gap: var(--ou-space-4);
 }
 
 /* The parameter column carries the description and is therefore greedy: without a
@@ -1994,7 +2467,9 @@
   color: var(--ou-fg-default);
 }
 .design-colors-table__hint {
-  font: var(--ou-text-caption);
+  /* Подпись под ячейкой цвета — обычный мелкий текст, а не капшен: капшен несёт
+     полужирное начертание и свой интерлиньяж, и строка выбивалась из соседних. */
+  font: var(--ou-text-body-xs);
   color: var(--ou-fg-muted);
   margin-top: var(--ou-space-1);
 }
@@ -2159,24 +2634,23 @@
    мягкая акцентная заливка каждой настроенной ячейки (tooltip на ячейке). */
 .tb-qscoring { display: flex; flex-direction: column; gap: var(--ou-space-4); padding: var(--ou-space-1) 0; }
 .tb-qscoring__default-row { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+/* Шапка конструктора цены ответа: подпись слева, максимальный балл справа. */
+.tb-qscoring__price { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-4); }
+.tb-qscoring__price-lbl { font: var(--ou-text-heading-s); }
 .tb-qscoring__default-lbl { font: var(--ou-text-body-m); font-weight: 600; }
 .tb-qscoring__default-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
 .tb-qscoring__num { width: var(--tb-input-w-sm); }
-.tb-qscoring__sec {
-  border: var(--wf-border-w) solid var(--ou-border-soft);
-  border-radius: var(--ou-radius-m);
-  padding: var(--ou-space-4);
-  background: var(--ou-bg-surface);
-}
-.tb-qscoring__sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-2); }
-.tb-qscoring__sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
 .tb-qscoring__sec-default { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
 .tb-qscoring__sec-default-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
 /* ─── Сворачиваемые секции списков (Оценка / Вклады вопросов) ──────────────────
    Общий примитив: триггер-заголовок (шеврон + название), глобальные
    «Свернуть все / Развернуть все», и обёртка-секция для «Вкладов». */
-.tb-fold-actions { margin-left: auto; display: inline-flex; gap: var(--ou-space-2); }
+/* Две кнопки одной группы («Развернуть все» / «Свернуть все») — родственная пара, 1x.
+   Эскиз `editor-settings-target.html` объявляет этот примитив сам и ставит 4px; продукт
+   держал 8px. Гейт этого не поймал: у правила эскиза нет комментария-перебивки, а ловит он
+   пока только правила с ним — см. раздел «чего гейт не покрывает» в отчёте приёмки. */
+.tb-fold-actions { margin-left: auto; display: inline-flex; gap: var(--ou-space-1); }
 .tb-fold-trigger {
   flex: 1;
   min-width: 0;
@@ -2191,7 +2665,44 @@
   cursor: pointer;
 }
 .tb-fold-chev { flex: none; color: var(--ou-fg-muted); }
-.tb-fold-toolbar { display: flex; align-items: center; }
+/* Панель не дробит ряд кнопок добавления: не помещаясь, «Развернуть все / Свернуть все»
+   уходят строкой ниже целиком — у роутера со сценариями кнопок добавления три. */
+.tb-fold-toolbar { display: flex; align-items: center; flex-wrap: wrap; row-gap: var(--ou-space-2); }
+
+/* Пиктограмма вида пункта в заголовке строки состава (сценарий, lucide monitor-play): сброс
+   делает svg блочным, и без этого правила знак вставал строкой над названием. */
+.tb-acc-title-ico { display: inline-block; vertical-align: text-bottom; margin-right: var(--ou-space-1); }
+
+/* ─── Шапка раздела с действиями ──────────────────────────────────────────────
+   Эскиз `editor-settings-target.html` ставит действия списка («Развернуть все /
+   Свернуть все») в СТРОКУ заголовка раздела, справа: `.ou-formsection__intro.tb-section-head`.
+   Слот `meta` у FormSection задуман под метку-пилюлю — у него своя заливка, скругление
+   и отбивка, и пара кнопок попадала в неё серой плашкой ПОД заголовком, прижатой влево.
+   Класс приходит на шапку через `headClassName`: `className` достаёт только до корня
+   секции, а раскладку задаёт шапка. */
+.tb-section-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  /* Подзаголовок — родственник заголовка (1x), действия — другой компонент (4x). */
+  column-gap: var(--ou-space-4);
+  row-gap: var(--ou-space-1);
+}
+.tb-section-head > .ou-formsection__title { margin: 0; }
+/* Подзаголовок остаётся ПОД заголовком: он описывает раздел, а не действия. */
+.tb-section-head > .ou-formsection__sub { flex: 1 0 100%; order: 1; }
+/* Здесь `meta` — панель действий, а не метка: без плашки, скругления и отбивок. */
+.tb-section-head > .ou-formsection__meta {
+  flex: 0 0 auto;
+  order: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+}
 .tb-fold-sec {
   border: var(--wf-border-w) solid var(--ou-border-soft);
   border-radius: var(--ou-radius-m);
@@ -2200,7 +2711,14 @@
 }
 .tb-fold-sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
 .tb-fold-sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
-.tb-fold-sec__body { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-3); }
+.tb-fold-sec__body { display: flex; flex-direction: column; gap: var(--ou-space-4); margin-top: var(--ou-space-4); }
+
+/* Шапка карточки ответа в разборе попытки — тот же триггер сворачивания, но с текстом
+   задания в две-три строки: шеврон держится верхней строки, а не середины абзаца.
+   Колонка собрана на строчных элементах — блочное содержимое в `button` недопустимо. */
+.tb-ansfold__head { align-items: flex-start; }
+.tb-ansfold__title { display: flex; flex-direction: column; gap: var(--ou-space-1); min-width: 0; }
+.tb-ansfold__meta { display: flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
 
 /* Disabled state for a Drawer rail item (DS has none): e.g. «Вклады вопросов»
    stays inert until a scale exists. */
@@ -2216,6 +2734,20 @@
 .tb-qscoring__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
 /* Пиктограмма типа вопроса — инлайново перед текстом, на той же строке. */
 .tb-qscoring__qtype { display: inline-flex; vertical-align: -0.15em; margin-right: var(--ou-space-2); color: var(--ou-fg-muted); }
+
+/* ─── «Вопросы теста» (рейл «Состава» → тема) ────────────────────────────────
+   Эскиз `editor-settings-target.html`, состояние `s-composition-questions`: текст
+   вопроса первой строкой, сводка его свойств в этом тесте второй, отметки третьей;
+   вся строка открывает ящик вопроса, действия — в правой колонке. */
+.tb-qlist__title { display: inline-flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
+.tb-qlist__row { cursor: pointer; }
+.tb-qlist__row:hover > td { background: var(--ou-bg-surface-2); }
+.tb-qlist__cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+.tb-qlist__text { font: var(--ou-text-body-m); }
+.tb-qlist__text .tb-qscoring__qtype { margin-right: var(--ou-space-1); }
+.tb-qlist__meta { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-qlist__flags { display: flex; flex-wrap: wrap; gap: var(--ou-space-1); }
+.tb-qlist__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
 /* Recap вопроса в модале переопределения (read-only контекст). */
 .tb-qscoring__recap {
   padding: var(--ou-space-3) var(--ou-space-4);
@@ -2237,9 +2769,9 @@
 .tb-row-sep { border-bottom: 1px solid var(--ou-border-soft); }
 .tb-row-sep:last-child { border-bottom: 0; }
 /* Fixed field widths for the scoring condition row (was Tailwind w-20/24/36). */
-.tb-fw-sm { width: 5rem; }
+.tb-fw-sm { width: 88px; }
 .tb-fw-md { width: 6rem; }
-.tb-fw-lg { width: 9rem; }
+.tb-fw-lg { width: 152px; }
 /* The DS Select trigger carries min-width:180px; on the compact operator /
    counter selects that floor overrides the width above, so the trigger stays
    ~180px and the count field wraps under it. Relax the floor when one of these
@@ -2259,6 +2791,18 @@
   color: var(--ou-fg-muted);
 }
 .tb-drag-handle:active { cursor: grabbing; }
+
+/* Per-option feedback (single choice): the switch «Переопределить обратную связь» and its
+   text field sit under the option row, aligned with the option's input — past the drag
+   handle (16px icon) and the correct-answer radio (20px ring) and the two row gaps.
+   Approved wireframe: docs/wireframes/approved/option-feedback.html. */
+.tb-option-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-2);
+  padding-left: calc(16px + 20px + var(--ou-space-2) * 2);
+}
 
 /* PRD-16: folder picker as a combobox that opens a DS Tree in a popover. */
 .tb-foldercombo { position: relative; }
@@ -2339,11 +2883,11 @@
 /* One width for the two boundary columns: the threshold field MUST line up under
    «Начало», and the whole layout is that alignment. Two literals could drift apart
    in separate edits; one token cannot. */
-.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); --tb-levels-bound-w: 88px; }
+.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-4); --tb-levels-bound-w: 88px; }
 
 .tb-levels__cover {
   display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w);
-  column-gap: var(--ou-space-2); align-items: center;
+  column-gap: var(--ou-space-4); align-items: center;
   margin-bottom: var(--ou-space-3);
 }
 .tb-levels__caplbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
@@ -2419,7 +2963,7 @@
 .tb-levels__spacer { flex: 1; }
 .tb-levels__range { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
 
-.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-3); }
+.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-4); }
 
 /* The tone row is a DS SegmentedControl: inline-flex, nowrap by design, natural
    width ~540px with all five labels. The drawer is `--xl` (1040px) minus a 240px
@@ -2428,7 +2972,7 @@
    the row would push out of the card. Scrolling the row inside its own strip keeps
    the card intact and keeps every label readable, which is the whole point of
    leaving the Select behind. */
-.tb-levels__tone { margin-top: var(--ou-space-3); overflow-x: auto; }
+.tb-levels__tone { margin-top: var(--ou-space-4); overflow-x: auto; }
 .tb-levels__tonelbl { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
 .tb-levels__tonehint { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
 
@@ -2568,3 +3112,365 @@
   background: var(--ou-accent-soft);
   color: var(--ou-fg-default);
 }
+
+/* ── Разделитель «или» между двумя способами задать список (PRD-28 раздел 16) ──
+   Верхняя половина вкладки «Списком» — набранные адреса, нижняя — книга; они
+   альтернативы, и жёлоб с подписью говорит об этом до того, как оператор
+   заполнит одну из них. */
+.tb-orsep { display: flex; align-items: center; gap: var(--ou-space-3); }
+.tb-orsep::before,
+.tb-orsep::after {
+  content: "";
+  flex: 1;
+  height: var(--wf-border-w, 1px);
+  background: var(--ou-border-soft);
+}
+.tb-orsep__word { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Набор правил проверки ответа (PRD-57 §6.1, §6.3) ─────────────────────────
+   Три класса раскладки, согласованные эскизом `prd57-answer-rule.html`; они
+   добавляют только раскладку, вид берут у примитивов ДС. */
+
+/* Связка между правилами. Стоит отдельной строкой внутри списка, чтобы
+   набор читался сверху вниз как одна фраза, а не как набор карточек.
+   Отступ по горизонтали — как у строки правила, по вертикали — шаг
+   родственных элементов: связка принадлежит обеим соседним строкам. */
+.tb-rules__join {
+  padding: var(--ou-space-1) var(--ou-space-5);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* Строка пробы: поле ответа тянется, вердикт занимает ровно свою ширину. */
+.tb-probe {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--ou-space-4);
+  align-items: center;
+}
+
+/* Состояние вопроса и возврат правок — одной группой в подвале ящика.
+   Правило для `hidden` обязательно: собственный `display` сильнее
+   браузерного правила для атрибута, и скрытая группа осталась бы видимой. */
+.tb-dirty {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-4);
+}
+.tb-dirty[hidden] { display: none; }
+
+/* Панель вставки кусков выражения. Кнопки — родственные, шаг между ними
+   наименьший; переносится по ширине поля. */
+.tb-rxbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ou-space-1);
+}
+
+/* Выражение и куски выражения — моноширинными: в них значим каждый знак,
+   а пропорциональный шрифт склеивает точку с запятой и путает I с l. */
+.tb-mono { font-family: var(--ou-font-family-mono); }
+
+/* ─── PRD-57 §4.3: визуальный ввод текста задания ─────────────────────────────
+   Поле повторяет вид обычного поля ДС — рамка, фон и отступы взяты у него же, —
+   чтобы режим отличался способом набора, а не оформлением формы. Атом виден как
+   единый объект: своя подложка и запрет выделения внутри, потому что правится он
+   целиком (FR-09b). */
+.tb-rich-area {
+  min-height: 120px;
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface);
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  overflow-wrap: anywhere;
+}
+.tb-rich-area:focus-visible {
+  outline: 2px solid var(--ou-accent-default);
+  outline-offset: 1px;
+}
+.tb-atom {
+  display: inline-block;
+  padding: 0 var(--ou-space-1);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-2);
+  border: 1px dashed var(--ou-border-soft);
+  user-select: none;
+}
+.tb-atom--code { display: block; margin: var(--ou-space-2) 0; padding: var(--ou-space-2); }
+.tb-atom--code pre { margin: 0; }
+.tb-atom--formula,
+.tb-atom--blank { font-family: var(--ou-font-mono, monospace); font-size: 0.95em; }
+
+/* ─── PRD-66: дорожка доли в таблице вариантов ответа ────────────────────────
+   Значение стоит ПЕРЕД дорожкой и выровнено по правому краю фиксированной
+   ширины: так числа соседних строк читаются столбиком, а дорожки начинаются
+   на одной вертикали и сравниваются взглядом (FR-26a). Обе колонки — слабые и
+   сильные — используют один класс, поэтому их шкалы одной длины; цветом группы
+   НЕ различаются, различают их колонки и подписи (FR-26c). */
+.tb-psy-scale { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-psy-scale__value { min-width: 44px; text-align: right; }
+.tb-psy-scale__track {
+  flex: 1;
+  height: var(--ou-space-2);
+  background: var(--ou-bg-muted);
+  border-radius: var(--ou-radius-pill);
+  overflow: hidden;
+}
+.tb-psy-scale__fill {
+  display: block;
+  height: 100%;
+  background: var(--ou-accent-default);
+  border-radius: var(--ou-radius-pill);
+}
+
+/* ─── PRD-66: мини-гистограмма распределения по градациям пункта шкалы ────────
+   Сетка в три ряда: столбики стоят в строке фиксированной высоты, подписи под
+   ними. Высота отсчитывается от общей шкалы 0 — 100 %, поэтому строки таблицы
+   сравнимы между собой, а мёртвый пункт виден мгновенно — один столбик почти
+   во всю высоту (FR-30a). Число столбиков задаётся инлайном: градаций у
+   вопроса бывает и четыре, и семь, и десять (FR-30b). */
+.tb-psy-hist {
+  display: grid;
+  grid-template-rows: 44px auto;
+  align-items: end;
+  justify-items: center;
+  gap: var(--ou-space-1);
+  min-width: 120px;
+}
+.tb-psy-hist__box { width: 100%; height: 100%; display: flex; align-items: flex-end; }
+.tb-psy-hist__bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--ou-accent-default);
+  border-radius: var(--ou-radius-s);
+}
+.tb-psy-hist__label {
+  color: var(--ou-fg-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+  /* Столбик не растягивается подписью: `table-layout: auto` раздал бы колонке всю
+     ширину самой длинной градации, и у опросника с вариантами-предложениями
+     гистограмма вытеснила за горизонтальную прокрутку связь с остатком и признак.
+     Подписи длиннее предела заменяются номерами в самом компоненте; этот предел —
+     страховка на случай градации в одно длинное слово. */
+  max-width: 16ch;
+}
+/* План сверки 6.6: крайние градации словами — строкой во всю ширину гистограммы, по одной
+   строке с многоточием, а не переносом; расшифровка номеров — нумерованным списком в подсказке
+   (сброс стилей убирает маркеры списков, поэтому нумерация задана явно). */
+.tb-psy-hist__edges {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ou-space-1);
+  min-width: 0;
+}
+.tb-psy-hist__edges > * { min-width: 0; }
+.tb-psy-hist__list { margin: 0; padding-inline-start: var(--ou-space-5); list-style: decimal; }
+
+/* ─── PRD-66: текст задания в таблице психометрики ───────────────────────────
+   У задания бывает абзац условия. Таблица дизайн-системы раскладывается по
+   содержимому (`table-layout: auto`), поэтому доли в процентах для неё лишь
+   пожелание: на приёмке абзац растянул первую колонку до 1446 px и вытеснил за
+   край признак, трудность и дискриминативность. Предел ставится ЗДЕСЬ, на самом
+   тексте, а не правкой раскладки таблиц всего продукта. */
+/* Э3.5: длинный текст в ячейке реестра (название теста, список групп) переносится. Ячейка
+   дизайн-системы держит `nowrap`, и сумма таких колонок выталкивала таблицу за край карточки —
+   горизонтальная прокрутка ради трёх пикселей. */
+.tb-cell-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Э3.3: изображение вопроса в блоке «Вопрос в этом тесте» — по ширине карточки, но не выше
+   экрана разбора: блок — справка о вопросе, а не его предпросмотр. */
+.tb-question-card__media {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: var(--ou-radius-m);
+}
+
+/* Э3.0: поиск вкладки «Тесты» — размером с поиск панели фильтра (`.ou-filterbar__search`):
+   вкладка фильтра не имеет, а поле должно стоять так же, как на соседней вкладке. */
+.tb-tests-search { flex: 1 1 280px; min-width: 0; max-width: 420px; }
+
+.tb-psy-prompt {
+  display: block;
+  max-width: 46ch;
+  /* Ячейка таблицы дизайн-системы держит `nowrap`, поэтому перенос включается явно:
+     без него абзац уходит одной строкой поверх соседней колонки. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ─── PRD-66 FR-02, FR-03: условие задания в таблице «Вопросы» ───────────────
+   Обратная беда того же `table-layout: auto`. С приходом колонки
+   «Дискриминативность» длинные заголовки чисел справа отняли место у первой
+   колонки, и условие сжалось в столбик по три слова (270 px из 1252). Доля в
+   процентах на колонке таблицу не убедила — при раскладке по содержимому она
+   пожелание, — поэтому НИЖНИЙ предел, как и верхний, ставится самому тексту. */
+.tb-psy-question {
+  /* Эскиз prd66-item-quality (состояние wf-items) отдаёт условию 28 % ширины, но
+     там же действия строки убраны под меню-троеточие. Пока в таблице стоят две
+     кнопки действий (наследство PRD-56), 28 % выталкивают правую под
+     горизонтальную прокрутку, поэтому предел — 36ch: условие читается в четыре
+     строки вместо восьми, а действия остаются видимыми целиком. */
+  min-width: 36ch;
+}
+
+/* ─── PRD-66 FR-14b: заголовок-термин с подсказкой (`TermHint`) ──────────────
+   Жалоба владельца 2026-09-25: у числовой колонки текст заголовка стоял слева,
+   значок подсказки — у правого края, а числа — справа, и заголовок читался
+   оторванным от своей колонки. Правила — как в эскизе prd66-item-quality
+   (`.ou-grid__th .ou-tip`, `.wf-tip-end`, `.wf-tip-wide`), но на метке
+   `tb-term-hint`, а не на всех подсказках продукта.
+   - Значок — компонент lucide `Info` (значки только из lucide-react, решение
+     владельца 2026-09-28; прежняя маска с переписанным путём в 12 px не читалась).
+     Он стоит в одном неразрывном блоке с последним словом (`__tail`), поэтому перенос
+     не отрывает его от термина. Сброс стилей делает `svg` блочным — значку возвращена
+     строчность (`__icon`), иначе он встал бы под заголовком, как при приёмке 5.2.
+   - Шапка таблицы дизайн-системы не переносится (`nowrap`): длинный термин
+     распирал колонку и включал горизонтальную прокрутку. Заголовку с термином
+     перенос по словам разрешён.
+   - Стрелка сортировки не сжимается: в узкой колонке переносится текст, а не
+     пропадает стрелка.
+   - Пузырёк выводится поверх страницы (`FloatingHint`, ниже): внутри таблицы его
+     обрезала рамка, а скрытый он раздувал прокрутку. */
+.tb-term-hint__tail { white-space: nowrap; }
+.tb-term-hint__icon {
+  display: inline-block;
+  vertical-align: -0.15em;
+  margin-left: var(--ou-space-1);
+  color: var(--ou-fg-muted);
+}
+.ou-grid__th:has(.tb-term-hint) { white-space: normal; }
+.ou-grid__th .tb-term-hint { display: inline; }
+/* The grid's `.ou-grid__th svg` rule sizes and dims the SORT glyph; the hint icon
+   keeps the size given to the lucide component, in the header as on a tile. */
+.ou-grid__th .tb-term-hint__icon { width: 14px; height: 14px; opacity: 1; }
+.ou-grid__th > svg { flex-shrink: 0; }
+
+/* ─── PRD-66: подсказка поверх страницы (`FloatingHint`) ─────────────────────
+   Пузырь подсказки дизайн-системы живёт внутри триггера, и в таблице его обрезает
+   рамка `DataGrid`, а скрытый (прозрачный, но занимающий место) он раздувал её
+   прокрутку — приёмка этапа 6. Здесь пузырь выводится порталом всплывающего окна
+   дизайн-системы, а выглядит как пузырь подсказки: те же токены, что у
+   `.ou-tip__bubble` с переносом строк. */
+.tb-float-hint {
+  box-sizing: border-box;
+  max-width: 240px;
+  padding: 6px 10px;
+  background: var(--ou-neutral-900);
+  color: var(--ou-neutral-0);
+  font: var(--ou-text-body-xs);
+  font-weight: 500;
+  line-height: 1.35;
+  border-radius: var(--ou-radius-s);
+  box-shadow: var(--ou-shadow-md);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.tb-float-hint__title { display: block; font-weight: 600; margin-bottom: 2px; }
+
+/* ─── Э4а: распределение ответов (approved/e4a-answer-distribution.html) ─────
+   Сжатый вид в ячейке: подпись не длиннее двух строк, полоса на всю ширину. Легенда
+   подсказки — разметка ChartLegendList (как у DonutChart): на тёмном пузыре подписи
+   наследуют его цвет, базовая высота легенды кольца (flex 200px) снята — в столбике
+   она растягивала пузырь на 200 px пустоты. */
+.tb-dist { display: block; width: 100%; outline-offset: 2px; }
+/* Горизонтальные полосы ячейки (решение владельца 2026-10-04): подпись ответа обрезается
+   многоточием, доля справа не переносится. */
+.tb-hbar__head { min-width: 0; }
+.tb-hbar__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-hbar__value { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.tb-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.tb-float-hint--legend { width: 300px; max-width: 300px; }
+.tb-float-hint--legend .ou-donut__legend { flex: none; gap: var(--ou-space-1); }
+.tb-float-hint--legend .ou-donut__legend-item,
+.tb-float-hint--legend .ou-donut__legend-name { color: inherit; white-space: normal; }
+.tb-no-value { display: inline-flex; text-align: center; overflow-wrap: normal; }
+/* Метка цвета ответа в полном виде — та же, что в легенде полосы (размер метки легенды DS). */
+.tb-dist-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: var(--ou-space-2); vertical-align: 0; }
+/* Таблица «Вопросы»: значок сортировки стоит в строке заголовка, а не отдельным столбцом
+   flex-ряда, и при нехватке ширины уходит на следующую строку под термин — иначе в колонке
+   в 8 % он вылезал на соседний заголовок (приёмка Э4а). */
+.tb-qtable .ou-grid__th.ou-grid__th--center { display: block; text-align: center; }
+.tb-qtable .ou-grid__th.ou-grid__th--center > svg { display: inline-block; vertical-align: -2px; margin-left: var(--ou-space-1); }
+/* Колонки чисел в 8 % (1440 px — около 85 px): слово «Трудность» со значком и «применимо»
+   не помещались в ячейку с отступами по 8 px. Боковой отступ — 4 px, сетка 4 px. */
+.tb-qtable .ou-grid__th.ou-grid__th--center,
+.tb-qtable tbody td.is-align-center { padding-inline: var(--ou-space-1); }
+/* Вывод «легче заданной на 12» шире колонки сложности (10 %): тег переносится в две строки. */
+.tb-qtable tbody td .ou-tag { white-space: normal; height: auto; text-align: center; padding-block: var(--ou-space-1); }
+
+/* ─── PRD-66: таблица «Качество вопросов» — фиксированная раскладка ───────────
+   Колонка «n» уезжала за горизонтальную прокрутку: при `table-layout: auto`
+   доли в процентах лишь пожелание, и признак с подписью растягивал свою
+   колонку. Фиксированная раскладка делит ширину по долям эскиза (32 / 26 / 13 /
+   17 / 8 / 4 %), содержимое ячеек переносится по словам. Отступы шапки чуть
+   уже умолчания: иначе «Дискриминативность» со значком и стрелкой не влезает
+   в свои 17 % на экране шириной 1400 px. */
+.tb-psy-grid .ou-grid__table { table-layout: fixed; }
+.tb-psy-grid .ou-grid__th { padding-inline: var(--ou-space-2); gap: var(--ou-space-1); }
+.tb-psy-grid tbody td { white-space: normal; overflow-wrap: anywhere; }
+/* Меню строки: колонка в 4 % уже кнопки с умолчательными отступами ячейки. */
+.tb-psy-grid tbody td:has(> .tb-rowmenu) { padding-inline: var(--ou-space-1); text-align: center; }
+
+/* ─── Таблица с выпадающими меню в ячейках ──────────────────────────────────
+   `.ou-tbl` держит `overflow: hidden` ради скруглённых углов, и меню `Select`
+   (оно позиционируется абсолютно, без портала) обрезалось краем таблицы:
+   в форме импорта теста у темы виднелся один пункт «Что делать» из трёх.
+   Модификатор снимает обрезку, а скругление переносит на угловые ячейки —
+   фон шапки иначе вылез бы за углы. */
+.ou-tbl.tb-tbl--menus { overflow: visible; }
+.ou-tbl.tb-tbl--menus thead th:first-child { border-top-left-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus thead th:last-child { border-top-right-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus tbody tr:last-child td:first-child { border-bottom-left-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus tbody tr:last-child td:last-child { border-bottom-right-radius: var(--ou-radius-l); }
+
+/* ─── Шапка уровней аналитики: кнопки — одной строкой справа, переносится заголовок ─── */
+.tb-analytics-head__title { min-width: 0; flex: 1 1 auto; }
+.tb-analytics-head__actions { flex-shrink: 0; }
+
+/* PRD-70 FR-32 (эскиз e7-question-bank): строка «Сложность» ящика вопроса — переключатель
+   «Не задано», шкала и поле числа по средней линии шкалы; от шкалы — 6x (модульная сетка).
+   Поля над и под шкалой равны: снизу — подписи делений, сверху — ориентир «По ответам». */
+.tb-qdiff-row { display: flex; align-items: center; gap: var(--ou-space-6); }
+.tb-qdiff-row > .ou-switch-field { flex: none; white-space: nowrap; }
+.tb-qdiff-row__slider.ou-slider--h { flex: 1; min-width: 0; max-width: none; padding-block: var(--ou-space-5); }
+.tb-qdiff-row__num { width: var(--wf-size-90, 88px); flex: none; }
+
+/* «Сценарий в ИС»: «Сыграть» в ящике вопроса — плеер shared/sim на весь экран поверх ящика
+   (1000) и под уведомлениями (1100). Плеер заполняет хост сам (position:absolute; inset:0). */
+.tb-sim-host { position: fixed; inset: 0; z-index: 1050; background: var(--ou-bg-page); }
+
+/* Э5 «Сохранить как…»: подробности выбранного формата — подпись слева, значение справа.
+   Между строками 2x, между колонками 4x (модульная сетка); список версий не шире 360px. */
+.tb-saveas-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--ou-space-2) var(--ou-space-4); align-items: baseline; }
+.tb-saveas-select { max-width: 360px; }
+
+/* ─── PRD-56 FR-21d: гистограмма числового показателя без уровней ───────────
+   Половина ширины карточки (эскиз approved/analytics-indicators.html, владелец
+   2026-10-08): на всю ширину десять столбиков становились плитами. BarChart
+   меряет ширину контейнера, поэтому узкий контейнер даёт и узкие столбики. */
+.tb-indicator-hist { max-width: 50%; }
+
+/* «Сценарий в ИС» (Э5б): карта промахов — слои сцены и точки промахов в процентах от размера
+   сцены (эскиз sim-scenario-analytics.html). Своего компонента в ДС нет. */
+.tb-miss-map { position: relative; width: 100%; border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); overflow: hidden; background: var(--ou-bg-muted); }
+.tb-miss-map__layer { position: absolute; display: block; }
+.tb-miss-dot { position: absolute; width: var(--ou-space-3); height: var(--ou-space-3); margin: calc(var(--ou-space-3) / -2) 0 0 calc(var(--ou-space-3) / -2); border-radius: 50%; background: var(--ou-error-default); opacity: 0.55; box-shadow: 0 0 0 1px var(--ou-bg-page); pointer-events: none; }
+.tb-miss-body { display: flex; align-items: flex-start; gap: var(--ou-space-4); }
+.tb-miss-body > .tb-miss-map { flex: 1; min-width: 0; }

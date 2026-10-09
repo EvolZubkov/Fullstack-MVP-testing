@@ -19,7 +19,7 @@ import {
   Cluster,
   Stack,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import type { AttentionItem, AttentionKind } from "@shared/home/contract";
 
 /**

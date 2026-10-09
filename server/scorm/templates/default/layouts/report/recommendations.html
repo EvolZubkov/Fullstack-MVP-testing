@@ -1,0 +1,38 @@
+{{#if result.recommendations.hasAny}}
+<section class="tb-report__card">
+  {{#if labels.results.recommendations}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.recommendations }}</div>{{/if}}
+  <!-- Текст рекомендации печатается РАЗМЕТКОЙ: автор выбирает формат («Обычный»,
+       «Форматированный», «HTML») в редакторе обратной связи, и его выбор доезжает сюда
+       полем `textsHtml`. Обычный текст ядро экранирует само, а переводы строк отдаёт
+       переносами — абзацы автора сохраняются. -->
+  {{#each result.recommendations.textsHtml}}
+  <div class="tb-report__rec tb-report__rec--plain">
+    <div class="tb-report__event">{{& this }}</div>
+  </div>
+  {{/each}}
+  {{#if result.recommendations.links}}
+  <div class="tb-report__lead">Пройти обучение</div>
+  {{#each result.recommendations.links}}
+  <div class="tb-report__rec">
+    <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+  </div>
+  {{/each}}
+  {{/if}}
+  {{#if result.recommendations.events}}
+  <div class="tb-report__lead">Мероприятия</div>
+  {{#each result.recommendations.events}}
+  <div class="tb-report__rec tb-report__rec--plain">
+    <div class="tb-report__event">{{ title }}</div>
+  </div>
+  {{/each}}
+  {{/if}}
+  {{#if result.recommendations.assets}}
+  <div class="tb-report__lead">Материалы</div>
+  {{#each result.recommendations.assets}}
+  <div class="tb-report__rec">
+    <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+  </div>
+  {{/each}}
+  {{/if}}
+</section>
+{{/if}}

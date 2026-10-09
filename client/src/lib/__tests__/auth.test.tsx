@@ -95,34 +95,66 @@ describe("capability checks", () => {
 });
 
 describe("login / logout", () => {
-  it("login resolves true and sets the user on success", async () => {
+  it("login resolves ok and sets the user on success", async () => {
     handler = (url) => {
       if (url.endsWith("/api/auth/me")) return { status: 401, body: {} };
       if (url.endsWith("/api/auth/login")) return { status: 200, body: { user: { id: "u9", roles: [ROLES.MANAGER] } } };
       return { status: 200, body: {} };
     };
     const { result } = await renderAuth();
-    let ok = false;
+    let outcome: string | undefined;
     await act(async () => {
-      ok = await result.current.login("m@e.test", "pw");
+      outcome = await result.current.login("m@e.test", "pw");
     });
-    expect(ok).toBe(true);
+    expect(outcome).toBe("ok");
     expect(result.current.user?.id).toBe("u9");
     expect(result.current.hasRole(ROLES.MANAGER)).toBe(true);
   });
 
-  it("login resolves false on bad credentials", async () => {
+  it("login reports bad credentials", async () => {
     handler = (url) => {
       if (url.endsWith("/api/auth/login")) return { status: 401, body: { error: "bad" } };
       return { status: 401, body: {} };
     };
     const { result } = await renderAuth();
-    let ok = true;
+    let outcome: string | undefined;
     await act(async () => {
-      ok = await result.current.login("m@e.test", "wrong");
+      outcome = await result.current.login("m@e.test", "wrong");
     });
-    expect(ok).toBe(false);
+    expect(outcome).toBe("invalid-credentials");
     expect(result.current.user).toBeNull();
+  });
+
+  // A refusal by link scope is NOT a wrong password, and saying so was the whole
+  // reason the lock-out went unrecognised for so long: the form claimed the
+  // credentials were wrong while the password was fine.
+  it("login tells a link-scope refusal apart from a wrong password", async () => {
+    handler = (url) => {
+      if (url.endsWith("/api/auth/login")) {
+        return { status: 403, body: { error: "Link scope", code: "MAGIC_SCOPE" } };
+      }
+      return { status: 401, body: {} };
+    };
+    const { result } = await renderAuth();
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.login("m@e.test", "right-password");
+    });
+    expect(outcome).toBe("link-scope");
+    expect(result.current.user).toBeNull();
+  });
+
+  it("treats an unrelated 403 as a plain credentials failure", async () => {
+    handler = (url) => {
+      if (url.endsWith("/api/auth/login")) return { status: 403, body: { error: "Account is deactivated" } };
+      return { status: 401, body: {} };
+    };
+    const { result } = await renderAuth();
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.login("m@e.test", "pw");
+    });
+    expect(outcome).toBe("invalid-credentials");
   });
 
   it("logout clears the user", async () => {

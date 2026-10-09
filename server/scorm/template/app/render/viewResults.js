@@ -91,21 +91,122 @@ function vrTopicFeedbackTexts(tr) {
 }
 
 /**
- * The test's OWN feedback block (`tests.feedback_json`, baked as `TEST_DATA.testFeedbackJson`),
- * normalised for the recommendations block — the widest source, and the first one.
+ * PRD-50 FR-50: тексты ПОДТЕМ этого раздела, выпеченные в `section.breakdownFeedback`
+ * (`{ ключ: блок }`). Читаются из TEST_DATA по той же причине, что тексты темы: это
+ * содержание пакета, а не сохранённого прогона.
  *
- * Read OUTSIDE `buildResultsMeasures`, which returns null for a test with neither scales
- * nor indicators: the feedback of such a test is exactly as due to the learner as any
- * other, and the commonest test in the product has no measurements at all. The address
- * rule lives in the shared normaliser — the fired band/outcome blocks pass through the
- * same one inside the builder.
+ * Отбор здесь НЕ делается — кого прочитает человек, решает общий построитель по порогу
+ * теста; второе правило отбора в рантайме разошлось бы с веб-хостом.
  */
-function vrTestFeedback() {
-  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
-  var raw = (typeof TEST_DATA !== 'undefined' && TEST_DATA.testFeedbackJson) || null;
-  if (!raw || !TB || typeof TB.normalizeFeedback !== 'function') return null;
-  return TB.normalizeFeedback(raw);
+function vrTopicBreakdownFeedback(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.breakdownFeedback) || null;
 }
+
+/**
+ * Толкования этого раздела, выпеченные тремя полями: `interpretation` — текст самой ТЕМЫ,
+ * `sectionInterpretation` — текст, которым его заменил ЭТОТ тест, `breakdownInterpretation`
+ * — текст каждой подтемы.
+ *
+ * Читаются из TEST_DATA по той же причине, что и тексты подтем: это содержание пакета, а не
+ * сохранённого прогона, поэтому толкование доходит и до прогона, сохранённого пакетом
+ * постарше. Возвращаются ТРЕМЯ полями, а не одним разрешённым: какое из них напечатается,
+ * решает общий построитель — он же решает это и на вебе.
+ *
+ * Поле, которого нет, НЕ приписывается: раздел без толкований оставляет вход темы прежним
+ * до ключа, и контекст такого теста не меняется. Дописывает в готовую строку, а не
+ * возвращает объект для разлива, — рантайм остаётся ES5, как и весь пакет.
+ */
+function vrWithInterpretations(row, tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  if (!section) return row;
+  if (section.interpretation) row.interpretation = section.interpretation;
+  if (section.sectionInterpretation) row.sectionInterpretation = section.sectionInterpretation;
+  if (section.breakdownInterpretation) row.breakdownInterpretation = section.breakdownInterpretation;
+  return row;
+}
+
+/**
+ * PRD-50: this topic's breakdown records, from whichever of the two places has them.
+ *
+ * A SAVED attempt carries them ON the topic: `saveAttemptResult` persists `topicResults`
+ * verbatim, so the records ride along with everything else the topic keeps. The CURRENT
+ * attempt additionally has the ONE flat list `calculateResults` returns (`results.breakdowns`
+ * — both scopes in a single array, built for `tag()`), and the topic's own field is filled
+ * there too; the flat list stays as the fallback for a record written by an older package,
+ * which had the list but no per-topic field.
+ *
+ * The scope string is the shared convention `"section:" + topicId`
+ * (`shared/breakdown/compute.ts`'s `sectionScope`), reproduced here rather than imported:
+ * this is a flat ES5 runtime file, and the prefix is stable data, not an algorithm.
+ *
+ * @param {object} tr The topic result being rendered.
+ * @param {Array|undefined} breakdowns The flat list, when the caller has one.
+ * @returns {Array} This topic's section-scope breakdown records, in order.
+ */
+function vrTopicBreakdown(tr, breakdowns) {
+  if (tr && tr.breakdown && tr.breakdown.length) return tr.breakdown;
+  var scope = 'section:' + (tr && tr.topicId);
+  var out = [];
+  (breakdowns || []).forEach(function (e) {
+    if (e && e.scope === scope) out.push(e);
+  });
+  return out;
+}
+
+/**
+ * PRD-50 FR-28: the breakdown records of the TEST scope — what the summary block prints.
+ *
+ * ONE reader for both results screens and for the report, and it works on either shape of
+ * `results`: the CURRENT attempt carries the flat list `calculateResults` builds (both
+ * scopes in one array, for `tag()`), a SAVED attempt carries only the test-scope records
+ * `saveAttemptResult` persisted. Filtering by scope answers both without asking which one
+ * it was handed.
+ *
+ * Nothing is summed here, and nothing may be: the test scope is a separate pass over the
+ * delivered items (FR-04), so adding up the per-topic records would double-count a
+ * question delivered in two sections.
+ *
+ * @param {object} results The attempt being rendered (current or saved).
+ * @returns {Array} Test-scope records, in the order the engine produced them.
+ */
+function vrTestBreakdown(results) {
+  var out = [];
+  var list = (results && results.breakdowns) || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && list[i].scope === 'test') out.push(list[i]);
+  }
+  return out;
+}
+
+/**
+ * PRD-50 FR-11: the group this topic was delivered in, from whichever of the two places
+ * has it.
+ *
+ * The topic itself is the first source: `calculateResults` stamps the key onto the topic
+ * result, and `saveAttemptResult` persists `topicResults` verbatim, so an attempt keeps
+ * the membership it was graded under. The baked section is the fallback — an attempt saved
+ * into suspend_data BEFORE the package was rebuilt carries no key at all, and without the
+ * fallback its «Мой результат» would print a flat list while the finish screen of the very
+ * same test prints groups. Both sources are frozen at bake time, so neither can hand the
+ * learner a grouping the package was not built with.
+ *
+ * @param {object} tr The topic result being rendered.
+ * @returns {string|null} The group key, or null when the topic belongs to no group.
+ */
+function vrTopicGroupKey(tr) {
+  if (tr && tr.groupKey) return tr.groupKey;
+  var sections = (typeof TEST_DATA !== 'undefined' && TEST_DATA && TEST_DATA.sections) || [];
+  var section = null;
+  for (var i = 0; i < sections.length; i++) {
+    if (tr && sections[i] && sections[i].topicId === tr.topicId) { section = sections[i]; break; }
+  }
+  return (section && section.groupKey) || null;
+}
+
+/* PRD-61 §10: обратная связь УРОВНЯ ТЕСТА снята. Здесь была `vrTestFeedback()`, читавшая
+   `TEST_DATA.testFeedbackJson`; ни поля в пакете, ни источника в построителе больше нет.
+   Обратная связь ТЕМ и РАЗДЕЛОВ не тронута — она едет в темах результата. */
 
 /**
  * Вводный блок ЭКРАНА итогов (`tests.intro_json.results`, PRD-27 §7.1).
@@ -267,7 +368,26 @@ function resultsDesignParams() {
   for (key in themed) {
     if (Object.prototype.hasOwnProperty.call(themed, key)) out[key] = themed[key];
   }
+  // What the author left untouched takes the manifest's `default`, exactly as on the web
+  // (`readScreenTemplate`): the template decides the look of an untouched test.
+  if (manifest && typeof TB.withParamDefaults === 'function') return TB.withParamDefaults(out, manifest.params);
   return out;
+}
+
+/**
+ * Окраска полос подтем (`breakdownBarFill`), разрешённая из тех же параметров оформления,
+ * что и рампа уровней, — тем же общим правилом, что на вебе. `null` — режим «по вердикту»:
+ * опция тогда не передаётся, и контекст остаётся прежним.
+ *
+ * Одна функция на экран итогов, адаптивный экран и PDF: три копии разрешения означали бы
+ * три шанса покрасить одну полосу по-разному.
+ *
+ * @returns {object|null} Настройка для построителя или null.
+ */
+function resultsBarFill() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || typeof TB.barFillFromParams !== 'function') return null;
+  return TB.barFillFromParams(resultsDesignParams());
 }
 
 /**
@@ -299,6 +419,20 @@ function resultsBlockSettings() {
   return {};
 }
 
+/**
+ * Заголовки итога — свойства того же узла «Итоги теста», из которого читаются
+ * переключатели блоков. Пустые строки отбрасывает общий построитель; пустой объект здесь
+ * означает «автор ничего не заполнил», и контекст остаётся прежним до поля.
+ */
+function resultHeadingsOf() {
+  var settings = resultsBlockSettings();
+  var out = {};
+  if (settings.headingDocument) out.document = settings.headingDocument;
+  if (settings.headingPassed) out.passed = settings.headingPassed;
+  if (settings.headingFailed) out.failed = settings.headingFailed;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** Rows in the author's order — the same ORDER BY the web host reads them with. */
 function measuresBySortOrder(rows) {
   return rows.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
@@ -317,6 +451,29 @@ function measuresBySortOrder(rows) {
  * @param {object|null} varComputation   `{ values }` — this attempt's indicator values.
  * @returns {object|null} MeasuresInput for `buildResultContext`, or null.
  */
+/**
+ * PRD-53 §4.4: настройка карточки «вне профиля» из `config_json` показателя.
+ *
+ * Двойник `readRestScales` веб-хоста (server/services/result-context.ts) — правила чтения обязаны
+ * совпадать до мелочей: разойдись они, пакет и веб напечатали бы разные блоки на одном тесте.
+ *
+ * @param {object} config `configJson` показателя, как его запёк пакет.
+ * @returns {{show: boolean, label: string, keys: string[]}|undefined}
+ */
+function restScalesOf(config) {
+  var raw = config && config.restScales;
+  if (!raw || raw.show !== true) return undefined;
+  var keys = [];
+  if (Object.prototype.toString.call(raw.keys) === '[object Array]') {
+    for (var i = 0; i < raw.keys.length; i++) {
+      var key = String(raw.keys[i]);
+      if (key) keys.push(key);
+    }
+  }
+  if (!keys.length) return undefined;
+  return { show: true, label: String(raw.label == null ? '' : raw.label), keys: keys };
+}
+
 function buildResultsMeasures(scaleComputation, varComputation) {
   var TD = (typeof TEST_DATA !== 'undefined' && TEST_DATA) || {};
   var rawScales = TD.scales || [];
@@ -346,7 +503,9 @@ function buildResultsMeasures(scaleComputation, varComputation) {
       // answer. `!== false` because an absent key means "show", so a scale baked before
       // this field existed keeps printing both slots.
       showName: s.showName !== false,
-      showLevel: s.showLevel !== false
+      showLevel: s.showLevel !== false,
+      // PRD-53 §4.4: собственное описание шкалы — источник текста блока «вне профиля».
+      description: s.description || ''
     };
   });
 
@@ -360,7 +519,12 @@ function buildResultsMeasures(scaleComputation, varComputation) {
       visibility: v.learnerVisibility || 'hidden',
       interpretation: TB.parseIndicatorInterpretation(v.configJson),
       showName: varConfig.showName !== false,
-      showLevel: varConfig.showLevel !== false
+      showLevel: varConfig.showLevel !== false,
+      // PRD-53 §4.4: карточка «вне профиля». Пакет везёт `configJson` показателя целиком, так что
+      // настройка уже здесь — её остаётся прочитать теми же защитными правилами, что и на вебе
+      // (`readRestScales` в server/services/result-context.ts): выключенный переключатель и
+      // пустой список ключей дают `undefined`, то есть карточки не будет.
+      restScales: restScalesOf(varConfig)
     };
   });
 
@@ -369,11 +533,16 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     ramp: resultsLevelRamp(params),
     scaleKind: String(params.scaleRenderKind || 'band_ruler'),
     indicatorKind: String(params.indicatorRenderKind || 'label'),
+    // «Показывать максимум шкалы». Explicit `false` only: a package baked before the
+    // param carries no key at all, and `||` would have read that absence as «hide».
+    showMax: params.scaleShowMax !== false,
     scales: scales,
     indicators: indicators,
     // ONE reading of the pass rule, shared with the top-level option the builder gates
     // the test's feedback on — two copies could disagree about the very same test.
     hasPassThreshold: vrHasPassThreshold(),
+    // PRD-50 FR-50: САМО правило — по его порогу построитель отбирает тексты подтем.
+    overallPassRule: (typeof TEST_DATA !== 'undefined' && TEST_DATA.overallPassRule) || null,
     blockSettings: blockSettings,
     // PRD-35/46: the chart setting travels in the SAME settings of the «Итоги» variant, so
     // the package hands them over untouched and the ONE decision rule in Core reads them —
@@ -423,7 +592,8 @@ function renderViewResultsTemplated(app, results) {
     earnedPoints: results.earnedPoints,
     possiblePoints: results.possiblePoints,
     topicResults: (results.topicResults || []).map(function (tr) {
-      return {
+      // Толкования дописываются в готовую строку: см. `vrWithInterpretations`.
+      return vrWithInterpretations({
         topicId: tr.topicId,
         topicName: tr.topicName,
         correct: tr.correct,
@@ -439,10 +609,27 @@ function renderViewResultsTemplated(app, results) {
         feedbackTexts: vrTopicFeedbackTexts(tr),
         // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
         // block; gated by the same verdict rule inside the shared builder.
-        recommendedAssets: vrTopicAssets(tr)
-      };
+        recommendedAssets: vrTopicAssets(tr),
+        // PRD-50 FR-50: тексты подтем этого раздела; отбирает их общий построитель.
+        breakdownFeedback: vrTopicBreakdownFeedback(tr),
+        // PRD-50: this topic's breakdown records — from the topic itself on a saved
+        // attempt, from the flat list on a current one. See `vrTopicBreakdown`.
+        breakdown: vrTopicBreakdown(tr, results.breakdowns),
+        // PRD-50 FR-11: the group this section was delivered in. See `vrTopicGroupKey`.
+        groupKey: vrTopicGroupKey(tr)
+      }, tr);
     })
   };
+  // PRD-50 FR-11/FR-27: the test's declared groups, baked ONLY when the author made any
+  // (`test-json.ts`). Absent leaves the input exactly as it was before this PRD, and the
+  // shared builder then produces the flat list of topic cards the screen always showed.
+  if (TEST_DATA.sectionGroups) input.sectionGroups = TEST_DATA.sectionGroups;
+  // PRD-50 FR-28: records of the TEST scope for the summary block. Of a SAVED attempt they
+  // are the ones persisted WITH it (`saveAttemptResult`) — never a recomputation, the same
+  // rule the measures below follow. An attempt saved by an older package carries none, and
+  // the input then stays exactly as it was.
+  var vrTestRows = vrTestBreakdown(results);
+  if (vrTestRows.length) input.breakdowns = vrTestRows;
   // PRD-29: a SAVED attempt renders from the values persisted WITH it and never from a
   // recomputation — regrading a finished attempt against today's interpretation would
   // change what the learner already scored (the rule the web host follows too).
@@ -452,12 +639,23 @@ function renderViewResultsTemplated(app, results) {
     recommendedEvents: rec.events,
     // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
     // its own right, whether or not the test has scales and indicators.
-    testFeedback: vrTestFeedback(),
     // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
     // whether this test pronounces a verdict at all. Travels for every test, unlike the
     // copy inside `measures`, which a test without measurements never sends.
-    hasPassThreshold: vrHasPassThreshold()
+    hasPassThreshold: vrHasPassThreshold(),
+    // PRD-50 FR-50: САМО правило — по его порогу построитель отбирает тексты подтем.
+    overallPassRule: (typeof TEST_DATA !== 'undefined' && TEST_DATA.overallPassRule) || null
   };
+  // PRD-50 FR-13: the author's breakdown display setting, baked into TEST_DATA only
+  // when turned on (`build-export-data`/`test-json.ts`) — absent keeps this context
+  // byte-identical to what it was before this PRD.
+  if (TEST_DATA.breakdownDisplay) opts.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  var barFill = resultsBarFill();
+  if (barFill) opts.barFill = barFill;
+  // Заголовки итога: их читает ТОТ ЖЕ построитель, что на вебе, — расхождение шапки между
+  // хостами было бы расхождением в том, как тест называет свой результат.
+  var headings = resultHeadingsOf();
+  if (headings) opts.headings = headings;
   var measures = buildResultsMeasures(
     { values: results.scaleValues || {} },
     { values: results.resultValues || {} }
@@ -472,11 +670,14 @@ function renderViewResultsTemplated(app, results) {
   // NB: no attempt counter in the header — the scene header names the test, run
   // parameters belong to the screen's own content (parity with the web host).
 
+  // A viewing of a finished learning (main.js `detectReviewLaunch`) has no test to go
+  // back to — the result IS the screen, and leaving it closes the window.
+  var reviewLaunch = !!(typeof state !== 'undefined' && state && state.reviewLaunch);
   ctx.result.nav = window.TBTemplate.buildResultsNav({
     canReport: vrReportEnabled(),
     canRetry: false,
     hasPostPages: false,
-    finishLabel: 'Вернуться к тесту'
+    finishLabel: reviewLaunch ? 'Закрыть' : 'Вернуться к тесту'
   });
 
   // PRD-7 G21: mount default's results layout + activate default's stylesheet
@@ -495,7 +696,7 @@ function renderViewResultsTemplated(app, results) {
     // The screen shows the BEST saved attempt, so the report must be that attempt —
     // not whatever `downloadPDF()` would pick for the CURRENT run.
     'download-report': function () { if (typeof downloadPDF === 'function') downloadPDF(true); },
-    'results-finish': backToStart
+    'results-finish': reviewLaunch ? closeReviewLaunch : backToStart
   });
 }
 
@@ -518,7 +719,8 @@ function renderResultsTemplated(app, results) {
     earnedPoints: results.earnedPoints,
     possiblePoints: results.possiblePoints,
     topicResults: (results.topicResults || []).map(function (tr) {
-      return {
+      // Толкования дописываются в готовую строку: см. `vrWithInterpretations`.
+      return vrWithInterpretations({
         topicId: tr.topicId,
         topicName: tr.topicName,
         correct: tr.correct,
@@ -534,22 +736,48 @@ function renderResultsTemplated(app, results) {
         feedbackTexts: vrTopicFeedbackTexts(tr),
         // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
         // block; gated by the same verdict rule inside the shared builder.
-        recommendedAssets: vrTopicAssets(tr)
-      };
+        recommendedAssets: vrTopicAssets(tr),
+        // PRD-50 FR-50: тексты подтем этого раздела; отбирает их общий построитель.
+        breakdownFeedback: vrTopicBreakdownFeedback(tr),
+        // PRD-50: this topic's breakdown records, out of the fresh in-memory result —
+        // this screen renders BEFORE persistence, so it is the one results screen that
+        // always has them when the test carries keys. See `vrTopicBreakdown`.
+        breakdown: vrTopicBreakdown(tr, results.breakdowns),
+        // PRD-50 FR-11: the group this section was delivered in. See `vrTopicGroupKey`.
+        groupKey: vrTopicGroupKey(tr)
+      }, tr);
     })
   };
+  // PRD-50 FR-11/FR-27: same groups as «Мой результат» — one screen, one layout, one
+  // input. Absent when the test declares none, and the context stays as it was.
+  if (TEST_DATA.sectionGroups) input.sectionGroups = TEST_DATA.sectionGroups;
+  // PRD-50 FR-28: the same test-scope records the saved-attempt screen prints, here out of
+  // the fresh in-memory result — this screen renders BEFORE persistence.
+  var frTestRows = vrTestBreakdown(results);
+  if (frTestRows.length) input.breakdowns = frTestRows;
   var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
     recommendedEvents: rec.events,
     // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
     // its own right, whether or not the test has scales and indicators.
-    testFeedback: vrTestFeedback(),
     // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
     // whether this test pronounces a verdict at all. Travels for every test, unlike the
     // copy inside `measures`, which a test without measurements never sends.
-    hasPassThreshold: vrHasPassThreshold()
+    hasPassThreshold: vrHasPassThreshold(),
+    // PRD-50 FR-50: САМО правило — по его порогу построитель отбирает тексты подтем.
+    overallPassRule: (typeof TEST_DATA !== 'undefined' && TEST_DATA.overallPassRule) || null
   };
+  // PRD-50 FR-13: the author's breakdown display setting, baked into TEST_DATA only
+  // when turned on (`build-export-data`/`test-json.ts`) — absent keeps this context
+  // byte-identical to what it was before this PRD.
+  if (TEST_DATA.breakdownDisplay) opts.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  var barFill = resultsBarFill();
+  if (barFill) opts.barFill = barFill;
+  // Заголовки итога: их читает ТОТ ЖЕ построитель, что на вебе, — расхождение шапки между
+  // хостами было бы расхождением в том, как тест называет свой результат.
+  var headings = resultHeadingsOf();
+  if (headings) opts.headings = headings;
   // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
   // which leaves the context byte-identical to what it has always been).
   var measures = currentAttemptMeasures(results);

@@ -10,7 +10,8 @@ import { registryMediaResolver } from "./builders/media-resolver";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
-import { resolveReportBake, reportKindForMode, type ReportLabelLayers } from "@shared/report/report-variants";
+import { reportKindForMode, type ReportLabelLayers } from "@shared/report/report-variants";
+import { resolveReportBundle } from "@shared/report/report-document";
 import { isReportEnabled } from "@shared/schema";
 import type { ReportSettings, DesignSettings } from "@shared/schema";
 import fs from "node:fs";
@@ -172,12 +173,15 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     values: (data.test.designSettingsJson as DesignSettings | null)?.labels ?? null,
     overrides: (data.test.reportSettingsJson as ReportSettings | null)?.labels ?? null,
   };
-  let reportBake = resolveReportBake(
+  let reportBake = resolveReportBundle(
     readTemplateManifest(templateDir),
     reportKind,
     (data.test.reportSettingsJson as ReportSettings | null)?.[
       data.test.mode === "adaptive" ? "adaptive" : "standard"
     ] ?? null,
+    // PRD-51: состав документа теста. Разрешается ЗДЕСЬ, а не в рантайме: манифеста
+    // шаблона в LMS нет, и связать строку с раскладкой блока там нечем.
+    data.reportBlocks ?? [],
     // FR-05: картинки варианта — файлы ШАБЛОНА, а он лежит в пакете под `template/`.
     // Резолвятся здесь, а не в рантайме: только сборщик знает, из какого каталога
     // приехал вариант.
@@ -190,10 +194,14 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     // варианта: без этого шага страница собиралась бы вообще без оформления, потому
     // что своего `styleFile` у несуществующего варианта нет. Оттуда же берутся и его
     // картинки — база другая, потому что `default` лежит в пакете рядом, отдельно.
-    const fromDefault = resolveReportBake(
+    const fromDefault = resolveReportBundle(
       readTemplateManifest(defaultDir),
       reportKind,
       null,
+      // Документ теста собран под ЧУЖОЙ шаблон, и его блоки «Стандартному» неизвестны.
+      // Отдаём деградации пустой состав: она напечатает документ по умолчанию вложенного
+      // шаблона, а не набор пропусков.
+      [],
       `${PACKAGE_DEFAULT_TEMPLATE_DIR}/`,
       reportLabelLayers,
     );
@@ -264,6 +272,18 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // несколько render-модулей, поэтому объявлена ДО них и ровно один раз.
   const protectionJs = readOneOf([
     "app/utils/protection.js",
+  ]);
+
+  // Время показа вопроса (`cmi.interactions.n.latency`). Утилита: засечки ставит рендер
+  // вопроса, а читает сборщик взаимодействий, поэтому объявлена до обоих.
+  const questionTimeJs = readOneOf([
+    "app/utils/questionTime.js",
+  ]);
+
+  // PRD-36: run-state model + row codec. Must precede every part that reads or writes
+  // suspend_data — suspendAttempts and sessionRecovery both call into TBRunState.
+  const runStateJs = readOneOf([
+    "app/utils/scorm/runState.js",
   ]);
 
   const suspendAttemptsJs = readOneOf([
@@ -376,6 +396,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/render/mainRender.js",
   ]);
 
+  // «Сценарий в ИС» (Э4): экран вопроса-сценария — слой плеера `TBTemplate.mountPlayer`.
+  // Объявлен до mainRender.js, который его вызывает, и до роутера, просящего полный экран.
+  const simulationJs = readOneOf([
+    "app/render/simulation.js",
+  ]);
+
   const timerJs = readOneOf([
     "app/timer/timer.js",
   ]);
@@ -386,6 +412,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const qRankingJs  = readOneOf(["app/render/questions/ranking.js"]);
   const qScaleJs    = readOneOf(["app/render/questions/scale.js"]);
   const qAllocJs    = readOneOf(["app/render/questions/allocation.js"]);
+  const qShortJs    = readOneOf(["app/render/questions/short.js"]);
   const qIndexJs    = readOneOf(["app/render/questions/index.js"]);
   const viewResultsJs = readOneOf(["app/render/viewResults.js"]);
 
@@ -431,8 +458,11 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // unresolved reference is a ReferenceError as soon as the learner reaches that screen.
   // Removing the call sites by regex instead is what used to leave that hole: a form the
   // pattern did not anticipate (`Telemetry.finish(results)`) survived the strip.
+  //
+  // Telemetry ON reads the runtime STRICTLY: a missing file must fail the build, not ship a
+  // package that silently sends nothing and leaves `Telemetry` unbound.
   const telemetryJs = telemetryEnabled
-    ? tryReadAsset(["app/telemetry/telemetry.js"])
+    ? readOneOf(["app/telemetry/telemetry.js"])
     : readOneOf(["app/telemetry/telemetry-disabled.js"]);
 
   // PRD-12 (2-7): shared template runtime bundled from `@shared` and exposed as the
@@ -449,8 +479,10 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     trustedNowJs,
     qTypeJs,
     protectionJs,
+    questionTimeJs,
     telemetryJs,
     shuffleJs,
+    runStateJs,
     suspendAttemptsJs,
     sessionRecoveryJs,
     testDataJs,
@@ -458,6 +490,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     templateCoreJs,
     templateLoaderJs,
     contentFlowJs,
+    simulationJs,
     routerFlowJs,
     renderersJs,
     timerJs,
@@ -467,6 +500,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     qRankingJs,
     qScaleJs,
     qAllocJs,
+    qShortJs,
     qIndexJs,
     answerActionsJs,
     matchingDndJs,

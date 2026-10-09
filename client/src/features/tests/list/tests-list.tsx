@@ -26,6 +26,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { testHref } from "@/features/analytics/levels/analytics-routes";
 import {
   AlertCircle,
   Archive,
@@ -36,8 +37,6 @@ import {
   ChevronsUpDown,
   ClipboardList,
   Download,
-  Filter,
-  FileSpreadsheet,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -57,12 +56,12 @@ import {
   Upload,
   Users,
   ArrowRight,
+  MessageSquare,
 } from "lucide-react";
 import {
   Banner,
   Button,
-  Chip,
-  Cluster,
+  FilterBar,
   Input,
   Label,
   ModalDialog,
@@ -71,9 +70,9 @@ import {
   Stack,
   Tag,
   Text,
-} from "@universityrt/ui-kit";
+  useToast,
+} from "@skillum/ui-kit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
 import { TransferImportDialog } from "@/features/tests/transfer/import-dialog";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
@@ -87,11 +86,20 @@ import {
   TestFilters,
   testFacetMatch,
   testFilterCount,
+  testFilterOf,
   type TestFilterValue,
 } from "./tests-filters";
+import { stableKey, useListFilters } from "@/features/saved-filters/use-list-filters";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
-import type { PublishCheckFinding, PublishInfeasibleError } from "@/features/content-protection/types";
+import type {
+  BreakdownWarning,
+  PublishCheckFinding,
+  PublishInfeasibleError,
+} from "@/features/content-protection/types";
+import { describeBreakdownWarning } from "@/features/content-protection/issue-text";
 import { TestEditor } from "@/features/tests/editor/test-editor";
+import { describeDeleteImpact, type TestDeleteImpact } from "./delete-impact";
+import { SaveAsDialog } from "@/features/tests/export/save-as-dialog";
 import type { EditorTabKey } from "@/features/tests/editor/use-test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
@@ -136,6 +144,7 @@ function apiToEntry(row: ApiTestRow): TestListEntry {
     createdAt: (row as { createdAt?: string | Date | null }).createdAt ?? null,
     publicationState: (row as { publication?: { state?: TestListEntry["publicationState"] } }).publication?.state,
     unmappedPageCount: (row as { unmappedPageCount?: number }).unmappedPageCount ?? 0,
+    openReviewComments: (row as { openReviewComments?: number }).openReviewComments ?? 0,
   };
 }
 
@@ -167,7 +176,7 @@ const EMPTY_FOLDERS: TestFolder[] = [];
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function TestsListPage(): React.JSX.Element {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { can, hasRole, user } = useAuth();
 
   // Data ----------------------------------------------------------------------
@@ -225,6 +234,7 @@ export function TestsListPage(): React.JSX.Element {
   const [testFilter, setTestFilter] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // applied
   const [testDraft, setTestDraft] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // edited in the panel
   const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
 
   const authorOptions = useMemo(() => {
     const names = new Map<string, string>();
@@ -246,10 +256,18 @@ export function TestsListPage(): React.JSX.Element {
     [entries, testFilter, userId],
   );
 
-  const openFilters = () => { setTestDraft(testFilter); setFilterOpen(true); };
+  // The panel edits a draft of what is applied; closing it without «Применить» drops the draft
+  // (PRD-70 FR-74), so every opening starts from the applied filter.
+  const toggleFilters = () => { if (!filterOpen) setTestDraft(testFilter); setFilterOpen(!filterOpen); };
   const applyFilters = () => { setTestFilter(testDraft); setFilterOpen(false); };
+  /** «Сбросить» of the panel: clears the draft only. */
+  const resetDraft = () => setTestDraft(EMPTY_TEST_FILTER);
+  /** «Сбросить фильтры» of the bar: clears what is applied. */
   const resetFilters = () => { setTestDraft(EMPTY_TEST_FILTER); setTestFilter(EMPTY_TEST_FILTER); };
   const commitFilter = (next: TestFilterValue) => { setTestFilter(next); setTestDraft(next); };
+  // Сохранённые фильтры «Тестов» (решение владельца 2026-10-05): сохранить в ряду условий,
+  // применить и удалить — из «Сохранённых».
+  const savedFilters = useListFilters({ scope: "tests", current: testFilter, apply: commitFilter, normalize: testFilterOf, keyOf: stableKey });
 
   const expandAll = () => setExpandedFolderIds(new Set(folders.map((f) => f.id)));
   const collapseAll = () => setExpandedFolderIds(new Set());
@@ -276,14 +294,31 @@ export function TestsListPage(): React.JSX.Element {
   // the author can fix the variant/состав and rebuild. The param is stripped after
   // opening so a refresh/back doesn't re-open the Drawer.
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("edit");
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("edit");
+    // PRD-52 FR-27: `?test=<id>&review=<threadId>` открывает ящик сразу на вкладке
+    // «Комментарии» с раскрытой веткой — по такой ссылке рецензент или коллега
+    // отправляет автора к конкретному замечанию, а не к тесту вообще.
+    const reviewTestId = params.get("test");
+    const reviewThreadId = params.get("review");
+    if (reviewTestId && reviewThreadId) {
+      setEditorTarget({ kind: "edit", testId: reviewTestId, tab: "review" });
+      setFocusReviewThreadId(reviewThreadId);
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+      return;
+    }
     if (!id) return;
     setEditorTarget({ kind: "edit", testId: id });
     window.history.replaceState(null, "", window.location.pathname + window.location.hash);
   }, []);
 
+  /** PRD-52: ветка, раскрытая по ссылке; передаётся в панель комментариев ящика. */
+  const [focusReviewThreadId, setFocusReviewThreadId] = useState<string | null>(null);
+
   // More-menu --------------------------------------------------------------
   const [testMenu, setTestMenu] = useState<{ id: string } | null>(null);
+  /** Э5: тест, открытый в окне «Сохранить как…». */
+  const [saveAsTest, setSaveAsTest] = useState<{ id: string; title: string } | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ id: string } | null>(null);
 
   // Test delete confirm (FR-30) ---------------------------------------------
@@ -324,6 +359,8 @@ export function TestsListPage(): React.JSX.Element {
   // Existing dialogs (assign / export) --------------------------------------
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTest, setAssignTest] = useState<{ id: string; title: string } | null>(null);
+  // PRD-52: тот же диалог, другое выдаваемое право — грант на рецензирование.
+  const [assignMode, setAssignMode] = useState<"assign" | "review">("assign");
 
   // Access panel (PRD-13 / PRD-15 BRC-27) — admin on any test, author on owned.
   const [accessTest, setAccessTest] = useState<{ id: string; title: string } | null>(null);
@@ -341,6 +378,8 @@ export function TestsListPage(): React.JSX.Element {
   // PRD-48: importing a `.tbtest` package creates or updates a test, so the right is the
   // same one «создать тест» needs.
   const canImportPackage = can("tests.create");
+  // Э6: пункт меню теста ведёт в «Импорт» на выгрузку LMS этого теста.
+  const canImportLms = can("analytics.import");
   const [transferOpen, setTransferOpen] = useState(false);
 
   // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
@@ -352,12 +391,26 @@ export function TestsListPage(): React.JSX.Element {
   // PRD-15 FR-14: emergency-republish confirm target.
   const [forceRepublish, setForceRepublish] = useState<{ id: string; title: string } | null>(null);
 
+  // PRD-50 FR-45 - FR-47: замечания УСПЕШНОЙ публикации. null = диалога нет; тест без
+  // единого замечания публикуется ровно как раньше, без лишнего экрана.
+  const [publishNotes, setPublishNotes] = useState<string[] | null>(null);
+  // PRD-15 FR-05: то же самое, но по итогу СОХРАНЕНИЯ — тест сохранён, а выдать
+  // вопросы по нему нечем. Отдельная строка состояния, потому что заголовок другой:
+  // публикации не было, и запрещать тут нечего.
+  const [saveNotes, setSaveNotes] = useState<string[] | null>(null);
+
   // ─── Mutations ───────────────────────────────────────────────────────────
   const statusMutation = useMutation({
     mutationFn: async (args: { id: string; status: "draft" | "published" | "archived" }) => {
-      return apiRequest("PATCH", `/api/tests/${args.id}/status`, { status: args.status });
+      const res = await apiRequest("PATCH", `/api/tests/${args.id}/status`, { status: args.status });
+      // PRD-50: тело публикации может нести предупреждения (FR-45 - FR-47); их показывает
+      // onSuccess. Разбор здесь, а не там, потому что onSuccess получает то, что вернул mutationFn.
+      return (await res.json()) as { breakdownWarnings?: BreakdownWarning[] };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tests"] }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
+      if (data.breakdownWarnings?.length) setPublishNotes(data.breakdownWarnings.map(describeBreakdownWarning));
+    },
     onError: (error: Error, args) => {
       // apiRequest throws "409: <json>"; surface a publish-infeasible 409 as the
       // content-impact dialog (PRD-15 FR-06), otherwise a generic toast.
@@ -373,7 +426,7 @@ export function TestsListPage(): React.JSX.Element {
           /* fall through to the toast */
         }
       }
-      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось изменить статус теста" });
+      toast({ tone: "error", title: "Ошибка", description: "Не удалось изменить статус теста" });
     },
   });
 
@@ -387,7 +440,7 @@ export function TestsListPage(): React.JSX.Element {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       setForceRepublish(null);
       toast({
-        title: "Тест переопубликован",
+        tone: "success", title: "Тест переопубликован",
         description: `Прервано идущих попыток: ${data.annulledAttempts}`,
       });
     },
@@ -406,7 +459,7 @@ export function TestsListPage(): React.JSX.Element {
           /* fall through */
         }
       }
-      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось переопубликовать тест" });
+      toast({ tone: "error", title: "Ошибка", description: "Не удалось переопубликовать тест" });
     },
   });
 
@@ -503,9 +556,11 @@ export function TestsListPage(): React.JSX.Element {
       <div className="tl-header">
         <PageHeader title={t.tests.title} description={t.tests.description} />
       </div>
-      <div className="toolbar" role="search">
-        <div className="tl-search">
+      <FilterBar
+        role="search"
+        search={(
           <Input
+            size="s"
             iconLeft={<Search size={16} />}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -514,53 +569,65 @@ export function TestsListPage(): React.JSX.Element {
             fullWidth
             data-testid="tests-list-search-input"
           />
-        </div>
-        <Button
-          variant={filterOpen || filterActiveCount > 0 ? "secondary" : "ghost"}
-          leadingIcon={<Filter size={16} />}
-          onClick={() => (filterOpen ? setFilterOpen(false) : openFilters())}
-          data-testid="tests-list-filter"
-        >
-          {t.content.filters}{filterActiveCount > 0 ? ` (${filterActiveCount})` : ""}
-        </Button>
-        {!isSearchMode && (
-          <div className="toolbar-sort">
-            <span className="toolbar-sort__label">Сортировка:</span>
-            <Select<SortKey>
-              size="s"
-              value={sortBy}
-              options={[
-                { value: "created_desc", label: "Новые сначала" },
-                { value: "updated_desc", label: "Недавно изменённые" },
-                { value: "title_asc", label: "По названию (А→Я)" },
-              ]}
-              onChange={(value) => handleSortChange(value)}
-              aria-label="Сортировка тестов"
-              data-testid="tests-list-sort"
-            />
-          </div>
         )}
-        <span className="tl-spacer" />
-        {!isSearchMode && (
-          <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
+        count={filterActiveCount}
+        applied={filterChips.map((c) => ({ id: c.key, label: c.label }))}
+        filterButtonRef={filterButtonRef}
+        filterOpen={filterOpen}
+        onOpenFilter={toggleFilters}
+        onRemove={(id) => filterChips.find((c) => c.key === id)?.remove()}
+        onReset={resetFilters}
+        {...savedFilters}
+        data-testid="tests-list-filterbar"
+        actions={(
+          <>
+            {!isSearchMode && (
+              <div className="toolbar-sort">
+                <span className="toolbar-sort__label">Сортировка:</span>
+                <Select<SortKey>
+                  size="s"
+                  value={sortBy}
+                  options={[
+                    { value: "created_desc", label: "Новые сначала" },
+                    { value: "updated_desc", label: "Недавно изменённые" },
+                    { value: "title_asc", label: "По названию (А→Я)" },
+                  ]}
+                  onChange={(value) => handleSortChange(value)}
+                  aria-label="Сортировка тестов"
+                  data-testid="tests-list-sort"
+                />
+              </div>
+            )}
+            {!isSearchMode && (
+              <Button variant="ghost" size="s" leadingIcon={<ChevronsUpDown width={14} height={14} aria-hidden="true" />} onClick={expandAll}>{t.content.expandAll}</Button>
+            )}
+            {!isSearchMode && (
+              <Button variant="ghost" size="s" leadingIcon={<ChevronsDownUp width={14} height={14} aria-hidden="true" />} onClick={collapseAll}>{t.content.collapseAll}</Button>
+            )}
+            {canImportPackage && (
+              <Button
+                variant="ghost"
+                size="s"
+                leadingIcon={<PackageOpen size={14} />}
+                onClick={() => setTransferOpen(true)}
+                data-testid="tests-list-import-package"
+              >
+                Импорт из пакета
+              </Button>
+            )}
+          </>
         )}
-        {!isSearchMode && (
-          <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
-        )}
-        {canImportPackage && (
-          <Button
-            variant="ghost"
-            leadingIcon={<PackageOpen size={16} />}
-            onClick={() => setTransferOpen(true)}
-            data-testid="tests-list-import-package"
-          >
-            Импорт из пакета
-          </Button>
-        )}
-        {filterOpen && (
-          <TestFilters value={testDraft} onChange={setTestDraft} onApply={applyFilters} onReset={resetFilters} authorOptions={authorOptions} />
-        )}
-      </div>
+      />
+      <TestFilters
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorRef={filterButtonRef}
+        value={testDraft}
+        onChange={setTestDraft}
+        onApply={applyFilters}
+        onReset={resetDraft}
+        authorOptions={authorOptions}
+      />
 
       {transferOpen && (
         <TransferImportDialog
@@ -568,15 +635,6 @@ export function TestsListPage(): React.JSX.Element {
           onClose={() => setTransferOpen(false)}
           onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tests"] })}
         />
-      )}
-
-      {filterChips.length > 0 && (
-        <div className="tl-chips">
-          <Cluster gap={2} wrap>
-            {filterChips.map((c) => <Chip key={c.key} size="s" onRemove={c.remove}>{c.label}</Chip>)}
-            <Button variant="ghost" size="s" onClick={resetFilters}>Очистить всё</Button>
-          </Cluster>
-        </div>
       )}
 
       {isError ? (
@@ -734,6 +792,14 @@ export function TestsListPage(): React.JSX.Element {
             )
           }
           onCancel={() => setDeleteTestState(null)}
+          onArchive={
+            can("tests.publish")
+              ? () => {
+                  statusMutation.mutate({ id: deleteTestState.id, status: "archived" });
+                  setDeleteTestState(null);
+                }
+              : undefined
+          }
           onDelete={async () => {
             if (!deleteTestState) return;
             try {
@@ -812,6 +878,20 @@ export function TestsListPage(): React.JSX.Element {
           onOpenChange={setAssignDialogOpen}
           testId={assignTest.id}
           testTitle={assignTest.title}
+          mode={assignMode}
+        />
+      )}
+
+      {saveAsTest && (
+        <SaveAsDialog
+          open
+          onClose={() => setSaveAsTest(null)}
+          test={saveAsTest}
+          canExportScorm={canExportScorm}
+          onOpenSettings={() => {
+            setSaveAsTest(null);
+            setEditorTarget({ kind: "edit", testId: saveAsTest.id, tab: "main" });
+          }}
         />
       )}
 
@@ -824,8 +904,19 @@ export function TestsListPage(): React.JSX.Element {
             : undefined
         }
         open={editorTarget !== null}
-        onClose={() => setEditorTarget(null)}
+        onClose={() => {
+          setEditorTarget(null);
+          // Раскрытая ветка живёт ровно одно открытие ящика: следующий заход — это
+          // уже обычная работа со списком, а не переход по чьей-то ссылке.
+          setFocusReviewThreadId(null);
+        }}
+        // «Применить» создало тест, а ящик остался открытым: переводим его в режим
+        // правки созданного, чтобы следующее «Применить» дописывало этот тест, а не
+        // создавало новый.
+        onCreated={(testId) => setEditorTarget({ kind: "edit", testId })}
         initialTab={editorTarget?.kind === "edit" ? editorTarget.tab : undefined}
+        focusReviewThreadId={focusReviewThreadId ?? undefined}
+        onFeasibilityNotes={setSaveNotes}
       />
 
       {/* Access panel (PRD-13, WF-2) ---------------------------------------- */}
@@ -843,6 +934,25 @@ export function TestsListPage(): React.JSX.Element {
           if (publishImpact) setEditorTarget({ kind: "edit", testId: publishImpact.testId });
           setPublishImpact(null);
         }}
+      />
+
+      {/* PRD-50 FR-45 - FR-47: замечания к УЖЕ опубликованному тесту ---------- */}
+      <ContentImpactDialog
+        open={publishNotes !== null}
+        mode="advisory"
+        title="Тест опубликован с замечаниями"
+        notes={publishNotes ?? []}
+        onClose={() => setPublishNotes(null)}
+      />
+
+      {/* PRD-15 FR-05: замечания к СОХРАНЁННОМУ тесту ---------------------- */}
+      <ContentImpactDialog
+        open={saveNotes !== null}
+        mode="advisory"
+        title="Тест сохранён, но выдать вопросы по нему нельзя"
+        notes={saveNotes ?? []}
+        advisoryFooter="Сохранению это не мешает. Но пока состав тем не поправлен, тест не выдаст вопросы: прогон встанет, а публикация будет отклонена."
+        onClose={() => setSaveNotes(null)}
       />
 
       {/* PRD-15 FR-14: emergency re-publish confirm ------------------------- */}
@@ -948,40 +1058,52 @@ export function TestsListPage(): React.JSX.Element {
             Выполнить отладку
           </button>
         )}
-        {canExportScorm && (
-          <a
+        {canGrantAccessFor(test) && (
+          <button
+            type="button"
             className="dropdown-item"
             role="menuitem"
-            href={`/api/tests/${test.id}/export/scorm`}
-            onClick={() => setTestMenu(null)}
-            data-testid={`menu-export-${test.id}`}
+            onClick={() => {
+              setTestMenu(null);
+              setAssignMode("review");
+              setAssignTest({ id: test.id, title: test.title });
+              setAssignDialogOpen(true);
+            }}
+            data-testid={`menu-review-${test.id}`}
           >
-            <Download size={14} />
-            Экспорт SCORM
-          </a>
+            <MessageSquare size={14} />
+            Отправить на рецензирование
+          </button>
         )}
-        <a
+        {/* Э5 (решение владельца Р6 2026-10-05): один пункт вместо трёх — окно называет задачу
+            каждого формата, путь обратно и версию; формат без права в окне не показывается. */}
+        <button
+          type="button"
           className="dropdown-item"
           role="menuitem"
-          href={`/api/tests/${test.id}/workbook/export`}
-          onClick={() => setTestMenu(null)}
-          data-testid={`menu-export-excel-${test.id}`}
+          onClick={() => {
+            setTestMenu(null);
+            setSaveAsTest({ id: test.id, title: test.title });
+          }}
+          data-testid={`menu-save-as-${test.id}`}
         >
-          <FileSpreadsheet size={14} />
-          Экспорт в Excel
-        </a>
-        {/* PRD-48: the package carries the test WHOLE — appearance and result texts
-            included — which the workbook, an authoring format, cannot. */}
-        <a
-          className="dropdown-item"
-          role="menuitem"
-          href={`/api/tests/${test.id}/transfer`}
-          onClick={() => setTestMenu(null)}
-          data-testid={`menu-export-package-${test.id}`}
-        >
-          <PackageOpen size={14} />
-          Экспорт пакета (.tbtest)
-        </a>
+          <Download size={14} />
+          Сохранить как…
+        </button>
+        {/* Э6: своего окна у пункта нет — он ведёт в раздел «Импорт» с этим тестом в адресе,
+            и раздел сразу показывает загрузки теста. Тест задаёт файл, а не пункт. */}
+        {canImportLms && (
+          <Link
+            href={`/author/import?testId=${encodeURIComponent(test.id)}`}
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => setTestMenu(null)}
+            data-testid={`menu-import-lms-${test.id}`}
+          >
+            <Upload size={14} />
+            Загрузить выгрузку LMS
+          </Link>
+        )}
         <hr className="dropdown-sep" />
         <button
           type="button"
@@ -1202,7 +1324,7 @@ function DefaultTree(props: {
             indented={row.depth >= 2}
             onOpen={() => props.onOpenTest(row.id)}
             onEdit={() => props.onOpenTest(row.id)}
-            onOpenStructure={() => props.onOpenTest(row.id, "structure")}
+            onOpenStructure={() => props.onOpenTest(row.id, "composition")}
             onAssign={() => props.onAssign(row.id, row.entry.title)}
             onMore={(e) => {
               e.stopPropagation();
@@ -1243,7 +1365,7 @@ function SearchTree(props: {
           breadcrumb={row.folderName}
           onOpen={() => props.onOpenTest(row.id)}
           onEdit={() => props.onOpenTest(row.id)}
-          onOpenStructure={() => props.onOpenTest(row.id, "structure")}
+          onOpenStructure={() => props.onOpenTest(row.id, "composition")}
           onAssign={() => props.onAssign(row.id, row.entry.title)}
           onMore={(e) => {
             e.stopPropagation();
@@ -1386,6 +1508,7 @@ function TestRow(props: {
       <div className="tb-status-cell">
         <StatusTag status={e.status} publicationState={e.publicationState} />
         <UnmappedPagesMark count={e.unmappedPageCount ?? 0} testId={e.id} onOpen={props.onOpenStructure} />
+        <OpenCommentsMark count={e.openReviewComments ?? 0} />
       </div>
       <div>
         <span className={"mode-badge " + e.mode} title={modeTitle(e.mode)}>
@@ -1450,8 +1573,10 @@ function TestRow(props: {
             <Users width={14} height={14} />
           </button>
         )}
+        {/* Э3.1, решение владельца 2026-10-03: на уровень теста — туда же, куда ведёт строка
+            вкладки «Тесты» в «Аналитике». Отменяет решение Э2 (общий раздел с отбором). */}
         {canAnalytics && (
-          <Link href={`/author/tests/${e.id}/analytics`} onClick={(ev) => ev.stopPropagation()}>
+          <Link href={testHref(e.id)} onClick={(ev) => ev.stopPropagation()}>
             <button
               type="button"
               className="action-btn"
@@ -1488,6 +1613,23 @@ function TestRow(props: {
  * in the run reveals it; the mark is how the author learns a decision is pending,
  * and it takes them to «Структура», where the mapping is made.
  */
+/**
+ * PRD-52 FR-32: сколько у теста открытых комментариев рецензентов.
+ *
+ * Показывается ТОЛЬКО когда они есть: у теста без комментариев строка не должна
+ * обрастать нулём — это шум в списке, который читают ежедневно.
+ */
+function OpenCommentsMark({ count }: { count: number }) {
+  if (count <= 0) return null;
+  const label = `Открытых комментариев: ${count}`;
+  return (
+    <span className="tb-open-comments-mark" title={label} aria-label={label} data-testid="open-comments">
+      <MessageSquare size={12} aria-hidden />
+      {count}
+    </span>
+  );
+}
+
 function UnmappedPagesMark(props: { count: number; testId: string; onOpen: () => void }) {
   if (props.count <= 0) return null;
   // Just a warning pictogram: the count lives in the tooltip (it is a hint, not a
@@ -1708,15 +1850,34 @@ function FabSpeedDial(props: {
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
+/**
+ * Test delete confirmation (FR-30, approved wireframes prd7-tests-delete-confirm and
+ * test-delete-lms-impact). PRD-15 FR-07a: the dialog names what goes with the test —
+ * web and LMS attempts, uploaded exports, packages that stop reporting — and offers
+ * archiving as the equal alternative right next to «Удалить навсегда».
+ *
+ * While the counts load, or when the request fails, there is no banner: the dialog
+ * works exactly as before, the counts only inform the choice.
+ */
 function DeleteTestModal(props: {
   state: { id: string; title: string; input: string; error: string | null };
   onChange: (input: string) => void;
   onCancel: () => void;
   onDelete: () => void | Promise<void>;
+  /** Absent when the user may not archive (`tests.publish`): then there is no button. */
+  onArchive?: () => void;
 }) {
   const match = props.state.input === props.state.title;
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
+  const { data: impact } = useQuery<TestDeleteImpact>({
+    // Not under ["/api/tests"]: the delete mutation invalidates that prefix while the dialog is
+    // still mounted, and the refetch would ask about a test that no longer exists (404).
+    queryKey: ["test-delete-impact", props.state.id],
+    queryFn: () => fetchJson(`/api/tests/${props.state.id}/delete-impact`),
+    staleTime: 0,
+  });
+  const warning = impact ? describeDeleteImpact(impact) : null;
   return (
     <ModalDialog
       open
@@ -1733,6 +1894,16 @@ function DeleteTestModal(props: {
           >
             Отмена
           </Button>
+          {props.onArchive && (
+            <Button
+              variant="secondary"
+              size="s"
+              onClick={props.onArchive}
+              data-testid="delete-test-archive"
+            >
+              Архивировать
+            </Button>
+          )}
           <Button
             variant="destructive"
             size="s"
@@ -1745,27 +1916,44 @@ function DeleteTestModal(props: {
         </>
       }
     >
-      <label className="typed-confirm__label" htmlFor="del-test-input">
-        Введите точное название теста для подтверждения:
-      </label>
-      <div className="typed-confirm__name-block" aria-hidden="true">
-        {props.state.title}
+      <p className="typed-confirm__lead">
+        Тест <strong>«{props.state.title}»</strong> будет удалён безвозвратно вместе со всеми
+        назначениями и результатами попыток. Это действие невозможно отменить.
+      </p>
+      {warning && (
+        <Banner
+          className="typed-confirm__impact"
+          tone="warning"
+          variant="subtle"
+          icon={<TriangleAlert size={20} />}
+          title={warning.title}
+          description={warning.description}
+          data-testid="delete-test-impact"
+        />
+      )}
+      <div className="typed-confirm">
+        <label className="typed-confirm__label" htmlFor="del-test-input">
+          Введите точное название теста для подтверждения:
+        </label>
+        <div className="typed-confirm__name-block" aria-hidden="true">
+          {props.state.title}
+        </div>
+        <Input
+          ref={inputRef}
+          id="del-test-input"
+          size="m"
+          fullWidth
+          type="text"
+          placeholder="Введите название…"
+          value={props.state.input}
+          onChange={(e) => props.onChange(e.target.value)}
+          autoComplete="off"
+          tone={props.state.error ? "error" : match ? "success" : undefined}
+          error={props.state.error ?? undefined}
+          data-testid="delete-test-input"
+        />
+        <p className="typed-confirm__hint">Регистр символов учитывается.</p>
       </div>
-      <Input
-        ref={inputRef}
-        id="del-test-input"
-        size="m"
-        fullWidth
-        type="text"
-        placeholder="Введите название…"
-        value={props.state.input}
-        onChange={(e) => props.onChange(e.target.value)}
-        autoComplete="off"
-        tone={props.state.error ? "error" : match ? "success" : undefined}
-        error={props.state.error ?? undefined}
-        data-testid="delete-test-input"
-      />
-      <p className="typed-confirm__hint">Регистр символов учитывается.</p>
     </ModalDialog>
   );
 }

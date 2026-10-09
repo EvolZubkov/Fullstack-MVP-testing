@@ -39,10 +39,8 @@ const { storageMock } = vi.hoisted(() => ({
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 
 import scormTelemetryRouter from "../server/routes/scorm-telemetry";
-import analyticsGeneralRouter from "../server/routes/analytics/general";
 import analyticsAttemptsRouter from "../server/routes/analytics/attempts";
 import analyticsScormRouter from "../server/routes/analytics/scorm";
-import analyticsCombinedRouter from "../server/routes/analytics/combined";
 
 // ─── App factory ──────────────────────────────────────────────────────────────
 const authorUser = {
@@ -214,6 +212,40 @@ describe("SCORM Telemetry — POST /scorm-telemetry/answer", () => {
       .send({ packageId: "pkg1", sessionId: "sess1", signature: sig, timestamp: ts, data });
     expect(res.status).toBe(404);
   });
+
+  it("сохраняет время на задании, когда пакет его измерил", async () => {
+    // Материал анализа пунктов: до этой правки время не доезжало ни в отчёт LMS, ни к нам.
+    storageMock.getScormPackage.mockResolvedValue(dbPkg);
+    storageMock.getScormAttemptBySession.mockResolvedValue(dbScormAttempt);
+    storageMock.createScormAnswer.mockResolvedValue({});
+    storageMock.updateScormAttempt.mockResolvedValue({});
+    const ts = String(Date.now());
+    const data = { questionId: "q1", questionPrompt: "Q?", questionType: "single",
+      userAnswer: 0, correctAnswer: 0, isCorrect: true, points: 1, maxPoints: 1, latencyMs: 62000 };
+    const sig = makeSignature("pkg1", "sess1", ts, data);
+    await request(app).post("/api/scorm-telemetry/answer")
+      .send({ packageId: "pkg1", sessionId: "sess1", signature: sig, timestamp: ts, data });
+    expect(storageMock.createScormAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ latencyMs: 62000 }),
+    );
+  });
+
+  it("пакет без измерения времени пишет NULL, а не ноль", async () => {
+    // Пакеты, выданные до измерения, поля не шлют вовсе; ноль означал бы «ответил мгновенно».
+    storageMock.getScormPackage.mockResolvedValue(dbPkg);
+    storageMock.getScormAttemptBySession.mockResolvedValue(dbScormAttempt);
+    storageMock.createScormAnswer.mockResolvedValue({});
+    storageMock.updateScormAttempt.mockResolvedValue({});
+    const ts = String(Date.now());
+    const data = { questionId: "q1", questionPrompt: "Q?", questionType: "single",
+      userAnswer: 0, correctAnswer: 0, isCorrect: true, points: 1, maxPoints: 1 };
+    const sig = makeSignature("pkg1", "sess1", ts, data);
+    await request(app).post("/api/scorm-telemetry/answer")
+      .send({ packageId: "pkg1", sessionId: "sess1", signature: sig, timestamp: ts, data });
+    expect(storageMock.createScormAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ latencyMs: null }),
+    );
+  });
 });
 
 describe("SCORM Telemetry — POST /scorm-telemetry/finish", () => {
@@ -311,48 +343,6 @@ describe("SCORM Telemetry — package management (author)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ANALYTICS — GENERAL
-// ─────────────────────────────────────────────────────────────────────────────
-describe("Analytics — GET /analytics", () => {
-  let app: express.Express;
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageMock.getUser.mockResolvedValue(authorUser);
-    app = makeApp([analyticsGeneralRouter, "/api/analytics"]);
-  });
-
-  it("returns 401 when not authenticated", async () => {
-    const res = await request(app).get("/api/analytics/");
-    expect(res.status).toBe(401);
-  });
-
-  it("returns summary, testStats, topicStats, trends", async () => {
-    storageMock.getTests.mockResolvedValue([{ id: "test1", title: "Test 1" }]);
-    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
-    storageMock.getAllAttempts.mockResolvedValue([dbAttemptResult]);
-    const res = await asAuthor(request(app).get("/api/analytics/"));
-    expect(res.status).toBe(200);
-    expect(res.body.summary.totalTests).toBe(1);
-    expect(res.body.summary.totalAttempts).toBe(1);
-    expect(res.body.summary.overallPassRate).toBe(100);
-    expect(res.body.testStats).toHaveLength(1);
-    expect(res.body.testStats[0].passRate).toBe(100);
-    expect(res.body.topicStats).toHaveLength(1);
-  });
-
-  it("returns zero stats when no completed attempts", async () => {
-    storageMock.getTests.mockResolvedValue([{ id: "test1", title: "Test 1" }]);
-    storageMock.getTopics.mockResolvedValue([]);
-    storageMock.getAllAttempts.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/analytics/"));
-    expect(res.status).toBe(200);
-    expect(res.body.summary.totalAttempts).toBe(0);
-    expect(res.body.summary.overallPassRate).toBe(0);
-    expect(res.body.trends).toHaveLength(0);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
 // ANALYTICS — ATTEMPTS
 // ─────────────────────────────────────────────────────────────────────────────
 describe("Analytics — attempts routes", () => {
@@ -363,61 +353,10 @@ describe("Analytics — attempts routes", () => {
     app = makeApp([analyticsAttemptsRouter, "/api/analytics"]);
   });
 
-  it("GET /tests/:testId/attempts — returns attempts list", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Test 1", mode: "standard" });
-    storageMock.getAllAttempts.mockResolvedValue([dbAttemptResult]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)  // middleware
-      .mockResolvedValueOnce({ id: "u1", name: "User", email: "u@test.com" }); // user lookup
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(200);
-    expect(res.body.testTitle).toBe("Test 1");
-    expect(res.body.attempts).toHaveLength(1);
-    expect(res.body.attempts[0].passed).toBe(true);
-  });
-
-  it("GET /tests/:testId/attempts — returns 404 when test not found", async () => {
-    storageMock.getTest.mockResolvedValue(undefined);
-    const res = await asAuthor(request(app).get("/api/analytics/tests/x/attempts"));
-    expect(res.status).toBe(404);
-  });
-
-  it("GET /tests/:testId/attempts — filters to only that test's attempts", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Test 1", mode: "standard" });
-    const otherAttempt = { ...dbAttemptResult, id: "other", testId: "test2" };
-    storageMock.getAllAttempts.mockResolvedValue([dbAttemptResult, otherAttempt]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)
-      .mockResolvedValueOnce({ id: "u1", name: "User", email: "u@test.com" });
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(200);
-    expect(res.body.attempts).toHaveLength(1);
-  });
-
-  it("GET /tests/:testId/attempts — resolves snapshot version and the version breakdown (T-20)", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Test 1", mode: "standard" });
-    // Two attempts on snapshot v2, one legacy (no snapshot).
-    const onV2a = { ...dbAttemptResult, id: "a", snapshotId: "snap2" };
-    const onV2b = { ...dbAttemptResult, id: "b", snapshotId: "snap2" };
-    const legacy = { ...dbAttemptResult, id: "c", snapshotId: null };
-    storageMock.getAllAttempts.mockResolvedValue([onV2a, onV2b, legacy]);
-    storageMock.getSnapshotsForTest.mockResolvedValue([
-      { id: "snap2", version: 2 },
-      { id: "snap1", version: 1 },
-    ]);
-    storageMock.getUser.mockResolvedValue({ id: "u1", name: "User", email: "u@test.com" });
-
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(200);
-    expect(res.body.currentVersion).toBe(2);
-    // Newest version first, legacy (null) last.
-    expect(res.body.versions).toEqual([
-      { snapshotVersion: 2, attemptCount: 2 },
-      { snapshotVersion: null, attemptCount: 1 },
-    ]);
-    const byId = Object.fromEntries(res.body.attempts.map((a: any) => [a.attemptId, a.snapshotVersion]));
-    expect(byId).toEqual({ a: 2, b: 2, c: null });
-  });
+  // Ручка списка попыток теста снята вместе с его вкладкой (PRD-56 FR-23): прохождения
+  // показывает реестр. Вместе с ней временно ушёл и разрез по версиям публикации
+  // (`currentVersion` / `versions`, T-20) — он восстанавливается в Э5 на слое наблюдений,
+  // где `snapshotId` есть у прохождений ОБОИХ источников, а не у одних веб-попыток (FR-19).
 
   it("GET /attempts/:attemptId — returns 404 when not found", async () => {
     storageMock.getAttempt.mockResolvedValue(undefined);
@@ -592,62 +531,5 @@ describe("Analytics — SCORM routes", () => {
     storageMock.getScormAttempt.mockResolvedValue(undefined);
     const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/x"));
     expect(res.status).toBe(404);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ANALYTICS — COMBINED
-// ─────────────────────────────────────────────────────────────────────────────
-describe("Analytics — combined routes", () => {
-  let app: express.Express;
-  const finishedScormAttempt = { ...dbScormAttempt, finishedAt: new Date(),
-    resultPercent: 90, resultPassed: true, totalPoints: 9, maxPoints: 10 };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageMock.getUser.mockResolvedValue(authorUser);
-    app = makeApp([analyticsCombinedRouter, "/api/analytics"]);
-  });
-
-  it("GET /combined — returns merged web + lms attempts", async () => {
-    storageMock.getAllAttempts.mockResolvedValue([dbAttemptResult]);
-    storageMock.getAllScormAttempts.mockResolvedValue([finishedScormAttempt]);
-    storageMock.getTests.mockResolvedValue([{ id: "test1", title: "Test 1" }]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)
-      .mockResolvedValueOnce({ id: "u1", name: "User", email: "u@test.com" });
-    const res = await asAuthor(request(app).get("/api/analytics/combined"));
-    expect(res.status).toBe(200);
-    expect(res.body.attempts).toBeDefined();
-    const sources = res.body.attempts.map((a: any) => a.source);
-    expect(sources).toContain("web");
-    expect(sources).toContain("lms");
-  });
-
-  it("GET /combined — filters by source=web", async () => {
-    storageMock.getAllAttempts.mockResolvedValue([dbAttemptResult]);
-    storageMock.getTests.mockResolvedValue([{ id: "test1", title: "Test 1" }]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)
-      .mockResolvedValueOnce({ id: "u1", name: "User", email: "u@test.com" });
-    const res = await asAuthor(request(app).get("/api/analytics/combined?source=web"));
-    expect(res.status).toBe(200);
-    const sources = res.body.attempts.map((a: any) => a.source);
-    expect(sources.every((s: string) => s === "web")).toBe(true);
-  });
-
-  it("GET /combined — filters by source=lms", async () => {
-    storageMock.getAllScormAttempts.mockResolvedValue([finishedScormAttempt]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    const res = await asAuthor(request(app).get("/api/analytics/combined?source=lms"));
-    expect(res.status).toBe(200);
-    const sources = res.body.attempts.map((a: any) => a.source);
-    expect(sources.every((s: string) => s === "lms")).toBe(true);
-  });
-
-  it("GET /combined — returns 401 when not authenticated", async () => {
-    const res = await request(app).get("/api/analytics/combined");
-    expect(res.status).toBe(401);
   });
 });

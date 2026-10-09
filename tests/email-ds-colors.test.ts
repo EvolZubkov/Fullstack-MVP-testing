@@ -3,7 +3,7 @@
  * @description Письма красятся палитрой дизайн-системы. Почтовые клиенты не
  * понимают ни CSS-переменные, ни `color-mix()`, поэтому значения токенов DS
  * разворачиваются в литералы в `server/email-theme.ts` — а этот тест сверяет их
- * с `vendor/ui-kit/css/university-rt.css`, чтобы разворот не разошёлся с DS,
+ * с `vendor/ui-kit/css/skillum-ds.css`, чтобы разворот не разошёлся с DS,
  * и следит, что в самих письмах не осталось произвольных цветов.
  */
 import { describe, it, expect } from "vitest";
@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { EMAIL_COLORS, tintWithWhite } from "../server/email-theme";
 
-const DS_CSS = fs.readFileSync(path.resolve("vendor/ui-kit/css/university-rt.css"), "utf8");
+const DS_CSS = fs.readFileSync(path.resolve("vendor/ui-kit/css/skillum-ds.css"), "utf8");
 
 /** Value of a DS token declaration, e.g. `--ou-neutral-0: #FFFFFF;` -> `#FFFFFF`. */
 function dsToken(name: string): string {

@@ -14,7 +14,7 @@
 `tests/order-questions-port.test.ts`. Настройка теста живёт в новой колонке `tests.question_order`,
 настройка темы (`test_sections.question_order`) становится nullable и означает «как в тесте».
 
-**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@universityrt/ui-kit`, Vitest
+**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@skillum/ui-kit`, Vitest
 (`npm test`), plain-JS рантайм SCORM, ExcelJS. Спецификация:
 [docs/specs/prd-30/question-order.md](../specs/prd-30/question-order.md), раздел 14.
 

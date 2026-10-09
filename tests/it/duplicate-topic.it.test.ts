@@ -74,6 +74,22 @@ describe("duplicateTopicWithQuestions — copy respects topic invariants", () =>
     expect(copied.map((q) => q.prompt).sort()).toEqual(["Q1", "Q2"]);
   });
 
+  it("копия задания несёт ТОТ ЖЕ отпечаток содержания (PRD-66 FR-09a)", async () => {
+    // Unlike the copy of a single question, a duplicated topic does not rename anything:
+    // the copy is the same instrument, so answers to it and to the original belong to
+    // ONE observation series. An empty stamp here would quietly drop the copy out of
+    // every statistic.
+    const original = await seedTopicWithQuestions();
+    const before = await storage.getQuestionsByTopic(original.id);
+
+    const result = await storage.duplicateTopicWithQuestions(original.id, U2);
+    const copied = await storage.getQuestionsByTopic(result!.topic.id);
+
+    const stamps = (rows: typeof copied) => rows.map((q) => q.psychoHash).sort();
+    expect(stamps(copied).every((hash) => /^[0-9a-f]{64}$/.test(hash ?? ""))).toBe(true);
+    expect(stamps(copied)).toEqual(stamps(before));
+  });
+
   it("gives a distinct name when one owner duplicates the same topic twice", async () => {
     const original = await seedTopicWithQuestions();
 

@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Wireframe: вводный текст по исходу — две карточки.
+      Файл: docs/wireframes/prd61-intro-by-outcome.html
+      Источник решений: docs/specs/prd-61/results-intro-by-outcome.md (FR-16 - FR-19),
+      план docs/plans/2026-09-22-prd-61-intro-by-outcome.md, этап Э0.
+
+      Каркас ящика, шапка, вкладки и рейл взяты ДОСЛОВНО из
+      docs/wireframes/editor-settings-target.html (состояние wf-texts, строки 1553-1648).
+      Разметка полей повторяет живой компонент
+      client/src/features/tests/editor/sections/feedback-preview.tsx: заполненное поле —
+      .tb-feedback-preview, пустое — .tb-feedback-preview.is-empty с надписью «Без текста».
+
+      РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-22 (второе): карточка «Общая обратная связь теста» с этой
+      страницы УХОДИТ. Три вводных текста закрывают её назначение: «При любом исходе» плюс
+      текст исхода говорят то же и там, где автор этого ждёт — в начале. Материалы (курсы,
+      файлы, мероприятия) остаются у ТЕМ, где ими и пользуются. Подробности и судьба данных —
+      в спецификации, §9.
+
+      РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-22 (первое): вводный текст разводится на ДВЕ карточки — «на
+      экране итогов» и «в отчёте», — чтобы подписи полей внутри остались короткими. Подписи
+      параллельны по конструкции («При любом исходе» / «Если тест пройден» / «Если тест не
+      пройден»), а не вводят новое слово для общего текста. Переключатель «те же тексты,
+      что на экране итогов» живёт в карточке ОТЧЁТА: он про отчёт, и карточка либо
+      ссылается на экран, либо держит свои тексты.
+
+      Состояния: s-linked (переключатель включён), s-split (выключен), s-empty (новый тест).
+    -->
+    <title>Вводный текст по исходу</title>
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <!-- ДС берётся из редактируемой зависимости, а не из копии в docs/wireframes/ds:
+         копия отстала и врала бы про облик компонентов. Так же поступает эталон ящика. -->
+    <link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      /* МОДУЛЬНАЯ СЕТКА: модуль — шаг шкалы ДС, токен --ou-space-1. Родственные элементы
+         получают 1x, разные — 4x, отступы от краёв панели или карточки — 6x. */
+
+      .wf-sprite { position: absolute; width: 0; height: 0; }
+
+      /* Панель переключения состояний эскиза. Ящик — фиксированный оверлей, поэтому
+         панель держится НАД ним. Взято из эталона ящика без изменений. */
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: var(--ou-space-1);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: 1px solid var(--ou-border-soft);
+        font: var(--ou-text-body-s);
+      }
+      .wf-nav__btn {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: 1px solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-s);
+        background: var(--ou-bg-default);
+        color: var(--ou-fg-default);
+        cursor: pointer;
+        font: inherit;
+      }
+      .wf-nav__btn.is-active {
+        border-color: var(--ou-accent-default);
+        color: var(--ou-accent-default);
+      }
+
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-state .ou-drawer { top: var(--ou-space-12); }
+
+      /* ══ Интервалы — из эталона ящика (editor-settings-target.html, строки 71-141),
+         перенесены дословно. Часть правил перебивает СОБСТВЕННЫЕ интервалы компонентов
+         ui-kit; чтобы интерфейс совпал с эскизом, те же значения надо поменять в
+         vendor/ui-kit — строки помечены комментарием «ui-kit». ══ */
+
+      /* ── Края ящика: всё содержимое отбито от края на 6x ─────────────────── */
+      .ou-drawer__head { padding: var(--ou-space-6); }            /* ui-kit: 20 -> 24 */
+      .ou-tabs__list { padding-inline: var(--ou-space-6); }       /* ui-kit: 0 -> 24 */
+      /* Семь вкладок с точками состояния шире полосы: отступ вкладки — на два шага меньше,
+         полосе разрешена прокрутка (то же правило в `tb-components.css`). */
+      .ou-tabs--m .ou-tabs__tab { padding-inline: var(--ou-space-2); }
+      .ou-tabs__list { overflow-x: auto; scrollbar-width: thin; }
+      .ou-drawer__body { padding: 0; }
+      .ou-drawer__foot { padding: var(--ou-space-6); }            /* ui-kit: 20 -> 24 */
+      .ou-drawer__rail { padding: var(--ou-space-6); }            /* ui-kit: 24/16 -> 24 */
+      .ou-drawer__split .tb-settings-content { flex: 1 1 auto; min-width: 0; }
+      .tb-settings-content { padding: var(--ou-space-6); }        /* проектный слой: 20 -> 24 */
+
+      /* ── Родственные пары внутри компонентов: 1x ─────────────────────────── */
+      /* Проектный слой (tb-components.css:148) даёт формфилду gap 8 и нижнюю отбивку 16;
+         второе складывалось с интервалом группы. Правится там же, не в ui-kit. */
+      .ou-formfield,
+      .tb-settings-content .ou-formfield { gap: var(--ou-space-1); margin-bottom: 0; }
+      .ou-switch-field { gap: var(--ou-space-1); }                /* ui-kit: 12 -> 4 */
+      .ou-switch-field__text { gap: var(--ou-space-1); }          /* ui-kit: 2 -> 4 */
+      .ou-btn { gap: var(--ou-space-1); }                         /* ui-kit: 8 -> 4 */
+
+      /* ── Однородные строки списка: 1x ────────────────────────────────────── */
+      .ou-drawer__rail { gap: var(--ou-space-1); }                /* ui-kit: 2 -> 4 */
+      .ou-drawer__foot { gap: var(--ou-space-1); }                /* ui-kit: 12 -> 4 */
+
+      /* ── Разные элементы: 4x ─────────────────────────────────────────────── */
+      .tb-settings-content > * { margin: var(--ou-space-4) 0 0; }
+      .tb-settings-content > *:first-child { margin-top: 0; }
+      /* Разделы отбиваются друг от друга сильнее, чем заголовок от своего содержимого. */
+      .tb-settings-content > .ou-formsection { margin-top: var(--ou-space-6); }
+      .tb-settings-content > .ou-formsection:first-child { margin-top: 0; }
+      /* Раскладка группы — одна колонка (штатный --stacked), без разделителя и
+         собственных вертикальных полей: интервалы задаёт панель. */
+      .ou-formsection { padding: 0; border-bottom: 0; }
+      .ou-formsection__body { gap: var(--ou-space-4); }           /* ui-kit: 20 -> 16 */
+      /* ДС отбивает соседние поля ЕЩЁ И собственным margin (`.ou-formfield + .ou-formfield`,
+         skillum-ds.css), и он складывается с gap группы: между полями выходит 32 вместо 16.
+         В карточке с одним полем это не проявлялось, поэтому и не было замечено — эталон
+         ящика (editor-settings-target.html) несёт тот же двойной интервал. Интервалы задаёт
+         КОНТЕЙНЕР, поэтому margin гасится. */
+      .ou-formsection__body > .ou-formfield + .ou-formfield { margin-top: 0; }  /* ui-kit: 16 -> 0 */
+      /* Заголовок раздела принадлежит своему содержимому: под ним 1x, а до него — 6x. */
+      .ou-formsection__intro { margin-bottom: 0; }
+      .tb-settings-content .ou-formsection { gap: var(--ou-space-1); }
+    </style>
+  </head>
+  <!-- Класс `ou` обязателен: токены ДС объявлены под ним, и без него страница рисуется
+       голым HTML. Модификаторы темы и плотности — как в эталоне ящика. -->
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /><path d="m15 5 4 4" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Состояния эскиза">
+      <button type="button" class="wf-nav__btn is-active" data-state="s-linked">Те же тексты в отчёте</button>
+      <button type="button" class="wf-nav__btn" data-state="s-split">Свои тексты в отчёте</button>
+      <button type="button" class="wf-nav__btn" data-state="s-empty">Новый тест</button>
+    </nav>
+
+    <!-- ═══════════ s-linked: переключатель ВКЛЮЧЁН — у отчёта своих полей нет ═══════════ -->
+    <div id="s-linked" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v26</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы обратной связи и итогов">
+                <button type="button" class="ou-drawer__rail-item">Во время теста</button>
+                <button type="button" class="ou-drawer__rail-item">Состав итогов</button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-feedback-linked">Обратная связь</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-feedback-linked">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page">Общее</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По темам</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По уровням шкал</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По уровням сложности</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По уровням показателей</button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item">Отчёт</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Вводный текст на экране итогов</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">При любом исходе</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Спасибо за прохождение теста.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст на экране итогов при любом исходе"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест пройден</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Ваш уровень компетенций и знаний соответствует стандарту руководителя в «Ростелекоме».</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст на экране итогов, если тест пройден"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест не пройден</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Пока вам не хватает баллов по одной или нескольким темам. Повторно пройти тест можно через 14 дней.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст на экране итогов, если тест не пройден"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Вводный текст в отчёте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Те же тексты, что на экране итогов</span><span class="ou-switch-field__desc">Правятся в одном месте. Выключите, чтобы задать отчёту своё вводное слово.</span></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ s-split: переключатель ВЫКЛЮЧЕН — у отчёта свои три текста ═══════════ -->
+    <div id="s-split" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v26</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы обратной связи и итогов">
+                <button type="button" class="ou-drawer__rail-item">Во время теста</button>
+                <button type="button" class="ou-drawer__rail-item">Состав итогов</button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-feedback-split">Обратная связь</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-feedback-split">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page">Общее</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По темам</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По уровням шкал</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По уровням сложности</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По уровням показателей</button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item">Отчёт</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Вводный текст на экране итогов</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">При любом исходе</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Спасибо за прохождение теста.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст на экране итогов при любом исходе"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест пройден</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Ваш уровень компетенций и знаний соответствует стандарту руководителя.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст на экране итогов, если тест пройден"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест не пройден</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Пока вам не хватает баллов по одной или нескольким темам.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст на экране итогов, если тест не пройден"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Вводный текст в отчёте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Те же тексты, что на экране итогов</span><span class="ou-switch-field__desc">Правятся в одном месте. Выключите, чтобы задать отчёту своё вводное слово.</span></span>
+                    </label>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">При любом исходе</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Спасибо за прохождение теста.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст в отчёте при любом исходе"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест пройден</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Сертификация пройдена. В отчёте — подробные результаты по компетенциям и знаниям.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст в отчёте, если тест пройден"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест не пройден</label>
+                    <div class="tb-feedback-preview">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Уровень компетенций и знаний пока не соответствует стандарту руководителя. В отчёте — зоны развития.</span>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать: вводный текст в отчёте, если тест не пройден"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ s-empty: новый тест — ни один текст не задан ═══════════ -->
+    <div id="s-empty" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Аттестация технических специалистов</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v1</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы обратной связи и итогов">
+                <button type="button" class="ou-drawer__rail-item">Во время теста</button>
+                <button type="button" class="ou-drawer__rail-item">Состав итогов</button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-feedback-empty">Обратная связь</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-feedback-empty">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page">Общее</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">По темам</button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item">Отчёт</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Вводный текст на экране итогов</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">При любом исходе</label>
+                    <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать: вводный текст на экране итогов при любом исходе">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Без текста</span>
+                        <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест пройден</label>
+                    <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать: вводный текст на экране итогов, если тест пройден">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Без текста</span>
+                        <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Если тест не пройден</label>
+                    <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать: вводный текст на экране итогов, если тест не пройден">
+                      <div class="tb-feedback-preview__head">
+                        <span class="tb-feedback-preview__snippet">Без текста</span>
+                        <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Вводный текст в отчёте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Те же тексты, что на экране итогов</span><span class="ou-switch-field__desc">Правятся в одном месте. Выключите, чтобы задать отчёту своё вводное слово.</span></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      document.querySelectorAll('.wf-nav__btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.wf-nav__btn').forEach(function (b) { b.classList.remove('is-active'); });
+          document.querySelectorAll('.wf-state').forEach(function (s) { s.classList.remove('active'); });
+          btn.classList.add('is-active');
+          document.getElementById(btn.dataset.state).classList.add('active');
+        });
+      });
+    </script>
+  </body>
+</html>

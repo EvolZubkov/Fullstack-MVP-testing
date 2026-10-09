@@ -1,0 +1,11 @@
+{{#if report.hasCourses}}
+<section class="tb-report__card">
+  {{#if labels.recommendations.courses}}<div class="tb-report__title tb-report__title--tight">{{ labels.recommendations.courses }}</div>{{/if}}
+  <div class="tb-report__lead">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>
+  {{#each report.courses}}
+  <div class="tb-report__rec">
+    <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+  </div>
+  {{/each}}
+</section>
+{{/if}}

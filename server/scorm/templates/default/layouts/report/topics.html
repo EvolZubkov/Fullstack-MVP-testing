@@ -1,0 +1,110 @@
+<!-- ЗАГОЛОВКИ РАЗДЕЛОВ приходят словарём надписей (PRD-49): формулировку задаёт автор
+     теста, а отчёт вправе сказать иначе, чем экран итогов. Пустая надпись означает «не
+     печатать» — раздел остаётся, заголовка у него нет. Умолчания, в том числе отдельные
+     умолчания отчёта, объявляет манифест шаблона. -->
+{{#if report.hasTopics}}
+<section class="tb-report__card">
+  {{#if labels.results.topics}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.topics }}</div>{{/if}}
+  <!-- PRD-50 (FR-24/FR-25/FR-27): БЛОКИ РАЗДЕЛОВ. Документ печатает ровно то, что
+       экран, с которого его скачали (§5.2): состав блока и его счётчик считает ядро, а
+       `result.topicGroups` появляется только у теста, где автор блоки завёл. Плоский
+       `result.topicResults` остаётся ПОЛНЫМ, поэтому рядом с блоками он не печатается —
+       иначе тема вышла бы в документе дважды. Темы без блока идут ПОСЛЕ блоков. -->
+  {{#each result.topicGroups}}
+  <div class="tb-report__topic-group">
+    <div class="tb-report__topic-group-head">
+      {{#if label}}<div class="tb-report__topic-group-title">{{ label }}</div>{{/if}}
+      {{#if counterLabel}}<div class="tb-report__topic-group-counter">{{ counterLabel }}</div>{{/if}}
+    </div>
+    <div class="tb-report__topics" style="grid-template-columns: repeat({{ @root.report.gridColumns }}, 1fr);">
+      {{#each topics}}
+      <div class="tb-report__topic {{ passClass }}">
+        <div class="tb-report__topic-stripe"></div>
+        <div class="tb-report__topic-head">
+          <div class="tb-report__topic-name">{{ topicName }}</div>
+          {{#if verdictLabel}}<div class="tb-report__topic-verdict">{{ verdictLabel }}</div>{{/if}}
+        </div>
+        <div class="tb-report__topic-stats">
+          <span>{{ countsLabel }}</span>
+          <span>{{ pointsFixedLabel }}</span>
+        </div>
+        <div class="tb-report__topic-bar"><div class="tb-report__topic-bar-fill" style="width: {{ barPercent }}%;"></div></div>
+        {{#if breakdown}}
+        <div class="tb-report__breakdown">
+          {{#each breakdown}}
+          <div class="tb-report__breakdown-row {{ passClass }}" data-item="{{ key }}">
+            <div class="tb-report__breakdown-name">{{ key }}</div>
+            <div class="tb-report__breakdown-bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+            {{#if showValue}}<div class="tb-report__breakdown-val">{{ valueLabel }}</div>{{/if}}
+            {{#if requiredLabel}}<div class="tb-report__breakdown-req">{{ requiredLabel }}</div>{{/if}}
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </div>
+  {{/each}}
+  {{#if result.ungroupedTopics}}
+  <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
+    {{#each result.ungroupedTopics}}
+    <div class="tb-report__topic {{ passClass }}">
+      <div class="tb-report__topic-stripe"></div>
+      <div class="tb-report__topic-head">
+        <div class="tb-report__topic-name">{{ topicName }}</div>
+        {{#if verdictLabel}}<div class="tb-report__topic-verdict">{{ verdictLabel }}</div>{{/if}}
+      </div>
+      <div class="tb-report__topic-stats">
+        <span>{{ countsLabel }}</span>
+        <span>{{ pointsFixedLabel }}</span>
+      </div>
+      <div class="tb-report__topic-bar"><div class="tb-report__topic-bar-fill" style="width: {{ barPercent }}%;"></div></div>
+      {{#if breakdown}}
+      <div class="tb-report__breakdown">
+        {{#each breakdown}}
+        <div class="tb-report__breakdown-row {{ passClass }}" data-item="{{ key }}">
+          <div class="tb-report__breakdown-name">{{ key }}</div>
+          <div class="tb-report__breakdown-bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+          {{#if showValue}}<div class="tb-report__breakdown-val">{{ valueLabel }}</div>{{/if}}
+          {{#if requiredLabel}}<div class="tb-report__breakdown-req">{{ requiredLabel }}</div>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+    </div>
+    {{/each}}
+  </div>
+  {{/if}}
+  {{#unless result.topicGroups}}
+  <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
+    {{#each result.topicResults}}
+    <div class="tb-report__topic {{ passClass }}">
+      <div class="tb-report__topic-stripe"></div>
+      <div class="tb-report__topic-head">
+        <div class="tb-report__topic-name">{{ topicName }}</div>
+        {{#if verdictLabel}}<div class="tb-report__topic-verdict">{{ verdictLabel }}</div>{{/if}}
+      </div>
+      <div class="tb-report__topic-stats">
+        <span>{{ countsLabel }}</span>
+        <span>{{ pointsFixedLabel }}</span>
+      </div>
+      <div class="tb-report__topic-bar"><div class="tb-report__topic-bar-fill" style="width: {{ barPercent }}%;"></div></div>
+      {{#if breakdown}}
+      <div class="tb-report__breakdown">
+        {{#each breakdown}}
+        <div class="tb-report__breakdown-row {{ passClass }}" data-item="{{ key }}">
+          <div class="tb-report__breakdown-name">{{ key }}</div>
+          <div class="tb-report__breakdown-bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+          {{#if showValue}}<div class="tb-report__breakdown-val">{{ valueLabel }}</div>{{/if}}
+          {{#if requiredLabel}}<div class="tb-report__breakdown-req">{{ requiredLabel }}</div>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+    </div>
+    {{/each}}
+  </div>
+  {{/unless}}
+</section>
+{{/if}}

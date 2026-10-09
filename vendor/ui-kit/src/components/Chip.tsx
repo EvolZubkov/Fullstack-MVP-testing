@@ -15,6 +15,14 @@ export interface ChipProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonEle
   count?: React.ReactNode;
   /** Renders × close button. */
   onRemove?: () => void;
+  /**
+   * What the close button is called for assistive tech.
+   *
+   * Defaults to «Удалить», which is all a lone chip needs. A ROW of chips is the case this
+   * exists for: read out of context, ten identical «Удалить» say nothing about which
+   * condition each one drops.
+   */
+  removeLabel?: string;
   onChange?: (selected: boolean) => void;
 }
 
@@ -28,6 +36,7 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(
     avatar,
     count,
     onRemove,
+    removeLabel = 'Удалить',
     onChange,
     className,
     children,
@@ -74,7 +83,7 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(
           <button
             type="button"
             className="ou-chip__close"
-            aria-label="Удалить"
+            aria-label={removeLabel}
             disabled={disabled}
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
           >

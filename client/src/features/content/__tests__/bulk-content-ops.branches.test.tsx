@@ -14,7 +14,10 @@ import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/re
 import type { Folder } from "@shared/schema";
 
 const { toastSpy } = vi.hoisted(() => ({ toastSpy: vi.fn() }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import {
   BulkImpactDialog,
@@ -129,7 +132,7 @@ describe("GroupMoveModal — apply failures", () => {
     fireEvent.click(screen.getByTestId("ct-group-move-confirm"));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "move" }),
+        expect.objectContaining({ tone: "error", description: "move" }),
       ),
     );
     expect(onDone).not.toHaveBeenCalled();
@@ -147,7 +150,7 @@ describe("GroupMoveModal — apply failures", () => {
     );
     fireEvent.click(screen.getByTestId("ct-group-move-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "boom" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "boom" })),
     );
     expect(onDone).not.toHaveBeenCalled();
   });
@@ -161,7 +164,7 @@ describe("GroupMoveModal — apply failures", () => {
     );
     fireEvent.click(screen.getByTestId("ct-group-move-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "reparent" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "reparent" })),
     );
   });
 });
@@ -232,7 +235,7 @@ describe("GroupAccessModal — branches", () => {
     pickUser();
     fireEvent.click(screen.getByTestId("ct-group-access-apply"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "grant" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "grant" })),
     );
     expect(onDone).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
@@ -244,7 +247,7 @@ describe("GroupAccessModal — branches", () => {
     fireEvent.click(screen.getByText("Видимость"));
     fireEvent.click(screen.getByTestId("ct-group-access-apply"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "visibility" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "visibility" })),
     );
   });
 
@@ -255,7 +258,7 @@ describe("GroupAccessModal — branches", () => {
     pickUser();
     fireEvent.click(screen.getByTestId("ct-group-access-apply"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "owner" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "owner" })),
     );
   });
 
@@ -266,7 +269,7 @@ describe("GroupAccessModal — branches", () => {
     pickUser();
     fireEvent.click(screen.getByTestId("ct-group-access-apply"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "revoke" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "revoke" })),
     );
   });
 
@@ -278,7 +281,7 @@ describe("GroupAccessModal — branches", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Жёсткий отзыв/ }));
     fireEvent.click(screen.getByTestId("ct-group-access-apply"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "revoke" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "revoke" })),
     );
     // The impact preview screen must NOT appear.
     expect(screen.queryByText("Жёсткий отзыв доступа")).not.toBeInTheDocument();
@@ -325,7 +328,7 @@ describe("GroupAccessModal — branches", () => {
     await waitFor(() => expect(screen.getByText("Жёсткий отзыв доступа")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("ct-impact-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "revoke" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "revoke" })),
     );
   });
 
@@ -377,7 +380,7 @@ describe("FolderDeleteDialog — branches", () => {
     const { onDone } = renderDialog();
     fireEvent.click(screen.getByTestId("ct-folder-delete-move"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "delete" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "delete" })),
     );
     expect(onDone).not.toHaveBeenCalled();
   });
@@ -389,7 +392,7 @@ describe("FolderDeleteDialog — branches", () => {
     fireEvent.change(screen.getByLabelText("Введите имя папки для подтверждения"), { target: { value: "Финансы" } });
     fireEvent.click(screen.getByTestId("ct-folder-delete-cascade"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "dryrun" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "dryrun" })),
     );
     expect(screen.queryByText("Проверка перед удалением")).not.toBeInTheDocument();
   });
@@ -440,7 +443,7 @@ describe("FolderDeleteDialog — branches", () => {
     await waitFor(() => expect(screen.getByText("Тема A")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("ct-impact-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "delete" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "delete" })),
     );
   });
 
@@ -522,7 +525,7 @@ describe("GroupDeleteFlow — branches", () => {
     await waitFor(() => expect(screen.getByText("Тема A")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("ct-impact-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive", description: "delete" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error", description: "delete" })),
     );
   });
 });

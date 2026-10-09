@@ -120,6 +120,30 @@ describe("контекст обычного отчёта", () => {
     expect(rows({ passed: null }).passClass).toBe("");
   });
 
+  it("авторское слово вердикта побеждает формулировку документа (PRD-50 FR-34)", () => {
+    // Строка разреза ВНУТРИ карточки печатает `statusLabel` через словарь надписей.
+    // Пока плашка темы держала жёсткий «Не пройден», одна карточка отчёта говорила
+    // двумя словарями сразу: «Не пройден» над «Не зачтено».
+    const labels = { "topic.verdict.passed": "Зачтено", "topic.verdict.failed": "Не зачтено" };
+    const row = (over: Record<string, unknown>) =>
+      (buildReportContext(input({ result: { ...input().result, topicResults: [topic(over)] } }), { labels })
+        .result.topicResults as any[])[0];
+    expect(row({ passed: true }).verdictLabel).toBe("Зачтено");
+    expect(row({ passed: false }).verdictLabel).toBe("Не зачтено");
+    // Выключенная надпись (пустая строка) — тоже решение автора, а не отсутствие ключа:
+    // плашка гаснет, а не подставляет умолчание документа.
+    expect(
+      (buildReportContext(input({ result: { ...input().result, topicResults: [topic({ passed: false })] } }), {
+        labels: { "topic.verdict.failed": "" },
+      }).result.topicResults as any[])[0].verdictLabel,
+    ).toBe("");
+    // Молчание автора не трогает собственную формулировку документа.
+    expect(
+      (buildReportContext(input({ result: { ...input().result, topicResults: [topic({ passed: false })] } }))
+        .result.topicResults as any[])[0].verdictLabel,
+    ).toBe("Не пройден");
+  });
+
   it("в отчёте всегда есть строка баллов по теме", () => {
     // Отчёт — документ: досчитать баллы по теме читателю потом нечем.
     expect((buildReportContext(input()).result.topicResults as any[])?.[0].pointsLabel).toBe("3 / 5");
@@ -156,6 +180,54 @@ describe("контекст обычного отчёта", () => {
       },
     });
     expect((ctx.result.topicResults as any[])?.[0].pointsLabel).toBe("3 / 5");
+  });
+
+  describe("PRD-50 FR-13: полосы разреза по ключам", () => {
+    // Тема с записями разреза — тот же вид данных, что хранит попытка (см.
+    // `shared/template/__tests__/result-context-breakdown.test.ts`).
+    const topicWithBreakdown = () =>
+      topic({
+        breakdown: [
+          {
+            scope: "section:t1",
+            axis: "tag",
+            key: "ПДн",
+            items: 2,
+            answered: 2,
+            earned: 1,
+            possible: 2,
+            unitEarned: 1,
+            unitPossible: 2,
+            percentPoints: 50,
+            percentUnits: 40,
+          },
+        ],
+      });
+
+    it("при включённой настройке строки полос доезжают до вида темы", () => {
+      const ctx = buildReportContext(
+        input({
+          result: { ...input().result, topicResults: [topicWithBreakdown()] },
+          breakdownDisplay: { visibility: "bar_and_value", basis: "points" },
+        }),
+      );
+      const rows = (ctx.result.topicResults as Array<{ breakdown?: Array<Record<string, unknown>> }>)[0].breakdown;
+      expect(rows).toMatchObject([{ key: "ПДн", barPercent: 50, showValue: true, valueLabel: "50 %" }]);
+    });
+
+    it("при выключенной настройке (или её отсутствии) полос в виде темы нет", () => {
+      const withTopics = { result: { ...input().result, topicResults: [topicWithBreakdown()] } };
+
+      // Настройка вовсе не передана — байт-в-байт то же, что до PRD-50.
+      const noSetting = buildReportContext(input(withTopics));
+      expect((noSetting.result.topicResults as Array<{ breakdown?: unknown }>)[0].breakdown).toBeUndefined();
+
+      // Настройка передана, но автор выключил показ.
+      const hidden = buildReportContext(
+        input({ ...withTopics, breakdownDisplay: { visibility: "hidden", basis: "units" } }),
+      );
+      expect((hidden.result.topicResults as Array<{ breakdown?: unknown }>)[0].breakdown).toBeUndefined();
+    });
   });
 
   it("измерительному тесту отчёт не выносит вердикта, которого нет на экране (PRD-29 §6.7)", () => {
@@ -277,30 +349,29 @@ describe("консолидированный блок обратной связ�
   it("совпадает с блоком ЭКРАНА на одном входе — состав, порядок, дедуп", () => {
     const ctx = buildReportContext(feedbackInput());
     expect(ctx.result.recommendations).toEqual(screenOf(feedbackInput()).result.recommendations);
-    // Порядок пиннится явно: общее раньше частного, тест раньше темы.
+    // Порядок пиннится явно: общее раньше частного. PRD-61 §10: обратная связь ТЕСТА
+    // снята, поэтому первым источником стала тема — и текстов, и вложений.
     expect(ctx.result.recommendations?.texts).toEqual([
-      "Разберите ошибки.",
       "Текст темы",
       "Текст раздела",
     ]);
-    expect(ctx.result.recommendations?.assets).toEqual([
-      { title: "Памятка теста", url: "assets/media/test.pdf" },
-      TOPIC_ASSET,
-    ]);
-    expect(ctx.result.recommendations?.links).toEqual(TEST_FEEDBACK.links);
-    expect(ctx.result.recommendations?.events).toEqual(TEST_FEEDBACK.events);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_ASSET]);
+    expect(ctx.result.recommendations?.links).toEqual([]);
+    expect(ctx.result.recommendations?.events).toEqual([]);
   });
 
-  it("текст, написанный и у теста, и у темы, печатается один раз", () => {
+  it("один и тот же текст у темы и у раздела печатается один раз", () => {
+    // PRD-61 §10: дедуп проверялся на паре «тест и тема»; уровень теста снят, и второй
+    // источник той же строки теперь — раздел над темой.
     const ctx = buildReportContext(
       feedbackInput({
         result: {
           ...input().result,
-          topicResults: [topic({ feedbackTexts: ["Разберите ошибки.", "Текст раздела"] })],
+          topicResults: [topic({ feedbackTexts: ["Текст раздела", "Текст раздела"] })],
         },
       }),
     );
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст раздела"]);
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст раздела"]);
   });
 
   it("у ПРОЙДЕННОЙ темы ни текст, ни вложение в отчёт не идут", () => {
@@ -314,11 +385,9 @@ describe("консолидированный блок обратной связ�
         },
       }),
     );
-    // Обратная связь ТЕСТА при этом остаётся: тест-то не пройден.
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
-    expect(ctx.result.recommendations?.assets).toEqual([
-      { title: "Памятка теста", url: "assets/media/test.pdf" },
-    ]);
+    // PRD-61 §10: обратной связи ТЕСТА больше нет, поэтому у блока не остаётся источников
+    // вовсе — пройденная тема молчит целиком.
+    expect(ctx.result.recommendations).toBeUndefined();
   });
 
   it("явно пройденный тест молчит и в отчёте", () => {
@@ -402,11 +471,10 @@ describe("контекст адаптивного отчёта", () => {
       testFeedback: TEST_FEEDBACK,
     });
     expect(ctx.result.recommendations).toEqual(screen.result.recommendations);
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст темы"]);
-    expect(ctx.result.recommendations?.assets).toEqual([
-      { title: "Памятка теста", url: "assets/media/test.pdf" },
-      TOPIC_ASSET,
-    ]);
+    // PRD-61 §10: уровень ТЕСТА снят — блок собирается из тем. Главное здесь прежнее:
+    // отчёт и экран отдают ОДНО И ТО ЖЕ, что и проверяет равенство выше.
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_ASSET]);
   });
 
   it("тема с ПОДТВЕРЖДЁННЫМ уровнем своих материалов в отчёт не отдаёт", () => {

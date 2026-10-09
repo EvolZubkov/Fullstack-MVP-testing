@@ -112,6 +112,10 @@ export function hasAnswer(question: { type?: string; dataJson?: unknown } | null
     // пропущенных и в возврат к незавершённым.
     case "allocation":
       return isAllocationComplete(allocationSpec(question.dataJson), answer);
+    // «Сценарий в ИС»: ответ — прогон, и он готов, когда у прогона есть исход. Ветка явная по
+    // той же причине, что у распределения: `default` счёл бы ответом любой объект.
+    case "simulation":
+      return !!answer && typeof answer === "object" && typeof (answer as { outcome?: unknown }).outcome === "string";
     default:
       return answer !== undefined && answer !== null;
   }

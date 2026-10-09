@@ -16,6 +16,8 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getTestSections: vi.fn(),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
     getTopics: vi.fn(),
     getQuestionsByTopic: vi.fn(),
     getTopicCourses: vi.fn(),
@@ -25,6 +27,8 @@ const { storageMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn(),
     getContentPages: vi.fn(),
     getTestQuestionScoring: vi.fn(),
+    // PRD-51: снапшот морозит документ отчёта вместе с рядом теста.
+    listReportBlocks: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
     getAdaptiveLevelLinks: vi.fn(),
@@ -44,6 +48,7 @@ import {
   createTestSnapshot,
   dataSourceForAttempt,
   exportSourceForTest,
+  ExportVersionUnavailableError,
   getPublicationState,
 } from "../server/services/test-snapshot";
 
@@ -63,6 +68,7 @@ beforeEach(() => {
   storageMock.getResultVariables.mockResolvedValue([]);
   storageMock.getContentPages.mockResolvedValue([]);
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
+  storageMock.listReportBlocks.mockResolvedValue([]);
   storageMock.getLatestSnapshot.mockResolvedValue(undefined);
   storageMock.getSnapshotsForTest.mockResolvedValue([]);
   storageMock.getReferencedSnapshotIds.mockResolvedValue([]);
@@ -151,15 +157,28 @@ describe("exportSourceForTest — SCORM from snapshot (FR-16)", () => {
     const frozen = await buildSnapshotContent("t1"); // pool q1,q2
     storageMock.getLatestSnapshot.mockResolvedValue({ id: "snap-1", contentJson: frozen });
     storageMock.getQuestionsByTopic.mockResolvedValue([q("q1", "h1"), q("q9", "h9")]); // live drifted
-    const src = await exportSourceForTest("t1");
+    const { src } = await exportSourceForTest("t1");
     expect((await src.getQuestionsByTopic("tp1")).map((x) => x.id)).toEqual(["q1", "q2"]);
   });
 
   it("exports a draft from live storage (no snapshot)", async () => {
     storageMock.getTest.mockResolvedValue({ id: "t1", mode: "standard", version: 1, status: "draft" });
-    const src = await exportSourceForTest("t1");
+    const { src } = await exportSourceForTest("t1");
     expect((await src.getQuestionsByTopic("tp1")).map((x) => x.id)).toEqual(["q1", "q2"]);
     expect(storageMock.getLatestSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("Э5: version «draft» bakes live storage even for a published test", async () => {
+    storageMock.getQuestionsByTopic.mockResolvedValue([q("q1", "h1"), q("q9", "h9")]); // live drifted
+    const { src, snapshot } = await exportSourceForTest("t1", "draft");
+    expect(snapshot).toBeNull();
+    expect((await src.getQuestionsByTopic("tp1")).map((x) => x.id)).toEqual(["q1", "q9"]);
+    expect(storageMock.getLatestSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("Э5: version «published» of an unpublished test is refused, not silently replaced by the draft", async () => {
+    storageMock.getTest.mockResolvedValue({ id: "t1", mode: "standard", version: 1, status: "draft" });
+    await expect(exportSourceForTest("t1", "published")).rejects.toBeInstanceOf(ExportVersionUnavailableError);
   });
 
   it("snapshot topics carry full rows (name + feedback) for the SCORM builder", async () => {

@@ -82,19 +82,10 @@ describe("вложения темы и раздела в блоке «Матер
     expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 
-  it("не даёт дубля, когда один файл приложен и к тесту, и к теме — остаётся копия теста", () => {
-    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Тест", {
-      testFeedback: { links: [], events: [], assets: [TOPIC_PDF] },
-    });
-    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
-  });
-
-  it("общий источник идёт раньше частного: вложение теста впереди вложения темы", () => {
-    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Тест", {
-      testFeedback: { links: [], events: [], assets: [SECTION_PDF] },
-    });
-    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF, TOPIC_PDF]);
-  });
+  // PRD-61 §10: здесь были две проверки про вложение, приложенное к САМОМУ ТЕСТУ, — про
+  // дедупликацию с темой и про порядок «общее раньше частного». Уровень теста снят, второго
+  // источника у этих правил не осталось: дедупликация проверяется ниже на паре «тема и
+  // раздел», порядок — на паре тем.
 
   it("один и тот же файл, приложенный и к теме, и к разделу, показывается один раз", () => {
     // Хост склеивает вложения темы и раздела в один список — дедупликация сборщика
@@ -116,10 +107,7 @@ describe("вложения темы и раздела в блоке «Матер
   });
 });
 
-describe("обратная связь ТЕСТА в блоке рекомендаций (дефект Д-3)", () => {
-  // Обратная связь теста никогда не была частью измерений: она оказалась внутри их
-  // ветки лишь потому, что PRD-29 собирал там весь блок. Тест без шкал и показателей —
-  // самая массовая конфигурация продукта.
+describe("обратная связь ТЕСТА снята (PRD-61 §10)", () => {
   const TEST_FEEDBACK = {
     text: "Спасибо за участие.",
     links: [],
@@ -127,23 +115,21 @@ describe("обратная связь ТЕСТА в блоке рекоменд�
     assets: [{ title: "Памятка", url: "/api/media/cccc" }],
   };
 
-  it("текст и вложение доезжают у теста БЕЗ шкал и показателей", () => {
-    const ctx = buildResultContext(baseInput([topicRow([])]), "Опрос", { testFeedback: TEST_FEEDBACK });
-    expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
-    expect(ctx.result.recommendations?.assets).toEqual([{ title: "Памятка", url: "/api/media/cccc" }]);
+  it("ни текст, ни вложение теста в блок не попадают — ни при каком исходе", () => {
+    for (const passed of [true, false]) {
+      const ctx = buildResultContext(baseInput([topicRow([])], { passed }), "Опрос", {
+        testFeedback: TEST_FEEDBACK,
+        hasPassThreshold: true,
+      });
+      expect(ctx.result.recommendations).toBeUndefined();
+    }
   });
 
-  it("идёт ПЕРВОЙ — раньше вложений темы и раздела", () => {
-    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Опрос", { testFeedback: TEST_FEEDBACK });
-    expect(ctx.result.recommendations?.assets).toEqual([
-      { title: "Памятка", url: "/api/media/cccc" },
-      TOPIC_PDF,
-    ]);
-  });
-
-  it("её отсутствие оставляет контекст прежним", () => {
-    const ctx = buildResultContext(baseInput([topicRow([])]), "Опрос", { testFeedback: null });
-    expect(ctx.result.recommendations).toBeUndefined();
+  it("материалы ТЕМ при этом печатаются как печатались", () => {
+    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Опрос", {
+      testFeedback: TEST_FEEDBACK,
+    });
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 });
 
@@ -168,16 +154,9 @@ describe("тексты обратной связи темы и раздела в
     expect(ctx.result.recommendations?.texts).toEqual(["Повторим тему"]);
   });
 
-  it("текст, совпадающий с обратной связью теста, не повторяется — остаётся экземпляр теста", () => {
-    // Дедупликация оставляет ПЕРВОЕ вхождение, а тест идёт первым источником: общая
-    // формулировка выигрывает у своей копии на теме. Порядок здесь нагружен: у темы
-    // повтор стоит ПОСЛЕ собственного текста, поэтому позиция «Общей рекомендации»
-    // показывает, чей экземпляр остался — тестовый, а не темы.
-    const ctx = buildResultContext(baseInput([topicRow([], ["Текст темы", "Общая рекомендация"])]), "Тест", {
-      testFeedback: { text: "Общая рекомендация", links: [], events: [], assets: [] },
-    });
-    expect(ctx.result.recommendations?.texts).toEqual(["Общая рекомендация", "Текст темы"]);
-  });
+  // PRD-61 §10: здесь была проверка дедупликации текста ТЕМЫ против текста ТЕСТА. Уровень
+  // теста снят, второго источника не осталось; дедупликация одинаковых текстов проверяется
+  // выше на паре «тема и раздел».
 
   it("тексты разных тем сливаются в один список без разделения по темам", () => {
     const second = { ...topicRow([], ["Текст второй темы"]), topicId: "t2", topicName: "Тема 2" };
@@ -236,74 +215,28 @@ describe("гейт по вердикту ТЕМЫ: молчим только п�
     expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
   });
 
-  it("обратной связи ТЕСТА гейт темы не касается — у неё свой вердикт", () => {
+  it("пройденная тема молчит целиком — второго источника у блока больше нет", () => {
+    // PRD-61 §10: здесь проверялось, что гейт ТЕМЫ не глушит обратную связь ТЕСТА. Её сняли,
+    // и у блока остался один источник: пройденная тема молчит — значит блока нет вовсе.
     const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], true)]), "Тест", {
       testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] },
     });
-    expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
-    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
+    expect(ctx.result.recommendations).toBeUndefined();
   });
 });
 
-describe("гейт по вердикту ТЕСТА: своя обратная связь молчит при явном успехе", () => {
-  // Пройденный тест не показывает ученику работу над ошибками. «Явный успех» — это ДВА
-  // условия: тест вообще оценивает (порог задан И есть что оценивать) и вердикт —
-  // «пройден». Всё остальное трактуется в пользу показа.
-  const TEST_FEEDBACK = { text: "Разберите ошибки.", links: [], events: [], assets: [SECTION_PDF] };
-  const withFeedback = (opts: Record<string, unknown>) => ({ testFeedback: TEST_FEEDBACK, ...opts });
-
-  it("явно пройденный тест свою обратную связь не показывает", () => {
-    const ctx = buildResultContext(baseInput([topicRow([])]), "Контрольный", withFeedback({ hasPassThreshold: true }));
-    expect(ctx.result.recommendations).toBeUndefined();
-  });
-
-  it("провалённый — показывает", () => {
-    const ctx = buildResultContext(
-      baseInput([topicRow([])], { passed: false }),
-      "Контрольный",
-      withFeedback({ hasPassThreshold: true }),
-    );
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
-    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
-  });
-
-  it("измерительный БЕЗ порога показывает свою обратную связь при любом passed", () => {
-    // Край PRD-29: вердикт у такого теста не «провал», а «не выносился» — обратная связь
-    // и есть его результат, ради которого метод и проходят.
-    const ctx = buildResultContext(baseInput([topicRow([])]), "Маслач", withFeedback({ hasPassThreshold: false }));
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
-  });
-
-  it("порог по умолчанию, но оценивать нечего — тоже показывает", () => {
-    // Каждый новый тест несёт порог 70% по умолчанию, поэтому одного признака порога
-    // мало: у измерительного теста возможных баллов ноль, и вердикт не выносился.
-    const ctx = buildResultContext(
-      baseInput([topicRow([])], { possiblePoints: 0 }),
-      "Маслач",
-      withFeedback({ hasPassThreshold: true }),
-    );
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
-  });
-
-  it("признак порога не передан вовсе — неизвестность трактуется в пользу показа", () => {
-    const ctx = buildResultContext(baseInput([topicRow([])]), "Тест", withFeedback({}));
-    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
-  });
-
-  it("читает признак и из measures, когда хост прислал его только там", () => {
-    const ctx = buildResultContext(baseInput([topicRow([])]), "Тест", withFeedback({
-      measures: { ramp: LEVEL_SCHEMES.traffic, scaleKind: "band_ruler", indicatorKind: "label", scales: [], indicators: [], hasPassThreshold: true },
-    }));
-    expect(ctx.result.recommendations).toBeUndefined();
-  });
-
-  it("гейт теста не глушит материалы непройденных тем", () => {
-    // Два уровня независимы: ученик сдал тест в целом, но конкретную тему не взял —
-    // помощь по теме ему по-прежнему нужна.
+describe("гейт вердикта теста снят вместе с его обратной связью (PRD-61 §10)", () => {
+  // Здесь был блок из восьми проверок правила «своя обратная связь теста молчит при явном
+  // успехе»: с порогом и без, с нулём возможных баллов, с признаком из measures. Правило
+  // ушло вместе с самим полем — гасить больше нечего.
+  //
+  // Осталось то, что этот блок стерёг с другой стороны: вердикт ТЕСТА никогда не глушил
+  // материалы непройденных ТЕМ. Два уровня независимы, и это по-прежнему так.
+  it("пройденный тест не глушит материалы непройденных тем", () => {
     const ctx = buildResultContext(
       baseInput([topicRow([TOPIC_PDF], ["Текст темы"], false)]),
       "Контрольный",
-      withFeedback({ hasPassThreshold: true }),
+      { hasPassThreshold: true },
     );
     expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
     expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
@@ -367,14 +300,14 @@ describe("адаптивный экран итогов: тот же блок, т
     expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
   });
 
-  it("обратная связь ТЕСТА идёт первой и гейта темы не касается", () => {
+  it("обратная связь ТЕСТА снята и здесь — печатается только тема (PRD-61 §10)", () => {
     const ctx = buildAdaptiveResultContext(
       { topicResults: [adaptiveTopic(null, ["Текст темы"], [TOPIC_PDF])] },
       "Адаптивный тест",
       { testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] } },
     );
-    expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие.", "Текст темы"]);
-    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF, TOPIC_PDF]);
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 
   it("текст, совпадающий с обратной связью теста, не повторяется", () => {
@@ -412,24 +345,18 @@ describe("адаптивный экран итогов: тот же блок, т
     expect(adaptive.result.recommendations).toEqual(standard.result.recommendations);
   });
 
-  it("обратная связь ТЕСТА молчит и здесь, когда адаптивный тест пройден", () => {
-    // Тот же уровень гейта, что на стандартном экране: пройденный тест не показывает
-    // работу над ошибками. Порога-процента у адаптивного режима нет — вердикт выносит
-    // `aggregateAdaptiveResult` по подтверждённым уровням, поэтому проверять признак
-    // порога здесь нечего.
+  it("обратная связь ТЕСТА не печатается ни при каком исходе (PRD-61 §10)", () => {
+    // Здесь проверялся гейт «пройденный тест не показывает работу над ошибками». Правило
+    // ушло вместе с полем: теперь текст теста молчит и у пройденного, и у провалённого.
     const testFeedback = { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] };
-    const passedRun = buildAdaptiveResultContext(
-      { passed: true, topicResults: [adaptiveTopic(1)] },
-      "Адаптивный тест",
-      { testFeedback },
-    );
-    expect(passedRun.result.recommendations).toBeUndefined();
-    const failedRun = buildAdaptiveResultContext(
-      { passed: false, topicResults: [adaptiveTopic(1)] },
-      "Адаптивный тест",
-      { testFeedback },
-    );
-    expect(failedRun.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
+    for (const passed of [true, false]) {
+      const ctx = buildAdaptiveResultContext(
+        { passed, topicResults: [adaptiveTopic(1)] },
+        "Адаптивный тест",
+        { testFeedback },
+      );
+      expect(ctx.result.recommendations).toBeUndefined();
+    }
   });
 });
 
@@ -459,9 +386,17 @@ describe("topicFeedbackTexts", () => {
   // (`server/routes/attempts.ts`), и сборка пакета (`server/scorm/builders/test-json.ts`)
   // зовут эту функцию. Вторая копия правила разъехалась бы молча, а проявилась бы
   // расхождением хостов — тем самым дефектом, который эта работа и чинит.
-  it("отдаёт текст темы, затем текст раздела", () => {
+  it("текст раздела ЗАМЕНЯЕТ текст темы, а не дописывается к нему (§7.1a)", () => {
+    // Сложение двух текстов признано дефектом владельцем 2026-09-02: ученик получал
+    // склейку, которую автор нигде не видел. Разрешение — одно значение.
     expect(topicFeedbackTexts({ feedbackJson: { text: "Текст темы" } }, { text: "  Текст раздела  " }))
-      .toEqual(["Текст темы", "Текст раздела"]);
+      .toEqual(["Текст раздела"]);
+  });
+
+  it("без текста раздела печатается текст темы", () => {
+    expect(topicFeedbackTexts({ feedbackJson: { text: "Текст темы" } }, { text: "   " }))
+      .toEqual(["Текст темы"]);
+    expect(topicFeedbackTexts({ feedbackJson: { text: "Текст темы" } })).toEqual(["Текст темы"]);
   });
 
   it("читает легаси-колонку, когда feedback_json темы текста не несёт", () => {

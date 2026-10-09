@@ -248,3 +248,56 @@ describe("Runtime content flow — router_by_topics hub (PRD-4 v1.1 §4.7)", () 
     expect((globalThis as any).state.currentPageIndex).toBe(1);
   });
 });
+
+// Таймер раздела начинается ТАМ, ГДЕ НАЧИНАЮТСЯ ВОПРОСЫ. Заставку раздела («Раздел 3 из 8 ·
+// 12 вопросов · 20 мин») читают до нажатия «Далее», и отсчёт под ней означал, что лимит
+// расходуется на чтение условий, которые сам этот лимит и объявляют. Веб-хост так себя и
+// ведёт (`use-section-timer` включён только в фазе вопроса) — расходился только пакет.
+describe("Runtime content flow — старт таймера раздела", () => {
+  beforeEach(() => {
+    (globalThis as any).TEST_DATA = {
+      designSettings: { params: {} },
+      sections: [{ topicId: "t1", timeLimitMinutes: 20 }],
+      contentPages: [
+        { id: "intro", topicId: "t1", position: "before_topic", kind: "info", sortOrder: 0 },
+        { id: "summary", topicId: "t1", position: "after_topic", kind: "info", sortOrder: 0 },
+      ],
+    };
+    (globalThis as any).state = {
+      currentIndex: 0,
+      currentPageIndex: 0,
+      phase: "start",
+      flatQuestions: [{ topicId: "t1", question: { id: "q1" } }],
+      pageSequence: [],
+    };
+    (globalThis as any).render = vi.fn();
+    (globalThis as any).submit = vi.fn();
+    (globalThis as any).startSectionTimer = vi.fn();
+    (globalThis as any).stopSectionTimer = vi.fn();
+    loadContentFlow();
+    (globalThis as any).rebuildPageSequence();
+  });
+
+  it("не идёт на заставке раздела", () => {
+    (globalThis as any).goToPageSequenceIndex(0);
+    expect((globalThis as any).state.phase).toBe("content");
+    expect((globalThis as any).startSectionTimer).not.toHaveBeenCalled();
+  });
+
+  it("начинается на первом вопросе раздела", () => {
+    (globalThis as any).goToPageSequenceIndex(0);
+    (globalThis as any).goToPageSequenceIndex(1);
+    expect((globalThis as any).state.phase).toBe("question");
+    expect((globalThis as any).startSectionTimer).toHaveBeenCalledWith("t1", 20, expect.any(Function));
+  });
+
+  it("продолжает идти на странице раздела ПОСЛЕ вопросов, а не начинается заново", () => {
+    (globalThis as any).goToPageSequenceIndex(1);
+    (globalThis as any).state.sectionTimer = { topicId: "t1", remainingSeconds: 900 };
+    (globalThis as any).startSectionTimer.mockClear();
+    (globalThis as any).stopSectionTimer.mockClear();
+    (globalThis as any).goToPageSequenceIndex(2);
+    expect((globalThis as any).startSectionTimer).not.toHaveBeenCalled();
+    expect((globalThis as any).stopSectionTimer).not.toHaveBeenCalled();
+  });
+});

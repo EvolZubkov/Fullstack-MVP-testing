@@ -4,7 +4,7 @@
  * putting identical bytes twice yields ONE physical file (dedup), and a ranged read
  * returns exactly the requested slice (audio/video seeking).
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,6 +60,36 @@ describe("createFsMediaStore", () => {
     expect(fs.readFileSync(path.join(root, a.storageKey), "utf8")).toBe("same-bytes");
     const shardDir = path.dirname(path.join(root, a.storageKey));
     expect(fs.readdirSync(shardDir)).toHaveLength(1);
+  });
+
+  // In a container the upload's temp file sits in /tmp (image layer) and the root on a mounted
+  // volume: rename across them fails with EXDEV. The scenario archive and the .tbtest import broke
+  // on the server exactly there, while every developer machine (one disk) stayed green.
+  it("moves a file across filesystems (EXDEV) by copying it and removing the source", async () => {
+    const store = createFsMediaStore(root);
+    const source = sourceFile("cross.png", "cross-device");
+    const exdev = Object.assign(new Error("EXDEV: cross-device link not permitted"), { code: "EXDEV" });
+    const rename = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw exdev; });
+    try {
+      const stored = await store.putFile(source, ".png");
+      expect(rename).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync(path.join(root, stored.storageKey), "utf8")).toBe("cross-device");
+      expect(fs.existsSync(source)).toBe(false);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
+  it("does not hide other rename failures behind the copy fallback", async () => {
+    const store = createFsMediaStore(root);
+    const source = sourceFile("perm.png", "denied");
+    const eacces = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    const rename = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw eacces; });
+    try {
+      await expect(store.putFile(source, ".png")).rejects.toThrow(/EACCES/);
+    } finally {
+      rename.mockRestore();
+    }
   });
 
   it("propagates ENOENT when the source file is gone", async () => {

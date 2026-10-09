@@ -50,6 +50,9 @@ vi.mock("@shared/template/result-context", () => ({
 
 vi.mock("@shared/template/params-css", () => ({
   buildTemplateCssVars: () => ({ "--x": "1" }),
+  // Спека §6: значение параметра может ехать атрибутом на корень сцены. Предпросмотр
+  // считает и его, поэтому мок обязан отдавать функцию — иначе модуль не импортируется.
+  buildTemplateDataAttrs: () => ({ "data-x": "y" }),
 }));
 
 import { PagePreviewModal, type PagePreviewModalProps } from "../page-preview-modal";

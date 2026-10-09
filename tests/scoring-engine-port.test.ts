@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { scoreAnswer as tsScore, explainAnswer as tsExplain, type ScoreInput } from "../shared/scoring/engine";
 import type { QuestionScoring } from "../shared/schema";
+import { checkRuleSet, hasRules } from "../shared/answer-check/rules";
 
 const portSrc = readFileSync(
   resolve(process.cwd(), "server/scorm/template/app/scoring/engine.js"),
@@ -22,8 +23,16 @@ const qTypeSrc = readFileSync(
   resolve(process.cwd(), "server/scorm/template/app/utils/qtype.js"),
   "utf8",
 );
+// PRD-57 FR-28s: the port does NOT reimplement answer comparison — it delegates to the
+// shared runtime bundle, which `server/scorm/index.ts` prepends to the package as the
+// `TBTemplate` global. The sandbox is handed the very same functions, so these scenarios
+// prove the port DELEGATES instead of growing a second, divergent implementation.
+const sharedRuntimeStub = { checkRuleSet, hasRules };
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
-const ScoringEnginePort = new Function(`${qTypeSrc}\n${portSrc}\n;return ScoringEngine;`)() as {
+const ScoringEnginePort = new Function(
+  "TBTemplate",
+  `${qTypeSrc}\n${portSrc}\n;return ScoringEngine;`,
+)(sharedRuntimeStub) as {
   scoreAnswer: (input: unknown) => { score: number; sMax: number; ratio: number };
   explainAnswer: (input: unknown) => Record<string, unknown>;
 };
@@ -49,6 +58,19 @@ const TIERED_RANKING: QuestionScoring = {
     { when: { all: [{ lhs: "c", op: "==", rhs: "N" }] }, score: 2 },
     { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
   ],
+};
+const SHORT_RULES = {
+  answerKind: "text" as const,
+  join: "any" as const,
+  rules: [
+    { kind: "text" as const, match: "wildcard" as const, value: "Федеральная служба по * надзору" },
+    { kind: "text" as const, match: "wildcard" as const, value: "РТН" },
+  ],
+};
+const SHORT_NUMBER = {
+  answerKind: "number" as const,
+  join: "any" as const,
+  rules: [{ kind: "number" as const, op: "eq" as const, value: 3.14, tolerance: { unit: "abs" as const, value: 0.01 } }],
 };
 const MATCH4 = { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }, { left: 3, right: 3 }] };
 
@@ -105,6 +127,16 @@ const scenarios: Array<{ name: string; input: ScoreInput }> = [
   { name: "tiered rank perfect", input: { type: "ranking", correct: { correctOrder: [0, 1, 2] }, answer: [0, 1, 2], scoring: TIERED_RANKING } },
   { name: "tiered rank partial", input: { type: "ranking", correct: { correctOrder: [0, 1, 2] }, answer: [0, 2, 1], scoring: TIERED_RANKING } },
   { name: "tiered rank zero", input: { type: "ranking", correct: { correctOrder: [0, 1, 2] }, answer: [2, 0, 1], scoring: TIERED_RANKING } },
+
+  // PRD-57 §6.5: короткий ответ — сравнение по набору правил
+  { name: "короткий ответ — подстановочный знак", input: { type: "short", correct: SHORT_RULES, answer: "федеральная служба по атомному надзору" } },
+  { name: "короткий ответ — точное совпадение", input: { type: "short", correct: SHORT_RULES, answer: "РТН" } },
+  { name: "короткий ответ — мимо", input: { type: "short", correct: SHORT_RULES, answer: "минэнерго" } },
+  { name: "короткий ответ — пусто", input: { type: "short", correct: SHORT_RULES, answer: "" } },
+  { name: "короткий ответ — не строка", input: { type: "short", correct: SHORT_RULES, answer: 3 } },
+  { name: "короткий ответ — правил нет", input: { type: "short", correct: { answerKind: "text", join: "any", rules: [] }, answer: "что угодно" } },
+  { name: "короткий ответ — число с допуском", input: { type: "short", correct: SHORT_NUMBER, answer: "3,1416" } },
+  { name: "короткий ответ — число вне допуска", input: { type: "short", correct: SHORT_NUMBER, answer: "3,2" } },
 ];
 
 describe("scoring engine — TS ↔ JS port parity", () => {

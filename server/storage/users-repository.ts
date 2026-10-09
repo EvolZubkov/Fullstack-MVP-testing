@@ -19,9 +19,11 @@ import { randomUUID } from "crypto";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
-  users, passwordResetTokens,
+  users, userRoles, passwordResetTokens, scormAttempts,
   type User, type InsertUser, type PasswordResetToken,
 } from "@shared/schema";
+import { ORG_FIELDS, foldOrgValues, type OrgField, type OrgValueCount } from "@shared/org-fields";
+import { PARTICIPANT_LABEL_KEY_CHARS, participantLabel } from "@shared/participant-label";
 import {
   encryptEmail,
   decryptEmail,
@@ -35,21 +37,85 @@ import { logger } from "../logger";
 import { incrementCounter } from "../metrics";
 import { pickDefined } from "./shared";
 
+/**
+ * The row with its email decrypted. An account without email (PRD-54 BR-54-42: an external
+ * participant created by an LMS export import) keeps `null` — there is nothing to decrypt.
+ */
+async function withPlainEmail<T extends { email: string | null }>(user: T): Promise<T> {
+  return { ...user, email: user.email ? await decryptEmail(user.email) : null };
+}
+
+/** What the import knows about a participant it has to create an account for (PRD-54 BR-54-39). */
+export interface ImportedExternalUserInput {
+  /** The participant key (`external_id`); stored as `external_key`. */
+  externalKey: string;
+  /** Full name from the file when anonymisation is off; `null` gives the key label instead. */
+  name: string | null;
+  lmsLearnerId: string | null;
+  organization: string | null;
+  unit: string | null;
+  position: string | null;
+}
+
 /** Repository for the `users` table (PRD-13 identities, encrypted emails). */
 export class UsersRepository {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
+      return withPlainEmail(user);
     }
     return undefined;
+  }
+
+  /**
+   * Найти пользователя по внешнему ключу (PRD-54 раздел 8.5).
+   *
+   * Регистр и краевые пробелы не учитываются: ключом чаще всего оказывается hex-хеш или табельный
+   * код, где разница в регистре смысла не несёт, а сопоставление ломает молча. Сравнение идёт по
+   * тому же выражению, на котором построен уникальный индекс `users_external_key_idx`, поэтому
+   * поиск по нему индексный, а не последовательный.
+   *
+   * Почта НЕ расшифровывается: связывание читает только идентификатор, и лишняя расшифровка на
+   * каждую строку выгрузки — это сотни ненужных операций на большом файле.
+   *
+   * @param key значение ключа из файла
+   * @returns пользователь или `undefined`; пустой ключ никогда ни с кем не совпадает
+   */
+  /**
+   * Пользователь по идентификатору обучающегося в LMS (PRD-54 BR-54-31).
+   *
+   * Им связывается ТЕЛЕМЕТРИЯ: `cmi.learner_id` — единственное, чем рантайм LMS опознаёт
+   * человека, и он устойчив — не меняется ни при переводе в другой отдел, ни при смене секрета
+   * инстанса. Сравнение без учёта регистра по той же причине, что у внешнего ключа: значение
+   * приходит из чужой системы, и разница в регистре смысла не несёт, а сопоставление ломает.
+   */
+  async getUserByLmsLearnerId(learnerId: string): Promise<User | undefined> {
+    const normalized = String(learnerId ?? "").trim().toLowerCase();
+    if (normalized === "") return undefined;
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.lmsLearnerId}) = ${normalized}`)
+      .limit(1);
+    return user || undefined;
+  }
+
+  async getUserByExternalKey(key: string): Promise<User | undefined> {
+    const normalized = String(key ?? "").trim().toLowerCase();
+    if (normalized === "") return undefined;
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.externalKey}) = ${normalized}`)
+      .limit(1);
+    return user || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const emailHashValue = hashEmail(email);
     const [user] = await db.select().from(users).where(eq(users.emailHash, emailHashValue));
     if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
+      return withPlainEmail(user);
     }
     return undefined;
   }
@@ -60,8 +126,10 @@ export class UsersRepository {
     // password at all (NULL), and the assignment link is the only way in.
     const hashedPassword =
       insertUser.passwordHash != null ? await hashPassword(insertUser.passwordHash) : null;
-    const emailEncrypted = await encryptEmail(insertUser.email);
-    const emailHashValue = hashEmail(insertUser.email);
+    // PRD-54 BR-54-42: no email at all is legal (an imported external participant); then there
+    // is nothing to encrypt and no hash to look the account up by.
+    const emailEncrypted = insertUser.email ? await encryptEmail(insertUser.email) : null;
+    const emailHashValue = insertUser.email ? hashEmail(insertUser.email) : null;
 
     const [user] = await db.insert(users).values({
       id,
@@ -73,11 +141,73 @@ export class UsersRepository {
       status: insertUser.status || "pending",
       mustChangePassword: insertUser.mustChangePassword ?? true,
       gdprConsent: false,
+      // PRD-54: внешний ключ можно проставить сразу при заведении — колонкой массовой загрузки.
+      externalKey: insertUser.externalKey ?? null,
+      // PRD-54 BR-54-28/31 and the org-structure plan: the LMS learner id links
+      // telemetry to the person, the three org fields feed the analytics axes.
+      lmsLearnerId: insertUser.lmsLearnerId ?? null,
+      organization: insertUser.organization ?? null,
+      unit: insertUser.unit ?? null,
+      position: insertUser.position ?? null,
       createdAt: new Date(),
       createdBy: insertUser.createdBy || null,
     }).returning();
 
-    return { ...user, email: await decryptEmail(user.email) };
+    return withPlainEmail(user);
+  }
+
+  /**
+   * Create the external account of an LMS export participant (PRD-54 BR-54-39, BR-54-40).
+   *
+   * No email, no password, the learner role, status «active». The name is the full name when the
+   * import keeps it; otherwise it is the key label, and the label is checked against the other
+   * external accounts: a taken one is lengthened by a character until it is free. The key itself
+   * is unique anyway — the label only decides how much of it a reader sees, and two different
+   * people must not look the same in a list. Once given, a label never changes.
+   *
+   * @param input what the file says about the participant
+   * @returns the new account
+   */
+  async createImportedExternalUser(input: ImportedExternalUserInput): Promise<User> {
+    let name = input.name?.trim() || null;
+    if (!name) {
+      for (let chars = PARTICIPANT_LABEL_KEY_CHARS; ; chars += 1) {
+        const label = participantLabel(input.externalKey, chars);
+        const [taken] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.isExternal, true), eq(users.name, label)))
+          .limit(1);
+        if (!taken || chars >= input.externalKey.length) {
+          name = label;
+          break;
+        }
+      }
+    }
+
+    const id = randomUUID();
+    return db.transaction(async (tx) => {
+      const [user] = await tx.insert(users).values({
+        id,
+        email: null,
+        emailHash: null,
+        passwordHash: null,
+        name,
+        isExternal: true,
+        status: "active",
+        mustChangePassword: false,
+        gdprConsent: false,
+        externalKey: input.externalKey,
+        lmsLearnerId: input.lmsLearnerId,
+        organization: input.organization,
+        unit: input.unit,
+        position: input.position,
+        createdAt: new Date(),
+        createdBy: null,
+      }).returning();
+      await tx.insert(userRoles).values({ id: randomUUID(), userId: id, role: "learner" });
+      return user;
+    });
   }
 
   async validatePassword(email: string, password: string): Promise<User | null> {
@@ -118,7 +248,7 @@ export class UsersRepository {
 
   async getUsers(): Promise<User[]> {
     const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
-    return Promise.all(allUsers.map(async user => ({ ...user, email: await decryptEmail(user.email) })));
+    return Promise.all(allUsers.map(withPlainEmail));
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
@@ -127,6 +257,11 @@ export class UsersRepository {
     // Partial<User>. `email` is handled specially (encrypt + derive hash).
     const set: Partial<User> = pickDefined(data, [
       "name", "status", "mustChangePassword", "gdprConsent", "gdprConsentAt",
+      // PRD-54: внешний ключ для связывания импортированных прохождений. `null` проходит сквозь
+      // `pickDefined` намеренно — это «снять ключ», в отличие от `undefined` = «не трогать».
+      "externalKey",
+      // Same null-means-clear rule for the LMS learner id and the org fields.
+      "lmsLearnerId", "organization", "unit", "position",
     ] as const);
     if (data.email) {
       set.email = await encryptEmail(data.email);
@@ -140,9 +275,54 @@ export class UsersRepository {
       .returning();
 
     if (updated) {
-      return { ...updated, email: await decryptEmail(updated.email) };
+      return withPlainEmail(updated);
     }
     return undefined;
+  }
+
+  /**
+   * The org-structure values in use, one list per field (org-structure plan, task 1).
+   *
+   * Two sources: profiles and passages. Passages count because an LMS export
+   * brings its own spelling of a unit, and the operator filling in a profile must
+   * see it to repeat it — otherwise the profile says «Отдел продаж», the export
+   * «ОТДЕЛ ПРОДАЖ», and nobody notices they are one department until the slices
+   * split. Only imported passages carry unit and position; telemetry reports the
+   * organisation alone (`cmi.student_org`), and that is counted too.
+   *
+   * SQL counts exact spellings; folding them into one value per unit is the job
+   * of {@link foldOrgValues}, the same engine the analytics compares with.
+   *
+   * @returns Values per field with profile and passage counts, sorted by label.
+   */
+  async getOrgValues(): Promise<Record<OrgField, OrgValueCount[]>> {
+    const fromUsers = {
+      organization: users.organization,
+      unit: users.unit,
+      position: users.position,
+    } as const;
+    const fromAttempts = {
+      organization: scormAttempts.lmsUserOrg,
+      unit: scormAttempts.lmsUserUnit,
+      position: scormAttempts.lmsUserPosition,
+    } as const;
+
+    const result = {} as Record<OrgField, OrgValueCount[]>;
+    for (const field of ORG_FIELDS) {
+      const userColumn = fromUsers[field];
+      const attemptColumn = fromAttempts[field];
+      const [userRows, attemptRows] = await Promise.all([
+        db.select({ value: userColumn, count: sql<number>`count(*)` })
+          .from(users).where(sql`${userColumn} is not null`).groupBy(userColumn),
+        db.select({ value: attemptColumn, count: sql<number>`count(*)` })
+          .from(scormAttempts).where(sql`${attemptColumn} is not null`).groupBy(attemptColumn),
+      ]);
+      result[field] = foldOrgValues([
+        ...userRows.map(r => ({ value: r.value ?? "", users: Number(r.count), attempts: 0 })),
+        ...attemptRows.map(r => ({ value: r.value ?? "", users: 0, attempts: Number(r.count) })),
+      ]);
+    }
+    return result;
   }
 
   async updateUserPassword(id: string, newPasswordHash: string): Promise<void> {
@@ -179,7 +359,7 @@ export class UsersRepository {
       .set({ isExternal: false, mustChangePassword: true })
       .where(eq(users.id, userId))
       .returning();
-    return user ? { ...user, email: await decryptEmail(user.email) } : undefined;
+    return user ? withPlainEmail(user) : undefined;
   }
 
   // ─── Password reset tokens (part of the user aggregate) ─────────────────────

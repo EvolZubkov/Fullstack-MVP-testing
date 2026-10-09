@@ -87,6 +87,39 @@
     Object.keys(vars).forEach(function (name) {
       el.style.setProperty(name, vars[name]);
     });
+    applyDataAttrsToRoot(params, manifestParams);
+  }
+
+  /**
+   * Params a template asked to receive as data attributes (manifest `dataAttr`) go on
+   * the SAME root as the CSS vars, so its stylesheet can SELECT on the chosen option
+   * (`[data-brand-logo="b2b"] .logo { … }`) — the one thing a custom property cannot
+   * do. The mapping lives in the shared bundle; the inline fallback mirrors it for a
+   * package built without one.
+   *
+   * @param {object} params
+   * @param {Array}  manifestParams
+   */
+  function applyDataAttrsToRoot(params, manifestParams) {
+    var el = typeof document !== "undefined" ? document.documentElement : null;
+    if (!el) return;
+    var attrs;
+    if (root.TBTemplate && typeof root.TBTemplate.buildTemplateDataAttrs === "function") {
+      attrs = root.TBTemplate.buildTemplateDataAttrs(params, manifestParams);
+    } else {
+      attrs = {};
+      var pattern = /^data-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+      (manifestParams || []).forEach(function (def) {
+        if (!def.dataAttr || !pattern.test(def.dataAttr)) return;
+        var value = params ? resolvePath(params, def.key) : undefined;
+        if (value === null || value === undefined) value = def.default;
+        if (value === null || value === undefined) return;
+        attrs[def.dataAttr] = String(value);
+      });
+    }
+    Object.keys(attrs).forEach(function (name) {
+      el.setAttribute(name, attrs[name]);
+    });
   }
 
   /**

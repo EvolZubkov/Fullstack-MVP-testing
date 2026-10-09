@@ -246,7 +246,7 @@ export const TransferList = forwardRef<HTMLDivElement, TransferListProps>(
                 checked={allChecked}
                 onChange={(e) => selectAll(side, e.target.checked)}
               />
-              <span>Выбрать всех{items.length ? ` (${items.length})` : ''}</span>
+              <span>Выбрать все{items.length ? ` (${items.length})` : ''}</span>
             </label>
             <span className="ou-transfer__summary-muted">
               {sel.size > 0 && `${sel.size} выбрано`}

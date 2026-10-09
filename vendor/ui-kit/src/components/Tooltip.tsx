@@ -29,7 +29,7 @@ export interface TooltipProps extends Omit<React.HTMLAttributes<HTMLSpanElement>
 }
 
 /**
- * UniversityRT · Tooltip.
+ * Skillum · Tooltip.
  *
  * Pure CSS hover/focus поведение — bubble показывается при hover на родительском
  * `.ou-tip` (или классе `is-open`). Для управляемого режима используйте `open`.

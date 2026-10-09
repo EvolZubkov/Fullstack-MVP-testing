@@ -63,6 +63,13 @@ export interface BuildQuestionProgressInput {
    */
   allowReturn?: boolean;
   /**
+   * FR-11a `allowFreeSectionNavigation`: every question of the CURRENT scope is a
+   * jump target, including one never shown — «не выдан» stops existing inside the
+   * scope. The scope itself is unchanged (FR-11b): the section boundary, a frozen
+   * section and strict mode keep gating exactly as they do without it. Default false.
+   */
+  freeNavigation?: boolean;
+  /**
    * Treat ALL in-scope questions as issued (frontier open) — used on the review
    * screen (section-finish/test-finish) where the learner reached the end and may
    * jump to any in-scope question.
@@ -147,9 +154,16 @@ export function buildQuestionProgress(input: BuildQuestionProgressInput): CtxQue
     // clickable and full-opacity instead of dimmed as «не выдан» (currentIndex is the
     // CURRENT position, not a high-water mark). Genuinely future untouched questions and
     // a frozen section stay non-jumpable; strict mode (no return) makes the whole map
-    // read-only (FR-02).
+    // read-only (FR-02). Free navigation (FR-11a) opens the frontier for the WHOLE scope
+    // at once: inside it every question counts as issued, so a future one is an ordinary
+    // clickable dot and «не выдан» never appears — the boundary of the scope, the frozen
+    // section and strict mode still gate below.
     const issued =
-      input.allIssued || index <= currentIndex || status === "answered" || status === "skipped";
+      input.allIssued ||
+      input.freeNavigation === true ||
+      index <= currentIndex ||
+      status === "answered" ||
+      status === "skipped";
     const clickable = (input.allowReturn ?? true) && issued && !sectionLocked;
 
     const number = pos + 1;

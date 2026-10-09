@@ -139,6 +139,17 @@ describe("форма выборочного импорта", () => {
     expect(screen.getByText(/нет прав управления/)).toBeInTheDocument();
   });
 
+  it("таблица тем не обрезает меню «Что делать»", async () => {
+    // Меню Select позиционируется абсолютно, а `.ou-tbl` режет выходящее за край: у темы
+    // виднелся один пункт из трёх. Модификатор `tb-tbl--menus` снимает обрезку.
+    renderDialog();
+
+    await toStepTwo();
+
+    const table = screen.getByText("Человекоцентричное лидерство").closest(".ou-tbl");
+    expect(table?.classList.contains("tb-tbl--menus")).toBe(true);
+  });
+
   it("предупреждает о медиа, которое не доехало из источника", async () => {
     renderDialog();
 

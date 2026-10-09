@@ -7,7 +7,7 @@ import {
   IconBadge,
   Stack,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 
 export default function NotFound() {
   return (

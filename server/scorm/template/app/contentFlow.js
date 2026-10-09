@@ -109,6 +109,17 @@
     if (runningTopicId === currentTopicId) return; // same section — keep running
     if (typeof stopSectionTimer === "function") stopSectionTimer();
     if (!currentTopicId) return; // outside any section (test-scope/router page)
+    // ОТСЧЁТ НАЧИНАЕТСЯ ТАМ, ГДЕ НАЧИНАЮТСЯ ВОПРОСЫ. Страницы раздела до вопросов —
+    // заставка «Раздел N из M · 12 вопросов · 20 мин», условия, инструкция — читаются
+    // ДО того, как участник решил начать: списывать с лимита время на чтение условий,
+    // которые сам этот лимит и объявляют, нельзя. Останов выше уже сработал, поэтому
+    // таймер ПРЕДЫДУЩЕГО раздела на такой странице замирает, а нового не возникает —
+    // он запустится на первом же вопросе (или на маркере адаптивной сессии, которая
+    // и есть блок вопросов этой темы).
+    //
+    // Так ведёт себя веб-хост: `use-section-timer` включён только в фазе вопроса
+    // (`client/src/pages/learner/take-test.tsx`). До этой правки расходился ПАКЕТ.
+    if (item && item.kind === "content") return;
     var section = (TEST_DATA.sections || []).find(function (s) {
       return s.topicId === currentTopicId;
     });
@@ -467,9 +478,35 @@
   // for the body and override its default (pageSequence) navigation.
 
   function enterPostResults() {
+    // Where «Назад» on the first post-results page returns: the results screen as it was
+    // drawn. It is not a nav-history step — that stack ends on the last question, and
+    // popping it took the learner back into a finished attempt.
+    state.postResultsReturn = { phase: state.phase, currentIndex: state.currentIndex };
     state.postResultsIndex = 0;
     state.phase = "postResults";
     render();
+  }
+
+  /**
+   * «Назад» on a post-results page: the previous page of the chain, or the results
+   * screen from the first one. Returns false when there is nowhere to go — the author
+   * hid the results screen, so the first page is the start of the chain.
+   * @returns {boolean} whether a screen was re-rendered.
+   */
+  function prevPostResults() {
+    var idx = state.postResultsIndex || 0;
+    if (idx > 0) {
+      state.postResultsIndex = idx - 1;
+      render();
+      return true;
+    }
+    var back = state.postResultsReturn;
+    var hidden = typeof screenHidden === "function" && screenHidden("results");
+    if (!back || hidden) return false;
+    state.phase = back.phase;
+    state.currentIndex = back.currentIndex;
+    render();
+    return true;
   }
 
   function nextPostResults() {
@@ -496,6 +533,21 @@
     // the ordinary page advance — which walks out of the post-results chain.
     var app = document.getElementById("app");
     var last = idx >= pages.length - 1;
+    // «Назад» of the layout is wired by renderContentPage to the ordinary page history,
+    // which ends on the last question. Here it walks the post-results chain instead.
+    var backBtn = app && typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "prev")
+      : null;
+    if (backBtn) {
+      // Nowhere to return to: the first page of a chain whose results screen the author
+      // hid. The button would lead back into the finished attempt, so it is withdrawn.
+      var hiddenResults = typeof screenHidden === "function" && screenHidden("results");
+      if (idx === 0 && (hiddenResults || !state.postResultsReturn)) {
+        backBtn.style.display = "none";
+      } else {
+        backBtn.onclick = function () { prevPostResults(); };
+      }
+    }
     var nav = app ? app.querySelector(".navigation") : null;
     if (nav) {
       nav.innerHTML = last
@@ -520,6 +572,7 @@
   root.rebuildPageSequence = rebuildPageSequence;
   root.enterPostResults = enterPostResults;
   root.nextPostResults = nextPostResults;
+  root.prevPostResults = prevPostResults;
   root.renderPostResults = renderPostResults;
   root.currentPageItem = currentPageItem;
   root.syncPhaseToCurrentPage = syncPhaseToCurrentPage;

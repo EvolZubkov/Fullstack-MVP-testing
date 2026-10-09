@@ -1,0 +1,11 @@
+{{#if report.hasEvents}}
+<section class="tb-report__card">
+  {{#if labels.recommendations.events}}<div class="tb-report__title tb-report__title--tight">{{ labels.recommendations.events }}</div>{{/if}}
+  <div class="tb-report__lead">Посетите очные мероприятия для углублённого изучения материала.</div>
+  {{#each report.events}}
+  <div class="tb-report__rec tb-report__rec--plain">
+    <div class="tb-report__event">{{ title }}</div>
+  </div>
+  {{/each}}
+</section>
+{{/if}}

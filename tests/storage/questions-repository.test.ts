@@ -26,6 +26,8 @@ vi.mock("../../server/db", () => ({
 import { DatabaseStorage } from "../../server/storage";
 // eslint-disable-next-line import/first
 import type { InsertQuestion } from "@shared/schema";
+// eslint-disable-next-line import/first
+import { computePsychoHash } from "@shared/questions/psycho-hash";
 
 let storage: DatabaseStorage;
 
@@ -292,6 +294,68 @@ describe("QuestionsRepository — update", () => {
 
   it("updateQuestion returns undefined for a missing question", async () => {
     expect(await storage.updateQuestion(randomUUID(), { prompt: "x" })).toBeUndefined();
+  });
+});
+
+describe("QuestionsRepository — отпечаток содержания (PRD-66 FR-09a)", () => {
+  // The stamp is written by the repository itself, not by its callers: the editor,
+  // the workbook import and the copy button all reach the table through here, and a
+  // path that forgot it would silently produce questions whose answers cannot be
+  // grouped into an observation series.
+  it("createQuestion пишет отпечаток по содержанию задания", async () => {
+    const topicId = await makeTopic("T-psycho-create");
+    const created = await storage.createQuestion(singleQ(topicId));
+
+    expect(created.psychoHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(created.psychoHash).toBe(computePsychoHash(singleQ(topicId)));
+  });
+
+  it("createQuestion не принимает отпечаток от вызывающего", async () => {
+    // Otherwise a caller could pin an arbitrary series onto a question.
+    const topicId = await makeTopic("T-psycho-forge");
+    const created = await storage.createQuestion(
+      singleQ(topicId, { psychoHash: "0".repeat(64) } as Partial<InsertQuestion>),
+    );
+
+    expect(created.psychoHash).toBe(computePsychoHash(singleQ(topicId)));
+  });
+
+  it("updateQuestion пересчитывает отпечаток при правке текста задания", async () => {
+    const topicId = await makeTopic("T-psycho-edit");
+    const q = await storage.createQuestion(singleQ(topicId, { prompt: "было" }));
+
+    const updated = await storage.updateQuestion(q.id, { prompt: "стало" });
+    expect(updated!.psychoHash).not.toBe(q.psychoHash);
+    expect(updated!.psychoHash).toBe(computePsychoHash({ ...singleQ(topicId), prompt: "стало" }));
+  });
+
+  it("updateQuestion пересчитывает отпечаток при смене эталона", async () => {
+    const topicId = await makeTopic("T-psycho-key");
+    const q = await storage.createQuestion(singleQ(topicId));
+
+    const updated = await storage.updateQuestion(q.id, { correctJson: { correctIndex: 2 } });
+    expect(updated!.psychoHash).not.toBe(q.psychoHash);
+  });
+
+  it("updateQuestion сохраняет отпечаток при правке, не касающейся содержания", async () => {
+    // Feedback, media and difficulty are not part of the instrument the respondent
+    // answers, so editing them must not break the series.
+    const topicId = await makeTopic("T-psycho-keep");
+    const q = await storage.createQuestion(singleQ(topicId));
+
+    const updated = await storage.updateQuestion(q.id, { difficulty: 80, feedback: "пояснение" });
+    expect(updated!.psychoHash).toBe(q.psychoHash);
+  });
+
+  it("duplicateQuestion даёт копии свой отпечаток", async () => {
+    // The copy carries the «(копия)» suffix in its prompt, so it is a different
+    // instrument — and it must have a stamp of its own, not an empty column.
+    const topicId = await makeTopic("T-psycho-copy");
+    const q = await storage.createQuestion(singleQ(topicId));
+
+    const copy = await storage.duplicateQuestion(q.id);
+    expect(copy!.psychoHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(copy!.psychoHash).not.toBe(q.psychoHash);
   });
 });
 

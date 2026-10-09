@@ -41,6 +41,19 @@ export interface MagicScopeMatch {
 export const MAGIC_SCOPE_RULES: MagicScopeRule[] = [
   { method: "GET", pattern: "/api/auth/me", bind: "none" },
   { method: "POST", pattern: "/api/auth/logout", bind: "none" },
+  // The ways OUT of the link. A magic session is a narrow room, and these four are
+  // its door: a password login (which clears the mark — server/routes/auth.ts) and
+  // the recovery flow that lets someone who has no working password reach that
+  // login. Without them a person who followed a link is locked in until the cookie
+  // is deleted by hand — the login form itself answered 403, indistinguishable from
+  // a wrong password. None of them widens the scope: they either replace the
+  // session's own authentication or act purely on a token from the mailbox.
+  // `change-password` is deliberately NOT here — it acts INSIDE the application on
+  // an already-authenticated session, which is not what a link grants.
+  { method: "POST", pattern: "/api/auth/login", bind: "none" },
+  { method: "POST", pattern: "/api/auth/forgot-password", bind: "none" },
+  { method: "GET", pattern: "/api/auth/verify-reset-token", bind: "none" },
+  { method: "POST", pattern: "/api/auth/reset-password", bind: "none" },
   // The route handler itself narrows the payload down to the magic test; see
   // `server/routes/attempts.ts` (covered by `tests/routes.attempts-tests.test.ts`)
   // for where that narrowing is actually enforced.
@@ -55,7 +68,20 @@ export const MAGIC_SCOPE_RULES: MagicScopeRule[] = [
   { method: "POST", pattern: "/api/attempts/:attemptId/finish", bind: "attempt" },
   { method: "POST", pattern: "/api/attempts/:attemptId/answer-adaptive", bind: "attempt" },
   { method: "POST", pattern: "/api/attempts/:attemptId/expire-topic-adaptive", bind: "attempt" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/finish-adaptive", bind: "attempt" },
   { method: "GET", pattern: "/api/attempts/:attemptId/result", bind: "attempt" },
+  // PRD-52: рецензент, пришедший по ревью-ссылке. Всё привязано к тесту ссылки, а
+  // редактирование, отладчик и экспорт сюда сознательно не входят: грант `review`
+  // открывает прогон и комментарии, и ничего сверх этого. Удаление комментария в
+  // список не внесено — своё удаляют из полноценной сессии, чужое не удаляют вовсе.
+  { method: "POST", pattern: "/api/tests/:testId/review/session", bind: "test" },
+  { method: "DELETE", pattern: "/api/tests/:testId/review/session/:token", bind: "test" },
+  { method: "GET", pattern: "/api/tests/:testId/review/play/:token/*", bind: "test" },
+  { method: "GET", pattern: "/api/tests/:testId/review/shim.js", bind: "test" },
+  { method: "GET", pattern: "/api/tests/:testId/review/inspector-compute.js", bind: "test" },
+  { method: "GET", pattern: "/api/tests/:testId/review/comments", bind: "test" },
+  { method: "POST", pattern: "/api/tests/:testId/review/comments", bind: "test" },
+  { method: "PATCH", pattern: "/api/tests/:testId/review/comments/:commentId", bind: "test" },
   { method: "GET", pattern: "/api/report/lib/:file", bind: "none" },
   // PRD-27 FR-05: подложка и логотип отчёта — файлы ШАБЛОНА, а не ассеты продукта
   // (прежний `/api/report/asset/:file` удалён вместе с ними). Без этой строки ученик,

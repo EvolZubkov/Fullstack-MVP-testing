@@ -4,8 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-    Wireframe: PRD-28 — диалог назначения теста, вкладка «Списком из файла».
-    Состояние 1 из 4: ЗАГРУЗКА (спека docs/specs/prd-28/external-participant.md, §5).
+    Wireframe: PRD-28 — диалог назначения теста, вкладка «Списком».
+    Состояние 1 из 4: ЗАГРУЗКА (спека docs/specs/prd-28/external-participant.md, §5 и §16).
+
+    Вкладка принимает список ДВУМЯ способами (§16): набранным вручную и книгой.
+    Способы — альтернативы, заполненный гасит второй; три кнопки переключателя
+    состояний показывают обе половины пустыми, набранный список и выбранный файл.
 
     Каркас диалога взят как есть из client/src/components/assign-test-dialog.tsx:
     ModalDialog size="xl" (ou-modal--xl) + Tabs variant="segment" align="stretch".
@@ -15,7 +19,7 @@
 
     Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
     -->
-    <title>PRD-28 — Списком из файла: загрузка</title>
+    <title>PRD-28 — Списком: загрузка</title>
     <!-- Порядок подключения важен и отличается от соседних эскизов.
          wf-utils.css несёт каркас эскиза, но вместе с ним — устаревшие shim'ы
          для ou-tag / ou-banner / ou-input с токенами, которых в дизайн-системе
@@ -26,7 +30,7 @@
          перекрасил бы полосу переключателя состояний в свой тёмный вариант. -->
     <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
     <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
-    <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/skillum-ds.css" />
     <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
     <script defer src="/docs/wireframes/prd7-shared.js"></script>
     <style>
@@ -44,8 +48,13 @@
       .tb-bulk-actions { display: flex; justify-content: flex-end; gap: var(--ou-space-2); }
       /* Ссылка на шаблон стоит под зоной выбора файла, слева. */
       .tb-bulk-tpl { display: flex; justify-content: flex-start; }
+      /* Погашенная вместе с нижней половиной: в коде это `disabled` у Button. */
+      .tb-bulk-tpl.is-disabled { opacity: 0.5; pointer-events: none; }
       .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
       .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      /* Состояния холста переключаются атрибутом hidden; у .ou-file и .ou-uploader
+         свой display, поэтому браузерного правила для [hidden] недостаточно. */
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body class="ou ou--light ou--normal">
@@ -60,8 +69,10 @@
     </svg>
 
     <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
-      <span class="wf-nav-title">PRD-28 · Списком из файла:</span>
-      <button type="button" class="active">1 · Загрузка</button>
+      <span class="wf-nav-title">PRD-28 · Списком:</span>
+      <button type="button" class="active" onclick="showListState(this, 'empty')">1 · Ничего не задано</button>
+      <button type="button" onclick="showListState(this, 'typed')">2 · Набран список</button>
+      <button type="button" onclick="showListState(this, 'file')">3 · Выбран файл</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="toggleTheme(this)">Dark</button>
       <button type="button" onclick="toggleDensity(this)">Compact</button>
@@ -102,30 +113,42 @@
                 </button>
                 <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">
                   <span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-sheet" /></svg></span>
-                  <span class="ou-tabs__label">Списком из файла</span>
+                  <span class="ou-tabs__label">Списком</span>
                 </button>
               </div>
 
-              <div class="ou-tabs__panel" role="tabpanel" aria-label="Списком из файла">
+              <div class="ou-tabs__panel" role="tabpanel" aria-label="Списком">
                 <div class="ou-stack ou-stack--gap-5">
 
-                  <!-- Выбор файла: файл ещё не выбран -->
-                  <div class="ou-uploader" role="button" tabindex="0">
+                  <!-- Верхняя половина: набранный список адресов (§16) -->
+                  <label class="ou-textarea ou-textarea--full" id="wf-emails-box" for="wf-emails">
+                    <span class="ou-textarea__lbl">Адреса почты</span>
+                    <div class="ou-textarea__box">
+                      <textarea class="ou-textarea__input" id="wf-emails" rows="4"
+                        placeholder="Ирина Петрова &lt;i.petrova@example.com&gt;&#10;s.kovalev@example.com"></textarea>
+                    </div>
+                    <span class="ou-textarea__msg">По одному в строке или через запятую. Запись «Имя &lt;адрес&gt;» задаёт имя, голый адрес — только адрес.</span>
+                  </label>
+
+                  <div class="tb-orsep"><span class="tb-orsep__word">или</span></div>
+
+                  <!-- Нижняя половина: книга. Файл ещё не выбран -->
+                  <div class="ou-uploader" id="wf-drop" role="button" tabindex="0">
                     <span class="ou-uploader__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-upload" /></svg></span>
                     <span class="ou-uploader__title">Перетащите книгу или нажмите, чтобы выбрать</span>
                     <span class="ou-uploader__sub">Только .xlsx. Колонки: email, name. До 500 строк.</span>
-                    <span class="ou-uploader__cta" aria-hidden="true">Выбрать файл</span>
+                    <span class="ou-uploader__cta" id="wf-drop-cta" aria-hidden="true">Выбрать файл</span>
                   </div>
 
-                  <div class="tb-bulk-tpl">
+                  <div class="tb-bulk-tpl" id="wf-tpl">
                     <a class="ou-btn ou-btn--ghost ou-btn--s" href="/api/tests/1/participants-template" download>
                       <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-download" /></svg></span>
                       Скачать шаблон .xlsx
                     </a>
                   </div>
 
-                  <!-- Выбранный файл (состояние после выбора) -->
-                  <div class="ou-file">
+                  <!-- Выбранный файл: заменяет собой зону выбора -->
+                  <div class="ou-file" id="wf-file" hidden>
                     <div class="ou-file__thumb ou-file__thumb--xls">XLS</div>
                     <div class="ou-file__main">
                       <div class="ou-file__name">uchastniki-audit-ib.xlsx</div>
@@ -165,7 +188,8 @@
                   </div>
 
                   <div class="tb-bulk-actions">
-                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Проверить список</button>
+                    <!-- Мертва, пока не задан ни один источник (§16, FR-24). -->
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" id="wf-check" disabled>Проверить список</button>
                   </div>
 
                 </div>
@@ -187,9 +211,12 @@
         <table>
           <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
           <tbody>
-            <tr><td>Вкладка «Списком из файла»</td><td>FR-09, §5</td><td>Четвёртая вкладка того же диалога. Соседние вкладки и каркас показаны как сейчас (assign-test-dialog.tsx). Ярлык первой вкладки в коде — «Назначено (N)», не «Текущие»</td></tr>
+            <tr><td>Вкладка «Списком»</td><td>FR-09, FR-23, §5, §16</td><td>Четвёртая вкладка того же диалога. Имя вкладки — «Списком»: с §16 файл перестал быть единственным источником. Соседние вкладки и каркас показаны как сейчас (assign-test-dialog.tsx). Ярлык первой вкладки в коде — «Назначено (N)», не «Текущие»</td></tr>
+            <tr><td>Поле «Адреса почты»</td><td>FR-23, FR-25, FR-26, §16</td><td>DS <code>Textarea</code>. По одному в строке или через запятую; запись «Имя &lt;адрес&gt;» задаёт имя, голый адрес — только адрес. Разбор — по кнопке «Проверить список», нераспознанная запись видна строкой предпросмотра, а не гасится здесь</td></tr>
+            <tr><td>Разделитель «или»</td><td>FR-24, §16</td><td>Каркас <code>tb-orsep</code> в проектном слое <code>tb-components.css</code>. Говорит, что половины — альтернативы, до того как оператор заполнит одну</td></tr>
+            <tr><td>Погашенная половина</td><td>FR-24, §16</td><td>Состояния 2 и 3 переключателя. Заполненное поле гасит зону файла (<code>ou-uploader is-disabled</code>, <code>aria-disabled</code>, без CTA), выбранный файл гасит поле (<code>ou-textarea is-disabled</code>). Освобождение возвращает выбор</td></tr>
             <tr><td>Зона выбора файла</td><td>FR-10, §5</td><td>DS <code>FileUploader</code>. Принимается ТОЛЬКО .xlsx: читатель книг отвергает csv (§5). Существующий импорт пользователей предлагает <code>.csv,.xlsx,.xls</code> — это известный дефект, в охват не входит</td></tr>
-            <tr><td>Выбранный файл</td><td>—</td><td>DS <code>FileItem</code>. Показан вместе с пустой зоной только ради эскиза: в интерфейсе одновременно видно одно из двух</td></tr>
+            <tr><td>Выбранный файл</td><td>—</td><td>DS <code>FileItem</code>. Заменяет собой зону выбора — состояние 3 переключателя</td></tr>
             <tr><td>Ссылка на шаблон</td><td>FR-10</td><td>Кнопка-ссылка (ghost). Отдельного DS-примитива «ссылка» нет — используется <code>ou-btn--ghost</code>, как единственный DS-эквивалент</td></tr>
             <tr><td>Срок выполнения / Ссылка активна до</td><td>FR-13, §5</td><td>Те же два поля и та же автоподстановка, что на вкладках «Пользователи» и «Группы» (<code>dateFields</code>). Действуют на весь прогон</td></tr>
             <tr><td>Создать группу из списка</td><td>FR-14, §5.1</td><td>Необязательное текстовое поле. Пусто — поимённые назначения. Занятое имя отклоняется на ПРЕДПРОСМОТРЕ, не здесь</td></tr>
@@ -208,18 +235,57 @@
           <tbody>
             <tr><td>Диалог</td><td><code>ModalDialog</code> (<code>ou-modal--xl</code>)</td><td>существующий диалог назначения</td></tr>
             <tr><td>Вкладки</td><td><code>Tabs</code> (<code>ou-tabs--segment ou-tabs--stretch</code>)</td><td>существующий диалог назначения</td></tr>
+            <tr><td>Поле адресов</td><td><code>Textarea</code> (<code>ou-textarea</code>)</td><td>существующий компонент</td></tr>
             <tr><td>Зона выбора файла</td><td><code>FileUploader</code> (<code>ou-uploader</code>)</td><td>существующий компонент</td></tr>
             <tr><td>Строка файла</td><td><code>FileItem</code> (<code>ou-file</code>)</td><td>существующий компонент</td></tr>
             <tr><td>Поля</td><td><code>Input</code> (<code>ou-field</code>)</td><td>существующий компонент</td></tr>
             <tr><td>Раскладка</td><td><code>Stack</code> (<code>ou-stack</code>), <code>ou-grow</code></td><td>существующие примитивы</td></tr>
             <tr><td>Кнопки</td><td><code>Button</code> (<code>ou-btn</code>)</td><td>существующий компонент</td></tr>
             <tr><td><code>tb-bulk-actions</code>, <code>tb-bulk-tpl</code></td><td>—</td><td>каркас эскиза: прижим ряда действий; в коде это <code>Cluster justify</code></td></tr>
+            <tr><td><code>tb-orsep</code></td><td>—</td><td>проектный слой <code>client/src/styles/tb-components.css</code>: жёлоб с подписью «или». Не эскизный каркас — тот же класс идёт в приложение</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
     <script>
+      /* Три состояния верхней и нижней половин вкладки (§16). Способы —
+         альтернативы: заполненный гасит второй, поэтому состояния отличаются
+         только тем, что задано, а не составом холста. */
+      window.showListState = function showListState(btn, id) {
+        var emails = document.getElementById('wf-emails');
+        var emailsBox = document.getElementById('wf-emails-box');
+        var drop = document.getElementById('wf-drop');
+        var dropCta = document.getElementById('wf-drop-cta');
+        var file = document.getElementById('wf-file');
+
+        var typed = id === 'typed';
+        var picked = id === 'file';
+
+        emails.value = typed ? 'Ирина Петрова <i.petrova@example.com>\ns.kovalev@example.com' : '';
+        emails.disabled = picked;
+        emailsBox.classList.toggle('is-disabled', picked);
+
+        drop.hidden = picked;
+        drop.classList.toggle('is-disabled', typed);
+        drop.setAttribute('tabindex', typed ? '-1' : '0');
+        if (typed) drop.setAttribute('aria-disabled', 'true');
+        else drop.removeAttribute('aria-disabled');
+        dropCta.hidden = typed;
+
+        /* Шаблон книги — принадлежность нижней половины: набранному списку он
+           не нужен, поэтому гаснет вместе с зоной файла. */
+        document.getElementById('wf-tpl').classList.toggle('is-disabled', typed);
+
+        file.hidden = !picked;
+        document.getElementById('wf-check').disabled = !typed && !picked;
+
+        document.querySelectorAll('.wf-nav button[onclick*="showListState"]').forEach(function (b) {
+          b.classList.remove('active');
+        });
+        if (btn) btn.classList.add('active');
+      };
+
       window.toggleTheme = function toggleTheme(btn) {
         var dark = document.body.classList.toggle('ou--dark');
         document.body.classList.toggle('ou--light', !dark);

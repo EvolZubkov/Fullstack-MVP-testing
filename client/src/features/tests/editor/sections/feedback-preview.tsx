@@ -7,11 +7,72 @@
  * The whole card is NO LONGER the edit trigger (that conflicted with the now
  * real item links). Editing is opened by a dedicated pencil IconButton; item
  * names are functional links. The empty placeholder stays click-to-edit.
+ *
+ * The empty placeholder carries the SAME pencil as a filled card, so an
+ * unfilled field is recognisable as editable at a glance instead of reading
+ * as inert text. There the whole card is already the button, so the pencil is
+ * decorative (`aria-hidden`) — a real button inside would nest one control in
+ * another.
  */
-import { CalendarDays, FileText, Link as LinkIcon, Pencil } from "lucide-react";
-import { IconButton } from "@universityrt/ui-kit";
+import { CalendarDays, FileText, Link as LinkIcon, Pencil, RotateCcw } from "lucide-react";
+import { IconButton, Tag } from "@skillum/ui-kit";
 import type { FeedbackFormat } from "@shared/schema";
 import type { FeedbackAsset, FeedbackEvent, FeedbackLink } from "../test-editor.types";
+
+export type FeedbackFieldProps = {
+  /** Что это за текст: «Толкование» или «Обратная связь». */
+  label: string;
+  /** Подпись источника («из темы» / «этот тест») или состояния («скрыто от участника»). */
+  tag?: { text: string; tone?: "neutral" | "warning" };
+  /** Снять правку теста. Без него сброса нет — значит, править нечего. */
+  onReset?: () => void;
+  /** Подпись действия сброса: она называет, ЧТО именно сбрасывается. */
+  resetLabel?: string;
+  resetTestId?: string;
+  /** Предпросмотр текста. */
+  children: React.ReactNode;
+};
+
+/**
+ * Поле текста: шапка (что это, откуда взято, чем сбросить) и предпросмотр под ней.
+ *
+ * Своя обёртка, а не `ou-formfield`: полей внутри одной темы теперь ДВА — толкование и
+ * обратная связь, — и группой их держит как раз `ou-formfield`. Подпись источника стоит
+ * ТЕГОМ: без неё автор не отличит, где текст пришёл из темы, а где переопределён этим
+ * тестом, а полосы слева для этого мало — она говорит «не как у темы», но не говорит, что
+ * это за поле (решение эскиза 2026-09-21).
+ */
+export function FeedbackField(props: FeedbackFieldProps): React.JSX.Element {
+  const tag = props.tag ? (
+    <Tag tone={props.tag.tone ?? "neutral"} size="s">
+      {props.tag.text}
+    </Tag>
+  ) : null;
+  return (
+    <div className="tb-textfield">
+      <div className="tb-feedback-head">
+        <label className="ou-formfield__lbl">{props.label}</label>
+        {props.onReset ? (
+          <span className="tb-feedback-head__trail">
+            {tag}
+            <IconButton
+              icon={<RotateCcw size={14} aria-hidden="true" />}
+              aria-label={props.resetLabel ?? "Сбросить до установок темы"}
+              title={props.resetLabel ?? "Сбросить до установок темы"}
+              variant="ghost"
+              size="s"
+              onClick={props.onReset}
+              data-testid={props.resetTestId}
+            />
+          </span>
+        ) : (
+          tag
+        )}
+      </div>
+      {props.children}
+    </div>
+  );
+}
 
 export type FeedbackPreviewProps = {
   format: FeedbackFormat;
@@ -28,6 +89,8 @@ export type FeedbackPreviewProps = {
   editAriaLabel?: string;
   /** Placeholder shown when nothing is configured. */
   emptyLabel?: string;
+  /** Текст переопределён в этом тесте: рисуется полосой слева, без подписи. */
+  overridden?: boolean;
   /** data-testid for the preview root. The pencil gets `${testId}-edit`. */
   testId?: string;
 };
@@ -80,13 +143,15 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
     props.events.length === 0;
 
   if (isEmpty) {
-    const empty = props.emptyLabel ?? "Не задано — нажмите для редактирования";
+    const empty = props.emptyLabel ?? "Без текста";
     if (props.onEdit) {
       return (
         <div
           role="button"
           tabIndex={0}
-          className="tb-feedback-preview is-empty"
+          className={
+            props.overridden ? "tb-feedback-preview is-empty is-overridden" : "tb-feedback-preview is-empty"
+          }
           onClick={props.onEdit}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -97,7 +162,12 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
           aria-label={props.editAriaLabel}
           data-testid={props.testId}
         >
-          {empty}
+          <div className="tb-feedback-preview__head">
+            <span className="tb-feedback-preview__snippet">{empty}</span>
+            <span className="tb-feedback-preview__edit-hint" aria-hidden="true">
+              <Pencil size={14} />
+            </span>
+          </div>
         </div>
       );
     }
@@ -109,7 +179,10 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
   }
 
   return (
-    <div className="tb-feedback-preview" data-testid={props.testId}>
+    <div
+      className={props.overridden ? "tb-feedback-preview is-overridden" : "tb-feedback-preview"}
+      data-testid={props.testId}
+    >
       <div className="tb-feedback-preview__head">
         {isRich && hasText ? (
           <div

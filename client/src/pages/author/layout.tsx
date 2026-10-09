@@ -1,7 +1,7 @@
 /**
  * @module pages/author/layout
  *
- * Author-area shell: the design-system `AppShell` (`@universityrt/ui-kit`) with
+ * Author-area shell: the design-system `AppShell` (`@skillum/ui-kit`) with
  * the primary {@link AppSidebar} in the side slot. The header carries (right
  * edge) the theme toggle and the signed-in user; the user avatar opens a menu
  * with the full role set and the logout action. Replaces the former shadcn
@@ -22,7 +22,7 @@ import {
   MenuItem,
   MenuHeader,
   MenuDivider,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth";

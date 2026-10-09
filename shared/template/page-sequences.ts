@@ -78,6 +78,11 @@ export interface PageContext {
    * Absent/false ⇒ a live button, which is every ordinary content page.
    */
   nextDisabled?: boolean;
+  /**
+   * Section subtitle of «Введение раздела» (PRD-22 FR-42). An empty string means the
+   * author switched the line off, so the layout prints it on non-emptiness.
+   */
+  sectionSubtitle: string;
 }
 
 /** The declared setting key that carries the sequence identifier. */
@@ -88,6 +93,22 @@ export const NEXT_LABEL_SETTING_KEY = "nextLabel";
 
 /** Caption used when the page declares none — the manifest default. */
 export const DEFAULT_NEXT_LABEL = "Далее";
+
+/** The declared setting key that switches the section subtitle off (PRD-22 FR-38). */
+export const SECTION_SUBTITLE_SHOWN_SETTING_KEY = "sectionSubtitleShown";
+
+/** The declared setting key that carries the section subtitle's wording (FR-38). */
+export const SECTION_SUBTITLE_SETTING_KEY = "sectionSubtitle";
+
+/** Wording used while the author has set none — the manifest default. */
+export const DEFAULT_SECTION_SUBTITLE = "Инструкция";
+
+/**
+ * The declared setting key that switches off the pass-condition line («Для прохождения:
+ * 7 баллов из 10») of «Введение раздела». A variant setting, not a test one: the author
+ * decides per section intro whether the threshold is worth stating to the learner.
+ */
+export const PASS_CONDITION_SHOWN_SETTING_KEY = "passConditionShown";
 
 /** The settings bag of a page, whichever shape the host ships it in. */
 function settingsOf(page: SequenceContentPage | null | undefined): Record<string, unknown> | null {
@@ -113,6 +134,32 @@ export function nextLabelOf(page: SequenceContentPage | null | undefined): strin
   const bag = settingsOf(page);
   const raw = bag ? bag[NEXT_LABEL_SETTING_KEY] : undefined;
   return (typeof raw === "string" ? raw.trim() : "") || DEFAULT_NEXT_LABEL;
+}
+
+/**
+ * Section subtitle — the line above the author instruction on «Введение раздела»
+ * (PRD-22 FR-41).
+ *
+ * Only the SWITCH silences it. An empty field with the switch on means «follow the
+ * template» and yields the default: the settings control shows the declared default as a
+ * grey placeholder, so «never touched» and «cleared» look identical in the form and
+ * emptiness cannot be made to mean «off» (FR-40).
+ */
+export function sectionSubtitleOf(page: SequenceContentPage | null | undefined): string {
+  const bag = settingsOf(page);
+  if (bag && bag[SECTION_SUBTITLE_SHOWN_SETTING_KEY] === false) return "";
+  const raw = bag ? bag[SECTION_SUBTITLE_SETTING_KEY] : undefined;
+  return (typeof raw === "string" ? raw.trim() : "") || DEFAULT_SECTION_SUBTITLE;
+}
+
+/**
+ * Whether «Введение раздела» states the topic threshold. Only an explicit `false` hides it:
+ * a page saved before the setting existed, or a variant that does not declare it, keeps
+ * the line — the verdict is unchanged either way, the switch silences only the wording.
+ */
+export function passConditionShownOf(page: SequenceContentPage | null | undefined): boolean {
+  const bag = settingsOf(page);
+  return !(bag && bag[PASS_CONDITION_SHOWN_SETTING_KEY] === false);
 }
 
 /**
@@ -219,13 +266,23 @@ export function buildSequencePlacements(
  */
 export function buildPageContext(
   placement: SequencePlacement | null | undefined,
-  options?: { canGoBack?: boolean; nextLabel?: string; nextDisabled?: boolean },
+  options?: {
+    canGoBack?: boolean;
+    nextLabel?: string;
+    nextDisabled?: boolean;
+    sectionSubtitle?: string;
+  },
 ): PageContext {
   const canGoBack = options?.canGoBack === true;
   const nextLabel = options?.nextLabel?.trim() || DEFAULT_NEXT_LABEL;
   const nextDisabled = options?.nextDisabled === true;
+  // `??`, NOT `||`: an empty string here is a subtitle the author switched OFF, and
+  // substituting the default would put back on the screen exactly what they removed. An
+  // ABSENT value is a different case — the caller knows nothing of the subtitle, and the
+  // safe outcome there is the template's own wording.
+  const sectionSubtitle = options?.sectionSubtitle ?? DEFAULT_SECTION_SUBTITLE;
   if (!placement)
-    return { dots: [], dotIndex: 0, dotsTotal: 0, pageLabel: "", progressPercent: 0, canGoBack, nextLabel, nextDisabled };
+    return { dots: [], dotIndex: 0, dotsTotal: 0, pageLabel: "", progressPercent: 0, canGoBack, nextLabel, nextDisabled, sectionSubtitle };
 
   const dots: SequenceDot[] = [];
   for (let i = 1; i <= placement.total; i++) {
@@ -233,7 +290,7 @@ export function buildPageContext(
   }
   const pageLabel = placement.total > 0 ? "Страница " + placement.index + " из " + placement.total : "";
   const progressPercent = placement.total > 0 ? Math.round((placement.index / placement.total) * 100) : 0;
-  return { dots, dotIndex: placement.index, dotsTotal: placement.total, pageLabel, progressPercent, canGoBack, nextLabel, nextDisabled };
+  return { dots, dotIndex: placement.index, dotsTotal: placement.total, pageLabel, progressPercent, canGoBack, nextLabel, nextDisabled, sectionSubtitle };
 }
 
 /**
@@ -251,6 +308,7 @@ export function buildPageContextFor(
   return buildPageContext(buildSequencePlacements(pages).get(pageId), {
     ...options,
     nextLabel: options?.nextLabel ?? nextLabelOf(page),
+    sectionSubtitle: sectionSubtitleOf(page),
   });
 }
 

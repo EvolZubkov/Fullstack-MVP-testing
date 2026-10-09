@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, check, uuid, real, primaryKey } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, date, jsonb, uniqueIndex, index, check, uuid, real, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -6,10 +6,13 @@ import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
 import { isAllocationFeasible } from "./questions/allocation";
 import { STORED_ROLES } from "./access/roles";
 import { PLACEHOLDER_TYPES, SETTING_TYPES } from "./template/field-types";
+import type { BreakdownFeedback as BreakdownFeedbackShape } from "./breakdown/types";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  email: text("email").notNull(), // Зашифрованный email
+  // Зашифрованный email. NULL — внешний участник, заведённый импортом выгрузки LMS (PRD-54 BR-54-42):
+  // выгрузка почты не несёт, а выдуманный адрес хуже отсутствующего.
+  email: text("email"),
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
   passwordHash: text("password_hash"), // scrypt hash (PRD-9); NULL for an external participant (PRD-28)
   name: text("name"), // заполняется при первом входе
@@ -27,6 +30,31 @@ export const users = pgTable("users", {
   expiresAt: timestamp("expires_at"), // срок действия учётки
   createdAt: timestamp("created_at").notNull().defaultNow(),
   createdBy: varchar("created_by", { length: 36 }), // кто создал
+  // PRD-54: ключ, по которому импорт выгрузки отчёта LMS находит этого человека. Задаётся руками
+  // (карточка пользователя или колонка массовой загрузки) — сопоставление по ФИО запрещено.
+  // Уникальность обеспечивает индекс по lower(external_key) из миграции 0029: выражения в
+  // индексах drizzle-kit не генерирует, поэтому он дописан в SQL вручную.
+  externalKey: text("external_key"),
+  /**
+   * PRD-54 BR-54-31: идентификатор обучающегося в LMS (`cmi.learner_id`), по которому
+   * связывается ТЕЛЕМЕТРИЯ.
+   *
+   * Отдельное поле, а не `external_key`: источники дают РАЗНЫЕ идентификаторы одного человека и
+   * оба существуют одновременно — в рантайме LMS сообщает `learner_id` и не знает табельного
+   * кода, в выгрузке есть код и нет `learner_id`. Поле «что-нибудь одно» превратило бы
+   * связывание в лотерею: заполнивший его не знал бы, какой источник включил, а какой выключил.
+   */
+  lmsLearnerId: text("lms_learner_id"),
+  /**
+   * PRD-54 BR-54-25, BR-54-28: поля, из которых считается псевдоним участника выгрузки.
+   *
+   * Нужны, чтобы система могла посчитать для СВОЕГО пользователя тот же ключ, что внешний
+   * обезличиватель считает для строки файла, и связать их. Необязательны: их отсутствие значит
+   * лишь, что связывание пойдёт другим путём или не пойдёт вовсе.
+   */
+  organization: text("organization"),
+  unit: text("unit"),
+  position: text("position"),
 });
 
 // Группы пользователей
@@ -85,9 +113,20 @@ export const testAssignments = pgTable("test_assignments", {
 // Magic-link токены для доступа к тесту без пароля
 export const assignmentAccessTokens = pgTable("assignment_access_tokens", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  assignmentId: varchar("assignment_id", { length: 36 }).notNull(),
+  /**
+   * PRD-52: NULL у ревью-ссылки. У рецензирования назначения нет — доступ несёт
+   * грант `review`, — но вход, отзыв, срок жизни и конвейер писем те же, поэтому
+   * заводить таблицу-близнеца ради одного поля дороже, чем обнулить это.
+   */
+  assignmentId: varchar("assignment_id", { length: 36 }),
   userId: varchar("user_id", { length: 36 }).notNull(),
   testId: varchar("test_id", { length: 36 }).notNull(),
+  /**
+   * Куда ведёт ссылка: `attempt` — прохождение теста (PRD-28), `review` — экран
+   * рецензента (PRD-52). Значение по умолчанию сохраняет смысл всех выданных ранее
+   * ссылок без бэкфилла.
+   */
+  purpose: text("purpose", { enum: ["attempt", "review"] }).notNull().default("attempt"),
   tokenHash: text("token_hash").notNull().unique(), // SHA-256 от случайного токена
   expiresAt: timestamp("expires_at").notNull(),
   revokedAt: timestamp("revoked_at"), // NULL = активен
@@ -130,6 +169,18 @@ export const topics = pgTable("topics", {
   // the legacy tables until r.3; this column backs the unified topic feedback
   // editor (T-32 Drawer). NULL = not yet backfilled.
   feedbackJson: jsonb("feedback_json"),
+  /**
+   * ТОЛКОВАНИЕ темы — текст, который объясняет результат, а не советует, что делать
+   * (см. {@link interpretationSchema}). Печатается в строке темы ВСЕГДА: и когда тема
+   * взята, и когда нет, — и в сводный блок «Рекомендации» не попадает.
+   *
+   * Живёт на ТЕМЕ, а не на тесте: описание компетенции («формирует эффективную команду…»)
+   * принадлежит самой компетенции и переиспользуется каждым тестом, который её измеряет.
+   * Тест вправе сказать своё — для этого есть `test_sections.interpretation_json`.
+   *
+   * NULL/пустой текст = толкования нет, и строка темы печатается как печаталась.
+   */
+  interpretationJson: jsonb("interpretation_json").$type<InterpretationText>(),
   folderId: varchar("folder_id", { length: 36 }),
   // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
   createdBy: varchar("created_by", { length: 36 }),
@@ -232,6 +283,27 @@ export const scoringTierSchema = z.object({
  *                (non-additive step table over the answer counters).
  * `sMax` is optional and otherwise derived: max(weights) | max(tier.score).
  */
+/**
+ * «Сценарий в ИС» (этап Э5а): штрафы прогона — доли цены вопроса за каждый случай. Любой штраф
+ * может отсутствовать: тогда он берётся уровнем выше (вопрос → тест → система,
+ * `shared/sim/scoring.resolveSimScoring`).
+ */
+export const simPenaltiesSchema = z.object({
+  miss: z.number().min(0).max(1).optional(),
+  blocked: z.number().min(0).max(1).optional(),
+  wrongValue: z.number().min(0).max(1).optional(),
+  detour: z.number().min(0).max(1).optional(),
+  trap: z.number().min(0).max(1).optional(),
+  hint: z.number().min(0).max(1).optional(),
+});
+
+/** Настройки оценки сценариев одного уровня: штрафы и «засчитывать частичное выполнение». */
+export const simScoringSettingsSchema = z.object({
+  penalties: simPenaltiesSchema.optional(),
+  countPartial: z.boolean().optional(),
+});
+export type SimScoringSettings = z.infer<typeof simScoringSettingsSchema>;
+
 export const questionScoringSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("exact") }),
   z.object({
@@ -244,6 +316,10 @@ export const questionScoringSchema = z.discriminatedUnion("kind", [
     tiers: z.array(scoringTierSchema).min(1),
     sMax: z.number().positive().optional(),
   }),
+  // «Сценарий в ИС»: штрафы вопроса-сценария в этом тесте. Хранится в переопределении вопроса
+  // (`test_question_scoring.scoring_json`); полностью разрешённое значение того же вида кладёт в
+  // вопрос контекст оценки — его читают подсчёт веба и пакет.
+  simScoringSettingsSchema.extend({ kind: z.literal("simulation") }),
 ]);
 
 export type ScoringCondition = z.infer<typeof scoringConditionSchema>;
@@ -254,8 +330,23 @@ export type QuestionScoring = z.infer<typeof questionScoringSchema>;
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation"] }).notNull(),
+  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long", "simulation"] }).notNull(),
   prompt: text("prompt").notNull(),
+  /**
+   * PRD-57 §4.3: формат, в котором АВТОР написал текст задания.
+   *
+   * Аддитивно и без миграции текста: у всех существующих заданий формат `markdown`, и это
+   * ровно их сегодняшнее поведение — текст читается как подмножество разметки. Колонка
+   * `prompt` остаётся исходником в любом формате.
+   *
+   * `richText` и `html` хранят одно и то же — разметку; помнить их по отдельности нужно,
+   * чтобы автор возвращался в тот редактор, которым набирал. Написание повторяет
+   * `feedbackContentSchema.format` и `tests.description_format` намеренно: второй словарь
+   * форматов в продукте — это способ завести два разных «Форматированных».
+   */
+  promptFormat: text("prompt_format", {
+    enum: ["markdown", "richText", "html"],
+  }).notNull().default("markdown"),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
   // PRD-15 block D, T-40: `points` and `scoring_json` were dropped here (migration
@@ -283,7 +374,30 @@ export const questions = pgTable("questions", {
   feedbackMode: text("feedback_mode", { enum: ["general", "conditional"] }).notNull().default("general"),
   feedbackCorrect: text("feedback_correct"),
   feedbackIncorrect: text("feedback_incorrect"),
+  /**
+   * Feedback texts of individual answer options (single choice only): an array aligned
+   * by position with `data_json.options`, `null` = no override for that option. The
+   * chosen option's text replaces the question's feedback above. NULL when no option
+   * has one. Kept OUT of `data_json` on purpose: `psycho_hash` is computed over it, and
+   * editing an explanation must not break an observation series.
+   * See `shared/questions/option-feedback`.
+   */
+  optionFeedbackJson: jsonb("option_feedback_json").$type<Array<string | null>>(),
   contentHash: text("content_hash"),
+  /**
+   * PRD-66 FR-09a: the fingerprint of the question's CONTENT, by which answers are
+   * grouped into an observation series. Written by the repository on every create and
+   * update (`shared/questions/psycho-hash`), never by a caller.
+   *
+   * A separate column from `content_hash` on purpose: that one is pinned by PRD-15
+   * (`test_question_scoring.pinned_content_hash` ties a per-test price to a revision),
+   * so changing how it is computed would mark every price override stale at once.
+   * The two answer different questions and must be free to diverge.
+   *
+   * Nullable: a row written before migration `0039` and not yet backfilled carries no
+   * stamp, and its earlier observations stay the series «версия неизвестна» (FR-09c).
+   */
+  psychoHash: text("psycho_hash"),
   // PRD-2 §8.2: tags feed result-variable aggregate formulas; chip input in the question card.
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
   // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
@@ -341,6 +455,10 @@ export const attemptIntervalSchema = z.object({
  * decision (see `shared/eligibility/engine.ts` `resolveCooldownDays`). Off (the
  * default, and every existing test) keeps `cooldownPeriodDays` as the only period,
  * byte-identical to pre-PRD-40 behaviour.
+ *
+ * `lmsCourseName` names the course in WebTutor when it differs from the test title: the
+ * `webtutor_cooldown` gate finds the previous attempts by that name, exactly. Absent =
+ * the test title, which is every test created before the field existed.
  */
 export const retakePolicySchema = z.preprocess(
   (val) => {
@@ -363,6 +481,12 @@ export const retakePolicySchema = z.preprocess(
       eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
       blockedPageId: z.string().optional(),
       attemptInterval: attemptIntervalSchema.nullish(),
+      // The course name the `webtutor_cooldown` gate looks for in the LMS records (exact
+      // match). A blank value means "same as the test title" and is dropped.
+      lmsCourseName: z.preprocess(
+        (v) => (typeof v === "string" ? v.trim() || undefined : v),
+        z.string().max(500).optional(),
+      ),
     })
     .superRefine((v, ctx) => {
       if (v.enabled && v.cooldownByOutcome) {
@@ -456,6 +580,43 @@ export function isReportEnabled(settings: ReportSettings | null | undefined): bo
 export type ReportModeSettings = z.infer<typeof reportModeSettingsSchema>;
 export type ReportSettings = z.infer<typeof reportSettingsSchema>;
 
+/**
+ * PRD-50 §4 (FR-11): ONE named group of sections, stored in `tests.section_groups_json`.
+ * A section joins it by `test_sections.group_key`; a key nothing points at is legal (an
+ * empty group simply does not print — FR-12).
+ *
+ * `order` is OPTIONAL although the list is called ordered: the list already carries its
+ * order in the position of its elements, and demanding the number would reject perfectly
+ * meaningful data written by an importer or baked into a SCORM package. The core sorts by
+ * `order` where it is present and falls back to the position where it is not
+ * (`shared/scoring/section-groups`).
+ */
+export const sectionGroupSchema = z.object({
+  key: z.string().trim().min(1).max(64),
+  label: z.string().trim().max(200),
+  order: z.number().int().min(0).optional(),
+});
+
+/**
+ * `tests.section_groups_json` — the test's groups in author order. Absent column = no
+ * groups at all, i.e. exactly today's flat list of topic cards (FR-27).
+ *
+ * Duplicate keys are rejected: two groups with one key make a section's membership
+ * ambiguous, and the resolver would have to pick one silently.
+ */
+export const sectionGroupsSchema = z.array(sectionGroupSchema).superRefine((groups, ctx) => {
+  const seen = new Set<string>();
+  for (const g of groups) {
+    if (seen.has(g.key)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Повторяющийся ключ блока: ${g.key}` });
+      return;
+    }
+    seen.add(g.key);
+  }
+});
+
+export type SectionGroup = z.infer<typeof sectionGroupSchema>;
+
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
   folderId: varchar("folder_id", { length: 36 }),
@@ -464,7 +625,25 @@ export const tests = pgTable("tests", {
   ownerId: varchar("owner_id", { length: 36 }),
   title: text("title").notNull(),
   description: text("description"),
-  mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
+  /**
+   * PRD-59 FR-02: the format `description` is written in. The column holds the
+   * FORMAT only — the text itself stays the author's source in `description`, so
+   * every plain consumer (the letter's text part, the package's XML metadata, the
+   * Excel workbook) keeps reading what it always read.
+   *
+   * The spelling repeats `feedbackContentSchema.format` deliberately: a second
+   * vocabulary of formats in the product is how two screens start disagreeing about
+   * what «Форматированный» means.
+   */
+  descriptionFormat: text("description_format", {
+    enum: ["plain", "richText", "html"],
+  }).notNull().default("plain"),
+  /**
+   * Режим теста. `scenario` («Сценарий в ИС», docs/specs/sim-scenario/plan-tests.md): один
+   * пункт-сценарий из `test_scenarios` вместо тем и разделов; участник сразу попадает в
+   * сценарий на весь экран. Колонка текстовая без CHECK — новое значение миграции не требует.
+   */
+  mode: text("mode", { enum: ["standard", "adaptive", "scenario"] }).notNull().default("standard"),
   showDifficultyLevel: boolean("show_difficulty_level").notNull().default(true),
   overallPassRuleJson: jsonb("overall_pass_rule_json").notNull(),
   /**
@@ -492,7 +671,15 @@ export const tests = pgTable("tests", {
   published: boolean("published").default(false),
   status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   version: integer("version").notNull().default(1),
+  /**
+   * @deprecated PRD-61 §10: общая обратная связь УРОВНЯ ТЕСТА снята. Колонка не читается ни
+   * одним хостом, не запекается в пакет, не выгружается книгой и не правится из ящика —
+   * её назначение закрыли три вводных текста (`intro_json`). Оставлена, чтобы снятие можно
+   * было откатить без потери данных; сносится отдельной миграцией (пункт технического долга
+   * ROADMAP §0.3). Обратная связь ТЕМ и РАЗДЕЛОВ — другие колонки, они живы.
+   */
   feedback: text("feedback"),
+  /** @deprecated PRD-61 §10 — см. {@link feedback} выше. */
   feedbackJson: jsonb("feedback_json"),
   flowPolicyJson: jsonb("flow_policy_json"),
   telemetryEnabled: boolean("telemetry_enabled").notNull().default(false),
@@ -509,6 +696,11 @@ export const tests = pgTable("tests", {
   // PRD-15 block D (FR-31): test-wide default price of a question. Null = no
   // default — the effective chain falls through to the system default (1 point).
   defaultQuestionPoints: integer("default_question_points"),
+  /**
+   * «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию и «засчитывать частичное
+   * выполнение». NULL или отсутствующий штраф — системное умолчание.
+   */
+  simScoringJson: jsonb("sim_scoring_json").$type<SimScoringSettings>(),
   /**
    * PRD-30 FR-16: the test-wide delivery order, and the default every topic
    * inherits unless it overrides it (`test_sections.question_order`).
@@ -530,6 +722,15 @@ export const tests = pgTable("tests", {
   // Default false. Depends on allowReturnToUnanswered=true and is mutually exclusive with
   // showCorrectAnswers (FR-04b) — enforced in the editor/service layer, not as a DB CHECK.
   allowAnswerChange: boolean("allow_answer_change").notNull().default(false),
+  // PRD-19 (FR-11a): free navigation inside the CURRENT section — any question of it is a
+  // jump target, including one not shown yet, so «не выдан» stops existing within the
+  // section. The section boundary still holds (FR-11b): a neighbouring section is out of
+  // reach until the current one is finished, a finished section stays locked, the flat flow
+  // spreads the freedom over the whole test, and adaptive topics ignore the setting — there
+  // the ladder of levels decides the order. Depends on allowReturnToUnanswered=true (FR-11c):
+  // without return the pills are an indicator, not navigation. Default false so an existing
+  // test keeps today's frontier without its author touching anything.
+  allowFreeSectionNavigation: boolean("allow_free_section_navigation").notNull().default(false),
   // PRD-43: independent of allowReturnToUnanswered — whether submitting an answer
   // also advances to the next question in one click, or needs a separate «Далее»
   // click. Default false (today's two-step behaviour for a brand-new test); the
@@ -539,6 +740,24 @@ export const tests = pgTable("tests", {
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
+  // PRD-67: leaving a started section with a time limit (its own or the test's) CLOSES it
+  // instead of freezing its clock — the frozen clock let a learner read a question, close
+  // the tab, look the answer up and come back. A test without sections is one section, so
+  // there leaving ends the attempt. Default false: every existing test keeps its behaviour.
+  closeSectionOnLeave: boolean("close_section_on_leave").notNull().default(false),
+  // Какой результат SCORM-пакет отдаёт в LMS, когда попыток несколько: лучшую по проценту
+  // или только что завершённую. Стандарт этого не решает — SCORM не предписывает LMS ничего
+  // о хранении истории, и платформы (Moodle, Blackboard, Teachbase) держат выбор у себя,
+  // ожидая от содержимого данные ТЕКУЩЕЙ попытки. Но LMS, хранящая лишь снимок, при выборе
+  // «последняя» безвозвратно перекроет удачную попытку неудачной, поэтому решает автор.
+  // Умолчание 'last' — то, чего ждёт платформа: содержимое отчитывается за текущую попытку,
+  // а какую засчитать, решает LMS своей настройкой. Тесты, заведённые до этой колонки,
+  // остались на 'best' (значение проставлено миграцией 0022) — их поведение не меняется.
+  // В вебе настройка не применяется: внешней системы там нет, попытки показываются каждая
+  // сама по себе.
+  lmsAttemptResult: text("lms_attempt_result", { enum: ["best", "last"] })
+    .notNull()
+    .default("last"),
   // Обзор при полностью отвеченном объёме. `shouldShowReview` выводит показ из ПРАВ
   // навигации, и по ним обзор при разрешённой правке полезен всегда; нужен ли он тесту,
   // который проходят подряд и ни к чему не возвращаются, — суждение о методике, и вынести
@@ -566,6 +785,28 @@ export const tests = pgTable("tests", {
    * складывать их вместе значило бы связать два независимых черновика редактора.
    */
   introJson: jsonb("intro_json").$type<TestIntro>(),
+  /**
+   * PRD-50 FR-13: breakdown display setting. `hidden` (default) means this test behaves
+   * exactly as it did before PRD-50. `basis` picks the NUMBER shown on screen, not the
+   * verdict's currency — the pass threshold is always evaluated in points.
+   */
+  breakdownDisplayJson: jsonb("breakdown_display_json").$type<{
+    visibility: "hidden" | "bar" | "bar_and_value";
+    basis: "units" | "points";
+    /** PRD-50 FR-44 (Э4): nested bars, the test-scope block, or both. Absent = nested. */
+    placement?: "topics" | "block" | "both";
+  }>(),
+  /**
+   * PRD-50 FR-53: учитывать ли подтемы в вердикте темы. `false` (умолчание и значение
+   * бэкфилла) = подтема говорит о результате, но не судит его — поведение до §16.
+   */
+  breakdownGateEnabled: boolean("breakdown_gate_enabled").notNull().default(false),
+  /**
+   * PRD-50 FR-11: named groups of sections, in author order (see {@link sectionGroupSchema}).
+   * Null/empty = no groups, and the results screen prints exactly the flat list of topic
+   * cards every test has printed so far (FR-27).
+   */
+  sectionGroupsJson: jsonb("section_groups_json").$type<SectionGroup[]>(),
 }, (table) => ({
   // Test lists filter by lifecycle status (draft/published/archived).
   statusIdx: index("tests_status_idx").on(table.status),
@@ -581,7 +822,9 @@ export const testAccessGrants = pgTable("test_access_grants", {
   id: varchar("id", { length: 36 }).primaryKey(),
   testId: varchar("test_id", { length: 36 }).notNull(),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  accessLevel: text("access_level", { enum: ["edit", "assign"] }).notNull(),
+  // PRD-52: `review` opens the reviewer screen of ONE test (comments + a throwaway
+  // run) and nothing else. Stored as plain text, so the value needs no migration.
+  accessLevel: text("access_level", { enum: ["edit", "assign", "review"] }).notNull(),
   grantedBy: varchar("granted_by", { length: 36 }), // which admin granted it
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
@@ -672,6 +915,43 @@ export const testSections = pgTable("test_sections", {
   // draw (uniform / quotas), backward-compatible.
   formSetJson: jsonb("form_set_json").$type<FormSet>(),
   /**
+   * PRD-50 FR-50: обратная связь ПОДТЕМ этого раздела — карта «ключ -> текст с
+   * рекомендациями». NULL = у подтем текста нет, и результат печатается ровно как раньше.
+   * Своя колонка, а не поле правил: правило — оценка, текст — содержание результата.
+   */
+  breakdownFeedbackJson: jsonb("breakdown_feedback_json").$type<BreakdownFeedbackShape<FeedbackContent>>(),
+  /**
+   * ТОЛКОВАНИЕ темы, заданное ЭТИМ ТЕСТОМ. Заменяет текст самой темы целиком (не
+   * складывается с ним) — то же правило, что у обратной связи темы: две редакции одного
+   * текста, склеенные в выдаче, автор нигде не видит и не может проверить.
+   *
+   * Правка из ящика теста пишется ТОЛЬКО сюда: тема общая для многих тестов, и менять её
+   * из редактора одного теста значило бы править чужие тесты. NULL = берётся текст темы.
+   */
+  interpretationJson: jsonb("interpretation_json").$type<InterpretationText>(),
+  /**
+   * ТОЛКОВАНИЯ ПОДТЕМ (тегов) этого раздела — карта «ключ подтемы -> текст».
+   *
+   * Своя колонка, а не ветвь `breakdown_feedback_json`: та несёт РЕКОМЕНДАЦИЮ, у неё своё
+   * правило выдачи (доля подтемы ниже общего порога теста) и свой адресат — сводный блок
+   * рекомендаций. Толкование печатается всегда, когда автор включил его показ, и стоит под
+   * полосой своей подтемы. Два разных правила в одном поле не живут.
+   *
+   * Сущности «тег» в базе нет (теги — строки в `questions.tags`), поэтому текст принадлежит
+   * РАЗДЕЛУ: в другом тесте та же подтема описывается заново. NULL = толкований нет.
+   */
+  breakdownInterpretationJson: jsonb("breakdown_interpretation_json")
+    .$type<BreakdownFeedbackShape<InterpretationText>>(),
+  /**
+   * PRD-50 FR-11/FR-12: the group this section belongs to — a `key` of the test's
+   * `section_groups_json`. Null = the section belongs to no group and prints after all
+   * groups, in its own order (FR-25); a key no group declares means the SAME thing, so a
+   * deleted group never hides a section (FR-12). No FK: the groups live in a JSON column,
+   * and the resolver in `shared/scoring/section-groups` is where the reference is made
+   * good — on both hosts, over stored attempts and baked packages alike.
+   */
+  groupKey: text("group_key"),
+  /**
    * PRD-30 FR-02/FR-18: how this topic's questions are ordered on delivery.
    * `random` shuffles the drawn set (today's behaviour), `fixed` orders it by
    * `questions.order_index` (FR-03) or, in variants mode, by the variant's own
@@ -696,6 +976,51 @@ export const testSections = pgTable("test_sections", {
   topicIdIdx: index("test_sections_topic_id_idx").on(table.topicId),
   // getTestSections filters by test_id and orders by sort_order (editor topic order).
   testIdSortIdx: index("test_sections_test_id_sort_order_idx").on(table.testId, table.sortOrder),
+}));
+
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста (docs/specs/sim-scenario/plan-tests.md, раздел 2).
+ *
+ * Отдельная сущность рядом с разделами, не вид раздела. Пункт ссылается на ТЕМУ — банк
+ * сценариев — и выдаёт из неё только вопросы типа `simulation`: случайный с поправкой на
+ * экспозицию (PRD-55), когда `question_id` пуст, или фиксированный — этот вопрос темы.
+ *
+ * В тесте режима `scenario` строка ровно одна; в тесте с роутером (этап Э3) — сколько угодно.
+ */
+export const testScenarios = pgTable("test_scenarios", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  /** Тема-банк сценариев. */
+  topicId: varchar("topic_id", { length: 36 }).notNull(),
+  /** Фиксированный сценарий этой темы; NULL — случайный сценарий темы. */
+  questionId: varchar("question_id", { length: 36 }),
+  /** Название пункта в меню участника (роутер); NULL — название темы. */
+  title: text("title"),
+  required: boolean("required").notNull().default(true),
+  timeLimitMinutes: integer("time_limit_minutes"),
+  /** Картинка карточки пункта в хабе; NULL — без картинки. */
+  imageUrl: text("image_url"),
+  /**
+   * Группа тем, в которой стоит пункт (PRD-50 `tests.section_groups_json`), — как
+   * `test_sections.group_key`. NULL или ключ, которого тест не объявлял, — «вне групп».
+   */
+  groupKey: text("group_key"),
+  /** Балл по умолчанию для сценариев пункта (как `test_sections.default_points`); NULL — по тесту. */
+  defaultPoints: integer("default_points"),
+  /**
+   * Правило прохождения пункта — то же, что `test_sections.topic_pass_rule_json` у темы
+   * (`shared/scoring/pass-rule`): «как у теста», «не менее, %», «не менее, баллов». Его читают
+   * «Открывается после успешного прохождения» и вердикт теста (техдолг №8, решение владельца
+   * 2026-10-08: успех сценария определяет порог, как у темы). NULL — порога нет: любое завершение
+   * засчитывается, как у темы без порога.
+   */
+  passRuleJson: jsonb("pass_rule_json"),
+  /** Порядок пунктов теста (в роутере — общий с темами, этап Э3). */
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  // «Где используется тема»: тест, где тема служит банком сценариев, тоже от неё зависит.
+  topicIdIdx: index("test_scenarios_topic_id_idx").on(table.topicId),
+  testIdSortIdx: index("test_scenarios_test_id_sort_order_idx").on(table.testId, table.sortOrder),
 }));
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
@@ -755,8 +1080,9 @@ export const attempts = pgTable("attempts", {
    * Section time budgets of THIS attempt (`shared/flow/section-budget`), kept
    * server-side on purpose: the remaining time of a section decides whether the
    * learner may keep answering, so it must not live where the learner can edit it
-   * (it used to sit in `localStorage`). Shape: `{ budgets, lastSeenAt, activeMs }`.
-   * NULL for attempts of tests without section limits.
+   * (it used to sit in `localStorage`). Shape: `{ budgets, lastSeenAt, activeMs }`
+   * plus the PRD-67 fields `{ runId, gate }` (page-run identity and open/closed
+   * sections). NULL for attempts of tests without section limits.
    */
   sectionTimerJson: jsonb("section_timer_json"),
   startedAt: timestamp("started_at").notNull(),
@@ -807,6 +1133,15 @@ export const testQuestionScoring = pgTable("test_question_scoring", {
   scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
   difficulty: integer("difficulty"),
   pinnedContentHash: text("pinned_content_hash"),
+  /**
+   * PRD-56 FR-17a: задание исключено из выдачи ЭТОГО теста.
+   *
+   * Состояние, а не разовая команда: выдача перестаёт его брать, пока признак стоит. Живёт
+   * здесь, а не у вопроса, потому что негодное ЗДЕСЬ задание может быть годно в другом тесте,
+   * а отключение в банке — операция владельца темы, а не читателя аналитики. Собранные
+   * ответы и статистика сохраняются: из аналитики задание не пропадает.
+   */
+  excludedFromDelivery: boolean("excluded_from_delivery").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -847,17 +1182,26 @@ export const insertQuestionSchema = createInsertSchema(questions)
   // trim/collapse, dedup, length cap). Scoring left the question in T-40.
   .extend({
     tags: z.array(z.string()).transform(normalizeTags).optional(),
+    optionFeedbackJson: z.array(z.string().nullable()).nullish(),
   });
 export const insertTestSchema = createInsertSchema(tests)
   .omit({ id: true })
-  // drizzle-zod types jsonb loosely; validate the retake policy explicitly (PRD-6).
-  .extend({ retakePolicyJson: retakePolicySchema.nullish() });
+  // drizzle-zod types jsonb loosely; validate the retake policy (PRD-6) and the
+  // section groups (PRD-50 FR-11) explicitly.
+  .extend({
+    retakePolicyJson: retakePolicySchema.nullish(),
+    sectionGroupsJson: sectionGroupsSchema.nullish(),
+  });
 export const insertTestSectionSchema = createInsertSchema(testSections)
   .omit({ id: true })
   // drizzle-zod types jsonb loosely; validate the draw blueprint + variant set explicitly.
   .extend({
     drawBlueprintJson: drawBlueprintSchema.nullish(),
     formSetJson: formSetSchema.nullish(),
+    // `breakdownFeedbackJson` НЕ валидируется здесь: его схема опирается на
+    // `feedbackContentSchema`, объявленную ниже по файлу (обратная связь темы), а этот
+    // insert-схемой пользуются раньше. Проверку делает маршрут записи разделов теста,
+    // как и для остальных «живых» JSON-колонок.
   });
 export const insertAttemptSchema = createInsertSchema(attempts).omit({ id: true });
 
@@ -904,6 +1248,9 @@ export type Test = typeof tests.$inferSelect;
 
 export type InsertTestSection = z.infer<typeof insertTestSectionSchema>;
 export type TestSection = typeof testSections.$inferSelect;
+export type TestScenario = typeof testScenarios.$inferSelect;
+export const insertTestScenarioSchema = createInsertSchema(testScenarios).omit({ id: true });
+export type InsertTestScenario = z.infer<typeof insertTestScenarioSchema>;
 
 export type InsertAttempt = z.infer<typeof insertAttemptSchema>;
 export type Attempt = typeof attempts.$inferSelect;
@@ -1043,6 +1390,26 @@ export const feedbackContentSchema = z.object({
 });
 
 /**
+ * PRD-50 FR-50: обратная связь ПОДТЕМЫ (ключа разреза) внутри одного раздела теста.
+ *
+ * Отдельная колонка, а не поле внутри `breakdown_rules_json`, по той же причине, по которой
+ * квоты и пороги живут врозь: правило — это оценка, а текст — содержание результата.
+ * Пороги к тому же перестали что-либо судить (решение владельца 2026-09-03), и подмешивать
+ * к ним живой авторский текст значило бы хоронить его в легаси-структуре.
+ *
+ * Формат значения — тот же `feedback_json`, что у темы и у раздела (`format`, `text`,
+ * `links`, `assets`, `events`), поэтому текст подтемы собирается тем же сборщиком
+ * рекомендаций и печатается теми же блоками.
+ *
+ * Ключ записи — ключ подтемы КАК ЕГО НАПИСАЛ АВТОР; сопоставление идёт через `tagKey`
+ * (регистр и пробелы), как и везде в разрезе. Пустая запись = текста нет.
+ */
+export const breakdownFeedbackSchema = z.object({
+  axis: z.literal("tag"),
+  keys: z.record(z.string(), feedbackContentSchema),
+});
+
+/**
  * ВВОДНЫЙ ТЕКСТ — блок, который идёт ПЕРВЫМ, до всего остального: до сводки баллов, до тем,
  * до измерений и рекомендаций. Объясняет слушателю, что он сейчас читает.
  *
@@ -1053,9 +1420,59 @@ export const feedbackContentSchema = z.object({
  * Пустой текст = блока нет. Гейт стоит именно на тексте, а не на наличии записи: автор,
  * стерший текст, ожидает, что блок исчезнет, а не станет пустой рамкой.
  */
-export const introBlockSchema = z.object({
+export const introTextSchema = z.object({
   format: feedbackFormatSchema.default("plain"),
   text: z.string().default(""),
+});
+
+/**
+ * ВВОДНЫЙ ТЕКСТ одной выдачи (PRD-61): общее вступление плюс необязательные тексты по исходу.
+ *
+ * `format`/`text` — общее вступление, печатаемое при ЛЮБОМ исходе. Это ровно тот текст, что
+ * лежал здесь до PRD-61, и смысл его не менялся: он и тогда печатался всегда. `passed` и
+ * `failed` печатаются ВТОРЫМ блоком, под ним, и только когда вердикт вынесен — правило живёт
+ * в {@link module:shared/report/report-intro}, а не здесь.
+ *
+ * Ветви исхода — тексты, а не блоки ({@link introTextSchema}): у текста исхода не может быть
+ * собственных текстов исхода.
+ *
+ * Отсутствие ветвей — не порча данных и не переходное состояние, а вечный вход: так выглядит
+ * всякий тест, заведённый до PRD-61, всякий снимок публикации, сделанный до него (снимок
+ * морозит строку теста целиком и не мигрируется), и всякий SCORM-пакет, собранный раньше.
+ */
+export const introBlockSchema = introTextSchema.extend({
+  passed: introTextSchema.nullish(),
+  failed: introTextSchema.nullish(),
+});
+
+/**
+ * ТОЛКОВАНИЕ — текст, который объясняет результат темы или подтемы.
+ *
+ * Форма та же, что у вводного блока (`format` + `text`), и разметку из него строит тот же
+ * `richTextToHtml`: автор пишет все эти тексты в одном редакторе и вправе ожидать
+ * одинакового поведения. Вложений (курсы, материалы, мероприятия) у толкования НЕТ — они
+ * принадлежат рекомендации, а толкование не советует, а объясняет.
+ *
+ * Пустой текст = толкования нет: гейт стоит на тексте, а не на наличии записи, иначе автор,
+ * стерший текст, получил бы пустую строку вместо исчезнувшего блока.
+ */
+export const interpretationSchema = z.object({
+  format: feedbackFormatSchema.default("plain"),
+  text: z.string().default(""),
+});
+
+export type InterpretationText = z.infer<typeof interpretationSchema>;
+
+/**
+ * Толкования подтем ОДНОГО раздела: `axis` + карта «ключ подтемы -> текст».
+ *
+ * Форма повторяет {@link breakdownFeedbackSchema} намеренно: адресация подтемы (ключ как его
+ * написал автор, сопоставление через `tagKey`) — это уже решённый вопрос, и второй способ
+ * адресовать ту же сущность развёл бы тексты и рекомендации по разным ключам.
+ */
+export const breakdownInterpretationSchema = z.object({
+  axis: z.literal("tag"),
+  keys: z.record(z.string(), interpretationSchema),
 });
 
 /**
@@ -1079,8 +1496,43 @@ export const testIntroSchema = z.object({
   reportSameAsResults: z.boolean().optional(),
 });
 
+export type IntroText = z.infer<typeof introTextSchema>;
 export type IntroBlock = z.infer<typeof introBlockSchema>;
 export type TestIntro = z.infer<typeof testIntroSchema>;
+
+/**
+ * `tests.breakdown_display_json` (PRD-50 FR-13). `visibility` gates whether the
+ * key-breakdown rows (tag subtotals) print on the topic card at all; `hidden`
+ * (absent column) reproduces the byte-identical screen a test built before PRD-50
+ * has always shown. `basis` picks the NUMBER the bar carries, never the pass
+ * verdict's currency — the threshold is always evaluated in points.
+ */
+export const breakdownDisplaySchema = z.object({
+  visibility: z.enum(["hidden", "bar", "bar_and_value"]),
+  basis: z.enum(["units", "points"]),
+  /**
+   * PRD-50 FR-28/FR-44 (Э4): where the visible breakdown is printed — nested in the topic
+   * cards, as the test-scope summary block, or both. OPTIONAL on purpose: every setting
+   * saved before Э4 lacks it, and absence has to keep meaning exactly what those tests
+   * already print, i.e. `topics`.
+   */
+  placement: z.enum(["topics", "block", "both"]).optional(),
+  /**
+   * Печатать ли ТОЛКОВАНИЯ подтем (`test_sections.breakdown_interpretation_json`).
+   *
+   * Живёт здесь, рядом с остальными решениями «что показывает строка подтемы», а не у
+   * текстов: показ и содержание — разные вопросы, и автор ищет «показывать или нет» там,
+   * где уже стоят вид полосы, база и место печати.
+   *
+   * ОТСУТСТВИЕ = НЕ печатать. Референс сертификата толкований подтем не содержит, и ни один
+   * существующий тест не должен получить их молча — включение остаётся действием автора.
+   * Показ вложен в показ самих подытогов: при `visibility: "hidden"` строк подтем нет, и
+   * печатать толкование некуда.
+   */
+  showInterpretation: z.boolean().optional(),
+});
+
+export type BreakdownDisplaySetting = z.infer<typeof breakdownDisplaySchema>;
 
 /**
  * Вводный блок ОТЧЁТА с учётом переключателя «как на экране итогов».
@@ -1187,6 +1639,97 @@ export const rankingCorrectSchema = z.object({
   correctOrder: z.array(z.number()),
 });
 
+/**
+ * PRD-57 §6.1: the answer check of an open question, stored in `questions.correct_json`.
+ *
+ * The rules ARE the answer key of a short answer, which is why they live in the existing
+ * key column rather than in one of their own: snapshots, the SCORM bake, test transfer
+ * and the Excel workbook already carry that column.
+ *
+ * `match: "regex"` is accepted since Э7 — together with the time budget it could not ship
+ * without (FR-28q). Validation does NOT reject an expression that fails to compile: the
+ * editor measures and warns, but the decision stays with the author (FR-28p1), and a rule
+ * saved through the Excel workbook must not be silently dropped either.
+ *
+ * A RANGE has no operator: it is two rules and the set's join (FR-28aa3).
+ */
+export const answerRuleSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("text"),
+    match: z.enum(["wildcard", "regex"]),
+    value: z.string().min(1),
+    /** PRD-57 Э7: замер при сохранении назвал выражение долгим — пакет его не исполняет. */
+    slow: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal("number"),
+    op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte"]),
+    value: z.number().finite(),
+    tolerance: z
+      .object({ unit: z.enum(["abs", "pct"]), value: z.number().finite().nonnegative() })
+      .optional(),
+  }),
+]);
+
+export const answerRuleSetSchema = z
+  .object({
+    answerKind: z.enum(["text", "number"]),
+    join: z.enum(["any", "all"]),
+    rules: z.array(answerRuleSchema),
+    unit: z.string().max(16).optional(),
+  })
+  .refine(
+    (set) => set.rules.every((rule) => (set.answerKind === "number" ? rule.kind === "number" : rule.kind === "text")),
+    { message: "Вид ответа и правила должны совпадать: текст либо число", path: ["rules"] },
+  );
+
+export type AnswerRuleSetInput = z.infer<typeof answerRuleSetSchema>;
+
+/**
+ * PRD-57 FR-24: эталон задания «Пропуски» — набор правил НА КАЖДЫЙ пропуск.
+ *
+ * Хранится в том же `correct_json`, что и у остальных типов: снимок публикации, выпечка
+ * пакета, перенос теста и книга Excel уже возят эту колонку, и заводить вторую значило бы
+ * учить каждого из них новому месту.
+ *
+ * Пропуск БЕЗ правил схемой принимается: это не ошибка формы, а несделанная работа —
+ * строка списка помечена «Правил нет», и публикация такого задания не пройдёт (FR-24d).
+ * Повтор имени, наоборот, отвергается здесь: два поля с общим правилом делают сборку
+ * балла неоднозначной, а выигрыша не дают (FR-24a).
+ */
+export const blanksCorrectSchema = z.object({
+  blanks: z.array(
+    z
+      .object({
+        id: z.string().regex(/^[A-Za-z0-9_]+$/, "Имя пропуска — латиница, цифры и подчёркивание"),
+      })
+      .and(answerRuleSetSchema),
+  ),
+}).refine(
+  (value) => new Set(value.blanks.map((blank) => blank.id)).size === value.blanks.length,
+  { message: "Имена пропусков в одном задании не повторяются", path: ["blanks"] },
+);
+
+export type BlanksCorrectInput = z.infer<typeof blanksCorrectSchema>;
+
+/**
+ * PRD-57 FR-28v: the content of a short answer is its length limit and nothing else.
+ *
+ * The type has no options, so `data_json` carries just this setting. An ABSENT key means
+ * «the system ceiling» (`limits.shortAnswerMaxLength`): storing a copy of the ceiling in
+ * every question would freeze it at the moment the question was written, and the ceiling
+ * is exactly the number the WebTutor measurement (#51) is expected to move.
+ *
+ * The upper bound is NOT checked here: the ceiling belongs to an installation's
+ * configuration, while this schema is shared by all of them. Holding the author to the
+ * ceiling is the editor's job.
+ */
+export const shortAnswerDataSchema = z.object({
+  maxLength: z.number().int().positive().optional(),
+});
+
+export type ShortAnswerData = z.infer<typeof shortAnswerDataSchema>;
+
 export type SingleChoiceData = z.infer<typeof singleChoiceDataSchema>;
 export type MultipleChoiceData = z.infer<typeof multipleChoiceDataSchema>;
 export type MatchingData = z.infer<typeof matchingDataSchema>;
@@ -1217,6 +1760,14 @@ export const testVariantSchema = z.object({
      * package). Absent on legacy in-progress attempts — treat missing as null.
      */
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
+    /**
+     * PRD-4 v1.1 §4.7 — is the section OBLIGATORY? Carried beside the time budget
+     * and for the same reason: it is what the router's «all_required_*» completion
+     * policy counts, and the SCORM package bakes it into `TEST_DATA.sections[]`.
+     * Absent on attempts started before it shipped — treat missing as `true`, which
+     * is both the column's default and the behaviour those attempts already had.
+     */
+    required: z.boolean().optional(),
   })),
   /**
    * PRD-30 FR-19: the delivery stream as question ids, when it does NOT follow
@@ -1229,12 +1780,66 @@ export const testVariantSchema = z.object({
    * walks the sections in order, exactly as it always has.
    */
   deliveryOrder: z.array(z.string()).optional(),
+  /**
+   * PRD-66 FR-09b: отпечаток редакции КАЖДОГО выданного задания, карта `id -> отпечаток`.
+   *
+   * Снимается в момент ВЫДАЧИ, а не ответа, и это не техническая мелочь. Веб отдаёт
+   * содержание один раз — на старте, — и дальше участник отвечает на то, что уже у него на
+   * экране. Правка задания посреди чужого прохождения не меняет того, что участник видел:
+   * «текущая редакция в момент ответа» назвала бы редакцию, которой он не видел, и увела бы
+   * наблюдение в чужую серию. Редакция выдачи называет ровно ту, на которую отвечали.
+   *
+   * Значение `null` — «редакция сменилась по ходу прохождения»: такое наблюдение не
+   * принадлежит чисто ни одной редакции и идёт в серию «версия неизвестна» (FR-09c).
+   * Отсутствие всего поля — попытка, начатая до появления штампа, с тем же смыслом.
+   */
+  psychoHashes: z.record(z.string(), z.string().nullable()).optional(),
+  /**
+   * PRD-66 FR-37a: время, проведённое на каждом задании, в миллисекундах — карта
+   * `id -> сумма всех заходов`.
+   *
+   * СУММА, а не последний заход: при разрешённом возврате к неотвеченным человек уходит с
+   * задания и возвращается, и «последний заход» показал бы две секунды на том, над чем думали
+   * минуту. Считает тот же счётчик, что и в пакете (`shared/questions/question-time`), — два
+   * хоста, меряющие время по-разному, сделали бы источники несравнимыми.
+   *
+   * Живёт здесь, а не в карте ответов: та плоская, «задание -> значение ответа», её целиком
+   * присылает клиент, и читают её движок оценивания и аналитика. Отсутствие поля — попытка,
+   * пройденная до появления замера: у её ответов времени нет, и это «не измерялось», а не ноль.
+   */
+  latencyMs: z.record(z.string(), z.number().nonnegative()).optional(),
 });
 
 export type TestVariant = z.infer<typeof testVariantSchema>;
 
 export const attemptAnswerSchema = z.record(z.string(), z.unknown());
 export type AttemptAnswers = z.infer<typeof attemptAnswerSchema>;
+
+/**
+ * One PRD-50 breakdown record as it is STORED with an attempt — the mirror of
+ * `shared/breakdown/types`'s `BreakdownEntry`. Declared once because three places keep
+ * the very same record (a topic's own scope, the test scope, an adaptive topic's scope),
+ * and three hand-written copies would drift the moment the record gains a field.
+ */
+export const breakdownEntrySchema = z.object({
+  scope: z.string(),
+  axis: z.string(),
+  key: z.string(),
+  items: z.number(),
+  answered: z.number(),
+  earned: z.number(),
+  possible: z.number(),
+  unitEarned: z.number(),
+  unitPossible: z.number(),
+  percentPoints: z.number(),
+  percentUnits: z.number(),
+  // PRD-50 Э2: the key's own verdict, stamped by `applyBreakdownGate` when the section
+  // declares a threshold for it. `null` = the key is ungated or was not delivered at all
+  // (`items = 0`); absent = written before thresholds existed. Declared here and not only
+  // on the TS type because zod STRIPS undeclared keys: without this line the verdict would
+  // be computed, stored into the object, and silently dropped on the way through the schema.
+  passed: z.boolean().nullable().optional(),
+});
 
 export const topicResultSchema = z.object({
   topicId: z.string(),
@@ -1266,6 +1871,20 @@ export const topicResultSchema = z.object({
   // recommendations block de-duplicates on. `.default([])` keeps attempts graded before
   // this work valid.
   feedbackTexts: z.array(z.string()).default([]),
+  // PRD-50: breakdown records of THIS section's scope, stored WITH the attempt like the
+  // recommendations above — the results screen renders from the saved result, and
+  // recomputing from live content would hand a past attempt today's tags.
+  // `.default([])` keeps attempts graded before PRD-50 valid.
+  breakdown: z.array(breakdownEntrySchema).default([]),
+  // PRD-50 FR-11: the group (`test_sections.group_key`) this section was DELIVERED in.
+  // Stored WITH the attempt for the same reason as everything above it: the results
+  // screen renders from the saved result, so an attempt keeps the membership it was
+  // graded under even if the author regroups the test afterwards.
+  //
+  // `.optional()` and NOT `.default(null)`: a section outside every group must add no
+  // key at all, so the result JSON of a test that never used groups stays byte-identical
+  // to what it has always been (FR-27).
+  groupKey: z.string().optional(),
 });
 
 export const attemptResultSchema = z.object({
@@ -1276,12 +1895,47 @@ export const attemptResultSchema = z.object({
   totalPossiblePoints: z.number(),
   overallPassed: z.boolean(),
   topicResults: z.array(topicResultSchema),
+  // PRD-50 FR-39: records of the TEST scope. Section-scope records live on their own
+  // topics and are NOT duplicated here — one record, one place. `optional()`, not
+  // `.default([])`: an absent field means "attempt finished before this work", and
+  // analytics needs to tell that apart from "test has no tags" to know whether it can
+  // trust an empty list.
+  breakdowns: z.array(breakdownEntrySchema).optional(),
   // PRD-12 (web parity): graded namespaces computed via @shared engines, present
   // only when the test defines scales (PRD-5) / result variables (PRD-2). Absence
   // keeps the legacy result shape and old stored results valid (back-compat).
   scaleResults: z.record(z.string(), z.unknown()).optional(),
   resultVariables: z.record(z.string(), z.unknown()).optional(),
   status: z.object({ success: z.boolean().optional(), completion: z.boolean().optional() }).optional(),
+  /**
+   * PRD-57 (#43): исход КАЖДОГО ответа этой попытки.
+   *
+   * `optional()`, а не `.default([])`, по той же причине, что и у разрезов выше:
+   * отсутствие поля означает «попытка завершена до этой работы», и аналитика обязана
+   * отличать это от «вопросов не было» — в первом случае она считает исход на месте, во
+   * втором считать нечего.
+   */
+  questionOutcomes: z
+    .array(
+      z.object({
+        questionId: z.string(),
+        // PRD-57 FR-35: четвёртое состояние — «ждёт проверки». Оно ОБЯЗАНО быть здесь,
+        // а не только в агрегате: `attemptResultSchema` — второй контракт результата, и
+        // поле, не объявленное в нём, срезается на записи без единой ошибки.
+        result: z.enum(["correct", "incorrect", "neutral", "pending"]),
+        earned: z.number(),
+        possible: z.number(),
+      }),
+    )
+    .optional(),
+  /**
+   * PRD-57 FR-36: оценка завершена — или результат предварительный.
+   *
+   * `optional()`: у попытки, завершённой до этой работы, признака нет, и читатель обязан
+   * отличать это от «оценка не завершена». Отсутствие означает «вопрос не задавался»,
+   * а не «предварительно».
+   */
+  gradingComplete: z.boolean().optional(),
 });
 
 export type TopicResult = z.infer<typeof topicResultSchema>;
@@ -1359,6 +2013,10 @@ export const adaptiveTopicResultSchema = z.object({
   // carry nothing.
   recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
   feedbackTexts: z.array(z.string()).default([]),
+  // PRD-50 FR-17/FR-39: записи разреза области ЭТОЙ темы, по той же причине и по той же
+  // схеме, что у стандартного результата. `.default([])` держит валидными адаптивные
+  // попытки, завершённые до этой работы.
+  breakdown: z.array(breakdownEntrySchema).default([]),
 });
 
 export const adaptiveAttemptResultSchema = z.object({
@@ -1377,6 +2035,9 @@ export const adaptiveAttemptResultSchema = z.object({
   // verdict — that one is pronounced by the confirmed levels (see `buildAdaptiveResult`).
   scaleResults: z.record(z.string(), z.unknown()).optional(),
   resultVariables: z.record(z.string(), z.unknown()).optional(),
+  // PRD-50 FR-39: записи области ТЕСТА. Как и у стандартного результата — `optional()`,
+  // и секционные здесь не дублируются: они лежат на своих темах.
+  breakdowns: z.array(breakdownEntrySchema).optional(),
 });
 
 export type AdaptiveTopicResult = z.infer<typeof adaptiveTopicResultSchema>;
@@ -1420,7 +2081,7 @@ export type AdaptiveAnswerResponse = z.infer<typeof adaptiveAnswerResponseSchema
 export const detailedAnswerSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long", "simulation"]),
   topicId: z.string(),
   topicName: z.string(),
   userAnswer: z.unknown(),
@@ -1492,7 +2153,7 @@ export type AdaptiveLevelStats = z.infer<typeof adaptiveLevelStatsSchema>;
 export const questionStatsSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long", "simulation"]),
   topicId: z.string(),
   topicName: z.string(),
   difficulty: z.number(),
@@ -1508,7 +2169,7 @@ export type QuestionStats = z.infer<typeof questionStatsSchema>;
 export const testAnalyticsSchema = z.object({
   testId: z.string(),
   testTitle: z.string(),
-  testMode: z.enum(["standard", "adaptive"]),
+  testMode: z.enum(["standard", "adaptive", "scenario"]),
   
   // Общая статистика
   summary: z.object({
@@ -1583,7 +2244,7 @@ export const attemptDetailSchema = z.object({
   username: z.string(),
   testId: z.string(),
   testTitle: z.string(),
-  testMode: z.enum(["standard", "adaptive"]),
+  testMode: z.enum(["standard", "adaptive", "scenario"]),
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   duration: z.number().nullable(),
@@ -1617,11 +2278,196 @@ export type AttemptDetail = z.infer<typeof attemptDetailSchema>;
 // Добавить в конец schema.ts
 // ============================================
 
+/**
+ * PRD-54: одна строка на загруженную выгрузку отчёта LMS.
+ *
+ * Хранит ровно столько, сколько нужно для аудита и отката: сам файл на диск не кладётся, от него
+ * остаются имя и sha-256 содержимого. По хешу импорт отвечает «этот файл уже грузили», по
+ * `batch_id` в `scorm_attempts` партия откатывается целиком.
+ */
+export const lmsImportBatches = pgTable("lms_import_batches", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  groupId: varchar("group_id", { length: 36 }),
+  fileName: text("file_name").notNull(),
+  fileHash: text("file_hash").notNull(),
+  anonymized: boolean("anonymized").notNull(),
+  sourceAnonymized: boolean("source_anonymized").notNull(),
+  linkUsers: boolean("link_users").notNull(),
+  importedBy: varchar("imported_by", { length: 36 }).notNull(),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+  rowsTotal: integer("rows_total").notNull().default(0),
+  rowsCreated: integer("rows_created").notNull().default(0),
+  rowsUpdated: integer("rows_updated").notNull().default(0),
+  rowsSkipped: integer("rows_skipped").notNull().default(0),
+  rowsLinked: integer("rows_linked").notNull().default(0),
+  /**
+   * PRD-66 FR-11: how many interactions of the file were NOT matched to a question of
+   * the test. A counter and not a warning line: the share of losses is what decides
+   * whether the batch is worth keeping, and a reader has to see it as a number beside
+   * the batch, not dig it out of the log. (The PRD-66 FR-12 «counted» switch is gone,
+   * migration 0046: a doubtful batch is rolled back, not hidden from the figures.)
+   */
+  rowsUnmatched: integer("rows_unmatched").notNull().default(0),
+  warningsJson: jsonb("warnings_json"),
+}, (table) => ({
+  // Партии перечисляются по тесту, новые первыми.
+  testIdIdx: index("lms_import_batches_test_id_idx").on(table.testId),
+}));
+
+/**
+ * PRD-54 BR-54-43: что партия импорта сделала с учётными записями — завела ли запись и добавила ли
+ * её в группу партии.
+ *
+ * Без этого откат не отличил бы участника, которого завела эта загрузка, от того, кто был в системе
+ * раньше, и членство, поставленное импортом, от поставленного руками. Строка одна на пару
+ * (партия, пользователь); удаляется вместе с партией.
+ */
+export const lmsImportBatchUsers = pgTable("lms_import_batch_users", {
+  batchId: varchar("batch_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  /** Запись заведена этой партией. */
+  createdUser: boolean("created_user").notNull().default(false),
+  /** Членство в группе партии поставлено этой партией (до неё участник в группе не был). */
+  addedToGroup: boolean("added_to_group").notNull().default(false),
+}, (table) => ({
+  pk: uniqueIndex("lms_import_batch_users_pk").on(table.batchId, table.userId),
+  userIdx: index("lms_import_batch_users_user_idx").on(table.userId),
+}));
+
+/**
+ * PRD-56 FR-07b: СРЕЗ — сохранённый набор условий отбора прохождений.
+ *
+ * Хранит УСЛОВИЯ, а не список прохождений (FR-07d): срез пересчитывается при каждом открытии,
+ * и группа, выросшая на трёх человек, назавтра показывает четверых, а не вчерашнюю тройку.
+ * Принять срез за снимок состава — самая дорогая ошибка чтения, поэтому это сказано и в
+ * интерфейсе, и здесь.
+ *
+ * Сущность ОДНА с сохранёнными наборами условий `FilterBar`: двух языков отбора в продукте
+ * не заводится. Условия описаны тем же словарём, что фильтр реестра.
+ */
+export const analyticsSlices = pgTable("analytics_slices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Имя, под которым срез виден в списке и в заголовке колонки сравнения. */
+  name: text("name").notNull(),
+  /**
+   * Роль записи: сохранённый ФИЛЬТР реестра или СРЕЗ аналитики (решение владельца 2026-09-25).
+   *
+   * Условия у них одного языка, но вопросы разные. Фильтр отвечает «покажи эти прохождения»
+   * и может охватывать РАЗНЫЕ тесты. Срез отвечает «вот выборка одного теста, считай по ней»
+   * — у него тест ровно один, иначе средние и пороги теряют смысл (FR-07e). Раньше это была
+   * одна сущность (FR-07b), и рабочий фильтр из реестра попадал в список сравнения.
+   */
+  kind: text("kind").notNull().default("slice"),
+  /**
+   * Тест. У среза заполнен ВСЕГДА и ровно один — это его определение (ограничение
+   * `analytics_slices_slice_has_test`). У сохранённого фильтра NULL: тесты (сколько угодно)
+   * живут в условиях отбора.
+   */
+  testId: varchar("test_id", { length: 36 }),
+  /**
+   * Условия отбора: `{ testIds, groupIds, sources, outcomes, from, to }` — тот же словарь,
+   * что у фильтра реестра. Жёсткой схемы у колонки нет намеренно: словарь условий будет
+   * расти (оси разбиения FR-06a), а миграция ради нового необязательного условия — цена,
+   * которую платить не за что.
+   */
+  conditionsJson: jsonb("conditions_json").$type<Record<string, unknown>>().notNull().default({}),
+  createdBy: varchar("created_by", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Срезы перечисляются своим владельцем, новые первыми.
+  ownerIdx: index("analytics_slices_owner_idx").on(table.createdBy),
+  // Э3 (решение владельца 2026-10-03): срез без теста существовать не может — его нельзя ни
+  // посчитать, ни открыть. Правило держит сама база, а не только ручка сохранения.
+  sliceHasTest: check("analytics_slices_slice_has_test", sql`${table.kind} <> 'slice' OR ${table.testId} IS NOT NULL`),
+  // Имя среза уникально у владельца В ПРЕДЕЛАХ ТЕСТА: срезы живут на уровне теста, и «Отдел
+  // продаж» в двух тестах — два разных среза, в списке каждого теста он один.
+  sliceNameUq: uniqueIndex("analytics_slices_owner_test_name_uq")
+    .on(table.createdBy, table.testId, table.name)
+    .where(sql`${table.kind} = 'slice'`),
+  // Имя фильтра — у владельца вообще: фильтр общего уровня, и два одноимённых неразличимы.
+  filterNameUq: uniqueIndex("analytics_slices_owner_filter_name_uq")
+    .on(table.createdBy, table.name)
+    .where(sql`${table.kind} = 'filter'`),
+}));
+
+export type AnalyticsSlice = typeof analyticsSlices.$inferSelect;
+export type InsertAnalyticsSlice = typeof analyticsSlices.$inferInsert;
+
+/**
+ * Экраны со своими сохранёнными фильтрами (решение владельца 2026-10-05: сохранение — везде,
+ * где есть фильтр). Аналитика сюда не входит: её фильтры живут в `analytics_slices` рядом со
+ * срезами, у них общий словарь условий.
+ */
+export const SAVED_FILTER_SCOPES = ["content", "tests", "users"] as const;
+export type SavedFilterScope = (typeof SAVED_FILTER_SCOPES)[number];
+
+/**
+ * Сохранённые фильтры списков — «Темы и вопросы», «Тесты», «Пользователи».
+ *
+ * Набор личный: его видит и применяет только тот, кто сохранил. Условия хранятся как есть,
+ * в словаре своего экрана: жёсткой схемы у колонки нет, экран сам приводит прочитанное к
+ * своему фильтру и отбрасывает незнакомое — новое условие не требует миграции.
+ */
+export const savedListFilters = pgTable("saved_list_filters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Экран, которому принадлежит набор: `content`, `tests`, `users`. */
+  scope: text("scope").notNull(),
+  name: text("name").notNull(),
+  conditionsJson: jsonb("conditions_json").$type<Record<string, unknown>>().notNull().default({}),
+  createdBy: varchar("created_by", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Список экрана у владельца — единственный способ чтения.
+  ownerScopeIdx: index("saved_list_filters_owner_scope_idx").on(table.createdBy, table.scope),
+  // Два одноимённых набора одного экрана в меню неразличимы.
+  ownerScopeNameUq: uniqueIndex("saved_list_filters_owner_scope_name_uq").on(table.createdBy, table.scope, table.name),
+  scopeKnown: check("saved_list_filters_scope_known", sql`${table.scope} IN ('content', 'tests', 'users')`),
+}));
+
+export type SavedListFilter = typeof savedListFilters.$inferSelect;
+export type InsertSavedListFilter = typeof savedListFilters.$inferInsert;
+
+/**
+ * PRD-55 (FR-05, FR-06): материализованный счётчик выдач задания.
+ *
+ * Корзина — КАЛЕНДАРНЫЙ МЕСЯЦ: скользящее окно тогда считается суммой последних N корзин, а
+ * выпавшие из окна строки удаляются уборкой, без пересчёта чего-либо. Разбивка по тесту нужна
+ * отчёту автору («доля попыток ЭТОГО теста»); взвешивание выдачи берёт СУММУ по всем тестам —
+ * утечка не разбирает, из какого теста участник увидел вопрос.
+ *
+ * Таблица — агрегат, а не журнал: она восстановима пересчётом из состава веб-попыток, строк
+ * телеметрии и выданного состава импортированных прохождений (`npm run exposure:rebuild`),
+ * поэтому её потеря не теряет фактов.
+ *
+ * `source` разделяет ДВА способа пополнения (FR-07, FR-08). `live` — веб и телеметрия, инкрементом
+ * в момент выдачи. `import` — выгрузки LMS, ПЕРЕСЧЁТОМ среза теста: повторная загрузка того же
+ * файла идемпотентна и строк не создаёт, а инкремент удвоил бы счётчик; откат партии вычитает её
+ * вклад тем же пересчётом. Читатели суммируют корзины, и источник для них прозрачен.
+ */
+export const questionExposure = pgTable("question_exposure", {
+  questionId: varchar("question_id", { length: 36 }).notNull(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  bucketMonth: date("bucket_month").notNull(),
+  source: text("source", { enum: ["live", "import"] }).notNull().default("live"),
+  deliveredCount: integer("delivered_count").notNull().default(0),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.questionId, table.testId, table.bucketMonth, table.source] }),
+  // Чтение идёт «по списку заданий за окно» — тест в отборе не участвует.
+  questionBucketIdx: index("question_exposure_question_bucket_idx").on(table.questionId, table.bucketMonth),
+}));
+
+export type QuestionExposure = typeof questionExposure.$inferSelect;
+export type InsertQuestionExposure = typeof questionExposure.$inferInsert;
+
 export const scormPackages = pgTable("scorm_packages", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  testId: varchar("test_id", { length: 36 }), // nullable - тест может быть удалён
+  // Без FK, nullable исторически. Пакет удаляется вместе с тестом (PRD-15 FR-07a, `purgeTestLmsData`).
+  testId: varchar("test_id", { length: 36 }),
   testTitle: text("test_title").notNull(),
-  testMode: text("test_mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
+  testMode: text("test_mode", { enum: ["standard", "adaptive", "scenario"] }).notNull().default("standard"),
   secretKey: text("secret_key").notNull(),
   apiBaseUrl: text("api_base_url").notNull(),
   exportedAt: timestamp("exported_at").notNull(),
@@ -1634,18 +2480,94 @@ export const scormPackages = pgTable("scorm_packages", {
 
 export const scormAttempts = pgTable("scorm_attempts", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  packageId: varchar("package_id", { length: 36 }).notNull(),
-  sessionId: varchar("session_id", { length: 64 }).notNull(),
-  
+  // PRD-54: у импортированного прохождения нет ни пакета, ни сессии — оно приехало книгой, а не
+  // рантаймом. Для телеметрии оба поля по-прежнему обязательны по смыслу, что и стережёт
+  // частичный уникальный индекс ниже.
+  packageId: varchar("package_id", { length: 36 }),
+  sessionId: varchar("session_id", { length: 64 }),
+
   // НОВОЕ: Номер попытки внутри сессии (1, 2, 3...)
   attemptNumber: integer("attempt_number").notNull().default(1),
-  
+
+  // ─── PRD-54: второй источник прохождений ──────────────────────────────────
+  /**
+   * Тест прохождения. Backfill из `scorm_packages.test_id`; остаётся необязательным, потому что у
+   * части старых пакетов тест уже удалён. Дальше именно эта колонка отвечает на вопрос «к какому
+   * тесту относится прохождение», и аналитике больше не нужен join через пакет.
+   */
+  testId: varchar("test_id", { length: 36 }),
+  /** Откуда строка: живой рантаймом или загруженной выгрузкой. */
+  origin: text("origin", { enum: ["telemetry", "import"] }).notNull().default("telemetry"),
+  /** Партия импорта — по ней прохождение откатывается вместе со всей загрузкой. */
+  batchId: varchar("batch_id", { length: 36 }),
+  /** Метка группы для разрезов в аналитике. NULL = без группы. */
+  groupId: varchar("group_id", { length: 36 }),
+  /**
+   * Псевдоним участника. У импорта заполнен ВСЕГДА, в любом режиме обезличивания: на нём держатся
+   * ключ идемпотентности и подсчёт уникальных участников. Параметр обезличивания решает не то,
+   * есть ли псевдоним, а то, хранятся ли рядом человекочитаемые поля.
+   */
+  participantKey: text("participant_key"),
+  /**
+   * Различитель попыток одного участника за одну дату (PRD-54 раздел 8.1, BR-54-34 - BR-54-37).
+   *
+   * Дата активации модуля приходит из выгрузки без времени, и без различителя две попытки одного
+   * дня склеивались в одну запись. `r:<метка>` — метка регистрации SCO из блока `meta_registration`,
+   * `c:<отпечаток>:<n>` — отпечаток содержимого строки и её номер среди одинаковых, у пакетов без
+   * метки. NULL — строка загружена до 2026-10-06; она перенимает ключ при повторной загрузке файла.
+   * У телеметрии не заполняется.
+   */
+  attemptKey: text("attempt_key"),
+  /** Связь с пользователем по внешнему ключу (PRD-54 раздел 8.5). Телеметрия её не заполняет. */
+  userId: varchar("user_id", { length: 36 }),
+  /** Значения шкал прохождения. Формат один на оба источника. */
+  scalesJson: jsonb("scales_json"),
+  /** Значения показателей прохождения. */
+  variablesJson: jsonb("variables_json"),
+  /**
+   * PRD-56 FR-19a: версия публикации, по которой шло прохождение — та же величина, что
+   * `attempts.snapshot_id` у веб-попытки.
+   *
+   * NULL означает «версия не сообщена», а НЕ «текущая»: пакеты, собранные до этой работы, её
+   * не знают, а снимка с сообщённым номером может уже не быть. Такие прохождения идут в
+   * разрезе отдельной строкой — приписать их текущей версии значит сделать разрез слепым
+   * ровно там, где он и нужен.
+   */
+  snapshotId: varchar("snapshot_id", { length: 36 }),
+  /**
+   * PRD-56 FR-18: выданные варианты (PRD-17) картой «тема -> вариант».
+   *
+   * Карта, а не строка: вариант — свойство РАЗДЕЛА, и у теста с двумя наборами форм
+   * прохождению принадлежат два варианта. Та же форма, что у веб-попытки, где пин лежит в
+   * `variant_json.sections[].formId`. NULL = вариантов не было или пакет их не сообщает.
+   */
+  formsJson: jsonb("forms_json").$type<Record<string, string>>(),
+  /**
+   * PRD-55 FR-08/FR-09: выданный состав ИМПОРТИРОВАННОГО прохождения — задания, блок которых в
+   * выгрузке непуст хотя бы в одной подколонке (PRD-66 FR-10a). Ответы для этого не годятся:
+   * выданное, но не отвеченное оцениваемое задание наблюдением не становится и в `scorm_answers`
+   * не попадает, а показано оно было. Из этого поля экспозиция импорта и пересчитывается.
+   * NULL — строка загружена до появления поля: её выдачи не известны и не считаются.
+   */
+  deliveredQuestionIds: jsonb("delivered_question_ids").$type<string[]>(),
+
   // Данные из LMS
   lmsUserId: text("lms_user_id"),
   lmsUserName: text("lms_user_name"),
   lmsUserEmail: text("lms_user_email"),
   lmsUserOrg: text("lms_user_org"),
-  
+  /**
+   * Подразделение и должность участника из выгрузки (решение владельца 2026-09-25).
+   *
+   * Они входят в псевдоним, и потому их приходится хранить рядом: должность и отдел человека
+   * МЕНЯЮТСЯ, а значит после перевода он получит другой ключ и разъедется на двух участников.
+   * Пока поля лежат при прохождении, такой разъезд ВИДЕН — два ключа с одним именем и разными
+   * отделами читаются как перевод либо как тёзки, и решает это человек. Без них разъезд был бы
+   * молчаливым.
+   */
+  lmsUserUnit: text("lms_user_unit"),
+  lmsUserPosition: text("lms_user_position"),
+
   // Временные метки
   startedAt: timestamp("started_at").notNull(),
   finishedAt: timestamp("finished_at"),
@@ -1665,9 +2587,19 @@ export const scormAttempts = pgTable("scorm_attempts", {
   // Рекомендованные курсы для проваленных тем
   failedTopicCoursesJson: jsonb("failed_topic_courses_json"),
 }, (table) => ({
-  // Уникальный индекс: одна комбинация package+session+attemptNumber
+  // Уникальный индекс: одна комбинация package+session+attemptNumber.
+  // PRD-54: стал ЧАСТИЧНЫМ — импортированные строки пакета не имеют, и без условия они все
+  // конфликтовали бы между собой по (NULL, NULL, 1). Для телеметрии поведение не изменилось.
   sessionAttemptIdx: uniqueIndex("scorm_attempts_session_attempt_idx")
-    .on(table.packageId, table.sessionId, table.attemptNumber),
+    .on(table.packageId, table.sessionId, table.attemptNumber)
+    .where(sql`${table.packageId} IS NOT NULL`),
+  // PRD-54 раздел 8.1: ключ идемпотентности импорта. Разрешать конфликт должна БАЗА, а не проверка
+  // «сначала выбрать, потом вставить»: две параллельные загрузки одного файла иначе задвоили бы строки.
+  // С 2026-10-06 в ключе и различитель попытки: без него попытки одного дня склеивались.
+  importRowIdx: uniqueIndex("scorm_attempts_import_row_idx")
+    .on(table.testId, table.participantKey, table.startedAt, table.attemptKey)
+    .where(sql`${table.origin} = 'import'`),
+  testIdIdx: index("scorm_attempts_test_id_idx").on(table.testId),
 }));
 
 export const scormAnswers = pgTable("scorm_answers", {
@@ -1677,18 +2609,32 @@ export const scormAnswers = pgTable("scorm_answers", {
   // Данные вопроса
   questionId: varchar("question_id", { length: 36 }).notNull(),
   questionPrompt: text("question_prompt").notNull(),
-  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation"] }).notNull(),
+  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long", "simulation"] }).notNull(),
   topicId: varchar("topic_id", { length: 36 }),
   topicName: text("topic_name"),
   difficulty: integer("difficulty"),
   
   // Ответ
   userAnswerJson: jsonb("user_answer_json").notNull(),
-  correctAnswerJson: jsonb("correct_answer_json").notNull(),
-  isCorrect: boolean("is_correct").notNull(),
-  points: integer("points").notNull(),
-  maxPoints: integer("max_points").notNull(),
-  
+  /**
+   * PRD-54: необязательный — у измерительного вопроса эталона НЕТ вовсе.
+   */
+  correctAnswerJson: jsonb("correct_answer_json"),
+  /**
+   * Исход ответа в трёх состояниях (PRD-54 раздел 5.3).
+   *
+   * Булева `isCorrect` ниже описывала измерительный ответ как «неверный», хотя он не может быть ни
+   * верным, ни неверным: у него нет эталона (PRD-26 FR-08, PRD-44 FR-09). `neutral` — то самое
+   * третье состояние, которое SCORM 2004 знает, а наша модель до сих пор не знала.
+   */
+  result: text("result", { enum: ["correct", "incorrect", "neutral"] }).notNull().default("incorrect"),
+  /** PRD-54: необязательная. NULL = «оценивать нечего». Оставлена ради прежних читателей. */
+  isCorrect: boolean("is_correct"),
+  /** PRD-54: необязательные по той же причине, что и `correctAnswerJson`. */
+  points: integer("points"),
+  maxPoints: integer("max_points"),
+
+
   // Варианты ответов для отображения в аналитике
   optionsJson: jsonb("options_json"),           // для single/multiple
   leftItemsJson: jsonb("left_items_json"),      // для matching
@@ -1698,7 +2644,18 @@ export const scormAnswers = pgTable("scorm_answers", {
   // Для адаптивных
   levelIndex: integer("level_index"),
   levelName: text("level_name"),
-  
+
+  /**
+   * Время на задании в миллисекундах; `NULL` — не измерялось.
+   *
+   * Сумма ВСЕХ заходов на вопрос, а не последнего: при разрешённом возврате к неотвеченным
+   * человек возвращается, и последний заход показал бы две секунды на задании, над которым
+   * думали минуту. Живая телеметрия шлёт миллисекунды, импорт выгрузки LMS переводит в них
+   * целые секунды колонки «Продолжительность (сек.)». `NULL` держат оба источника до этой
+   * правки, и это честнее нуля: ноль означал бы «ответил мгновенно».
+   */
+  latencyMs: integer("latency_ms"),
+
   answeredAt: timestamp("answered_at").notNull(),
 }, (table) => ({
   // Answers are always read for a given attempt.
@@ -1770,6 +2727,14 @@ export const contentPages = pgTable("content_pages", {
   settingsJson: jsonb("settings_json").notNull().default({}),
   autoAdvance: boolean("auto_advance").notNull().default(false),
   autoAdvanceDelayMs: integer("auto_advance_delay_ms"),
+  /** Экран есть в тесте, но ученику не выдаётся (решение владельца 2026-09-20).
+   *  Скрыть можно любую карточку полотна, КРОМЕ блока вопросов и маршрутизатора:
+   *  первый — сам тест, второй — способ навигации, без него сценарий перестаёт быть
+   *  маршрутизаторным. Скрытие обратимо и, в отличие от удаления, сохраняет тексты и
+   *  оформление страницы. Экран «Итоги раздела» хранит своё состояние не здесь, а в
+   *  `tests.show_section_results` — та настройка появилась раньше (PRD-19 FR-05a), и
+   *  второй источник правды для одного экрана заводить нельзя. */
+  hidden: boolean("hidden").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -1782,12 +2747,140 @@ export const contentPages = pgTable("content_pages", {
   topicIdIdx: index("content_pages_topic_id_idx").on(table.topicId),
 }));
 
+/**
+ * PRD-51 §4: ДОКУМЕНТ ОТЧЁТА одного теста — упорядоченный список блоков.
+ *
+ * Своя таблица, а не зона в {@link contentPages}, хотя форма совпадает почти дословно.
+ * Страница отчёта НЕ участвует в выдаче, а каждый потребитель `content_pages` (сборка
+ * выдачи, последовательности страниц, гард целостности, книга Excel, снимок публикации)
+ * обходит таблицу целиком: один пропущенный фильтр означал бы страницу отчёта посреди
+ * прохождения теста — отказ, который увидит ученик. Отдельная таблица делает эту ошибку
+ * невозможной, а не маловероятной.
+ *
+ * Пустой набор строк = документ по умолчанию, объявленный шаблоном (`reportDocument`).
+ * Строки материализуются при первой правке документа — так же, как страницы теста.
+ */
+export const reportBlocks = pgTable("report_blocks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 })
+    .notNull()
+    .references(() => tests.id, { onDelete: "cascade" }),
+  /**
+   * Документ на РЕЖИМ теста: обе ветви живут одновременно, как в `report_settings_json`,
+   * чтобы смена режима не стирала уже собранный документ другого.
+   */
+  mode: text("mode", { enum: ["standard", "adaptive"] }).notNull(),
+  /**
+   * Ключ блока (`shared/report/report-blocks`). ТЕКСТ, а не enum: реестр принадлежит коду,
+   * и расширять CHECK-констрейнт при каждом новом блоке пришлось бы миграцией. Ключ,
+   * которого текущий шаблон не знает, разрешение документа пропускает, но строку не
+   * удаляет — смена шаблона обратима.
+   */
+  block: text("block").notNull(),
+  /** Выбранный вариант шаблона; NULL = вариант с `isDefault` этого блока. */
+  templateKey: text("template_key"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  /** Системный блок гасится этим признаком и ОСТАЁТСЯ в списке (PRD-51 §3.1). */
+  enabled: boolean("enabled").notNull().default(true),
+  /**
+   * Содержимое: значения `placeholders[]` варианта.
+   *
+   * Тип объявлен здесь, а не приводится на каждой стороне: колонка ВСЕГДА хранит карту
+   * «ключ поля → значение», и десяток приведений `as Record<...>` по коду — это десяток
+   * мест, где однажды приведут к другому.
+   */
+  valuesJson: jsonb("values_json").$type<Record<string, unknown>>().notNull().default({}),
+  /** Свойства: значения `settings[]` варианта. */
+  settingsJson: jsonb("settings_json").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Документ читается целиком, одним запросом по (тест, режим), в порядке печати.
+  testModeSortIdx: index("report_blocks_test_mode_sort_idx")
+    .on(table.testId, table.mode, table.sortOrder),
+}));
+
+/** Строка документа отчёта, как её отдаёт база. */
+export type ReportBlockRow = typeof reportBlocks.$inferSelect;
+
+/** Строка документа отчёта на запись. */
+export type InsertReportBlockRow = typeof reportBlocks.$inferInsert;
+
+// ─── PRD-52: комментарии рецензирования ──────────────────────────────────────
+
+/**
+ * Комментарий рецензента к тесту (PRD-52 раздел 6).
+ *
+ * Ветка — один уровень: у ответа заполнен `parentId`, ответа на ответ нет, и исход
+ * (`status`) живёт ТОЛЬКО у корня ветки. Такая форма выбрана осознанно: обсуждение
+ * замечания редко ветвится глубже, а плоский ответ позволяет читать историю приёмки
+ * подряд, не собирая дерево.
+ *
+ * Якорь — СУЩНОСТЬ (вопрос, страница, тема, экран), а не позиция в прогоне: выборка
+ * вопросов меняется от прогона к прогону, и позиционный якорь обесценился бы на
+ * следующем же запуске. Рядом с якорем хранится `contextLabel` — снимок контекста
+ * строкой, чтобы комментарий оставался читаемым после удаления объекта, и
+ * `pinnedContentHash` — хеш содержимого на момент комментария, по которому автору
+ * показывают «изменено после комментария» (тот же приём, что в
+ * `test_question_scoring.pinned_content_hash`).
+ */
+export const testReviewComments = pgTable("test_review_comments", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 })
+    .notNull()
+    .references(() => tests.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id", { length: 36 }).notNull(),
+  /** NULL = корень ветки; заполнен = ответ в этой ветке (ровно один уровень). */
+  parentId: varchar("parent_id", { length: 36 }),
+  body: text("body").notNull(),
+  anchorKind: text("anchor_kind", {
+    enum: ["question", "content-page", "topic", "start", "results", "test"],
+  }).notNull(),
+  questionId: varchar("question_id", { length: 36 }),
+  topicId: varchar("topic_id", { length: 36 }),
+  contentPageId: uuid("content_page_id"),
+  /** Снимок контекста строкой: «Раздел «IPTV» · Вопрос 3 «…»». */
+  contextLabel: text("context_label"),
+  /** Хеш содержимого якоря на момент комментария; NULL для экранов и теста в целом. */
+  pinnedContentHash: text("pinned_content_hash"),
+  /** Исход. NULL у ответов: статус несёт только корень ветки. */
+  status: text("status", { enum: ["open", "accepted", "rejected"] }),
+  resolvedBy: varchar("resolved_by", { length: 36 }),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Лента теста читается целиком, в порядке появления.
+  testIdx: index("test_review_comments_test_idx").on(table.testId, table.createdAt),
+  // Комментарии к одному вопросу — для панели в карточке вопроса и счётчиков.
+  testQuestionIdx: index("test_review_comments_test_question_idx").on(table.testId, table.questionId),
+  // Сбор ответов ветки.
+  parentIdx: index("test_review_comments_parent_idx").on(table.parentId),
+}));
+
+/** Комментарий рецензирования, как его отдаёт база. */
+export type TestReviewComment = typeof testReviewComments.$inferSelect;
+
+/** Комментарий рецензирования на запись. */
+export type InsertTestReviewComment = typeof testReviewComments.$inferInsert;
+
+/** Вид якоря комментария — общий словарь для клиента и сервера. */
+export type ReviewAnchorKind = TestReviewComment["anchorKind"];
+
+/** Исход комментария: открыт, учтён, отклонён. */
+export type ReviewCommentStatus = NonNullable<TestReviewComment["status"]>;
+
 // Insert schemas
 export const insertScormPackageSchema = createInsertSchema(scormPackages).omit({ id: true });
 export const insertScormAttemptSchema = createInsertSchema(scormAttempts).omit({ id: true });
 export const insertScormAnswerSchema = createInsertSchema(scormAnswers).omit({ id: true });
+// PRD-54: партия импорта выгрузки отчёта LMS.
+export const insertLmsImportBatchSchema = createInsertSchema(lmsImportBatches).omit({ id: true });
 
 // Types
+export type InsertLmsImportBatch = z.infer<typeof insertLmsImportBatchSchema>;
+export type LmsImportBatch = typeof lmsImportBatches.$inferSelect;
+
 export type InsertScormPackage = z.infer<typeof insertScormPackageSchema>;
 export type ScormPackage = typeof scormPackages.$inferSelect;
 
@@ -1826,6 +2919,11 @@ export const variantKindSchema = z.enum([
   "section-results",
   "report",
   "report.adaptive",
+  // PRD-51 FR-02: вариант БЛОКА документа отчёта. Не экран и не авторская страница —
+  // раскладка одного раздела внутри документа, привязанная к ключу блока из закрытого
+  // реестра продукта (`shared/report/report-blocks`). Виды `report`/`report.adaptive`
+  // остаются: они стали ОБОЛОЧКОЙ документа, в которую движок вкладывает эти блоки.
+  "report.block",
 ]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
@@ -2014,13 +3112,8 @@ export const resultVariables = pgTable("result_variables", {
   // A variable name is addressed by var() in formulas — it must be unique within
   // a test, or the reference is ambiguous.
   testNameUq: uniqueIndex("result_variables_test_id_name_uq").on(table.testId, table.name),
-  // At most one variable may drive success_status / completion_status per test.
-  oneSuccessPerTest: uniqueIndex("result_variables_one_success_per_test")
-    .on(table.testId)
-    .where(sql`${table.controlsStatus} = 'success'`),
-  oneCompletionPerTest: uniqueIndex("result_variables_one_completion_per_test")
-    .on(table.testId)
-    .where(sql`${table.controlsStatus} = 'completion'`),
+  // No uniqueness on `controls_status`: several variables may drive the same status,
+  // and the runtime combines their verdicts with OR (migration 0044 dropped the limit).
   // The name is a DSL identifier (lowercase, starts with a letter, <=64 chars).
   nameFormat: check("result_variables_name_check", sql`${table.name} ~ '^[a-z][a-z0-9_]{0,63}$'`),
 }));
@@ -2044,6 +3137,15 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
 export type ResultVariable = typeof resultVariables.$inferSelect;
 
+/**
+ * Where a NEW scale is published by default (PRD-54, decision 13): as an interaction of the
+ * LMS report. Everything the analytics reads must also travel through the LMS export, and a
+ * scale that stays «none» is invisible to an imported attempt. Existing scales keep what they
+ * have — the old default cannot be told from a deliberate choice; the editor warns instead.
+ * The database default, the editor's blank scale and the workbook import share this value.
+ */
+export const DEFAULT_SCALE_SCORM_TARGET = "interaction" as const;
+
 // PRD-5: measurement scales (шкалы). Test-scoped named aggregates of explicit
 // per-question contributions, normalized (with optional inversion) and banded.
 // Published to scale.* before result.* at completion. See migration 009 for the
@@ -2065,7 +3167,7 @@ export const scales = pgTable("scales", {
   learnerVisibility: text("learner_visibility", { enum: ["hidden", "level", "level_and_value"] })
     .notNull()
     .default("hidden"),
-  scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default("none"),
+  scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default(DEFAULT_SCALE_SCORM_TARGET),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

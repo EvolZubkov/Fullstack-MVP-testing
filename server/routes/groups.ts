@@ -48,6 +48,7 @@ async function notifyNewGroupMember(userId: string, groupId: string) {
         testId: assignment.testId,
         testTitle: test.title,
         testDescription: test.description,
+        testDescriptionFormat: test.descriptionFormat,
         dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
         expiresAt,
         revokeExisting: false,
@@ -64,11 +65,19 @@ router.get("/", requirePermission("groups.manage"), async (req, res) => {
     const groups = await storage.getGroups();
     const groupsWithUsers = await Promise.all(
       groups.map(async (group) => {
-        const users = await storage.getGroupUsers(group.id);
+        const [users, importSummary] = await Promise.all([
+          storage.getGroupUsers(group.id),
+          storage.getGroupImportSummary(group.id),
+        ]);
         return {
           ...group,
           userCount: users.length,
-          users: users.map((u) => ({ id: u.id, email: u.email, name: u.name })),
+          // PRD-54: how many members are external accounts (imported LMS participants and PRD-28
+          // externals alike) — the «из них N внешних» mark.
+          externalCount: users.filter((u) => u.isExternal).length,
+          // PRD-54 BR-54-45: imported passages labelled with the group, for the delete confirmation.
+          importSummary,
+          users: users.map((u) => ({ id: u.id, email: u.email, name: u.name, isExternal: u.isExternal })),
         };
       })
     );
@@ -88,10 +97,13 @@ router.get("/:id", requirePermission("groups.manage"), async (req, res) => {
     }
 
     const users = await storage.getGroupUsers(group.id);
-    res.json({
-      ...group,
-      users: users.map((u) => ({ id: u.id, email: u.email, name: u.name })),
-    });
+    // The members dialog shows a role per member (approved wireframe
+    // prd54-lms-external-participants.html); without it the column stayed an empty pill.
+    const withRoles = await Promise.all(users.map(async (u) => ({
+      id: u.id, email: u.email, name: u.name, isExternal: u.isExternal,
+      roles: await storage.getUserRoles(u.id),
+    })));
+    res.json({ ...group, users: withRoles });
   } catch (error) {
     logger.error("Get group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get group" });

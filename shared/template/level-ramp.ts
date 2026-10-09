@@ -96,6 +96,26 @@ export function rampColor(ramp: LevelRamp, t: number): HslTriple {
 }
 
 /**
+ * Рампа уровней теста из параметров оформления.
+ *
+ * Именованная схема берётся целиком, `custom` — из авторских троек; недозаполненная своя схема
+ * падает на концы светофора, потому что рампа без конца не нарисует ни одной зоны.
+ *
+ * Живёт здесь, а не у одного из читателей: по этой рампе красит зоны линейки участник
+ * (`result-context`) и полосы уровней аналитика (PRD-56 FR-21a). Две копии этого правила
+ * означали бы, что один и тот же уровень красится в итогах одним цветом, а в аналитике другим.
+ */
+export function rampFromParams(params: Record<string, unknown>): LevelRamp {
+  const scheme = String(params.levelScheme ?? "traffic");
+  if (scheme !== "custom") return LEVEL_SCHEMES[scheme === "neutral" ? "neutral" : "traffic"];
+  return {
+    favorable: String(params.levelColorFavorable ?? LEVEL_SCHEMES.traffic.favorable),
+    mid: params.levelColorMid ? String(params.levelColorMid) : null,
+    unfavorable: String(params.levelColorUnfavorable ?? LEVEL_SCHEMES.traffic.unfavorable),
+  };
+}
+
+/**
  * Colours for `count` zones ordered by ascending value. `valence` decides which end
  * of the ramp the highest zone gets; `none` swaps the scheme for the neutral ramp,
  * because a typology has no better or worse level to signal.

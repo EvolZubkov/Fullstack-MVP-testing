@@ -129,13 +129,19 @@ var ScaleEngine = (function () {
   // [min, max] and make percent negative / >100. single: one unit fires, other
   // option = 0 -> [min(0,vals), max(0,vals)]; multiple/matching/ranking: several
   // units fire together -> sum of negative / positive units (as `raw` sums actives).
+  //
+  // Returns null when NOTHING of the scale has been delivered yet — «nothing to
+  // normalize yet» must not be confused with a zero-width range (see computeScales).
   function rawRange(scaleMeasurements, agg, questionTypes, answers, budgets) {
     var byQuestion = {};
+    var delivered = 0;
     for (var i = 0; i < scaleMeasurements.length; i++) {
       var m = scaleMeasurements[i];
       if (!Object.prototype.hasOwnProperty.call(answers, m.questionId)) continue;
+      delivered++;
       (byQuestion[m.questionId] = byQuestion[m.questionId] || []).push(m);
     }
+    if (delivered === 0) return null;
     var mins = [];
     var maxes = [];
     var weights = [];
@@ -201,14 +207,20 @@ var ScaleEngine = (function () {
         var percent = 0;
         if (scale.normalization === 'percent') {
           var range = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers, budgets);
-          var span = range.max - range.min;
-          if (span > 0) {
-            percent = scale.direction === 'inverse'
-              ? ((range.max - raw) / span) * 100
-              : ((raw - range.min) / span) * 100;
-          } else {
-            // PRD-5 §5.2: impossible / zero range — diagnostic, not a meaningless number.
-            errors.push({ key: scale.key, message: 'percent: диапазон нормализации невозможен или нулевой' });
+          // Nothing of this scale delivered yet — the NORMAL state of a run standing
+          // before its questions. Nothing to normalize, so nothing to report: percent
+          // stays undefined and `hasValue: false` says so.
+          if (range) {
+            var span = range.max - range.min;
+            if (span > 0) {
+              percent = scale.direction === 'inverse'
+                ? ((range.max - raw) / span) * 100
+                : ((raw - range.min) / span) * 100;
+            } else {
+              // PRD-5 §5.2: the delivered contributions cannot produce a range at all —
+              // percent is undefined for this construction. A diagnostic, not a number.
+              errors.push({ key: scale.key, message: 'percent не определён: вклады доставленных вопросов не дают диапазона' });
+            }
           }
           normalized = percent;
         }

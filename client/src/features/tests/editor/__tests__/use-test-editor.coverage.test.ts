@@ -61,6 +61,7 @@ const RESULT_VAR = {
 const SCALE = {
   key: "s1",
   label: "S1",
+  description: "",
   type: "number" as const,
   aggregation: "sum" as const,
   normalization: "none" as const,

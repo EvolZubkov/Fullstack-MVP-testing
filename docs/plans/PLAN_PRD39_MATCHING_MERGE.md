@@ -12,8 +12,8 @@
 **Подход:** единственная точка ветвления визуального режима — общий рендерер `renderMatching`
 в `shared/template/question-interaction.ts` (используется и вебом, и SCORM-пакетом через
 `TBTemplate.renderMatching`), он печатает класс `ou-match--gap-narrow` вместо
-`ou-match--gap-wide`. Дизайн-система (`vendor/ui-kit/css/university-rt.css`, зеркало —
-`client/src/styles/vendor/university-rt.css`) уже реализует narrow-режим, но её правило
+`ou-match--gap-wide`. Дизайн-система (`vendor/ui-kit/css/skillum-ds.css`, зеркало —
+`client/src/styles/vendor/skillum-ds.css`) уже реализует narrow-режим, но её правило
 акцентной заливки «просто соединено» исключает review-строки по классам
 `ou-match__row--correct`/`--incorrect`, которых в реальной разметке приложения не бывает —
 приложение метит их `correct-answer`/`incorrect-answer`. Из-за этого исключение никогда не
@@ -126,12 +126,12 @@ git commit -m "feat(prd-39): renderMatching печатает режим слия
 
 **Файлы:**
 
-- Изменить: `vendor/ui-kit/css/university-rt.css` (~строка 4304-4313)
-- Изменить: `client/src/styles/vendor/university-rt.css` (тот же блок, тот же номер строки —
+- Изменить: `vendor/ui-kit/css/skillum-ds.css` (~строка 4304-4313)
+- Изменить: `client/src/styles/vendor/skillum-ds.css` (тот же блок, тот же номер строки —
   файлы идентичны)
 - Тест (существующий, не создаётся заново): `tests/ds-touch-dnd.test.ts`
 
-- [ ] **Шаг 1: править исходную копию (`vendor/ui-kit/css/university-rt.css`)**
+- [ ] **Шаг 1: править исходную копию (`vendor/ui-kit/css/skillum-ds.css`)**
 
 Найти блок (комментарий «merge mode» стоит прямо над ним):
 
@@ -178,7 +178,7 @@ git commit -m "feat(prd-39): renderMatching печатает режим слия
 Ожидается: FAIL на тесте `"совпадают побайтово"` — копии разошлись, ровно этого мы и ждём
 после правки только одного файла.
 
-- [ ] **Шаг 3: повторить ту же правку в зеркальной копии (`client/src/styles/vendor/university-rt.css`)**
+- [ ] **Шаг 3: повторить ту же правку в зеркальной копии (`client/src/styles/vendor/skillum-ds.css`)**
 
 Тот же блок, та же замена, что в шаге 1.
 
@@ -190,7 +190,7 @@ git commit -m "feat(prd-39): renderMatching печатает режим слия
 - [ ] **Шаг 5: закоммитить**
 
 ```bash
-git add vendor/ui-kit/css/university-rt.css client/src/styles/vendor/university-rt.css
+git add vendor/ui-kit/css/skillum-ds.css client/src/styles/vendor/skillum-ds.css
 git commit -m "fix(ui-kit): narrow-match accent tint учитывает generic review-классы"
 ```
 
@@ -219,7 +219,7 @@ git commit -m "fix(ui-kit): narrow-match accent tint учитывает generic 
 .tb-scene .ou-rank__item.dragging { cursor: grabbing; }
 /* Drop-target feedback comes from the DS itself: the pointer engine adds
    `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
-   .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
+   .ou-match__card--fixed` in skillum-ds.css). No extra rule needed here. */
 /* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
    prompt too so the whole matched row reads as connected (review states keep their own
    green/red tint, so exclude them). */
@@ -246,9 +246,9 @@ git commit -m "fix(ui-kit): narrow-match accent tint учитывает generic 
 .tb-scene .ou-rank__item.dragging { cursor: grabbing; }
 /* Drop-target feedback comes from the DS itself: the pointer engine adds
    `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
-   .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
+   .ou-match__card--fixed` in skillum-ds.css). No extra rule needed here. */
 /* "Just connected" tint needs no scene rule any more: in merge mode the DS already
-   tints BOTH cards + the gap together (`ou-match--gap-narrow` in university-rt.css),
+   tints BOTH cards + the gap together (`ou-match--gap-narrow` in skillum-ds.css),
    unlike the old arrow mode which only tinted the answer card. */
 /* Review verdict (PRD-39): this app marks a matched row `correct-answer`/
    `incorrect-answer` (the choice/ranking convention), not the DS component's own BEM

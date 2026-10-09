@@ -33,6 +33,12 @@ export interface FlowContentPage {
   topicId?: string | null;
   position?: string | null;
   sortOrder?: number | null;
+  /**
+   * Экран есть в тесте, но ученику не выдаётся (решение владельца 2026-09-20).
+   * Фильтруется ЗДЕСЬ, в единственном источнике правды о порядке, — иначе хосты
+   * разойдутся: веб покажет страницу, которой нет в пакете, или наоборот.
+   */
+  hidden?: boolean | null;
 }
 
 /** A test section (topic) in author-defined structure order. */
@@ -100,6 +106,26 @@ export function isFlowContentPage(page: FlowContentPage | null | undefined): boo
 }
 
 /**
+ * Скрыт ли СИСТЕМНЫЙ экран этого вида (`start`, `results`, `review`).
+ *
+ * Системные экраны не текут в последовательность — каждый рисует своя фаза хоста, — но
+ * решение «показывать ли» у них общее с авторскими страницами и живёт на той же строке
+ * `content_pages`. Хелпер здесь, а не в хостах, по той же причине, по какой здесь лежит
+ * порядок: два прочтения одного признака разойдутся, и пакет начнёт показывать экран,
+ * которого нет в вебе.
+ *
+ * Блок вопросов и маршрутизатор скрыть нельзя (проверяется в редакторе и на сервере),
+ * поэтому спрашивать про них бессмысленно — ответ всегда «не скрыт».
+ */
+export function isSystemScreenHidden(
+  contentPages: FlowContentPage[] | null | undefined,
+  kind: "start" | "results" | "review",
+): boolean {
+  const page = (contentPages || []).find((p) => p && p.kind === kind);
+  return page?.hidden === true;
+}
+
+/**
  * Author content pages for one (topic, placement) slot, in author order.
  * `topicId` is `null` for the test-scope zones. The hub is included so the
  * caller can position it; every other system kind is filtered out.
@@ -113,6 +139,7 @@ export function contentPagesFor(
     .filter(
       (p) =>
         !isSystemKind(p.kind) &&
+        p.hidden !== true &&
         (p.topicId ?? null) === topicId &&
         p.position === position,
     )
@@ -151,27 +178,51 @@ export function buildBeforeZone(
 }
 
 /**
- * The test-scope «После теста» zone, split at the `summary` boundary: pages
- * before it render ahead of the built-in results screen, pages after it are
- * deferred to {@link PageSequenceResult.postResultsPages}. The `summary` page
- * itself is not rendered — the results screen IS the score page.
+ * The node that splits the «После теста» zone: the test's «Итоги теста» row.
+ *
+ * Today it is the system row of kind `results`. It used to be an author-flowing page with the
+ * legacy `type: "summary"`, and the boundary was looked up by that type only — but a `results`
+ * row is a SYSTEM kind, which {@link contentPagesFor} filters out, so the boundary was never
+ * found and every page the author put after «Итоги теста» ran BEFORE the results screen. The
+ * legacy row is still honoured for structures saved before the system kind existed.
+ */
+function resultsBoundary(
+  contentPages: FlowContentPage[] | null | undefined,
+  afterPages: FlowContentPage[],
+): FlowContentPage | null {
+  const system = (contentPages || []).find((p) => p && p.kind === "results" && (p.topicId ?? null) === null);
+  if (system) return system;
+  return afterPages.find((p) => p.type === "summary") ?? null;
+}
+
+/**
+ * The test-scope «После теста» zone, split at «Итоги теста»: pages before it render
+ * ahead of the built-in results screen, pages after it are deferred to
+ * {@link PageSequenceResult.postResultsPages}. The boundary node itself is not
+ * rendered here — the results screen IS that node.
+ *
+ * The order is the one the editor draws the zone in («Структура», `afterCombined` in
+ * `start-pages-section.tsx`): the author pages plus the «Итоги теста» row, stable-sorted
+ * by `sortOrder`, so a tie keeps the author page ahead of the results. Deriving it any
+ * other way would let the run disagree with the structure the author arranged.
  */
 export function buildAfterZone(contentPages: FlowContentPage[] | null | undefined): {
   preResults: FlowItem[];
   postResultsPages: FlowContentPage[];
 } {
-  const preResults: FlowItem[] = [];
-  const postResultsPages: FlowContentPage[] = [];
-  let seenSummary = false;
-  for (const page of contentPagesFor(contentPages, null, "after")) {
-    if (page.type === "summary") {
-      seenSummary = true;
-      continue;
-    }
-    if (seenSummary) postResultsPages.push(page);
-    else preResults.push({ kind: "content", page, isRouter: false });
-  }
-  return { preResults, postResultsPages };
+  const afterPages = contentPagesFor(contentPages, null, "after");
+  const boundary = resultsBoundary(contentPages, afterPages);
+  const authorPages = afterPages.filter((p) => p !== boundary && p.type !== "summary");
+  const toItem = (page: FlowContentPage): FlowItem => ({ kind: "content", page, isRouter: false });
+  if (!boundary) return { preResults: authorPages.map(toItem), postResultsPages: [] };
+  // `Array.prototype.sort` is stable (ES2019): equal `sortOrder` keeps the input order,
+  // author pages first — exactly as the editor lists them.
+  const combined = [...authorPages, boundary].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const at = combined.indexOf(boundary);
+  return {
+    preResults: combined.slice(0, at).map(toItem),
+    postResultsPages: combined.slice(at + 1),
+  };
 }
 
 /**

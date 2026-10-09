@@ -3,14 +3,15 @@
 # (CRLF -> LF) and runs the privileged deploy step. Invoked by
 # scripts/deploy/deploy.bat over the single SSH connection it opens.
 #
-# Usage: bash run-deploy.sh <project> <port> <image_tar> <node_env> \
-#            [--clone-from <source_project>] [--reset-db]
+# Usage: bash run-deploy.sh <project> <port> <image_tar> <node_env> [deploy.sh options...]
 #
-# Every argument is passed through to deploy.sh untouched.
+# Every argument is passed through to deploy.sh untouched — see its header for the
+# option list (--clone-from, --init-db-from, --reset-db, --domain, --certbot-email,
+# --seed-admin, --seed-admin-password-b64).
 
 set -euo pipefail
 
-PROJECT_NAME="${1:?Usage: bash run-deploy.sh <project> <port> <image_tar> <node_env> [--clone-from <src>] [--reset-db]}"
+PROJECT_NAME="${1:?Usage: bash run-deploy.sh <project> <port> <image_tar> <node_env> [deploy.sh options...]}"
 SERVICE_PORT="${2:?Missing port argument}"
 IMAGE_TAR="${3:?Missing image tar path}"
 NODE_ENV_NAME="${4:?Missing node_env argument}"

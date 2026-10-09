@@ -177,6 +177,19 @@ describe("заведение внешнего участника и перево
     expect(storageMock.updateUser).toHaveBeenCalledWith("u1", { email: undefined, name: undefined });
   });
 
+  it("внешнего участника без почты в штатные не перевести (PRD-54 BR-54-42)", async () => {
+    // Переход шлёт приглашение задать пароль — без адреса получилась бы штатная учётка, в которую
+    // никто не может войти.
+    storageMock.getUser.mockImplementation(getUserById({ ...externalUser, email: null }));
+
+    const res = await request(app).post("/api/users/u9/promote").send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("email");
+    expect(storageMock.promoteExternalUser).not.toHaveBeenCalled();
+    expect(storageMock.createPasswordResetToken).not.toHaveBeenCalled();
+  });
+
   it("перевод штатной учётки отклоняется и ничего не меняет", async () => {
     storageMock.getUser.mockImplementation(getUserById(staffUser));
 

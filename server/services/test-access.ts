@@ -75,6 +75,26 @@ export const canPublishTest = canEditTest;
 export const canExportScorm = canEditTest;
 export const canDebugTest = canEditTest;
 
+/**
+ * Can review the test (PRD-52): anyone who may already edit it, or the holder of
+ * a `review` grant on this specific test.
+ *
+ * Deliberately role-agnostic. An external expert arrives by a magic link and holds
+ * `learner` only, so gating this by a capability would lock out exactly the audience
+ * the reviewer screen exists for — the grant is what carries the permission. The
+ * `assign` grant does NOT qualify: delivering a test to learners says nothing about
+ * being invited to review its content.
+ */
+export async function canReviewTest(
+  roles: readonly Role[],
+  userId: string,
+  test: TestRef,
+): Promise<boolean> {
+  if (await canEditTest(roles, userId, test)) return true;
+  const grant = await storage.getTestGrantForUser(test.id, userId);
+  return grant?.accessLevel === "review";
+}
+
 /** Can assign the test: assign- or edit-grant for managers (plus admin/super). */
 export async function canAssignTest(
   roles: readonly Role[],

@@ -140,7 +140,10 @@ function materials(app: HTMLElement): Array<{ title: string; href: string }> {
 
 /** Тексты, напечатанные в общем блоке рекомендаций, в порядке показа. */
 function recTexts(app: HTMLElement): string[] {
-  return Array.from(app.querySelectorAll("p.tb-recs-group__text")).map((p) => p.textContent?.trim() ?? "");
+  // Selector is tag-free on purpose: the layout carries the author's own markup, so the
+  // wrapper is a <div> since `f3833fcf` — a <p> inside a <p> was closed early by the
+  // browser and the author's paragraphs escaped the block's rules.
+  return Array.from(app.querySelectorAll(".tb-recs-group__text")).map((p) => p.textContent?.trim() ?? "");
 }
 
 const sectionWithAssets = [
@@ -171,10 +174,9 @@ describe("SCORM: вложения темы и раздела на экранах
     ]);
   });
 
-  it("обратная связь ТЕСТА доезжает и без шкал и показателей (дефект Д-3)", () => {
-    // `buildResultsMeasures` возвращает null у теста без измерений, поэтому обратная
-    // связь теста читается ОТДЕЛЬНО от него — иначе самый массовый тест продукта
-    // остаётся без блока рекомендаций.
+  it("обратная связь ТЕСТА в пакете не печатается (PRD-61 §10)", () => {
+    // Уровень теста снят: TEST_DATA его больше не несёт, рантайм не читает. Материалы
+    // ТЕМЫ и РАЗДЕЛА при этом на месте — снят ровно один уровень.
     const feedback = {
       text: "Спасибо за участие.",
       links: [],
@@ -183,19 +185,17 @@ describe("SCORM: вложения темы и раздела на экранах
     };
     const { rt, app } = makeRuntime(sectionWithAssets, feedback);
     rt.renderViewResultsTemplated(app, savedAttempt);
-    expect(app.querySelector(".tb-recs-group__text")?.textContent).toBe("Спасибо за участие.");
-    // Обратная связь теста — общий источник, поэтому впереди вложений темы и раздела.
+    expect(app.querySelector(".tb-recs-group__text")).toBeNull();
     expect(materials(app)).toEqual([
-      { title: "Памятка теста", href: "assets/media/cccc.pdf" },
       { title: TOPIC_PDF.title, href: TOPIC_PDF.url },
       { title: SECTION_PDF.title, href: SECTION_PDF.url },
     ]);
   });
 
-  it("финишный экран показывает обратную связь теста так же", () => {
+  it("финишный экран молчит о ней так же", () => {
     const { rt, app } = makeRuntime([], { text: "Спасибо за участие.", links: [], events: [], assets: [] });
     rt.renderResultsTemplated(app, savedAttempt);
-    expect(app.querySelector(".tb-recs-group__text")?.textContent).toBe("Спасибо за участие.");
+    expect(app.querySelector(".tb-recs-group__text")).toBeNull();
   });
 
   it("«Мой результат» показывает тексты темы и раздела", () => {
@@ -210,15 +210,14 @@ describe("SCORM: вложения темы и раздела на экранах
     expect(recTexts(app)).toEqual(["Текст темы", "Текст раздела"]);
   });
 
-  it("текст теста идёт впереди текста темы, а повтор показывается один раз", () => {
-    // Тест — самый общий источник, поэтому его экземпляр переживает дедупликацию; тот же
-    // порядок держит веб-хост, иначе экраны двух хостов разошлись бы составом блока.
+  it("повтор текста внутри темы показывается один раз", () => {
+    // Дедуп проверялся на паре «тест и тема»; уровень теста снят, и оба экземпляра строки
+    // теперь приходят от самой темы.
     const { rt, app } = makeRuntime(
-      [{ topicId: "t1", topicName: "Тема 1", feedbackTexts: ["Спасибо за участие.", "Текст раздела"] }],
-      { text: "Спасибо за участие.", links: [], events: [], assets: [] },
+      [{ topicId: "t1", topicName: "Тема 1", feedbackTexts: ["Текст раздела", "Текст раздела"] }],
     );
     rt.renderViewResultsTemplated(app, savedAttempt);
-    expect(recTexts(app)).toEqual(["Спасибо за участие.", "Текст раздела"]);
+    expect(recTexts(app)).toEqual(["Текст раздела"]);
   });
 
   it("раздел без вложений не рождает пустого блока", () => {
@@ -289,35 +288,24 @@ describe("SCORM: гейт по вердикту ТЕМЫ", () => {
   });
 });
 
-describe("SCORM: гейт по вердикту ТЕСТА", () => {
+describe("SCORM: гейт вердикта теста снят вместе с его обратной связью (PRD-61 §10)", () => {
   const TEST_FEEDBACK = { text: "Разберите ошибки.", links: [], events: [], assets: [] };
 
-  it("явно пройденный тест свою обратную связь не показывает", () => {
-    // «Явно» = у теста есть порог (`TEST_DATA.overallPassRule`), есть что оценивать и
-    // вердикт «пройден».
-    const { rt, app } = makeRuntime([], TEST_FEEDBACK, PERCENT_RULE);
-    rt.renderViewResultsTemplated(app, attemptWithTopic(true, true));
-    expect(recTexts(app)).toEqual([]);
-    expect(app.querySelector(".tb-recs")).toBeNull();
-  });
+  // Здесь были четыре проверки правила «своя обратная связь теста молчит при явном
+  // успехе»: с порогом, без порога и на финишном экране. Правило ушло вместе с полем.
+  it("не печатается ни при каком вердикте и ни на одном из двух экранов", () => {
+    for (const [rule, topicPassed, overall] of [
+      [PERCENT_RULE, true, true],
+      [PERCENT_RULE, null, false],
+      [{ type: "none", value: 0 }, null, true],
+    ] as const) {
+      const view = makeRuntime([], TEST_FEEDBACK, rule as never);
+      view.rt.renderViewResultsTemplated(view.app, attemptWithTopic(topicPassed, overall));
+      expect(recTexts(view.app)).toEqual([]);
 
-  it("провалённый — показывает", () => {
-    const { rt, app } = makeRuntime([], TEST_FEEDBACK, PERCENT_RULE);
-    rt.renderViewResultsTemplated(app, attemptWithTopic(null, false));
-    expect(recTexts(app)).toEqual(["Разберите ошибки."]);
-  });
-
-  it("измерительный БЕЗ порога показывает свою обратную связь и при passed: true", () => {
-    // Край PRD-29 на стороне пакета: `overallPassRule.type === 'none'` — вердикт не
-    // выносился, и обратная связь теста и есть его результат.
-    const { rt, app } = makeRuntime([], TEST_FEEDBACK, { type: "none", value: 0 });
-    rt.renderViewResultsTemplated(app, attemptWithTopic(null, true));
-    expect(recTexts(app)).toEqual(["Разберите ошибки."]);
-  });
-
-  it("финишный экран гейтит тест так же", () => {
-    const { rt, app } = makeRuntime([], TEST_FEEDBACK, PERCENT_RULE);
-    rt.renderResultsTemplated(app, attemptWithTopic(true, true));
-    expect(recTexts(app)).toEqual([]);
+      const finish = makeRuntime([], TEST_FEEDBACK, rule as never);
+      finish.rt.renderResultsTemplated(finish.app, attemptWithTopic(topicPassed, overall));
+      expect(recTexts(finish.app)).toEqual([]);
+    }
   });
 });

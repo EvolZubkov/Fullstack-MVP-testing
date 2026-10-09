@@ -38,6 +38,8 @@ const EXPECTED_MANAGER: Capability[] = [
   "users.create",
   "analytics.read",
   "analytics.export",
+  // PRD-54: загрузка выгрузки отчёта LMS — выдаётся тем же ролям, что и экспорт.
+  "analytics.import",
 ];
 
 const EXPECTED_AUTHOR: Capability[] = [
@@ -61,9 +63,14 @@ const EXPECTED_AUTHOR: Capability[] = [
   // keeps the in-service debug run over the same edit scope.
   "tests.debug.play",
   "tests.access.grant",
+  // PRD-52 раздел 14: приглашение рецензентов — своё право авторских ролей, а не
+  // следствие прав на назначения.
+  "tests.review.invite",
   "templates.read",
   "analytics.read",
   "analytics.export",
+  // PRD-54: загрузка выгрузки отчёта LMS — выдаётся тем же ролям, что и экспорт.
+  "analytics.import",
 ];
 
 /** The developer is the author plus SCORM generation and the template registry. */
@@ -78,8 +85,8 @@ function sorted(values: Iterable<string>): string[] {
 }
 
 describe("capability catalogue", () => {
-  it("has 35 unique capabilities", () => {
-    expect(CAPABILITIES.length).toBe(35);
+  it("has 37 unique capabilities", () => {
+    expect(CAPABILITIES.length).toBe(37);
     expect(new Set(CAPABILITIES).size).toBe(CAPABILITIES.length);
   });
 
@@ -113,6 +120,16 @@ describe("role -> permission map (golden)", () => {
     // The debug run stays with both — it is a separate capability.
     expect(hasPermission([ROLES.AUTHOR], "tests.debug.play")).toBe(true);
     expect(hasPermission([ROLES.DEVELOPER], "tests.debug.play")).toBe(true);
+  });
+
+  it("приглашение рецензентов — право авторских ролей, но не методиста", () => {
+    // Права на назначения у автора нет, и раньше приглашение рецензентов ехало
+    // именно на нём — автор получал отказ на своей же вкладке (PRD-52, 14).
+    expect(hasPermission([ROLES.AUTHOR], "tests.review.invite")).toBe(true);
+    expect(hasPermission([ROLES.DEVELOPER], "tests.review.invite")).toBe(true);
+    expect(hasPermission([ROLES.ADMINISTRATOR], "tests.review.invite")).toBe(true);
+    expect(hasPermission([ROLES.MANAGER], "tests.review.invite")).toBe(false);
+    expect(hasPermission([ROLES.LEARNER], "tests.review.invite")).toBe(false);
   });
 
   it("administrator has all capabilities except the superadmin-only ones", () => {

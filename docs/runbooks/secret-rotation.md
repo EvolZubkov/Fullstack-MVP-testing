@@ -17,6 +17,13 @@
   захардкодены реальные значения: пароль PostgreSQL и учётные данные SMTP. Файл вычищен
   до плейсхолдеров, но скомпрометированные значения остаются в истории git.
 - Файл `.env` присутствовал в истории коммитов (есть коммиты `Delete .env`).
+- Находка от 2026-09-21: те же значения пережили чистку внутри отслеживаемого архива
+  `docker/docker.zip` (снимок каталога `docker/` от 2026-08-02, коммит `8253ed6b`). Внутри него
+  лежала ДОЧИСТОВАЯ копия `build/env/.env.example` с непустыми `SMTP_PASS`, `SMTP_USER`,
+  `SESSION_SECRET`, `ENCRYPTION_PASSWORD` и `DATABASE_URL`, а также копия
+  `build/config/deploy.env`. Текстовый поиск по репозиторию их не находил — архив двоичный.
+  Сам ZIP удалён из индекса 2026-09-21 вместе с каталогом `docker/build/`, но, как и всё
+  остальное в этом разделе, содержимое остаётся в истории git до её перезаписи (Шаг 3).
 - Удалённые репозитории: `origin` (vvlad1973) и `upstream` (EvolZubkov) на GitHub — секреты
   следует считать раскрытыми публично.
 
@@ -97,7 +104,8 @@
 Полностью удалить из истории файлы, которые в репозитории не нужны:
 
 ```bash
-git filter-repo --invert-paths --path ".env" --path ".env copy" --path "docker/build/config/deploy.env"
+git filter-repo --invert-paths --path ".env" --path ".env copy" \
+  --path "docker/build/config/deploy.env" --path "docker/docker.zip" --path "docker/build"
 ```
 
 Затем затереть конкретные скомпрометированные литералы, которые встречались и в файлах,
@@ -108,6 +116,9 @@ git filter-repo --invert-paths --path ".env" --path ".env copy" --path "docker/b
 ```bash
 git filter-repo --replace-text replacements.txt
 ```
+
+`--replace-text` работает по текстовым блобам и НЕ заглядывает внутрь ZIP, поэтому
+`docker/docker.zip` вычищается только удалением пути — он и добавлен в список выше.
 
 После переписывания истории:
 

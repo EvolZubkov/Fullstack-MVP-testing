@@ -111,7 +111,30 @@ export class ScalesVariablesRepository {
     const priorVarNames = new Set([...prior.map((rv) => rv.name), ...(opts.extraVarNames ?? [])]);
     const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
     const scaleKeys = new Set([...scaleRows.map((s) => s.key), ...(opts.extraScaleKeys ?? [])]);
-    return validate(formula, type, { topicIds, topicNames, priorVarNames, scaleKeys });
+    // PRD-50 FR-36: the delivered SECTION is the test's topic, addressed by the very same
+    // two spellings (UUID or the author's code) — so `topicIds` IS the scope key set for
+    // a composite `tag("<section>::<key>")`. This is passed as `scopeKeys`, NOT
+    // `sectionKeys`: the two checks are independent (see `ValidationRefs.scopeKeys`
+    // JSDoc), and the plain `sectionById(...)` accessor has never been strict-checked
+    // here — turning that on is a separate decision, out of scope for FR-36.
+    //
+    // `tagKeys` (breakdown keys from the test's questions) is intentionally NOT passed:
+    // collecting them here would need extra queries this method doesn't otherwise make,
+    // and an absent set simply leaves the (already warning-only) `tag-unresolved` check
+    // disabled, same as before.
+    // PRD-53: режим нормализации каждой шкалы — для предупреждения об АБСОЛЮТНОМ пороге
+    // верхней зоны на группе, шкалы которой нормализованы по-разному. Берётся из уже
+    // прочитанных строк, лишнего запроса не нужно; шкала, объявленная той же книгой, но ещё
+    // не сохранённая (`extraScaleKeys`), в карту не попадает — проверка её просто пропустит.
+    const scaleNormalizations = Object.fromEntries(scaleRows.map((s) => [s.key, s.normalization]));
+    return validate(formula, type, {
+      topicIds,
+      topicNames,
+      scopeKeys: topicIds,
+      priorVarNames,
+      scaleKeys,
+      scaleNormalizations,
+    });
   }
 
   // ─── Scales (PRD-5) ─────────────────────────────────────────────────────────
@@ -225,13 +248,55 @@ export class ScalesVariablesRepository {
     return row;
   }
 
-  async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
-    const result = await db.delete(testQuestionScoring)
-      .where(and(
-        eq(testQuestionScoring.testId, testId),
-        eq(testQuestionScoring.questionId, questionId),
-      ))
+  /**
+   * PRD-56 FR-17a: включить или снять состояние «исключён из выдачи».
+   *
+   * Узкий upsert, а не общий `upsertTestQuestionScoring`: тот пишет строку целиком, и
+   * переключение показа сбросило бы соседние переопределения — цену и трудность задания в
+   * этом тесте. Исключение из выдачи говорит о ПОКАЗЕ, а не о стоимости, и молча менять
+   * результат теста у всех, кто его пройдёт, оно не имеет права.
+   */
+  async setQuestionDelivery(
+    testId: string,
+    questionId: string,
+    excluded: boolean,
+  ): Promise<TestQuestionScoring> {
+    const [row] = await db.insert(testQuestionScoring)
+      .values({ testId, questionId, excludedFromDelivery: excluded })
+      .onConflictDoUpdate({
+        target: [testQuestionScoring.testId, testQuestionScoring.questionId],
+        set: { excludedFromDelivery: excluded, updatedAt: new Date() },
+      })
       .returning();
+    return row;
+  }
+
+  /**
+   * Сбросить переопределение ОЦЕНКИ задания в тесте.
+   *
+   * Строку удаляет, только если в ней нет признака «исключён из выдачи» (PRD-56): он живёт в
+   * той же строке, и удаление целиком молча возвращало скомпрометированный вопрос участникам.
+   * У исключённого задания обнуляются значения оценки, а сама строка остаётся.
+   *
+   * @returns была ли у задания строка настроек
+   */
+  async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
+    const where = and(
+      eq(testQuestionScoring.testId, testId),
+      eq(testQuestionScoring.questionId, questionId),
+    );
+    const kept = await db.update(testQuestionScoring)
+      .set({
+        points: null,
+        scoringJson: null,
+        difficulty: null,
+        pinnedContentHash: null,
+        updatedAt: new Date(),
+      })
+      .where(and(where, eq(testQuestionScoring.excludedFromDelivery, true)))
+      .returning();
+    if (kept.length > 0) return true;
+    const result = await db.delete(testQuestionScoring).where(where).returning();
     return result.length > 0;
   }
 
@@ -240,17 +305,34 @@ export class ScalesVariablesRepository {
    * a transaction) — the workbook «Оценка» sheet is authoritative for the
    * test's override set (PRD-14/PRD-15 FR-36 round-trip). An empty `rows`
    * clears every override.
+   *
+   * The sheet is authoritative for SCORING only. The PRD-56 «excluded from delivery» flag
+   * shares the row but is set by analytics, and the sheet does not carry it: every question
+   * excluded before the import stays excluded — its row is re-created with empty scoring
+   * when the sheet does not mention it.
    */
   async replaceTestQuestionScoring(
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
     return db.transaction(async (tx) => {
+      const excludedRows = await tx.select({ questionId: testQuestionScoring.questionId })
+        .from(testQuestionScoring)
+        .where(and(
+          eq(testQuestionScoring.testId, testId),
+          eq(testQuestionScoring.excludedFromDelivery, true),
+        ));
+      const excluded = new Set(excludedRows.map((r) => r.questionId));
       await tx.delete(testQuestionScoring).where(eq(testQuestionScoring.testId, testId));
-      if (rows.length === 0) return [];
-      return tx.insert(testQuestionScoring)
-        .values(rows.map((r) => ({ ...r, testId })))
-        .returning();
+      const inSheet = new Set(rows.map((r) => r.questionId));
+      const values = [
+        ...rows.map((r) => ({ ...r, testId, excludedFromDelivery: excluded.has(r.questionId) })),
+        ...[...excluded]
+          .filter((questionId) => !inSheet.has(questionId))
+          .map((questionId) => ({ testId, questionId, excludedFromDelivery: true })),
+      ];
+      if (values.length === 0) return [];
+      return tx.insert(testQuestionScoring).values(values).returning();
     });
   }
 }

@@ -23,13 +23,17 @@
       s-tab           — вкладка «Оценка» (умолчания + таблица вопросов по секциям)
       s-override      — модал переопределения: ступени (конструктор из prd10)
       s-stale         — модал переопределения на устаревшей настройке (FR-30)
+      s-preview       — предпросмотр балла на демо-ответе (PRD-10 §7, issue #31)
       s-question-card — карточка вопроса после переноса (без цены)
       s-docs          — Пояснения + DS Mapping
+    Состояние s-preview добавлено и СОГЛАСОВАНО 2026-08-14 (issue #31); перенос
+    состояния s-preview из prd10-question-scoring.html на актуальную поверхность
+    (конструктор цены живёт в модале «Оценка вопроса в тесте», а не в карточке вопроса).
     Связанные эскизы: prd10-question-scoring.html (старое место конструктора),
     prd2-prd5-scoring-tabs.html (вкладки Шкалы/Показатели того же редактора).
     -->
     <title>PRD-15 блок D — Оценка в тесте (T-39)</title>
-    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
     <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
     <script defer src="/docs/wireframes/prd7-shared.js"></script>
     <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
@@ -201,6 +205,7 @@
       <button type="button" class="active" onclick="showState(this, 'tab')">вкладка «Оценка»</button>
       <button type="button" onclick="showState(this, 'override')">переопределение</button>
       <button type="button" onclick="showState(this, 'stale')">настройка устарела</button>
+      <button type="button" onclick="showState(this, 'preview')">предпросмотр балла</button>
       <button type="button" onclick="showState(this, 'question-card')">карточка вопроса</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
@@ -447,7 +452,7 @@
             <button type="button" class="ou-btn ou-btn--ghost"><svg class="wf-btn-ico" width="14" height="14"><use href="#i-rotate-ccw" /></svg>Сбросить настройку</button>
             <span>
               <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'tab')">Отмена</button>
-              <button type="button" class="ou-btn ou-btn--ghost">Предпросмотр балла</button>
+              <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview')">Предпросмотр балла</button>
               <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Применить</button>
             </span>
           </footer>
@@ -550,9 +555,47 @@
             <button type="button" class="ou-btn ou-btn--ghost"><svg class="wf-btn-ico" width="14" height="14"><use href="#i-rotate-ccw" /></svg>Сбросить настройку</button>
             <span>
               <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'tab')">Отмена</button>
-              <button type="button" class="ou-btn ou-btn--ghost">Предпросмотр балла</button>
+              <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview')">Предпросмотр балла</button>
               <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Применить</button>
             </span>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-preview: предпросмотр балла на демо-ответе ════════════════ -->
+    <div id="wf-preview" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Предпросмотр балла</h1>
+              <p class="ou-modal__desc">Множественный · ступенчато · эталон А, Б</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'override')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="pv-answer">Демо-ответ</label>
+              <div class="ou-select ou-field--m ou-field--full" data-ou-options="Полностью верный (А, Б)|Часть верных (А)|Все верные и лишний (А, Б, В)|Только лишние (В, Г)|Пустой ответ"><button type="button" class="ou-select__trigger" id="pv-answer"><span class="ou-select__value">Часть верных (А)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+              <div class="ou-formfield__msg">Набор собран из эталона вопроса. Балл считает движок цены ответа по настройке, открытой в конструкторе, — ещё до «Применить».</div>
+            </div>
+            <table class="tb-table">
+              <thead><tr><th>Поле</th><th>Значение</th></tr></thead>
+              <tbody>
+                <tr><td>Эталон</td><td>А, Б (T = 2)</td></tr>
+                <tr><td>Ответ</td><td>А &rarr; c = 1, x = 0</td></tr>
+                <tr><td>Сработала строка</td><td>2 — «Верных (c) &ge; 1»</td></tr>
+                <tr><td>Балл s</td><td>1</td></tr>
+                <tr><td>sMax</td><td>2</td></tr>
+                <tr><td>scoreRatio</td><td>0.5</td></tr>
+                <tr><td>Статус</td><td><span class="ou-tag ou-tag--warning">Частично правильно</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'override')">Назад к цене ответа</button>
           </footer>
         </div>
       </div>
@@ -634,6 +677,7 @@
               <tr><td>Сбросить настройку оценки</td><td>иконка-кнопка в строке; убирает переопределение из драфта (persist на «Сохранить»)</td><td>Вопрос возвращается к цепочке умолчаний. Кнопка есть только у строк с переопределением</td></tr>
               <tr><td>Модал «Оценка вопроса в тесте»</td><td>балл + цена ответа + сложность одного вопроса в этом тесте</td><td>FR-35. Конструктор ступеней/весов перенесён из карточки вопроса (prd10) без изменений механики. Поля и сегмент инициализируются действующими значениями (из вопроса или цепочки умолчаний); признак настройки в форме — заполненное поле (пустое с плейсхолдером = наследуется), любое изменение = переопределение</td></tr>
               <tr><td>«Сбросить настройку» в модале</td><td>удаляет переопределение целиком (балл, цена, сложность)</td><td>Вопрос возвращается к действующим значениям без настройки в тесте; то же действие, что иконка «Сбросить» в строке таблицы</td></tr>
+              <tr><td>Предпросмотр балла</td><td>кнопка «Предпросмотр балла» в футере модала &rarr; демо-ответ, счётчики <code>c</code>/<code>x</code>, сработавшая строка, <code>s</code> / <code>sMax</code> / <code>scoreRatio</code>, статус</td><td>PRD-10 §7 (issue #31). Считает ОБЩИЙ движок цены ответа (<code>@shared/scoring/engine</code>) по настройке, открытой в конструкторе, — до «Применить», так что автор видит результат несохранённой правки. Демо-ответы генерируются из эталона: полностью верный / часть верных / все верные и лишний / только лишние / пустой; для «Одиночного» и «Шкалы» — по одному пункту на каждый вариант ответа (по пункту на вес). Невозможные для эталона пункты не показываются. Статус: «Правильно» (ratio = 1) / «Частично правильно» (0 &lt; ratio &lt; 1, FR-12) / «Неправильно» (0). У «Распределения баллов» кнопки нет — цена ответа к типу неприменима (PRD-44 FR-10)</td></tr>
               <tr><td>Сложность в этом тесте</td><td><code>test_question_scoring.difficulty</code>, пусто = базовая</td><td>FR-34. Адаптивная выдача и проверки выполнимости используют действующую сложность</td></tr>
               <tr><td>Карточка вопроса</td><td>поля «Балл» и «Цена ответа» удалены; «Сложность (базовая)» и «Теги» остаются</td><td>FR-35. Инфо-баннер ведёт во вкладку «Оценка». Конструктор градуировки из карточки удаляется</td></tr>
               <tr><td>Переходный период (до T-40)</td><td>колонки <code>questions.points</code>/<code>scoring_json</code> ещё живы</td><td>Значения из банка продолжают действовать, переопределения работают сразу. Умолчания секции/теста начнут действовать после удаления колонок (T-40, отдельный релиз) — до этого значение из банка имеет приоритет. РЕШЕНО (согласование 2026-06-12): поля умолчаний показываются в UI сразу</td></tr>
@@ -660,6 +704,7 @@
               <tr><td>Способ цены ответа</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Точное / Ступенчато / Веса (как prd10); взаимоисключающий выбор — не Tabs</td></tr>
               <tr><td>«Сбросить настройку»</td><td><code>Button</code> (<code>ou-btn--ghost</code>) слева в <code>ou-modal__foot--between</code></td><td><code>--ou-*</code></td><td>Lucide rotate-ccw; то же действие, что иконка в строке таблицы</td></tr>
               <tr><td>Конструктор ступеней/весов</td><td><code>Table</code> + <code>Select</code> + <code>NumberInput</code> (как prd10)</td><td><code>--ou-*</code></td><td>Перенос разметки prd10 as-is (scoring-builder.tsx переезжает в редактор теста)</td></tr>
+              <tr><td>Предпросмотр балла</td><td><code>Modal</code> (<code>ou-modal--m</code>) + <code>Select</code> + <code>Table</code> (<code>tb-table</code>) + <code>Tag</code></td><td><code>--ou-warning-*</code>, <code>--ou-success-*</code></td><td>Вторая модалка поверх модала переопределения; возврат кнопкой «Назад к цене ответа». Тег статуса: success / warning / neutral</td></tr>
               <tr><td>Баннер в карточке вопроса</td><td><code>Banner</code> (<code>ou-banner--subtle</code>, info)</td><td><code>--ou-fg-muted</code></td><td>Ссылка-навигация во вкладку «Оценка» теста</td></tr>
             </tbody>
           </table>

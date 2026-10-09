@@ -12,6 +12,20 @@ function renderQuestionInput(q) {
   var correct = q.correct || {};
   var shuffleMapping = state.shuffleMappings[q.id];
 
+  // «Сценарий в ИС» в обычном разделе (техдолг №5): на месте ответа — обложка из общего
+  // `shared/sim/cover` (та же разметка, что у веба); прогон открывает «Пройти» → окно правил.
+  if (typeof TBQType !== 'undefined' && TBQType.isSimulation(q.type)) {
+    var TBs = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TBs || !TBs.renderSimCover) return '';
+    var scenario = (q.data && q.data.scenario) || null;
+    return TBs.renderSimCover({
+      state: TBs.simCoverState(answer),
+      shotUrl: TBs.simCoverShot(scenario),
+      retake: !!TEST_DATA.allowAnswerChange,
+      readonly: typeof isAnswerLocked === 'function' && fqCur ? isAnswerLocked(fqCur) : false,
+    });
+  }
+
   // The type hint is the question subtitle (state.questionHint in the layout, both
   // hosts) — not prepended here, so the package matches the web exactly.
   if (q.type === 'single')   return renderSingleQuestionInput(q, answer, showReview, correct, shuffleMapping);
@@ -34,6 +48,17 @@ function renderQuestionInput(q) {
       }
     }
     return renderAllocationQuestionInput(q, answer, showReview, shuffleMapping);
+  }
+  // PRD-57 §6.5: текстовый ввод — ветка по ПРИЗНАКУ, чтобы пропуски (Э8) вошли сюда же.
+  if (typeof TBQType !== 'undefined' && TBQType.isTextEntry(q.type)) {
+    return renderShortQuestionInput(q, answer, showReview);
+  }
+  // PRD-57 §5: развёрнутый ответ. Своя ветка, а не общая с коротким: у пакета СВОЙ
+  // распределитель, и тип, забытый здесь, уезжает в LMS «неизвестным» при живом вебе.
+  if (typeof TBQType !== 'undefined' && TBQType.isOpenText(q.type)) {
+    var TBl = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TBl || !TBl.renderLongAnswer) return '';
+    return TBl.renderLongAnswer({ type: q.type, dataJson: q.data }, answer, { readonly: !!showReview });
   }
   return '<div>Неизвестный тип вопроса</div>';
 }

@@ -8,7 +8,7 @@
 > прогон и коммит.
 
 **Цель:** перевести ученические экраны шаблона «Стандартный» на дизайн-систему
-UniversityRT (компоненты `ou-*`, токены `--ou-*`) и модель «сцена», сохранив единый
+Skillum (компоненты `ou-*`, токены `--ou-*`) и модель «сцена», сохранив единый
 рендер на всех хостах (веб / SCORM / отладчик) и брендирование теста.
 
 **Архитектура:** рендерер уже общий (`shared/template/`); меняем per-template
@@ -17,7 +17,7 @@ UniversityRT (компоненты `ou-*`, токены `--ou-*`) и модел�
 собственный CSS-слой шаблона (1120 строк) заменяется тонким слоем сцены + мостом.
 
 **Технологии:** TypeScript, vitest (юнит, порог 80%), esbuild (SCORM-бандл),
-Vite (веб), mustache-подмножество `dsl.ts`, DS `university-rt.css`, `color-mix(in
+Vite (веб), mustache-подмножество `dsl.ts`, DS `skillum-ds.css`, `color-mix(in
 oklch)`, браузерная приёмка через CDP (см. `docs` reference).
 
 **Основание:** [docs/specs/spec-standard-template-uikit-revision.md](../specs/spec-standard-template-uikit-revision.md).
@@ -188,7 +188,7 @@ describe("buildPaletteBridge", () => {
 cardBorder?; border?; muted?; accent? }): string`. Внутри — вывести
 `--ou-purple-400..700` из `--primary` тем же приёмом, каким DS строит рампу из
 своих primitives (`color-mix(in oklch, …)`; свериться с блоками `.ou--dark`/`.ou--light`
-в `vendor/ui-kit/css/university-rt.css`), а `--ou-bg-*`/`--ou-border-*` — из
+в `vendor/ui-kit/css/skillum-ds.css`), а `--ou-bg-*`/`--ou-border-*` — из
 `--background`/`--card`/`--border`. Приёмка формулы — визуальная (Шаг 5): на трёх
 брендах (РТК-оранжевый `15 100% 45%`, синий `217 91% 42%`, зелёный `142 70% 40%`)
 `soft`/`container`/`hover` должны читаться. Значение по умолчанию (палитра пуста) —
@@ -283,7 +283,7 @@ describe("template-render palette bridge", () => {
 В `runtime-entry.ts` добавить `export { buildPaletteBridge } from "./palette-bridge";`.
 В `template-render.ts` — приклеить `buildPaletteBridge(<палитра теста>)` к отдаваемому
 `css`. В `template-screen.tsx` — в инъекцию Shadow DOM добавить загрузку
-`university-rt.css` (импортом строки или ссылкой на общий ассет) и поставить класс
+`skillum-ds.css` (импортом строки или ссылкой на общий ассет) и поставить класс
 `ou ou--<theme>` на `:host` (сейчас маппится `:root/body → :host`; DS написан под `.ou`).
 
 - [ ] **Шаг 4. Прогнать — PASS + `npm run check`**
@@ -321,7 +321,7 @@ git commit -m "feat(template): DS + мост палитры в веб-хосте
 В `server/scorm/index.ts` заменить `stylesCss = readStyle("theme.css") + base.css` на
 `readVendorDs() + readStyle("theme.css")` (DS первым, мост-`theme.css` — поверх,
 `base.css` удаляется в Фазе 4 после переноса макетов). Прочитать
-`vendor/ui-kit/css/university-rt.css`. Вложить woff2 в `assets/fonts/` и добавить
+`vendor/ui-kit/css/skillum-ds.css`. Вложить woff2 в `assets/fonts/` и добавить
 `@font-face` в CSS пакета; проверить путь внутри zip.
 
 - [ ] **Шаг 4. Прогнать — PASS; собрать пакет; открыть в SCORM-плеере**

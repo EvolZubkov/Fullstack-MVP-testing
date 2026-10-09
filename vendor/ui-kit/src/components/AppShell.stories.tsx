@@ -45,7 +45,7 @@ export const FullLayout: Story = {
             onToggleCollapse={() => setCollapsed(c => !c)}
             activeId={active}
             onSelect={setActive}
-            brand={<><span className="ou-story-brand-mark">U</span><span className="brand-text">UniversityRT</span></>}
+            brand={<><span className="ou-story-brand-mark">U</span><span className="brand-text">Skillum</span></>}
             groups={[
               {
                 title: 'Главное', items: [
@@ -65,7 +65,7 @@ export const FullLayout: Story = {
         }
         header={
           <>
-            <AppShellBrand mark="U">UniversityRT</AppShellBrand>
+            <AppShellBrand mark="U">Skillum</AppShellBrand>
             <AppShellSearch>
               <Input fullWidth placeholder="Найти курс, человека или команду" />
             </AppShellSearch>

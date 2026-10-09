@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { renderReportInto, type ReportBlockToRender } from "@shared/report/render-report";
 import { renderScreenInto, type ContentPageData } from "@shared/template/render-screen";
 import type { ProtectionSpec } from "@shared/template/protection/spec";
 import { fitQuestionScene } from "@shared/template/fit-question";
@@ -18,7 +19,7 @@ import { attachQuestionMediaFullscreen } from "@shared/template/question-media";
 import { nextScaleIndex } from "@shared/template/scale-keyboard";
 import { resolveSceneTheme } from "@shared/template/themes";
 import { paintSceneTimers, type SceneTimersState } from "@shared/template/scene-timers";
-import dsCss from "@/styles/vendor/university-rt.css?raw";
+import dsCss from "@/styles/vendor/skillum-ds.css?raw";
 
 /**
  * The design system, remapped for a shadow root. DS LAYER-1 primitives live on
@@ -31,9 +32,56 @@ const DS_SHADOW_CSS = dsCss
   .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
   .replace(/:root/g, ":host");
 
+/** A complete `@font-face` rule. Its body holds no nested braces, data URIs included. */
+const FONT_FACE_RULE = /@font-face\s*\{[^}]*\}/g;
+
+/**
+ * The `@font-face` rules of a template stylesheet, in source order.
+ *
+ * @param css Template CSS as the host receives it.
+ * @returns Every `@font-face` rule verbatim; empty when there is none.
+ */
+export function extractFontFaces(css: string): string[] {
+  return css.match(FONT_FACE_RULE) ?? [];
+}
+
+/** Font-face rules already lifted into the document, so each is added once. */
+const hoistedFontFaces = new Set<string>();
+
+/**
+ * Lift the template's `@font-face` rules into the DOCUMENT head.
+ *
+ * A face declared inside a shadow root is ignored by Chromium: the brand font a template
+ * embeds (Rostelecom Basis in «Сертификация» and «Стандартный Ростелеком») never loaded on
+ * the web host, and the scene fell back to the next family while the SCORM package, where
+ * the same CSS sits in the document, printed it correctly. Faces registered on the document
+ * are visible inside every shadow tree. They stay for the page lifetime: a font is not
+ * scene state, and dropping it on unmount would re-download it on the next screen.
+ *
+ * @param css Template CSS whose faces should become available to the shadow tree.
+ */
+export function hoistFontFaces(css: string): void {
+  for (const rule of extractFontFaces(css)) {
+    if (hoistedFontFaces.has(rule)) continue;
+    hoistedFontFaces.add(rule);
+    const style = document.createElement("style");
+    style.setAttribute("data-tb-font-face", "");
+    style.textContent = rule;
+    document.head.appendChild(style);
+  }
+}
+
 export interface TemplateScreenProps {
-  /** Layout HTML from the selected design template. */
+  /**
+   * Layout HTML from the selected design template. При заданном {@link blocks} это
+   * ОБОЛОЧКА документа отчёта (PRD-51), а не экран.
+   */
   layout: string;
+  /**
+   * PRD-51: блоки документа отчёта в порядке печати, с уже прочитанными раскладками.
+   * Пусто/отсутствует — рисуется обычный экран по {@link layout}.
+   */
+  blocks?: ReportBlockToRender[];
   /** Public render context (see render-screen / context contract). */
   context: unknown;
   /** Template CSS, injected (isolated) into the shadow root. */
@@ -55,6 +103,13 @@ export interface TemplateScreenProps {
    * how per-test branding renders in the preview, the SAME mapping the runtime uses.
    */
   cssVars?: Record<string, string>;
+  /**
+   * Design params the template asked to receive as data attributes on the scene root
+   * (manifest `dataAttr`, built by the shared `buildTemplateDataAttrs`). Set on the
+   * shadow HOST next to {@link cssVars}: unlike a custom property, an attribute can be
+   * SELECTED on, which is how a template switches a picture per chosen option.
+   */
+  dataAttrs?: Record<string, string>;
   /**
    * PRD-23: per-theme colour overrides as a CSS block (built by the shared
    * {@link module:shared/template/theme-css buildTemplateThemeCss} against `:host`).
@@ -125,11 +180,28 @@ export interface TemplateScreenProps {
   fill?: boolean;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, onShadowReady, className, shell, fill = true }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, protection, cssVars, dataAttrs, themeCss, dataTheme, themed, afterHtml, timers, onAction, onShadowReady, className, shell, blocks, fill = true }: TemplateScreenProps) {
+  /**
+   * PRD-51: отчёт печатается ДОКУМЕНТОМ из блоков, а не одной раскладкой. Когда блоки
+   * пришли, `layout` — это оболочка документа, и рисует его та же общая сборка, которой
+   * пользуется конвейер PDF: предпросмотр обязан показывать ровно то, что получит
+   * слушатель, а вторая реализация сборки означала бы два разных документа.
+   */
+  const paintInto = useCallback(
+    (target: HTMLElement) => {
+      if (blocks && blocks.length > 0) {
+        renderReportInto(target, { shell: layout, context, blocks });
+        return;
+      }
+      renderScreenInto(target, { layout, context, slots, content, protection });
+    },
+    [blocks, layout, context, slots, content, protection],
+  );
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
   const appliedVarsRef = useRef<string[]>([]);
+  const appliedAttrsRef = useRef<string[]>([]);
   const onActionRef = useRef(onAction);
   onActionRef.current = onAction;
   const onShadowReadyRef = useRef(onShadowReady);
@@ -181,8 +253,8 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
   // and wipe/rebuild the whole shadow tree, which is what made hover flicker and a
   // click land on an already-replaced button.
   const renderKey = useMemo(
-    () => JSON.stringify([layout, css, context, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, shell]),
-    [layout, css, context, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, shell],
+    () => JSON.stringify([layout, css, context, slots, content, protection, cssVars, dataAttrs, themeCss, dataTheme, themed, afterHtml, shell]),
+    [layout, css, context, slots, content, protection, cssVars, dataAttrs, themeCss, dataTheme, themed, afterHtml, shell],
   );
 
   useEffect(() => {
@@ -209,6 +281,7 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
       if (!n.hasAttribute("data-tb-ds")) n.remove();
     }
     if (css) {
+      hoistFontFaces(css);
       const style = document.createElement("style");
       // Template CSS targets :root / body (light DOM). Inside the shadow root those
       // selectors don't match, so map them to :host and seed the theme basics — the
@@ -274,6 +347,17 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
     } else {
       appliedVarsRef.current = [];
     }
+    // Params the template asked for as attributes (manifest `dataAttr`): they go on the
+    // SAME element as the vars, because a template selects on them (`[data-x="y"] .z`)
+    // and a selector needs an element to match. Stale keys are removed first — a
+    // switched choice must not leave the previous attribute behind.
+    for (const name of appliedAttrsRef.current) host.removeAttribute(name);
+    if (dataAttrs) {
+      for (const [name, value] of Object.entries(dataAttrs)) host.setAttribute(name, value);
+      appliedAttrsRef.current = Object.keys(dataAttrs);
+    } else {
+      appliedAttrsRef.current = [];
+    }
 
     const screen = document.createElement("div");
     shadow.appendChild(screen);
@@ -288,7 +372,7 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
       shadow.appendChild(fit);
       screen.innerHTML = shell;
       const app = screen.querySelector<HTMLElement>("#app");
-      renderScreenInto(app ?? screen, { layout, context, slots, content, protection });
+      paintInto(app ?? screen);
       fitQuestion();
     } else {
       // Fill chain (mirrors the SCORM package's `#app` foundation): the shadow host
@@ -306,7 +390,7 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
         screen.style.display = "flex";
         screen.style.flexDirection = "column";
       }
-      renderScreenInto(screen, { layout, context, slots, content, protection });
+      paintInto(screen);
       const sceneEl = screen.firstElementChild as HTMLElement | null;
       if (fill && sceneEl) {
         sceneEl.style.flex = "1 1 auto";

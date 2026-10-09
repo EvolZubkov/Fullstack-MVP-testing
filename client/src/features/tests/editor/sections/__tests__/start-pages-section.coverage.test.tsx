@@ -86,6 +86,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     basic: {
       title: "Sample",
       description: "",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -94,7 +95,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -452,14 +453,17 @@ describe("<StructureSection /> — image placeholder", () => {
 // ─── System-row markers ─────────────────────────────────────────────────────────
 
 describe("<StructureSection /> — system row markers", () => {
-  it("marks an all-empty intro system row with the «шаблон» marker", async () => {
+  it("помечает классом строку, которая ещё вся из шаблона", async () => {
     installApi([
       buildPage({ id: "pg-intro", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: {} } }),
       buildPage({ id: "pg-q", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_by_topics", sections: [buildSection({ topicId: "t1", topicName: "Тема А" })] }));
-    await waitFor(() => expect(screen.getByTestId("structure-system-intro-t1")).toBeInTheDocument());
-    expect(screen.getByTestId("structure-system-intro-t1-template-marker")).toBeInTheDocument();
+    const row = await screen.findByTestId("structure-system-intro-t1");
+    // Надписи «шаблон» в строке нет: это не состояние, с которым автор что-то делает, —
+    // остался только приглушённый цвет строки.
+    expect(row).toHaveClass("page-row--template");
+    expect(screen.queryByTestId("structure-system-intro-t1-template-marker")).toBeNull();
   });
 
   it("shows the «Из стандартного шаблона» fallback tag when the kind is absent from the template", async () => {
@@ -505,7 +509,7 @@ describe("<StructureSection /> — zone layouts", () => {
       baseModel({
         flowMode: "linear_flat",
         sections: [buildSection()],
-        runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+        runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: false, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
       }),
     );
     await waitFor(() => expect(screen.getByTestId("structure-zone-questions")).toBeInTheDocument());
@@ -541,8 +545,10 @@ describe("<StructureSection /> — zone layouts", () => {
     // Both the system «Итоги теста» row and the author after-page render in the zone.
     expect(screen.getByTestId("structure-system-results")).toBeInTheDocument();
     expect(screen.getByTestId("structure-page-row-pg-after")).toHaveTextContent("Пост-итог");
-    // Inserts appear before + between + after the combined list.
+    // Вставки есть в каждом промежутке, включая место после «Итогов теста»: страницы за
+    // ними ученик получает после экрана итогов.
     expect(screen.getByTestId("structure-insert-after-test-0")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-insert-after-test-1")).toBeInTheDocument();
     expect(screen.getByTestId("structure-insert-after-test-2")).toBeInTheDocument();
   });
 });

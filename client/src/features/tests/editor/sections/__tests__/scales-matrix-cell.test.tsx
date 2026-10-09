@@ -25,9 +25,9 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
 function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
   return {
     id: "test-1", version: 1, mode: "standard", flowMode: "linear_flat", flowSettings: {}, folderId: null,
-    basic: { title: "Sample", description: "", status: "draft", feedback: { format: "plain", text: "" },
+    basic: { title: "Sample", description: "", descriptionFormat: "plain", status: "draft", feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [], webhookUrl: "", telemetryEnabled: false },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [], adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
     resultVariables: [], scales: [], measurements: [], retakePolicy: defaultRetakePolicy(),
@@ -40,7 +40,7 @@ const dbQuestions = [
 ];
 
 const SCALE: ScaleModel = {
-  key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
+  key: "comp", label: "Компетенция", description: "", type: "number", aggregation: "sum",
   normalization: "none", direction: "positive", bands: [], domainMin: null, domainMax: null, displayMax: null,
   valence: "none", learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
 };
@@ -60,6 +60,7 @@ function Harness({ onModel }: { onModel: (m: TestEditorModel) => void }) {
   );
   return (
     <ScalesSection
+      pane="contributions"
       model={model}
       testId="test-1"
       updateModel={(updater) => setModel((m) => { const next = updater(m); onModel(next); return next; })}
@@ -67,9 +68,8 @@ function Harness({ onModel }: { onModel: (m: TestEditorModel) => void }) {
   );
 }
 
-/** Open «Вклады вопросов», expand the first question card, return its first cell. */
+/** Expand the first «Вклады вопросов» question card, return its first cell. */
 async function openFirstCell(): Promise<HTMLInputElement> {
-  fireEvent.click(screen.getByRole("button", { name: "Вклады вопросов" }));
   const card = await screen.findByTestId("contrib-card-0");
   fireEvent.click(card.querySelector("button.tb-level-card__chev")!);
   return (await screen.findByLabelText(/Вклад «A\. А» в шкалу comp/)) as HTMLInputElement;

@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="ru" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-54 — загрузка выгрузки отчёта LMS как источника аналитики.
+    Контракт: docs/specs/prd-54/lms-export-import.md, раздел 11.
+
+    Форма ОДНА на три точки входа (раздел 11.1):
+      • экран «Импорт» — встроенной веткой, как и книга теста (страница инлайновая);
+      • аналитика общая — кнопка в слоте действий, форма в ModalDialog;
+      • аналитика теста — кнопка рядом с «Экспорт в Excel», форма там же, но с ПРИВЯЗАННЫМ тестом.
+    Копии формы недопустимы: разойдутся поведением сухого прогона и предупреждений.
+
+    Отличие третьей точки содержательное: тест уже задан страницей, и файл ЧУЖОГО теста
+    отвергается — состояние «mismatch».
+
+    Состояния (14):
+      путь      — empty → detected → new-group → plan → busy → done;
+      отказы    — not-recognized (файл не распознан), no-test (тест по вопросам не найден),
+                  mismatch (чужой тест; только там, где тест задан страницей), failed (сбой записи);
+      предупреждения — duplicate (тот же файл уже грузили), skipped (строки без даты пропущены);
+      загрузки  — batches, batches-empty;
+      хост      — modal (та же форма в окне обеих страниц аналитики).
+
+    Флажка «Данные уже обезличены» нет (решение владельца 2026-09-25): обезличенный файл узнаётся
+    по колонке external_id, и вместе с флажком ушло состояние anon-mismatch.
+    -->
+
+    <title>PRD-54 — Загрузка выгрузки LMS</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+      .wf-state.active { display: block; }
+      .wf-state > .ou-shell { min-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+      .wf-sprite { display: none; }
+      .wf-imp { display: none; }
+      .wf-imp.is-shown { display: block; }
+      .wf-row { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+      .wf-mt-3 { margin-top: var(--ou-space-3); }
+      .wf-mt-4 { margin-top: var(--ou-space-4); }
+      .wf-cards { display: flex; flex-direction: column; gap: var(--ou-space-5); max-width: var(--wf-size-720, 720px); }
+      .wf-card-foot { display: flex; justify-content: flex-end; gap: var(--ou-space-2); margin-top: var(--ou-space-4); }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+      .wf-sel-chev { margin-left: auto; color: var(--ou-fg-muted); }
+      .wf-page-title { font: var(--ou-text-heading-s); font-weight: 600; color: var(--ou-fg-default); }
+      /* План загрузки: имя строки слева, счётчики справа — как в эскизе книги (PRD-14). */
+      .wf-plan { display: flex; flex-direction: column; gap: var(--ou-space-2); margin: var(--ou-space-3) 0 0; padding: 0; list-style: none; }
+      .wf-plan__row { display: flex; align-items: center; gap: var(--ou-space-3); }
+      .wf-plan__name { flex: 1; font: var(--ou-text-body-m); }
+      /* Список загрузок: строка = файл, когда, счётчики, откат. */
+      .wf-batch { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-2) 0; border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+      .wf-batch:last-child { border-bottom: 0; }
+      .wf-batch__main { flex: 1; display: flex; flex-direction: column; gap: var(--ou-space-1); }
+      .wf-batch__name { font: var(--ou-text-body-m); font-weight: 600; color: var(--ou-fg-default); }
+      .wf-batch__meta { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      /* Модальное окно эскиза: показываем «как есть», без портала. */
+      .wf-modal-stage { position: relative; min-height: var(--wf-size-520, 520px); }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Экран «Импорт»:</span>
+      <button type="button" class="active" onclick="impState(this, 'empty')">пусто</button>
+      <button type="button" onclick="impState(this, 'detected')">файл опознан</button>
+      <button type="button" onclick="impState(this, 'new-group')">новая группа</button>
+      <button type="button" onclick="impState(this, 'plan')">план</button>
+      <button type="button" onclick="impState(this, 'busy')">идёт запись</button>
+      <button type="button" onclick="impState(this, 'done')">готово</button>
+      <span class="wf-nav-sep"></span>
+      <span class="wf-nav-title">Отказы:</span>
+      <button type="button" onclick="impState(this, 'not-recognized')">не распознан</button>
+      <button type="button" onclick="impState(this, 'no-test')">тест не найден</button>
+      <button type="button" onclick="impState(this, 'mismatch')">чужой тест</button>
+      <button type="button" onclick="impState(this, 'failed')">сбой записи</button>
+      <span class="wf-nav-sep"></span>
+      <span class="wf-nav-title">Предупреждения:</span>
+      <button type="button" onclick="impState(this, 'duplicate')">файл повторный</button>
+      <button type="button" onclick="impState(this, 'skipped')">строки пропущены</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="impState(this, 'batches')">загрузки</button>
+      <button type="button" onclick="impState(this, 'batches-empty')">загрузок нет</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'modal')">в окне (аналитика)</button>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+    </nav>
+
+    <!-- ════════════════ page: экран «Импорт», ветка выгрузки LMS ════════════════ -->
+    <div id="wf-page" class="wf-state active">
+      <div class="ou-shell">
+        <main class="ou-shell__main">
+          <div class="wf-cards">
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header"><div class="ou-card__heading">
+                <h3 class="ou-card__title">Загрузка файла</h3>
+              </div></header>
+              <div class="ou-card__body">
+
+                <!-- пусто -->
+                <div id="imp-empty" class="wf-imp is-shown">
+                  <label class="ou-uploader" tabindex="0">
+                    <span class="ou-uploader__icon" aria-hidden="true"><svg width="20" height="20"><use href="#i-upload" /></svg></span>
+                    <span class="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
+                    <span class="ou-uploader__sub">Книга теста или выгрузка отчёта LMS — вид определяется автоматически</span>
+                    <span class="ou-uploader__cta">Выбрать файл</span>
+                  </label>
+                </div>
+
+                <!-- файл опознан как выгрузка LMS -->
+                <div id="imp-detected" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">7684237229762827328-1.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 1 строка · 11 КБ</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--info ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Определение ведущего стиля человекоцентричного лидерства</p>
+                      <p class="ou-banner__desc">14 вопросов, 4 шкалы, 4 показателя. Тест определён по файлу — выбирать не нужно.</p>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-group">Группа</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-group" type="text" value="Без группы" readonly />
+                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                    </div></div>
+                    <p class="ou-formfield__hint">Разрез для аналитики. В списке — существующие группы и «＋ Создать новую группу».</p>
+                  </div>
+
+                  <div class="ou-check-group wf-mt-4">
+                    <label class="ou-check ou-check--s">
+                      <input class="ou-check__input" type="checkbox" />
+                      <span class="ou-check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+                      <span class="ou-check__text">
+                        <span class="ou-check__lbl">Связать с пользователями по ключу</span>
+                        <span class="ou-check__desc">Совпадение с внешним ключом пользователя свяжет прохождение с ним.</span>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'plan')">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Сначала проверьте файл">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- выбрана «создать новую группу» -->
+                <div id="imp-new-group" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">7684237229762827328-1.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 1 строка · 11 КБ</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-group-n">Группа</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-group-n" type="text" value="＋ Создать новую группу" readonly />
+                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                    </div></div>
+                  </div>
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-group-name">Название новой группы <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-group-name" type="text" value="Поток сентябрь 2026" />
+                    </div></div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'plan')">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Сначала проверьте файл">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- план (сухой прогон) с предупреждением -->
+                <div id="imp-plan" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">7684237229762827328-1.xlsx</span><span class="ou-file__meta">запись ещё не выполнена</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+
+                  <ul class="wf-plan">
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет добавлено</span><span class="ou-tag ou-tag--success ou-tag--outline">+2</span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет обновлено</span><span class="ou-tag ou-tag--neutral ou-tag--outline">1</span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет пропущено</span><span class="ou-tag ou-tag--neutral ou-tag--outline">0</span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет связано с пользователями</span><span class="ou-tag ou-tag--neutral ou-tag--outline">1</span></li>
+                  </ul>
+
+                  <div class="ou-banner ou-banner--warning ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__desc">Обезличивание и связывание включены одновременно: ФИО не сохраняется, но прохождение указывает на конкретного пользователя.</p>
+                    </div>
+                  </div>
+                  <div class="ou-banner ou-banner--warning ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__desc">Вопросы не из этого теста (2): пакет собран под другой версией.</p>
+                    </div>
+                  </div>
+
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="impState(null, 'detected')">Назад</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- чужой тест: только там, где тест задан страницей -->
+                <div id="imp-mismatch" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">другой-тест.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 3 строки</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-banner ou-banner--error ou-banner--subtle wf-mt-3" role="alert">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Это выгрузка другого теста</p>
+                      <p class="ou-banner__desc">В файле — «Опросник выгорания (MBI)». Открыта аналитика теста «Определение ведущего стиля человекоцентричного лидерства».</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'empty')">Выбрать другой файл</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Файл относится к другому тесту">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- готово -->
+                <div id="imp-done" class="wf-imp">
+                  <div class="ou-banner ou-banner--success ou-banner--subtle" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Загрузка завершена</p>
+                      <p class="ou-banner__desc">Добавлено 2, обновлено 1, связано с пользователями 1. Строки видны в аналитике теста.</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'empty')">Загрузить ещё</button>
+                  </div>
+                </div>
+
+                <!-- файл не опознан: ни книга теста, ни выгрузка LMS -->
+                <div id="imp-not-recognized" class="wf-imp">
+                  <label class="ou-uploader is-error" tabindex="0">
+                    <span class="ou-uploader__icon" aria-hidden="true"><svg width="20" height="20"><use href="#i-alert" /></svg></span>
+                    <span class="ou-uploader__title">Файл не распознан</span>
+                    <span class="ou-uploader__sub">Это не книга теста и не выгрузка отчёта LMS. Проверьте, что выгружали отчёт по SCORM-модулю.</span>
+                    <span class="ou-uploader__cta">Выбрать другой файл</span>
+                  </label>
+                </div>
+
+                <!-- выгрузка опознана, но тест по вопросам не определился -->
+                <div id="imp-no-test" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">выгрузка-2024.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 26 строк</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-banner ou-banner--error ou-banner--subtle wf-mt-3" role="alert">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Тест по файлу не определён</p>
+                      <p class="ou-banner__desc">Из 14 вопросов файла ни один не найден в базе. Похоже, выгрузка сделана по тесту из другой установки — загрузить её сюда нельзя.</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'empty')">Выбрать другой файл</button>
+                  </div>
+                </div>
+
+                <!-- этот файл уже загружали в этот тест -->
+                <div id="imp-duplicate" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">7684237229762827328-1.xlsx</span><span class="ou-file__meta">запись ещё не выполнена</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <ul class="wf-plan">
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет добавлено</span><span class="ou-tag ou-tag--neutral ou-tag--outline">0</span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет обновлено</span><span class="ou-tag ou-tag--neutral ou-tag--outline">3</span></li>
+                  </ul>
+                  <div class="ou-banner ou-banner--info ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Этот файл уже загружали 11.09.2026</p>
+                      <p class="ou-banner__desc">Содержимое совпадает с прошлой загрузкой. Повторная запись ничего не испортит — строки обновятся на месте, дублей не будет.</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="impState(null, 'empty')">Отмена</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Всё равно импортировать</button>
+                  </div>
+                </div>
+
+                <!-- часть строк пропущена -->
+                <div id="imp-skipped" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">выгрузка-август.xlsx</span><span class="ou-file__meta">запись ещё не выполнена</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <ul class="wf-plan">
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет добавлено</span><span class="ou-tag ou-tag--success ou-tag--outline">+16</span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет обновлено</span><span class="ou-tag ou-tag--neutral ou-tag--outline">0</span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Будет пропущено</span><span class="ou-tag ou-tag--warning ou-tag--outline">2</span></li>
+                  </ul>
+                  <div class="ou-banner ou-banner--warning ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">2 строки без даты активации модуля пропущены</p>
+                      <p class="ou-banner__desc">Без даты прохождение нечем отличить от другого того же участника, поэтому такие строки не записываются.</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="impState(null, 'detected')">Назад</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Импортировать 16</button>
+                  </div>
+                </div>
+
+                <!-- идёт разбор или запись -->
+                <div id="imp-busy" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">выгрузка-август.xlsx</span><span class="ou-file__meta">418 строк · 1,2 МБ</span></div>
+                  </div>
+                  <div class="wf-row wf-mt-4">
+                    <span class="ou-spinner-wrap is-inline" role="status" aria-live="polite">
+                      <span class="ou-spinner ou-spinner--s ou-spinner--accent" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                          <circle class="ou-spinner__track" cx="12" cy="12" r="10" />
+                          <circle class="ou-spinner__head" cx="12" cy="12" r="10" />
+                        </svg>
+                      </span>
+                      <span class="ou-spinner__label">Импортируем… Не закрывайте окно.</span>
+                    </span>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" disabled aria-disabled="true">Отмена</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- запись не удалась -->
+                <div id="imp-failed" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">выгрузка-август.xlsx</span><span class="ou-file__meta">запись не выполнена</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-banner ou-banner--error ou-banner--subtle wf-mt-3" role="alert">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Загрузка не выполнена</p>
+                      <p class="ou-banner__desc">Сервер вернул ошибку. Ничего не записано — можно повторить.</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="impState(null, 'empty')">Отмена</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'busy')">Повторить</button>
+                  </div>
+                </div>
+
+                <!-- загрузок ещё не было -->
+                <div id="imp-batches-empty" class="wf-imp">
+                  <div class="ou-empty ou-empty--inline ou-empty--well">
+                    <div class="ou-empty__content">
+                      <p class="ou-empty__title">Выгрузки ещё не загружали</p>
+                      <p class="ou-empty__desc">Здесь появится список загруженных файлов — с датой, автором и возможностью откатить.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- список загрузок; ДЕЛЬТА PRD-66 FR-12: переключатель «В расчётах» у каждой загрузки -->
+                <div id="imp-batches" class="wf-imp">
+                  <div class="wf-batch">
+                    <div class="wf-batch__main">
+                      <span class="wf-batch__name">7684237229762827328-1.xlsx</span>
+                      <span class="wf-batch__meta">11.09.2026, 23:40 · Приёмка · группа «Поток сентябрь 2026»</span>
+                    </div>
+                    <span class="ou-tag ou-tag--neutral ou-tag--outline">3 строки</span>
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
+                    </label>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
+                  </div>
+                  <div class="wf-batch">
+                    <div class="wf-batch__main">
+                      <span class="wf-batch__name">выгрузка-август.xlsx</span>
+                      <span class="wf-batch__meta">14.08.2026, 10:12 · Приёмка · без группы · не учитывается в расчётах — данные сохранены</span>
+                    </div>
+                    <span class="ou-tag ou-tag--neutral ou-tag--outline">18 строк</span>
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--s" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
+                    </label>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
+                  </div>
+                </div>
+
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ modal: та же форма в окне (обе страницы аналитики) ════════════════ -->
+    <div id="wf-modal" class="wf-state">
+      <div class="wf-doc wf-modal-stage">
+        <div class="ou-modal-root">
+          <div class="ou-modal__backdrop"></div>
+          <div class="ou-modal ou-modal--m" role="dialog" aria-modal="true" aria-labelledby="wf-modal-title">
+            <div class="ou-modal__head">
+              <div class="ou-modal__head-text">
+                <h2 class="ou-modal__title" id="wf-modal-title">Загрузка выгрузки LMS</h2>
+                <p class="ou-modal__desc">Определение ведущего стиля человекоцентричного лидерства</p>
+              </div>
+              <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+            </div>
+            <div class="ou-modal__body">
+              <label class="ou-uploader" tabindex="0">
+                <span class="ou-uploader__icon" aria-hidden="true"><svg width="20" height="20"><use href="#i-upload" /></svg></span>
+                <span class="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
+                <span class="ou-uploader__sub">Только выгрузка отчёта LMS этого теста</span>
+                <span class="ou-uploader__cta">Выбрать файл</span>
+              </label>
+              <div class="ou-formfield wf-mt-3">
+                <label class="ou-formfield__lbl" for="imp-group-m">Группа</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box">
+                  <input class="ou-field__input" id="imp-group-m" type="text" value="Без группы" readonly />
+                  <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                </div></div>
+              </div>
+              <div class="ou-check-group wf-mt-4">
+                <label class="ou-check ou-check--s">
+                  <input class="ou-check__input" type="checkbox" />
+                  <span class="ou-check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <span class="ou-check__text"><span class="ou-check__lbl">Связать с пользователями по ключу</span></span>
+                </label>
+              </div>
+              <!-- ДЕЛЬТА PRD-66 FR-12 (2026-09-25): тест задан страницей, поэтому загрузки видны
+                   ДО выбора файла — снять загрузку с учёта можно, ничего не загружая. -->
+              <div class="wf-mt-4">
+                <p class="wf-batch__name">Загрузки этого теста</p>
+                <div class="wf-batch">
+                  <div class="wf-batch__main">
+                    <span class="wf-batch__name">7684237229762827328-1.xlsx</span>
+                    <span class="wf-batch__meta">11.09.2026, 23:40 · добавлено 3, обновлено 0</span>
+                  </div>
+                  <label class="ou-switch-field">
+                    <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                    <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
+                  </label>
+                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
+                </div>
+              </div>
+            </div>
+            <div class="ou-modal__foot">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Проверить</button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Импортировать</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ docs: Пояснения + DS Mapping ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — загрузка выгрузки отчёта LMS (PRD-54)</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Поведение / API</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Три точки входа</td><td>Экран «Импорт» — встроенно; аналитика общая и аналитика теста — та же форма в <code>ModalDialog</code></td><td>Форма ОДНА: копии разойдутся поведением сухого прогона</td></tr>
+              <tr><td>Определение вида</td><td><code>POST /api/workbook/inspect</code> отдаёт <code>kind: "lmsExport"</code> или <code>"workbook"</code>; клиент ветвится по одному полю</td><td>Отпечаток — четвёрка подколонок + префиксы <code>q_</code>/<code>scale_</code>/<code>var_</code></td></tr>
+              <tr><td>Тест</td><td>Определяется ИЗ ФАЙЛА по <code>q_&lt;uuid&gt;</code> и показывается подтверждением, а не списком</td><td>Ручной выбор открыл бы запись не в тот тест</td></tr>
+              <tr><td>Чужой тест</td><td>Только там, где тест задан страницей: несовпадение даёт <code>422</code> с названиями ОБОИХ тестов, «Импортировать» заблокирован</td><td>Состояние «чужой тест»</td></tr>
+              <tr><td>Группа</td><td>Список существующих + «＋ Создать новую группу» + явный пункт «Без группы»</td><td>Метка на прохождении; разрез для психометрики</td></tr>
+              <tr><td>Обезличенный файл</td><td>Узнаётся по колонке <code>external_id</code> в любом месте листа, флажка нет; без колонки <code>external_id</code> вычисляется при импорте тем же алгоритмом</td><td>Спрашивать человека о том, что видно из файла, незачем</td></tr>
+              <tr><td>«Связать по ключу»</td><td>Сначала <code>learner_id</code> против <code>users.lms_learner_id</code>, затем <code>external_id</code> против <code>users.external_key</code>; несовпадение — не ошибка</td><td>Вместе с обезличиванием даёт предупреждение</td></tr>
+              <tr><td>«Проверить»</td><td><code>POST /api/analytics/lms-import?dryRun=true</code> — план и предупреждения без записи</td><td>«Импортировать» до проверки заблокирован</td></tr>
+              <tr><td>«Импортировать»</td><td>Тот же эндпоинт без <code>dryRun</code>; после успеха гасится кеш аналитики</td><td>Цифры на странице обновляются без перезагрузки</td></tr>
+              <tr><td>Повторная загрузка</td><td>Обновляет по ключу (тест + участник + дата активации модуля), дублей не создаёт</td><td>Ею же проставляется позднее связывание</td></tr>
+              <tr><td>Загрузки и откат</td><td><code>GET /api/analytics/lms-import/batches/:testId</code>, <code>DELETE .../batches/:id</code></td><td>Откат удаляет строки партии целиком</td></tr>
+              <tr><td>«В расчётах» (PRD-66 FR-12, дельта 2026-09-25)</td><td><code>PATCH .../batches/:id</code> с <code>counted</code>; действует сразу, без подтверждения; у снятой загрузки в подписи «не учитывается в расчётах — данные сохранены»</td><td>Обратимое решение рядом с необратимым откатом: сомнительную выгрузку убирают из чисел, не теряя данных</td></tr>
+              <tr><td>Право</td><td><code>analytics.import</code> + область теста</td><td>Выдаётся тем же ролям, что <code>analytics.export</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping — загрузка выгрузки LMS</h2>
+          <p class="wf-mapping-sub">Заполняется до старта frontend. Строка с «custom» в колонке DS-компонент — блокер.</p>
+          <table>
+            <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
+            <tbody>
+              <tr><td>Карточка (экран «Импорт»)</td><td><code>Card variant="outlined"</code> (<code>ou-card</code>)</td><td><code>--ou-border-soft</code></td><td>Та же, что у книги теста</td></tr>
+              <tr><td>Окно (обе аналитики)</td><td><code>ModalDialog</code> (<code>ou-modal--m</code>)</td><td><code>--ou-modal-*</code></td><td>Образец — <code>AttemptDetailModal</code></td></tr>
+              <tr><td>Загрузчик</td><td><code>FileUploader</code> (<code>ou-uploader</code>)</td><td><code>--ou-border-default</code></td><td></td></tr>
+              <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>, <code>--xls</code>)</td><td><code>--ou-border-soft</code></td><td></td></tr>
+              <tr><td>Опознанный тест</td><td><code>Banner</code> info subtle</td><td><code>--ou-info-soft</code></td><td>Подтверждение, не поле выбора</td></tr>
+              <tr><td>Группа</td><td><code>Combobox</code> (ui-kit) + <code>Input</code> для нового названия</td><td><code>--ou-field-*</code></td><td>Сентинелы «без группы» и «создать новую»</td></tr>
+              <tr><td>Флажки</td><td><code>Checkbox</code> (<code>ou-check--s</code>) в <code>ou-check-group</code></td><td><code>--ou-check-*</code></td><td>С поясняющей строкой <code>ou-check__desc</code></td></tr>
+              <tr><td>Счётчики плана</td><td><code>Tag</code> success/neutral outline</td><td><code>--ou-success-default</code></td><td></td></tr>
+              <tr><td>Предупреждения</td><td><code>Banner</code> warning/error subtle</td><td><code>--ou-warning-soft</code>/<code>--ou-error-soft</code></td><td>По одному баннеру на предупреждение</td></tr>
+              <tr><td>Список загрузок</td><td>строки на <code>Tag</code> + <code>Button ghost</code></td><td><code>--ou-border-soft</code></td><td>Отдельного DS-компонента списка не требуется</td></tr>
+              <tr><td>Кнопки</td><td><code>Button</code> primary/secondary/ghost</td><td><code>--ou-accent-default</code></td><td>«Импортировать» disabled до проверки</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * Начальное состояние из адреса: `?state=plan`, `?state=modal`, `?state=docs`.
+       * Так состояние снимается скриншотом напрямую, без кликов по переключателю.
+       */
+      window.addEventListener('DOMContentLoaded', () => {
+        const want = new URLSearchParams(location.search).get('state');
+        if (!want) return;
+        // Подсветку переключателя двигаем тоже: иначе снимок показывает одно состояние, а
+        // выделенной остаётся кнопка другого, и смотрящий сверяет не то.
+        var btn = [...document.querySelectorAll('.wf-nav button')]
+          .find((b) => (b.getAttribute('onclick') || '').includes("'" + want + "'")) || null;
+        if (want === 'modal' || want === 'docs') showState(btn, want);
+        else impState(btn, want);
+        if (new URLSearchParams(location.search).get('theme') === 'dark') toggleTheme(null);
+      });
+
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="State"]').forEach(function (b) { b.classList.toggle('active', b === btn); });
+      };
+      window.impState = function impState(btn, id) {
+        var page = document.getElementById('wf-page');
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === page); });
+        document.querySelectorAll('.wf-imp').forEach(function (b) { b.classList.toggle('is-shown', b.id === 'imp-' + id); });
+        if (btn) document.querySelectorAll('.wf-nav button').forEach(function (b) { b.classList.toggle('active', b === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.classList.toggle('light', !dark);
+        if (btn) { btn.textContent = dark ? 'Light' : 'Dark'; btn.classList.toggle('active', dark); }
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>

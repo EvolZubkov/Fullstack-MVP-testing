@@ -142,7 +142,7 @@ describe("host parity", () => {
   // Дефект Д-3. Веб собирает `testFeedback` из своего `MeasuresSource`, пакет — из
   // `TEST_DATA.testFeedbackJson`, но оба отдают его общему сборщику ОДНОЙ опцией,
   // не завязанной на измерения. Тест без шкал и показателей — общий случай.
-  it("обратная связь теста без измерений: адаптер веба === общий сборщик", () => {
+  it("обратная связь теста снята НА ОБОИХ хостах одинаково (PRD-61 §10)", () => {
     const feedback = {
       format: "plain",
       text: "Спасибо за участие.",
@@ -163,9 +163,10 @@ describe("host parity", () => {
       hasPassThreshold: true,
       testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [{ title: "Памятка", url: "/api/media/cccc" }] },
     });
+    // Главное здесь прежнее: хосты отдают ОДНО И ТО ЖЕ. Изменилось что именно — уровень
+    // теста снят, и блока не остаётся ни у одного из них.
     expect(web).toEqual(shared);
-    expect(web.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
-    expect(web.result.recommendations?.assets).toEqual([{ title: "Памятка", url: "/api/media/cccc" }]);
+    expect(web.result.recommendations).toBeUndefined();
   });
 
   // Гейт по вердикту ТЕСТА: пройденный тест не показывает работу над ошибками. Веб
@@ -189,9 +190,9 @@ describe("host parity", () => {
     expect(web.result.recommendations).toBeUndefined();
   });
 
-  it("тест без порога: оба хоста показывают его обратную связь и при passed", () => {
-    // Край PRD-29 на обоих хостах сразу: вердикт не выносился, и обратная связь — это
-    // и есть результат измерительного метода.
+  it("тест без порога: оба хоста молчат одинаково и здесь", () => {
+    // Край PRD-29 проверялся обратной связью ТЕСТА — её сняли (PRD-61 §10). Предмет
+    // проверки — одинаковое поведение двух хостов — остался.
     const feedback = { format: "plain", text: "Ваш профиль.", links: [], events: [], assets: [] };
     const web = webBuild(attemptResult, "Маслач", {
       scales: [],
@@ -205,7 +206,7 @@ describe("host parity", () => {
       testFeedback: { text: "Ваш профиль.", links: [], events: [], assets: [] },
     });
     expect(web).toEqual(shared);
-    expect(web.result.recommendations?.texts).toEqual(["Ваш профиль."]);
+    expect(web.result.recommendations).toBeUndefined();
   });
 });
 
@@ -241,8 +242,9 @@ describe("вход отчёта питает блок экрана", () => {
     const screen = webBuild(result, "Тест", material);
     const report = buildReportContext(buildReportInput(result, "Тест", {}, material));
     expect(report.result.recommendations).toEqual(screen.result.recommendations);
+    // PRD-61 §10: текст ТЕСТА снят, список начинается с темы. Равенство выше — предмет
+    // проверки — от этого не зависит.
     expect(report.result.recommendations?.texts).toEqual([
-      "Разберите ошибки.",
       "Текст темы",
       "Текст раздела",
     ]);
@@ -264,9 +266,8 @@ describe("вход отчёта питает блок экрана", () => {
     const screen = webAdaptiveBuild(result, "Адаптивный", material);
     const report = buildAdaptiveReportContext(buildAdaptiveReportInput(result, "Адаптивный", {}, material));
     expect(report.result.recommendations).toEqual(screen.result.recommendations);
-    expect(report.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст темы"]);
+    expect(report.result.recommendations?.texts).toEqual(["Текст темы"]);
     expect(report.result.recommendations?.assets).toEqual([
-      { title: "Памятка", url: "/api/media/cccc" },
       { title: "Разбор темы", url: "/api/media/aaaa" },
     ]);
   });

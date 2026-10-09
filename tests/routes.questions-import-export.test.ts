@@ -49,6 +49,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTopics: vi.fn(),
     getTopic: vi.fn(),
     createTopic: vi.fn(),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSections: vi.fn(),
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
@@ -713,6 +716,14 @@ describe("POST /import — Сложность = 0 (PRD-14 Ф0)", () => {
     expect(res.body.errors).toHaveLength(1);
     expect(res.body.errors[0]).toMatch(/сложност/i);
     expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+  it("пустая клетка Сложности — «Не задано» (PRD-16 FR-10), а не 50", async () => {
+    const buf = await makeImportXlsx([singleRow({ "Сложность": "" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ difficulty: null })
+    );
   });
 });
 

@@ -60,15 +60,16 @@ export const PAGE_SHEET_NAME = "Страницы";
 export const PAGE_FIELD_SHEET_NAME = "Поля страниц";
 
 export const PAGE_HEADERS = [
-  "Зона", "Раздел", "Вид", "Номер", "Вариант", "Режим", "Автопереход", "Задержка, мс",
+  "Зона", "Раздел", "Вид", "Номер", "Вариант", "Режим", "Автопереход", "Задержка, мс", "Скрыт",
 ];
-export const PAGE_WIDTHS = [16, 28, 20, 8, 24, 16, 14, 14];
+export const PAGE_WIDTHS = [16, 28, 20, 8, 24, 16, 14, 14, 10];
 
 export const PAGE_FIELD_HEADERS = ["Зона", "Раздел", "Вид", "Номер", "Куда", "Ключ", "Значение"];
 export const PAGE_FIELD_WIDTHS = [16, 28, 20, 8, 14, 30, 80];
 
 /** Column keys, taken from the headers so a rename lands in one place. */
-const [PG_ZONE, PG_TOPIC, PG_KIND, PG_INDEX, PG_VARIANT, PG_MODE, PG_AUTO, PG_DELAY] = PAGE_HEADERS;
+const [PG_ZONE, PG_TOPIC, PG_KIND, PG_INDEX, PG_VARIANT, PG_MODE, PG_AUTO, PG_DELAY, PG_HIDDEN] =
+  PAGE_HEADERS;
 const [PF_ZONE, PF_TOPIC, PF_KIND, PF_INDEX, PF_TARGET, PF_KEY, PF_VALUE] = PAGE_FIELD_HEADERS;
 
 /** «Тема» is the legacy spelling of the «Раздел» column, accepted by every sheet here. */
@@ -149,6 +150,8 @@ export interface PageSource {
   mode?: string | null;
   autoAdvance?: boolean | null;
   autoAdvanceDelayMs?: number | null;
+  /** Экран есть в тесте, но ученику не выдаётся (2026-09-20). */
+  hidden?: boolean | null;
   /** `values_json` as stored: authored values live under `values`. */
   valuesJson?: unknown;
   settingsJson?: unknown;
@@ -169,6 +172,8 @@ export interface ParsedPage {
   mode?: PageMode;
   autoAdvance?: boolean;
   autoAdvanceDelayMs?: number;
+  /** `undefined` = столбца «Скрыт» в книге нет, видимость страницы не трогаем. */
+  hidden?: boolean;
   /** Keys of `values_json.values` named by «Поля страниц». */
   values: Record<string, unknown>;
   /** Keys of `settings_json` named by «Поля страниц». */
@@ -258,6 +263,9 @@ export function serializePageRows(pages: readonly PageSource[] = []): Record<str
       [PG_MODE]: MODE_TO[mode as PageMode] ?? mode,
       [PG_AUTO]: page.autoAdvance ? YES : NO,
       [PG_DELAY]: typeof delay === "number" ? String(delay) : "",
+      // Скрытие едет книгой наравне с остальными свойствами страницы: перенос теста,
+      // потерявший его, выдал бы ученику экран, который автор убрал.
+      [PG_HIDDEN]: page.hidden ? YES : NO,
     };
   });
 }
@@ -478,6 +486,25 @@ export function parsePageSheets(
       errors.push(`${where}: ${delay.error}`);
       return;
     }
+
+    // Пустая ячейка «Скрыт» читается как «показывать»: книги, выгруженные до появления
+    // столбца, не должны менять видимость экранов при обратном импорте.
+    const hiddenRaw = normalizeCell(String(row[PG_HIDDEN] ?? ""));
+    let hidden: boolean | undefined;
+    if (hiddenRaw === normalizeCell(YES)) hidden = true;
+    else if (hiddenRaw === normalizeCell(NO)) hidden = false;
+    else if (hiddenRaw !== "") {
+      errors.push(
+        `${where}: «${PG_HIDDEN}» должен быть «${YES}» или «${NO}», получено "${String(row[PG_HIDDEN])}"`,
+      );
+      return;
+    }
+    // Блок вопросов и маршрутизатор скрыть нельзя — тот же запрет, что в редакторе и на
+    // сервере; книга не должна быть лазейкой в обход него.
+    if (hidden === true && (kind.value === "questions" || kind.value === "router")) {
+      errors.push(`${where}: экран «${row[PG_KIND]}» нельзя скрыть`);
+      return;
+    }
     const templateKey = cleanCell(String(row[PG_VARIANT] ?? ""));
 
     const page: ParsedPage = {
@@ -490,6 +517,7 @@ export function parsePageSheets(
       mode: modeValue,
       autoAdvance,
       autoAdvanceDelayMs: delay.value,
+      hidden,
       values: {},
       settings: {},
     };

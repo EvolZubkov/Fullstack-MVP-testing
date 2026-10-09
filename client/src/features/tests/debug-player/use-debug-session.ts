@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import type { PublishCheckFinding } from "@/features/content-protection/types";
 
 export type DebugSessionStatus = "loading" | "ready" | "forbidden" | "error";
 
@@ -23,6 +24,12 @@ export interface DebugSessionState {
   title?: string;
   /** Applied design-template id, for the stage ribbon. */
   template?: string;
+  /**
+   * PRD-15 FR-05: чем текущий состав тем мешает выдаче. Не отказ — прогон
+   * запускается, — но объясняет заранее, почему он встанет: адаптивный уровень, под
+   * диапазон сложности которого в теме нет вопросов, печатает «Вопрос 1 из 0».
+   */
+  feasibility?: PublishCheckFinding[];
 }
 
 /** Inject a server-served script into the player window and resolve once it ran. */
@@ -37,7 +44,13 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-export function useDebugSession(testId: string) {
+/**
+ * Какой прогон открывается: отладочный (автор, PRD-18) или рецензентский
+ * (PRD-52). От этого зависит только префикс маршрутов — сам движок общий.
+ */
+export type RunKind = "debug" | "review";
+
+export function useDebugSession(testId: string, kind: RunKind = "debug") {
   const [state, setState] = useState<DebugSessionState>({ status: "loading" });
   // Bumping `runKey` reloads the stage iframe for a fresh run (Сброс).
   const [runKey, setRunKey] = useState(0);
@@ -52,18 +65,19 @@ export function useDebugSession(testId: string) {
         // Inject the RTE shim + inspector compute ONCE per window. On «Пересобрать»
         // (buildKey bump) they already exist — re-injecting would duplicate the
         // <script> tags and reset window.__scorm, dropping the token-keyed store.
-        if (!window.__scorm) await loadScript(`/api/tests/${testId}/debug/shim.js`);
-        if (!window.TBInspector) await loadScript(`/api/tests/${testId}/debug/inspector-compute.js`);
-        const res = await apiRequest("POST", `/api/tests/${testId}/debug/session`);
+        if (!window.__scorm) await loadScript(`/api/tests/${testId}/${kind}/shim.js`);
+        if (!window.TBInspector) await loadScript(`/api/tests/${testId}/${kind}/inspector-compute.js`);
+        const res = await apiRequest("POST", `/api/tests/${testId}/${kind}/session`);
         const data = (await res.json()) as {
           token: string; launch: string; playUrl: string; title?: string; template?: string;
+          feasibility?: PublishCheckFinding[];
         };
         if (cancelled) return;
         // Key the throwaway run's localStorage by token so reruns don't collide.
         window.__scorm?.restore(`debug:${data.token}`);
         setState({
           status: "ready", token: data.token, launch: data.launch, playUrl: data.playUrl,
-          title: data.title, template: data.template,
+          title: data.title, template: data.template, feasibility: data.feasibility ?? [],
         });
       } catch (e) {
         if (cancelled) return;
@@ -72,7 +86,7 @@ export function useDebugSession(testId: string) {
       }
     })();
     return () => { cancelled = true; };
-  }, [testId, buildKey]);
+  }, [testId, kind, buildKey]);
 
   /** Reset the current run: clear the RTE store and reload the stage iframe. */
   function reset() {

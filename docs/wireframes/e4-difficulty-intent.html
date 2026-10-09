@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="ru" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: Э4 UX-аудита аналитики — как показывать замысел автора рядом с наблюдаемой трудностью
+    в таблице «Вопросы». Варианты на согласование (вопрос владельца 2026-10-04: «нужны эскизы»).
+    Таблица — из prd66-item-quality.html (состояние wf-items), меняется только колонка «Замысел».
+    Четвёртая строка — вопрос без заданной сложности: «не задана» (решение владельца 2026-10-04).
+  -->
+    <title>Э4 — замысел и наблюдение</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css?v=4" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css?v=3" />
+    <script defer src="/docs/wireframes/prd7-shared.js?v=2"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css?v=4" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css?v=3" />
+    <style>
+      body { --wf-nav-offset: var(--wf-size-84); }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset); }
+      .wf-state.active { display: block; }
+      .wf-state .ou-shell__header { position: static; }
+      .wf-sprite { display: none; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+
+
+      .wf-th-end { justify-content: flex-end; }
+      .wf-rowmenu-cell { position: relative; text-align: right; }
+      .wf-rowmenu { position: absolute; right: 0; top: 100%; z-index: 20; min-width: var(--wf-size-240); text-align: left; }
+      .wf-rowmenu--up { top: auto; bottom: 100%; }
+      /* Слоты сравниваемых срезов — разметка и стили взяты из согласованного эскиза
+         раздела «Аналитика» (prd56-analytics-section.html), чтобы один механизм
+         выглядел одинаково на обоих экранах. */
+      .wf-slots { align-items: start; }
+      .wf-slot { min-width: 0; padding: var(--ou-space-6); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-l); }
+      .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
+      .wf-slot-add:hover { border-color: var(--ou-accent-default); }
+      /* Пузырёк подсказки позиционируется от своего якоря, поэтому в узкой ячейке
+         таблицы сжимается до ширины заголовка. Ширину задаёт эскизный класс. */
+      .wf-tip-wide { width: var(--wf-size-240); white-space: normal; }
+      /* Значок подсказки у заголовка-термина: без него подсказка невидима, пока
+         читатель случайно не наведёт курсор. */
+      .ou-tip { align-items: center; }
+      .wf-tip-ico { margin-left: var(--ou-space-1); color: var(--ou-fg-muted); flex-shrink: 0; }
+      /* Шкала доли: значение фиксированной ширины, дорожка занимает остаток ячейки,
+         поэтому обе колонки разреза выглядят одинаково при любой ширине стола. */
+      .wf-scale { display: flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-scale__value { min-width: var(--wf-size-44); text-align: right; }
+      .wf-scale__track { flex: 1; height: var(--ou-space-2); background: var(--ou-bg-muted); border-radius: var(--ou-radius-pill); overflow: hidden; }
+      .wf-scale__fill { display: block; height: 100%; background: var(--ou-accent-default); border-radius: var(--ou-radius-pill); }
+      /* Гистограмма распределения ответов: занимает ширину колонки целиком; под столбиками
+         номера градаций, словами подписаны только края (дельта 6.6, 2026-09-26). */
+      .wf-hist { display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: auto var(--wf-size-44) auto;
+                 align-items: end; justify-items: center; gap: var(--ou-space-1); }
+      .wf-hist__box { width: 100%; height: 100%; display: flex; align-items: flex-end; }
+      .wf-hist__bar { width: 100%; background: var(--ou-accent-default); border-radius: var(--ou-radius-s); }
+      .wf-hist__lbl { text-align: center; line-height: 1.2; white-space: normal; align-self: start; }
+      /* Семь градаций — те же номера и края, только колонок больше. Полный список
+         градаций с долями открывает подсказка ячейки. */
+      .wf-hist--wide { grid-template-columns: repeat(7, 1fr); }
+      /* Подсказка ячейки распределения: вся гистограмма — её якорь, внутри — нумерованный
+         список градаций. Маркеры заданы явно: сброс ДС гасит их у списков. */
+      .wf-tip-cell { display: flex; width: 100%; }
+      .wf-tip-cell > .ou-stack { flex: 1; min-width: 0; }
+      .wf-tip-list { margin: 0; padding-left: var(--ou-space-4); list-style: decimal outside; text-align: left; }
+      .wf-hist-ends { display: flex; justify-content: space-between; gap: var(--ou-space-2); white-space: normal; }
+      /* У колонок справа пузырёк уходил за край стола и добавлял горизонтальную
+         прокрутку; здесь он выравнивается по правому краю заголовка. */
+      .wf-tip-end[data-placement="bottom"] .ou-tip__bubble { left: auto; right: 0; --ou-tip-tx: 0; }
+      /* Длинный термин в заголовке распирает колонку и включает горизонтальную
+         прокрутку стола; перенос по словам оставляет её в пределах карточки. */
+      .wf-th-wrap .ou-grid__th { white-space: normal; align-items: flex-start; }
+      /* Заголовок с подсказкой — строчный: при переносе значок идёт сразу за последним словом, а
+         у числовой колонки текст стоит справа, над числами, и не отрывается от них. */
+      .ou-grid__th .ou-tip { display: inline; }
+      .ou-grid__th .wf-tip-ico { vertical-align: -1px; }
+      .wf-th-end { text-align: right; }
+      /* Стрелка сортировки не сжимается: в узкой колонке переносится текст, а не пропадает стрелка. */
+      .ou-grid__th > svg { flex-shrink: 0; }
+      /* Ячейки стола в дизайн-системе не переносятся, поэтому длинный текст задания
+         распирает таблицу и включает горизонтальную прокрутку. Колонка ограничена,
+         хвост срезается многоточием: текст целиком виден в подсказке и в разборе. */
+      .wf-col-item { max-width: var(--wf-size-360); overflow: hidden; text-overflow: ellipsis; }
+      /* Ячейки стола в дизайн-системе не переносятся: длинный текст задания распирал
+         таблицу и включал горизонтальную прокрутку. Фиксированная раскладка делит
+         ширину долями, а хвост срезается многоточием — полный текст виден в разборе. */
+      .wf-grid-fixed { table-layout: fixed; width: 100%; }
+      /* Многоточие нужно в ТЕЛЕ таблицы; на заголовке `overflow: hidden` срезал бы
+         пузырёк подсказки, который выходит за пределы ячейки. */
+      .wf-grid-fixed td { overflow: hidden; }
+      /* Ячейка с меню строки — исключение: меню всплывает за её пределы, и обрезка
+         оставляла от него только тень. */
+      .wf-grid-fixed td.wf-rowmenu-cell { overflow: visible; }
+      /* Ячейка распределения ответов тоже: её подсказка со списком градаций шире ячейки.
+         Первая строка открывает подсказку вниз, остальные — вверх, чтобы пузырёк не
+         выходил за нижний край стола и не включал в нём прокрутку. */
+      .wf-grid-fixed td.wf-tip-td { overflow: visible; }
+      .wf-grid-fixed .ou-grid__cell-strong, .wf-grid-fixed .ou-grid__cell-sub { text-overflow: ellipsis; }
+          /* Э4, вариант Г: общая полоса 0–100 «сложнее →» с двумя отметками. */
+      .wf-dual { position: relative; height: var(--ou-space-2); border-radius: var(--ou-radius-pill); background: var(--ou-bg-muted); }
+      .wf-dual__mark { position: absolute; top: 50%; width: var(--ou-space-3); height: var(--ou-space-3); transform: translate(-50%, -50%); }
+      .wf-dual__mark--intent { background: var(--ou-fg-muted); transform: translate(-50%, -50%) rotate(45deg); }
+      .wf-dual__mark--seen { background: var(--ou-accent-default); border-radius: 50%; }
+      .wf-dual-wrap { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+          .ou-grid__table th .wf-th-end { justify-content: center; text-align: center; }
+      .ou-grid__table tbody td.is-numeric { text-align: center; }
+      .ou-grid__table tbody td .ou-stack--ai-end { align-items: center; }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></symbol>
+      <symbol id="i-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5l-1-1H13a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.5l-1-1H13a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1Z"/><path d="M3 3v16a2 2 0 0 0 2 2h7"/><path d="M3 8h9"/></symbol>
+      <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+      <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
+      <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 21a8 8 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/></symbol>
+      <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
+      <symbol id="i-q-single" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="12" r="10" /></symbol>
+      <symbol id="i-q-multiple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="m16 9-5.5 5.5L8 12" /></symbol>
+      <symbol id="i-q-matching" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3" /><path d="m2 22 3-3" /><path d="M7.5 13.5 10 11" /><path d="M10.5 16.5 13 14" /></symbol>
+      <symbol id="i-q-ranking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5h10" /><path d="M11 12h10" /><path d="M11 19h10" /><path d="M4 4h1v5" /><path d="M4 9h2" /><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" /></symbol>
+      <symbol id="i-q-scale" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2" /><path d="M12 8a4 4 0 0 0-1.645 7.647" /><path d="M2 12h2" /><path d="M20 14.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z" /><path d="m4.93 4.93 1.41 1.41" /><path d="m6.34 17.66-1.41 1.41" /></symbol>
+      <symbol id="i-q-allocation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3" /><path d="M12 19H3" /><path d="M14 3v4" /><path d="M16 17v4" /><path d="M21 12h-9" /><path d="M21 19h-5" /><path d="M21 5h-7" /><path d="M8 10v4" /><path d="M8 12H3" /></symbol>
+    </svg>
+
+    <template id="wf-side-tpl">
+      <aside class="ou-side">
+        <div class="ou-side__brand">
+          <a href="#" class="ou-link-reset ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+            <span class="ou-shell__brand-mark"><svg width="16" height="16"><use href="#i-book" /></svg></span>
+            <span class="ou-text ou-text--body-m ou-text--w-semibold">Skill'Ум</span>
+          </a>
+        </div>
+        <nav class="ou-side__nav">
+          <div class="ou-side__group">
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-home" /></svg></span><span class="ou-side__lbl">Главная</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-folder-tree" /></svg></span><span class="ou-side__lbl">Темы и вопросы</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-clipboard" /></svg></span><span class="ou-side__lbl">Тесты</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-layout" /></svg></span><span class="ou-side__lbl">Шаблоны</span></button>
+            <button type="button" class="ou-side__item is-active" aria-current="page"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-chart" /></svg></span><span class="ou-side__lbl">Аналитика</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users" /></svg></span><span class="ou-side__lbl">Пользователи</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users-round" /></svg></span><span class="ou-side__lbl">Группы</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-import" /></svg></span><span class="ou-side__lbl">Импорт</span></button>
+          </div>
+        </nav>
+        <div class="ou-side__foot">
+          <span class="ou-text ou-text--caption ou-text--tone-subtle">Версия 1.18.0</span>
+        </div>
+      </aside>
+    </template>
+
+    <template id="wf-header-tpl">
+      <div class="ou-shell__actions">
+        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" aria-label="Переключить на тёмную тему"><span class="ou-iconbtn__ico"><svg width="20" height="20"><use href="#i-moon" /></svg></span></button>
+        <button type="button" class="ou-shell__user">
+          <span class="ou-shell__avatar">А</span>
+          <span class="ou-shell__user-meta">
+            <span class="ou-shell__user-name">Администратор</span>
+            <span class="ou-shell__user-role">Суперадминистратор</span>
+          </span>
+        </button>
+      </div>
+    </template>
+
+    <template id="wf-head-tpl">
+      <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+        <nav class="ou-crumbs" aria-label="Хлебные крошки">
+          <ol class="ou-crumbs__list">
+            <li class="ou-crumbs__item"><a class="ou-crumbs__crumb" href="#" onclick="showState(null, 'general'); return false;"><span class="ou-crumbs__label">Аналитика</span></a></li>
+            <li class="ou-crumbs__sep" aria-hidden="true"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></li>
+            <li class="ou-crumbs__item is-current"><span class="ou-crumbs__crumb" aria-current="page"><span class="ou-crumbs__label">Сертификация руководителей</span></span></li>
+          </ol>
+        </nav>
+        <h1 class="ou-text ou-text--heading-l">Сертификация руководителей</h1>
+        <p class="ou-text ou-text--body-m ou-text--tone-muted">486 завершённых прохождений · веб, телеметрия LMS и импортированные выгрузки</p>
+      </div>
+      <div class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Экспорт Excel</span></button>
+        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Обновить" title="Обновить"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-refresh" /></svg></span></button>
+      </div>
+    </template>
+
+    <template id="wf-tabs-tpl">
+      <div class="ou-tabs__list" role="tablist">
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="overview"><span class="ou-tabs__label">Обзор</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="passages"><span class="ou-tabs__label">Прохождения</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="items"><span class="ou-tabs__label">Вопросы</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="quality"><span class="ou-tabs__label">Качество вопросов</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="slices"><span class="ou-tabs__label">Срезы</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="delivery"><span class="ou-tabs__label">Выдача</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="scales"><span class="ou-tabs__label">Шкалы</span></button>
+      </div>
+    </template>
+
+    <template id="wf-filter-tpl">
+      <div class="ou-filterbar">
+        <div class="ou-filterbar__row">
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">2</span></button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+          <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Сравнить со срезом</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Сохранить как срез</span></button>
+          </div>
+        </div>
+        <div class="ou-filterbar__applied">
+          <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+          <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 12.09.2026</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+        </div>
+      </div>
+    </template>
+
+    <template id="wf-sample-tpl">
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body ou-stack ou-stack--gap-4">
+          <div class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+            <span class="ou-text ou-text--body-s ou-text--w-semibold">Выборка:</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--s">веб — 210</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--s">телеметрия LMS — 244</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--s">импорт выгрузок — 32</span>
+            <span class="ou-tag ou-tag--warning ou-tag--s">не сопоставлено — 7</span>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Э4 — замысел рядом с наблюдением:</span>
+      <button type="button" class="active" onclick="showState(this, 'a')">А — как сейчас</button>
+      <button type="button" onclick="showState(this, 'b')">Б — выбран</button>
+      <button type="button" onclick="showState(this, 'c')">В — подписи шкал</button>
+      <button type="button" onclick="showState(this, 'd')">Г — общая полоса</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <!-- ════════════════ Качество заданий: данных достаточно ════════════════ -->
+    <!-- ════════════════ Вариант А — как сейчас ════════════════ -->
+    <!-- Две колонки в своих шкалах: «Трудность» p (больше — легче) и «Замысел» 0–100 (больше — сложнее). -->
+    <div id="wf-a" class="wf-state active" data-tab="items">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div data-wf-filter></div>
+
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Вопросы теста</h2>
+                <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Все вопросы</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Требуют ревизии</span><span class="ou-seg__badge">5</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Исключённые</span><span class="ou-seg__badge">1</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table wf-grid-fixed">
+                    <colgroup><col style="width: 22%" /><col style="width: 9%" /><col style="width: 15%" /><col style="width: 9%" /><col style="width: 10%" /><col style="width: 10%" /><col style="width: 21%" /><col style="width: 4%" /></colgroup>
+                    <thead class="wf-th-wrap">
+                      <tr>
+                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th is-sortable">Вопрос<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Пропуски&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля показов, в которых на вопрос не ответили. Считается по веб-прохождениям: состав выданной формы пакет SCORM не сообщает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Экспозиция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Время, медиана&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Замысел&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Трудность, которую автор заявил при создании вопроса: 0 — легко, 100 — сложно. Сравнивается с наблюдаемой в разборе вопроса.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="ou-grid__control-cell" aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Какая мера относится к антикоррупционным?<span class="ou-grid__cell-sub">Право и комплаенс · Антикоррупция</span></td>
+                        <td class="is-numeric">0,41</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,34</span></button></td>
+                        <td class="is-numeric">3 %</td>
+                        <td class="is-numeric">82 %</td>
+                        <td class="is-numeric">0:48</td>
+                                                <td class="is-numeric">60</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Что делать при запросе персональных данных подрядчиком?<span class="ou-grid__cell-sub">Право и комплаенс · Персональные данные · частичный кредит</span></td>
+                        <td class="is-numeric">0,79</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,41</span></button></td>
+                        <td class="is-numeric">1 %</td>
+                        <td class="is-numeric">54 %</td>
+                        <td class="is-numeric">1:12</td>
+                                                <td class="is-numeric">50</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Выберите верные утверждения о СИЗ<span class="ou-grid__cell-sub">Охрана труда · Средства защиты</span></td>
+                        <td class="is-numeric">0,58</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>−0,21</span></button></td>
+                        <td class="is-numeric">19 %</td>
+                        <td class="is-numeric">44 %</td>
+                        <td class="is-numeric">2:07</td>
+                                                <td class="is-numeric">50</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Новый вопрос про электронный документооборот<span class="ou-grid__cell-sub">Документооборот · ЭДО · добавлено 08.09.2026</span></td>
+                        <td class="is-numeric">0,33</td>
+                        <td class="is-numeric is-muted">мало данных</td>
+                        <td class="is-numeric">8 %</td>
+                        <td class="is-numeric">2 %</td>
+                        <td class="is-numeric is-muted">—</td>
+                                                <td class="is-numeric is-muted">не задана</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ou-grid__footer">
+                  <span>Показано 25 из 42</span>
+                  <span>Трудность и дискриминативность считаются по доле балла · пропуски и экспозиция — от 10 наблюдений, коэффициенты — от 30</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Вариант Б — как плитка (ВЫБРАН владельцем 2026-10-04) ════════════════ -->
+    <!-- Замысел и наблюдение — в шкале автора (0–100, больше — сложнее), с выводом; правило — как у плитки разбора: расхождение больше 10 пунктов. -->
+    <div id="wf-b" class="wf-state" data-tab="items">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div data-wf-filter></div>
+
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Вопросы теста</h2>
+                <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Все вопросы</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Требуют ревизии</span><span class="ou-seg__badge">5</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Исключённые</span><span class="ou-seg__badge">1</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table wf-grid-fixed">
+                    <colgroup><col style="width: 22%" /><col style="width: 9%" /><col style="width: 15%" /><col style="width: 9%" /><col style="width: 10%" /><col style="width: 10%" /><col style="width: 21%" /><col style="width: 4%" /></colgroup>
+                    <thead class="wf-th-wrap">
+                      <tr>
+                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th is-sortable">Вопрос<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Пропуски&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля показов, в которых на вопрос не ответили. Считается по веб-прохождениям: состав выданной формы пакет SCORM не сообщает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Экспозиция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Время, медиана&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Сложность: задана → по ответам&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Слева — сложность, которую автор задал вопросу; справа — какой она получилась по ответам участников. Обе в шкале редактора: 0 — легко, 100 — сложно; по ответам — (1 − трудность) × 100. Расхождение больше 10 пунктов: вопрос оказался легче или труднее заданного.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="ou-grid__control-cell" aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Какая мера относится к антикоррупционным?<span class="ou-grid__cell-sub">Право и комплаенс · Антикоррупция</span></td>
+                        <td class="is-numeric">0,41</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,34</span></button></td>
+                        <td class="is-numeric">3 %</td>
+                        <td class="is-numeric">82 %</td>
+                        <td class="is-numeric">0:48</td>
+                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>60 → 59</span><span class="ou-grid__cell-sub">расхождения нет</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Что делать при запросе персональных данных подрядчиком?<span class="ou-grid__cell-sub">Право и комплаенс · Персональные данные · частичный кредит</span></td>
+                        <td class="is-numeric">0,79</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,41</span></button></td>
+                        <td class="is-numeric">1 %</td>
+                        <td class="is-numeric">54 %</td>
+                        <td class="is-numeric">1:12</td>
+                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>50 → 21</span><span class="ou-tag ou-tag--warning ou-tag--s">легче заданной на 29</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Выберите верные утверждения о СИЗ<span class="ou-grid__cell-sub">Охрана труда · Средства защиты</span></td>
+                        <td class="is-numeric">0,58</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>−0,21</span></button></td>
+                        <td class="is-numeric">19 %</td>
+                        <td class="is-numeric">44 %</td>
+                        <td class="is-numeric">2:07</td>
+                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>50 → 42</span><span class="ou-grid__cell-sub">расхождения нет</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Новый вопрос про электронный документооборот<span class="ou-grid__cell-sub">Документооборот · ЭДО · добавлено 08.09.2026</span></td>
+                        <td class="is-numeric">0,33</td>
+                        <td class="is-numeric is-muted">мало данных</td>
+                        <td class="is-numeric">8 %</td>
+                        <td class="is-numeric">2 %</td>
+                        <td class="is-numeric is-muted">—</td>
+                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>не задана → 67</span><span class="ou-grid__cell-sub">сложность не задана</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ou-grid__footer">
+                  <span>Показано 25 из 42</span>
+                  <span>Трудность и дискриминативность считаются по доле балла · пропуски и экспозиция — от 10 наблюдений, коэффициенты — от 30</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Вариант В — подписи направления ════════════════ -->
+    <!-- Числа как сейчас; под заголовками — направление шкалы, чтобы два числа не читались одинаково. -->
+    <div id="wf-c" class="wf-state" data-tab="items">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div data-wf-filter></div>
+
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Вопросы теста</h2>
+                <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Все вопросы</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Требуют ревизии</span><span class="ou-seg__badge">5</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Исключённые</span><span class="ou-seg__badge">1</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table wf-grid-fixed">
+                    <colgroup><col style="width: 22%" /><col style="width: 9%" /><col style="width: 15%" /><col style="width: 9%" /><col style="width: 10%" /><col style="width: 10%" /><col style="width: 21%" /><col style="width: 4%" /></colgroup>
+                    <thead class="wf-th-wrap">
+                      <tr>
+                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th is-sortable">Вопрос<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span><span class="ou-tip" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">0–1, больше — легче</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Пропуски&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля показов, в которых на вопрос не ответили. Считается по веб-прохождениям: состав выданной формы пакет SCORM не сообщает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Экспозиция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Время, медиана&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Замысел&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Сложность, которую автор заявил при создании вопроса.</span></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">0–100, больше — сложнее</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="ou-grid__control-cell" aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Какая мера относится к антикоррупционным?<span class="ou-grid__cell-sub">Право и комплаенс · Антикоррупция</span></td>
+                        <td class="is-numeric">0,41</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,34</span></button></td>
+                        <td class="is-numeric">3 %</td>
+                        <td class="is-numeric">82 %</td>
+                        <td class="is-numeric">0:48</td>
+                                                <td class="is-numeric">60</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Что делать при запросе персональных данных подрядчиком?<span class="ou-grid__cell-sub">Право и комплаенс · Персональные данные · частичный кредит</span></td>
+                        <td class="is-numeric">0,79</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,41</span></button></td>
+                        <td class="is-numeric">1 %</td>
+                        <td class="is-numeric">54 %</td>
+                        <td class="is-numeric">1:12</td>
+                                                <td class="is-numeric">50</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Выберите верные утверждения о СИЗ<span class="ou-grid__cell-sub">Охрана труда · Средства защиты</span></td>
+                        <td class="is-numeric">0,58</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>−0,21</span></button></td>
+                        <td class="is-numeric">19 %</td>
+                        <td class="is-numeric">44 %</td>
+                        <td class="is-numeric">2:07</td>
+                                                <td class="is-numeric">50</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Новый вопрос про электронный документооборот<span class="ou-grid__cell-sub">Документооборот · ЭДО · добавлено 08.09.2026</span></td>
+                        <td class="is-numeric">0,33</td>
+                        <td class="is-numeric is-muted">мало данных</td>
+                        <td class="is-numeric">8 %</td>
+                        <td class="is-numeric">2 %</td>
+                        <td class="is-numeric is-muted">—</td>
+                                                <td class="is-numeric is-muted">не задана</td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ou-grid__footer">
+                  <span>Показано 25 из 42</span>
+                  <span>Трудность и дискриминативность считаются по доле балла · пропуски и экспозиция — от 10 наблюдений, коэффициенты — от 30</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Вариант Г — общая полоса ════════════════ -->
+    <!-- Одна полоса 0–100 «сложнее →»: ромб — замысел автора, круг — наблюдение. Расхождение видно расстоянием. Нужен новый элемент ДС. -->
+    <div id="wf-d" class="wf-state" data-tab="items">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div data-wf-filter></div>
+
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Вопросы теста</h2>
+                <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Все вопросы</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Требуют ревизии</span><span class="ou-seg__badge">5</span></button>
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Исключённые</span><span class="ou-seg__badge">1</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table wf-grid-fixed">
+                    <colgroup><col style="width: 22%" /><col style="width: 9%" /><col style="width: 15%" /><col style="width: 9%" /><col style="width: 10%" /><col style="width: 10%" /><col style="width: 21%" /><col style="width: 4%" /></colgroup>
+                    <thead class="wf-th-wrap">
+                      <tr>
+                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th is-sortable">Вопрос<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Пропуски&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля показов, в которых на вопрос не ответили. Считается по веб-прохождениям: состав выданной формы пакет SCORM не сообщает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Экспозиция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Время, медиана&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Замысел и наблюдение&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Ромб — сложность, заявленная автором; круг — наблюдаемая. Шкала 0–100: правее — сложнее.</span></span></div></th>
+                        <th class="ou-grid__control-cell" aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Какая мера относится к антикоррупционным?<span class="ou-grid__cell-sub">Право и комплаенс · Антикоррупция</span></td>
+                        <td class="is-numeric">0,41</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,34</span></button></td>
+                        <td class="is-numeric">3 %</td>
+                        <td class="is-numeric">82 %</td>
+                        <td class="is-numeric">0:48</td>
+                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--intent" style="left: 60%"></span><span class="wf-dual__mark wf-dual__mark--seen" style="left: 59%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">расхождения нет</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Что делать при запросе персональных данных подрядчиком?<span class="ou-grid__cell-sub">Право и комплаенс · Персональные данные · частичный кредит</span></td>
+                        <td class="is-numeric">0,79</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>0,41</span></button></td>
+                        <td class="is-numeric">1 %</td>
+                        <td class="is-numeric">54 %</td>
+                        <td class="is-numeric">1:12</td>
+                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--intent" style="left: 50%"></span><span class="wf-dual__mark wf-dual__mark--seen" style="left: 21%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">легче заданной на 29</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Множественный выбор" aria-label="Множественный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-multiple" /></svg></span>Выберите верные утверждения о СИЗ<span class="ou-grid__cell-sub">Охрана труда · Средства защиты</span></td>
+                        <td class="is-numeric">0,58</td>
+                        <td class="is-numeric"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'item')"><span>−0,21</span></button></td>
+                        <td class="is-numeric">19 %</td>
+                        <td class="is-numeric">44 %</td>
+                        <td class="is-numeric">2:07</td>
+                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--intent" style="left: 50%"></span><span class="wf-dual__mark wf-dual__mark--seen" style="left: 42%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">расхождения нет</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Одиночный выбор" aria-label="Одиночный выбор"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Новый вопрос про электронный документооборот<span class="ou-grid__cell-sub">Документооборот · ЭДО · добавлено 08.09.2026</span></td>
+                        <td class="is-numeric">0,33</td>
+                        <td class="is-numeric is-muted">мало данных</td>
+                        <td class="is-numeric">8 %</td>
+                        <td class="is-numeric">2 %</td>
+                        <td class="is-numeric is-muted">—</td>
+                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--seen" style="left: 67%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">сложность не задана</span></span></td>
+                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ou-grid__footer">
+                  <span>Показано 25 из 42</span>
+                  <span>Трудность и дискриминативность считаются по доле балла · пропуски и экспозиция — от 10 наблюдений, коэффициенты — от 30</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        function fill(sel, tplId) {
+          var tpl = document.getElementById(tplId);
+          if (!tpl) return;
+          document.querySelectorAll(sel).forEach(function (host) {
+            host.appendChild(tpl.content.cloneNode(true));
+          });
+        }
+        window.addEventListener('DOMContentLoaded', function () {
+          fill('[data-wf-side]', 'wf-side-tpl');
+          fill('[data-wf-header]', 'wf-header-tpl');
+          fill('[data-wf-head]', 'wf-head-tpl');
+          fill('[data-wf-filter]', 'wf-filter-tpl');
+          fill('[data-wf-sample]', 'wf-sample-tpl');
+          document.querySelectorAll('[data-wf-tabs]').forEach(function (el) {
+            el.appendChild(document.getElementById('wf-tabs-tpl').content.cloneNode(true));
+            var state = el.closest('.wf-state');
+            var active = state && state.getAttribute('data-tab');
+            el.querySelectorAll('.ou-tabs__tab').forEach(function (tab) {
+              var on = tab.getAttribute('data-tab') === active;
+              tab.classList.toggle('is-active', on);
+              tab.setAttribute('aria-selected', String(on));
+            });
+          });
+          if (window.initOuSelects) window.initOuSelects(document);
+        });
+      }());
+
+      window.addEventListener('DOMContentLoaded', () => {
+        const want = new URLSearchParams(location.search).get('state');
+        if (want) {
+          var btn = [...document.querySelectorAll('.wf-nav button')]
+            .find((b) => (b.getAttribute('onclick') || '').includes("'" + want + "'")) || null;
+          showState(btn, want);
+        }
+        if (new URLSearchParams(location.search).get('theme') === 'dark') toggleTheme(null);
+      });
+
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="State"]').forEach(function (b) { b.classList.toggle('active', b === btn); });
+        window.scrollTo(0, 0);
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.classList.toggle('light', !dark);
+        if (btn) { btn.textContent = dark ? 'Light' : 'Dark'; btn.classList.toggle('active', dark); }
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

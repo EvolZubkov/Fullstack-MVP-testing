@@ -97,8 +97,18 @@ describe("отчёт печатает надписи блоков (PRD-49)", () 
   });
 
   it("без переопределений печатает ОБЩУЮ формулировку теста", () => {
-    // Консолидированный блок рекомендаций поднимает обратная связь самого теста.
-    const withFeedback: ReportInput = { ...STANDARD, feedback: { text: "Повторите материал" } };
+    // Консолидированный блок рекомендаций поднимает текст ТЕМЫ: обратная связь уровня теста
+    // снята (PRD-61 §10), и поднимать блок ею больше нельзя.
+    const withFeedback: ReportInput = {
+      ...STANDARD,
+      result: {
+        ...STANDARD.result,
+        topicResults: STANDARD.result.topicResults.map((topic) => ({
+          ...topic,
+          feedbackTexts: ["Повторите материал"],
+        })),
+      },
+    };
     const bake = resolveReportBake(MANIFEST, "report", null, "", {
       values: { "results.recommendations": { on: true, text: "Что делать дальше" } },
     });

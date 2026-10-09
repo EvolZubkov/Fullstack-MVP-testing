@@ -57,6 +57,7 @@ import { db } from "../db";
 import { sheetHeaders, sheetToObjects } from "../utils/excel";
 import {
   templates,
+  DEFAULT_SCALE_SCORM_TARGET,
   insertScaleSchema,
   insertResultVariableSchema,
   type Scale,
@@ -69,6 +70,7 @@ import {
   type ContentPage,
   type TemplateManifest,
 } from "@shared/schema";
+import { isScenarioItemKey, reflowItemOrder, scenarioItemKey } from "@shared/test-items";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
@@ -111,7 +113,17 @@ import {
 } from "./content-pages-lifecycle";
 import { FlowPolicyValidationError, validateFlowPolicy } from "./flow-policy-validator";
 import { parseScoringCell } from "../utils/scoring-excel";
-import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
+import {
+  hasOptionList,
+  isMeasurementOnly,
+  distributesBudget,
+  isTextEntry,
+  hasBlanks,
+  isOpenText,
+} from "@shared/questions/question-type";
+// Тот же нормализатор, которым читают список блоков оба хоста: книга обязана понимать
+// хранимое значение ровно так же, как экран итогов.
+import { normalizeSectionGroups } from "@shared/scoring/section-groups";
 
 import {
   parseScaleRow,
@@ -130,6 +142,7 @@ import {
   parseScoringOverrideRow,
   variantsColumnOf,
   parseFeedbackSheets,
+  type InterpretationPayload,
   FEEDBACK_SHEET_NAME,
   RECOMMENDATION_SHEET_NAME,
   parsePageSheets,
@@ -207,14 +220,44 @@ export interface WorkbookImportResult {
 function countSettingsParams(draft: SettingsDraft): number {
   const groups = [
     draft.test, draft.router, draft.overall, draft.retake, draft.attemptInterval,
-    draft.plugin, draft.introResults, draft.introReport, draft.introRoot,
+    draft.plugin, draft.introResults, draft.introReport, draft.introRoot, draft.breakdown,
+    draft.introResultsPassed, draft.introResultsFailed,
+    draft.introReportPassed, draft.introReportFailed,
   ];
   return groups.reduce((n, g) => n + Object.keys(g).length, 0)
     + (draft.flowMode !== undefined ? 1 : 0)
-    + (draft.folderPath !== undefined ? 1 : 0);
+    + (draft.folderPath !== undefined ? 1 : 0)
+    + (draft.sectionGroupLabels !== undefined ? 1 : 0);
 }
 
 /** Recommendations inside one owner's feedback: courses, materials and events together. */
+/**
+ * PRD-50 FR-50: набор подтем, прочитанный из книги, в форме колонки раздела.
+ *
+ * Подтема со стёртым текстом (в книге её строка есть, но пустая) в набор не попадает —
+ * так автор её и снимает. Набор, оставшийся пустым, уходит как `null`: «структура есть, но
+ * пустая» и «ничего не написано» — одно и то же, а `null` короче в базе.
+ */
+function breakdownFeedbackOf(
+  byTag: Map<string, FeedbackPayload | null>,
+): { axis: "tag"; keys: Record<string, FeedbackPayload> } | null {
+  const keys: Record<string, FeedbackPayload> = {};
+  for (const [tag, payload] of byTag) if (payload) keys[tag] = payload;
+  return Object.keys(keys).length > 0 ? { axis: "tag", keys } : null;
+}
+
+/**
+ * Толкования подтем раздела в форму колонки. То же правило, что у текстов подтем выше:
+ * подтема со стёртым текстом уходит из набора, пустой набор — `null`.
+ */
+function breakdownInterpretationOf(
+  byTag: Map<string, InterpretationPayload | null>,
+): { axis: "tag"; keys: Record<string, InterpretationPayload> } | null {
+  const keys: Record<string, InterpretationPayload> = {};
+  for (const [tag, payload] of byTag) if (payload) keys[tag] = payload;
+  return Object.keys(keys).length > 0 ? { axis: "tag", keys } : null;
+}
+
 function countRecommendations(payload: FeedbackPayload | null | undefined): number {
   if (!payload) return 0;
   return (payload.links?.length ?? 0) + (payload.assets?.length ?? 0) + (payload.events?.length ?? 0);
@@ -306,22 +349,159 @@ function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record
     patch.retakePolicyJson = retake;
   }
 
-  const hasIntro = [draft.introResults, draft.introReport, draft.introRoot].some(
-    (b) => Object.keys(b).length > 0,
-  );
+  const hasIntro = [
+    draft.introResults, draft.introReport, draft.introRoot,
+    draft.introResultsPassed, draft.introResultsFailed,
+    draft.introReportPassed, draft.introReportFailed,
+  ].some((b) => Object.keys(b).length > 0);
   if (hasIntro) {
     const cur = (current?.introJson ?? {}) as Record<string, unknown>;
     const intro: Record<string, unknown> = { ...cur, ...draft.introRoot };
-    if (Object.keys(draft.introResults).length > 0) {
-      intro.results = { format: "plain", text: "", ...(cur.results as object ?? {}), ...draft.introResults };
-    }
-    if (Object.keys(draft.introReport).length > 0) {
-      intro.report = { format: "plain", text: "", ...(cur.report as object ?? {}), ...draft.introReport };
-    }
+    /**
+     * PRD-61: одна выдача — общий текст плюс две ветви исхода. Ветвь выдачи заводится, если
+     * книга сказала хоть что-то ЛЮБОЙ из трёх частей: текст исхода, приехавший к тесту без
+     * общего вступления, обязан сохраниться, а не пропасть вместе с ненужной ему ветвью.
+     */
+    const mergeSide = (
+      side: "results" | "report",
+      common: Record<string, unknown>,
+      passed: Record<string, unknown>,
+      failed: Record<string, unknown>,
+    ) => {
+      if (![common, passed, failed].some((b) => Object.keys(b).length > 0)) return;
+      const curSide = (cur[side] ?? {}) as Record<string, unknown>;
+      const next: Record<string, unknown> = { format: "plain", text: "", ...curSide, ...common };
+      // Ветвь исхода — целый текст со своим форматом, поэтому у неё свои умолчания. Пустой
+      // текст ветви не стирает: пустая ячейка везде в книге значит «оставить как есть».
+      if (Object.keys(passed).length > 0) {
+        next.passed = { format: "plain", text: "", ...((curSide.passed ?? {}) as object), ...passed };
+      }
+      if (Object.keys(failed).length > 0) {
+        next.failed = { format: "plain", text: "", ...((curSide.failed ?? {}) as object), ...failed };
+      }
+      intro[side] = next;
+    };
+    mergeSide("results", draft.introResults, draft.introResultsPassed, draft.introResultsFailed);
+    mergeSide("report", draft.introReport, draft.introReportPassed, draft.introReportFailed);
     patch.introJson = intro;
   }
 
+  // PRD-50 FR-13/FR-44: показ подытогов. Умолчания подставляются ДО текущего значения, а не
+  // после: колонка необязательная, и книга, назвавшая одну только базу, обязана дать
+  // колонке целую настройку, а не половину, которую схема не примет.
+  if (Object.keys(draft.breakdown).length > 0) {
+    patch.breakdownDisplayJson = {
+      visibility: "hidden",
+      basis: "units",
+      ...((current?.breakdownDisplayJson ?? {}) as object),
+      ...draft.breakdown,
+    };
+  }
+
+  if (draft.sectionGroupLabels !== undefined) {
+    patch.sectionGroupsJson = resolveSectionGroups(
+      draft.sectionGroupLabels,
+      normalizeSectionGroups(current?.sectionGroupsJson),
+    );
+  }
+
   return patch;
+}
+
+/**
+ * Названия блоков из книги — в список блоков теста.
+ *
+ * Ключ блока автору не виден и в книгу не попадает, поэтому он ВОССТАНАВЛИВАЕТСЯ: блок,
+ * чьё название у теста уже есть, сохраняет свой ключ, и разделы, которые на него ссылаются,
+ * остаются в нём. Новый блок получает свободный ключ вида `block-N` — свободный именно
+ * среди сохранённых, иначе переименование одного блока могло бы отобрать ключ у другого.
+ *
+ * Порядок — тот, в котором названия перечислены в ячейке: это и есть порядок печати.
+ */
+export function resolveSectionGroups(
+  labels: string[],
+  current: Array<{ key: string; label: string }>,
+): Array<{ key: string; label: string; order: number }> {
+  const keyByLabel = new Map(current.map((g) => [normalizeName(g.label), g.key]));
+  const taken = new Set<string>();
+  const out: Array<{ key: string; label: string; order: number }> = [];
+  labels.forEach((label, index) => {
+    let key = keyByLabel.get(normalizeName(label));
+    if (key && taken.has(key)) key = undefined;
+    if (!key) {
+      let n = out.length + 1;
+      while (taken.has(`block-${n}`) || current.some((g) => g.key === `block-${n}`)) n += 1;
+      key = `block-${n}`;
+    }
+    taken.add(key);
+    out.push({ key, label, order: index });
+  });
+  return out;
+}
+
+/**
+ * Условие пункта-сценария после загрузки книги: только пункты, что в тесте остались, — темы книги
+ * и сценарии (их книга не трогает). Условие, у которого не осталось ни одного пункта, — `null`.
+ */
+function keepKnownPrerequisites(rule: unknown, topicIds: ReadonlySet<string>): unknown | null {
+  const r = (rule ?? {}) as { mode?: unknown; sectionIds?: unknown };
+  if (r.mode !== "after_sections_completed" && r.mode !== "after_sections_passed") return rule;
+  const ids = Array.isArray(r.sectionIds) ? (r.sectionIds as unknown[]) : [];
+  const kept = ids.filter((id): id is string => typeof id === "string" && (topicIds.has(id) || isScenarioItemKey(id)));
+  return kept.length > 0 ? { ...r, sectionIds: kept } : null;
+}
+
+/**
+ * «Сценарий в ИС»: не дать книге тихо испортить пункты-сценарии роутера.
+ *
+ * Книга сценарии не переносит (они едут архивом, тест целиком — пакетом `.tbtest`), а значит и
+ * не вправе их трогать. Два места, где она трогала бы молча:
+ *
+ * - правила разблокировки книга пишет объектом ЦЕЛИКОМ — правила пунктов `scenario:<id>`, которых
+ *   она выразить не может, сохраняются из теста;
+ * - порядок тем книга задаёт разделами, а общий порядок пунктов `router.itemOrder` остался бы
+ *   прежним и перекрыл бы его — порядок перестраивается под темы книги, места сценариев те же.
+ *
+ * @param currentFlow `flow_policy_json` теста до загрузки.
+ * @param patch Изменения теста из книги; правится на месте.
+ * @param topicIds Темы книги по порядку; `null` — книга разделов не задавала.
+ *
+ * @public Экспортируется ради тестов.
+ */
+export function keepRouterItemsFromBook(
+  currentFlow: unknown,
+  patch: Record<string, unknown>,
+  topicIds: string[] | null,
+): void {
+  const cur = (currentFlow ?? {}) as { mode?: unknown; router?: Record<string, unknown> | null };
+  const curRouter = cur.router && typeof cur.router === "object" ? cur.router : {};
+  const scenarioRules = Object.entries((curRouter.sectionUnlockRules ?? {}) as Record<string, unknown>)
+    .filter(([key]) => isScenarioItemKey(key));
+  const itemOrder = Array.isArray(curRouter.itemOrder) ? (curRouter.itemOrder as string[]) : [];
+  if (scenarioRules.length === 0 && itemOrder.length === 0) return;
+
+  const next = (patch.flowPolicyJson ?? currentFlow ?? {}) as { mode?: unknown; router?: Record<string, unknown> | null };
+  if (next.mode !== "router_by_topics" || !next.router) return;
+  const router: Record<string, unknown> = { ...next.router };
+  let changed = false;
+
+  if (patch.flowPolicyJson && scenarioRules.length > 0) {
+    const rules = { ...((router.sectionUnlockRules ?? {}) as Record<string, unknown>) };
+    for (const [key, rule] of scenarioRules) {
+      if (key in rules) continue;
+      // Техдолг №8: тема, которой больше нет в книге, уходит и из условия сценария — иначе он
+      // ждал бы пункт, которого нет, и не открылся бы никогда. Условие без пунктов снимается.
+      const kept = topicIds ? keepKnownPrerequisites(rule, new Set(topicIds)) : rule;
+      if (kept) rules[key] = kept;
+    }
+    router.sectionUnlockRules = rules;
+    changed = true;
+  }
+  if (topicIds && itemOrder.length > 0) {
+    router.itemOrder = reflowItemOrder(itemOrder, topicIds);
+    changed = true;
+  }
+  if (changed) patch.flowPolicyJson = { ...next, router };
 }
 
 /**
@@ -348,32 +528,75 @@ async function saveOrCollect(
   }
 }
 
+/** Поля раздела, о которых книга вправе промолчать; каждое переносится САМО ПО СЕБЕ. */
+const CARRIED_TEXT_FIELDS = [
+  "feedbackJson",
+  "breakdownFeedbackJson",
+  "interpretationJson",
+  "breakdownInterpretationJson",
+] as const;
+
 /**
- * Carry the target's own feedback into every section the «Обратная связь» sheet did NOT
+ * Carry the target's own texts into every section the «Обратная связь» sheet did NOT
  * name, matching the current sections by topic.
  *
  * «Структура» rewrites the sections wholesale — `testSettingsService` deletes them and
  * inserts the payload — so a field the payload leaves out is not "left alone", it is
- * ERASED. Feedback is the one section field a book may legitimately say nothing about:
+ * ERASED. The texts are the section fields a book may legitimately say nothing about:
  * every book exported before the sheet existed carries «Структура» and no «Обратная
  * связь», and applying such a book must not blank out the target's per-section feedback.
  * A workbook does not change what it does not name (FR-20).
  *
- * A section the sheet DID name keeps whatever the sheet gave it, `null` included: a named
- * owner takes its feedback WHOLE from the book, which is how an author erases it.
+ * Each field is carried on its OWN: the sheet gained «Толкование» only in contract 3.9.0,
+ * so a book of the previous format names a section's feedback and says nothing about its
+ * interpretation — one field is taken from the book and the other from the test. Judging
+ * all four by the presence of one would either erase the texts a book cannot express or
+ * ignore the erasure an author did mean.
+ *
+ * A field the sheet DID name keeps whatever the sheet gave it, `null` included: a named
+ * owner takes that text WHOLE from the book, which is how an author erases it.
  */
 async function keepUnnamedSectionFeedback(
   testId: string,
   sections: SectionPayload[],
 ): Promise<void> {
-  const unnamed = sections.filter((s) => !("feedbackJson" in s));
-  if (unnamed.length === 0) return;
+  const silent = CARRIED_TEXT_FIELDS.filter((f) => sections.some((s) => !(f in s)));
+  if (silent.length === 0) return;
 
   const current = await storage.getTestSections(testId);
-  const feedbackByTopic = new Map(current.map((s) => [s.topicId, s.feedbackJson]));
-  for (const section of unnamed) {
-    if (!feedbackByTopic.has(section.topicId)) continue;
-    section.feedbackJson = feedbackByTopic.get(section.topicId);
+  const storedByTopic = new Map(current.map((s) => [s.topicId, s]));
+  for (const section of sections) {
+    const stored = storedByTopic.get(section.topicId);
+    if (!stored) continue;
+    for (const field of silent) {
+      if (field in section) continue;
+      section[field] = (stored as Record<string, unknown>)[field];
+    }
+  }
+}
+
+/**
+ * Сохранить членство разделов в блоках итогов, если книга о нём НЕ говорила.
+ *
+ * Та же ловушка, что у обратной связи разделов: «Структура» переписывает разделы целиком, и
+ * поле, которого нет в полезной нагрузке, не «остаётся как было», а СТИРАЕТСЯ. Любая книга,
+ * выгруженная до появления колонки «Блок итогов», несёт «Структуру» без неё — и раньше
+ * такая загрузка молча разбирала блоки итогов теста по одному разделу.
+ *
+ * `hasColumn` — именно про колонку, а не про ячейку: пустая ячейка в книге с колонкой
+ * означает «вне блоков» и обязана стирать, отсутствие колонки означает «книга молчит».
+ */
+async function keepSectionGroupsWhenUnnamed(
+  testId: string,
+  sections: SectionPayload[],
+  hasColumn: boolean,
+): Promise<void> {
+  if (hasColumn || sections.length === 0) return;
+  const current = await storage.getTestSections(testId);
+  const groupByTopic = new Map(current.map((s) => [s.topicId, s.groupKey ?? null]));
+  for (const section of sections) {
+    if (!groupByTopic.has(section.topicId)) continue;
+    section.groupKey = groupByTopic.get(section.topicId) ?? null;
   }
 }
 
@@ -774,6 +997,8 @@ async function applyPageSheets(
   const zoneLabels = new Map<string, string>();
   const updates: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const authorPages: PendingAuthorPage[] = [];
+  /** System rows the book places in a zone, by their ordinal on the sheet. */
+  const systemOrder: Array<{ id: string; zoneKey: string; index: number }> = [];
 
   for (const page of parsed.pages) {
     const where = `Лист «${PAGE_SHEET_NAME}», страница «${formatPageAddress(page)}»`;
@@ -833,11 +1058,17 @@ async function applyPageSheets(
     for (const w of built.warnings) result.warnings.push(`${where}: ${w}`);
 
     if (existing) {
+      // The row's place in its zone is renumbered with the author pages below, so the
+      // system row and the pages around it share ONE numbering.
+      systemOrder.push({ id: existing.id, zoneKey, index: page.index });
       const patch: Record<string, unknown> = {};
       if (page.templateKey !== undefined) patch.templateKey = page.templateKey;
       if (page.mode !== undefined) patch.mode = page.mode;
       if (page.autoAdvance !== undefined) patch.autoAdvance = page.autoAdvance;
       if (page.autoAdvanceDelayMs !== undefined) patch.autoAdvanceDelayMs = page.autoAdvanceDelayMs;
+      // Скрытие экрана — такое же свойство страницы, как остальные: без него перенос
+      // теста выдал бы ученику экран, который автор убрал (2026-09-20).
+      if (page.hidden !== undefined) patch.hidden = page.hidden;
       if (built.fields.valuesJson) patch.valuesJson = built.fields.valuesJson;
       if (built.fields.settingsJson) patch.settingsJson = built.fields.settingsJson;
       if (Object.keys(patch).length > 0) updates.push({ id: existing.id, patch });
@@ -902,6 +1133,7 @@ async function applyPageSheets(
     await storage.deleteContentPage(page.id);
     await syncPageUsages(page.id, null);
   }
+  const createdOrder: Array<{ id: string; zoneKey: string; index: number }> = [];
   for (const item of authorPages) {
     const created = await storage.createContentPage({
       testId,
@@ -920,9 +1152,44 @@ async function applyPageSheets(
       settingsJson: item.fields.settingsJson ?? {},
       autoAdvance: item.page.autoAdvance ?? false,
       autoAdvanceDelayMs: item.page.autoAdvanceDelayMs ?? null,
+      hidden: item.page.hidden ?? false,
     });
     await syncPageUsages(created.id, created);
+    createdOrder.push({ id: created.id, zoneKey: zoneKeyOf(item.page.zone, item.topicId), index: item.page.index });
   }
+  await renumberNamedZones(testId, [...systemOrder, ...createdOrder], zoneKeyOf);
+}
+
+/**
+ * Puts every zone the book named into ONE numbering: the sheet's ordinals.
+ *
+ * A created author page takes its ordinal as `sort_order`, while a system row that already
+ * exists used to keep the number it had in the target — and those two numberings have
+ * nothing in common. A target whose «Итоги теста» sat at 17 received «Как читать отчёт» at
+ * its sheet ordinal 2, and the page the author placed AFTER the results ran BEFORE them
+ * (certification test, 2026-10-01). The run orders a zone by `sort_order`, so the zone has to
+ * be renumbered whole: the rows the book names by their ordinals, and any row of that zone the
+ * book does not mention after them, in the order it had.
+ */
+async function renumberNamedZones(
+  testId: string,
+  placed: Array<{ id: string; zoneKey: string; index: number }>,
+  zoneKeyOf: (position: string, topicId: string | null) => string,
+): Promise<void> {
+  if (placed.length === 0) return;
+  const zones = new Set(placed.map((p) => p.zoneKey));
+  const placedIds = new Set(placed.map((p) => p.id));
+  const updates: Array<{ id: string; sortOrder: number }> = [];
+  for (const zoneKey of zones) {
+    const named = placed.filter((p) => p.zoneKey === zoneKey).sort((a, b) => a.index - b.index);
+    for (const p of named) updates.push({ id: p.id, sortOrder: p.index });
+    let next = named.length > 0 ? named[named.length - 1].index : 0;
+    const rest = (await storage.getContentPages(testId))
+      .filter((p) => zoneKeyOf(p.position, p.topicId) === zoneKey && !placedIds.has(p.id))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const p of rest) updates.push({ id: p.id, sortOrder: ++next });
+  }
+  await storage.reorderContentPages(updates);
 }
 
 // ─── «Оформление» (PRD-48 FR-17/FR-18) ───────────────────────────────────────
@@ -1251,6 +1518,9 @@ export async function importWorkbook(
       // A level row of «Рекомендации» may only name a level the book itself described;
       // with no adaptive sheet the set is empty and such rows are reported as orphans.
       adaptive?.levelKeys,
+      // Какие колонки лист НЕСЁТ: книга, выгруженная до контракта 3.9.0, не знает
+      // «Толкование», и её пустые ячейки не должны читаться как «стереть текст».
+      sheetHeaders(feedbackSheet),
     );
     result.errors.push(...feedback.errors);
     // `undefined` = the test level was not named, so its feedback is not touched;
@@ -1343,7 +1613,10 @@ export async function importWorkbook(
       const configJson = existing
         ? mergeScaleConfig(existing.configJson, parsed.value.configJson as Record<string, unknown>)
         : parsed.value.configJson;
-      const check = insertScaleSchema.safeParse({ ...parsed.value, configJson, testId, sortOrder });
+      // Пустая ячейка SCORM не стирает выбор автора у существующей шкалы, а новой даёт общее
+      // умолчание (PRD-54, решение 13).
+      const scormTarget = parsed.value.scormTarget ?? existing?.scormTarget ?? DEFAULT_SCALE_SCORM_TARGET;
+      const check = insertScaleSchema.safeParse({ ...parsed.value, scormTarget, configJson, testId, sortOrder });
       if (!check.success) {
         const first = check.error.issues[0];
         result.errors.push(`${where}: ${first.message} (${first.path.join(".")})`);
@@ -1371,16 +1644,10 @@ export async function importWorkbook(
     if (!dryRun) await syncScaleFeedbackUsages(testId);
   }
 
-  // ── Pass 3: «Показатели» (upsert by name; validate formula; controlsStatus guard). ──
+  // ── Pass 3: «Показатели» (upsert by name; validate formula). Several indicators may
+  // control the same status — the runtime combines them with OR. ──
   const existingVars = await storage.getResultVariables(testId);
   const varByName = new Map<string, ResultVariable>(existingVars.map((v) => [v.name, v]));
-  // Track which controller is taken (by another variable) to guard ≤1 each.
-  const controllerOwner = new Map<string, string>(); // status → name
-  for (const v of existingVars) {
-    if (v.controlsStatus === "success" || v.controlsStatus === "completion") {
-      controllerOwner.set(v.controlsStatus, v.name);
-    }
-  }
 
   const varsSheet = findSheet(workbook, "Показатели");
   if (varsSheet) {
@@ -1401,15 +1668,6 @@ export async function importWorkbook(
         continue;
       }
       const data = check.data;
-
-      // controlsStatus guard (≤1 success, ≤1 completion per test).
-      if (data.controlsStatus === "success" || data.controlsStatus === "completion") {
-        const owner = controllerOwner.get(data.controlsStatus);
-        if (owner && owner !== data.name) {
-          result.errors.push(`${where}: статусом «${data.controlsStatus}» уже управляет «${owner}»`);
-          continue;
-        }
-      }
 
       const validation = await storage.validateResultVariableFormula(testId, data.formula, data.type as ValueType, {
         sortOrder: data.sortOrder,
@@ -1432,9 +1690,6 @@ export async function importWorkbook(
         if (!dryRun) await storage.createResultVariable(data);
         varByName.set(data.name, { ...(data as any) } as ResultVariable);
         result.resultVariables.created++;
-      }
-      if (data.controlsStatus === "success" || data.controlsStatus === "completion") {
-        controllerOwner.set(data.controlsStatus, data.name);
       }
     }
     // Same rule as the scales pass: whoever writes the entity re-indexes it. The book
@@ -1674,12 +1929,18 @@ export async function importWorkbook(
         // Причина у двух измерительных типов разная, и называть её надо точно: у шкалы
         // это ОТСУТСТВИЕ правильной градации (появится — цена оживёт), у распределения
         // сам тип (PRD-44 FR-10) — оживать нечему.
+        // PRD-57: у текстовых типов причина третья — ПРАВИЛ нет (у короткого ответа и у
+        // пропусков появятся — цена оживёт), а у развёрнутого их не бывает вовсе.
+        const why = distributesBudget(q.type)
+          ? `распределение баллов, оно не проверяется и не приносит баллов`
+          : isOpenText(q.type)
+            ? `развёрнутый ответ, он не проверяется автоматически`
+            : isTextEntry(q.type) || hasBlanks(q.type)
+              ? `текстовый ответ без правил сравнения`
+              : `измерительная шкала без правильной градации`;
         result.warnings.push(
-          distributesBudget(q.type)
-            ? `${input.where}: вопрос "${input.ref}" — распределение баллов, оно не проверяется ` +
-              `и не приносит баллов, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`
-            : `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
-              `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
+          `${input.where}: вопрос "${input.ref}" — ${why}, поэтому «Балл»/«Цена ответа» ` +
+            `на результат не влияют (значения сохранены)`,
         );
       }
 
@@ -1735,6 +1996,15 @@ export async function importWorkbook(
   /** Sections the book describes; empty when it describes none (see the save below). */
   let sections: SectionPayload[] = [];
   /**
+   * PRD-50 FR-11: НАЗВАНИЕ блока итогов, которое «Структура» дала разделу. Ключ подставится
+   * позже: список блоков известен только вместе с настройками теста, а лист разделов
+   * читается раньше. Ключом карты служит сам объект строки — раздел теста ровно один на
+   * тему, но искать его по теме отсюда дороже, чем помнить ссылку.
+   */
+  const groupLabelBySection = new Map<SectionPayload, string>();
+  /** Есть ли на листе «Структура» колонка «Блок итогов» вообще (не «пуста ли ячейка»). */
+  let structureNamesGroups = false;
+  /**
    * Adaptive topics the book describes, empty when it describes none.
    *
    * Assembled together with the sections and handed to the SAME `save`: the service takes
@@ -1780,6 +2050,7 @@ export async function importWorkbook(
     const topicIdByName = new Map(topics.map((t) => [normalizeName(t.name), t.id]));
 
     const structRows = sheetToObjects(structureSheet);
+    structureNamesGroups = sheetHeaders(structureSheet).has("Блок итогов");
     const pending: Array<{ order: number; payload: SectionPayload }> = [];
     // PRD-48 FR-11: unlock rules by topic NAME for now — the ids the rules are keyed by
     // are known only once every row has resolved its topic.
@@ -1848,27 +2119,42 @@ export async function importWorkbook(
         });
       }
 
-      pending.push({
-        order: sec.sortOrder,
-        payload: {
-          topicId,
-          drawCount: sec.drawCount,
-          topicPassRuleJson: sec.passRule,
-          required: sec.required,
-          // PRD-30 FR-02/FR-15: delivery order («Случайный порядок вопросов»).
-          questionOrder: sec.questionOrder,
-          // PRD-48 FR-09: the section fields the book carries since «Структура» grew.
-          drawAll: sec.drawAll,
-          timeLimitMinutes: sec.timeLimitMinutes,
-          defaultPoints: sec.defaultPoints,
-          drawBlueprintJson: strata.length ? { strata } : null,
-          formSetJson,
-          // PRD-48 FR-12: the key is set ONLY for a section the «Обратная связь» sheet
-          // names. A section it does not name keeps the field absent, so a book without
-          // the sheet says nothing about feedback at all.
-          ...(feedback?.byTopic.has(key) ? { feedbackJson: feedback.byTopic.get(key) } : {}),
-        },
-      });
+      const payload: SectionPayload = {
+        topicId,
+        drawCount: sec.drawCount,
+        topicPassRuleJson: sec.passRule,
+        required: sec.required,
+        // PRD-30 FR-02/FR-15: delivery order («Случайный порядок вопросов»).
+        questionOrder: sec.questionOrder,
+        // PRD-48 FR-09: the section fields the book carries since «Структура» grew.
+        drawAll: sec.drawAll,
+        timeLimitMinutes: sec.timeLimitMinutes,
+        defaultPoints: sec.defaultPoints,
+        drawBlueprintJson: strata.length ? { strata } : null,
+        formSetJson,
+        // PRD-48 FR-12: the key is set ONLY for a section the «Обратная связь» sheet
+        // names. A section it does not name keeps the field absent, so a book without
+        // the sheet says nothing about feedback at all.
+        ...(feedback?.byTopic.has(key) ? { feedbackJson: feedback.byTopic.get(key) } : {}),
+        // PRD-50 FR-50: тексты подтем. Ключ ставится ТОЛЬКО разделу, чьи подтемы книга
+        // назвала: раздел, о подтемах которого она молчит, сохраняет свои как были.
+        // Подтема со стёртым текстом уходит из набора — так автор её и снимает.
+        ...(feedback?.byKey.has(key)
+          ? { breakdownFeedbackJson: breakdownFeedbackOf(feedback.byKey.get(key)!) }
+          : {}),
+        // Толкования: то же правило адресации, что у текстов выше. Книга пишет ТОЛЬКО
+        // переопределение теста — толкование самой темы остаётся при теме.
+        ...(feedback?.interpretationByTopic.has(key)
+          ? { interpretationJson: feedback.interpretationByTopic.get(key) }
+          : {}),
+        ...(feedback?.interpretationByKey.has(key)
+          ? { breakdownInterpretationJson: breakdownInterpretationOf(feedback.interpretationByKey.get(key)!) }
+          : {}),
+      };
+      // PRD-50 FR-11: имя блока запоминается, ключ подставится, когда станет известен
+      // список блоков теста (он приходит с листа «Настройки», который читается позже).
+      if (structureNamesGroups) groupLabelBySection.set(payload, sec.groupLabel);
+      pending.push({ order: sec.sortOrder, payload });
       result.structure.quotas += strata.length;
 
       // PRD-48 FR-16: the topic's levels, with the materials «Рекомендации» attached to each
@@ -2005,11 +2291,21 @@ export async function importWorkbook(
     // topic. A name absent from the book's sections is an author's typo, and a silently
     // dropped dependency would OPEN a section that is meant to stay locked.
     const unlockRules: Record<string, unknown> = {};
+    // Техдолг №8: тема может открываться после пункта-сценария. Книга сценариев не знает (их
+    // перенос — техдолг №1) и выгружает такую зависимость ключом `scenario:<id>`; ключ пункта
+    // ЭТОГО теста возвращается как есть, а не роняет загрузку «раздел не найден».
+    const ownScenarioKeys = unlockByTopicKey.size > 0
+      ? new Set((await storage.getTestScenarios(testId)).map((item) => scenarioItemKey(item.id)))
+      : new Set<string>();
     for (const [key, rule] of unlockByTopicKey) {
       const topicId = sectionTopicIdByKey.get(key);
       if (!topicId) continue;
       const sectionIds: string[] = [];
       for (const dep of rule.dependsOn) {
+        if (ownScenarioKeys.has(dep.trim())) {
+          sectionIds.push(dep.trim());
+          continue;
+        }
         const depId = sectionTopicIdByKey.get(normalizeName(dep));
         if (!depId) {
           result.errors.push(`Лист «Структура»: раздел "${dep}" из «Зависит от разделов» не найден`);
@@ -2118,6 +2414,34 @@ export async function importWorkbook(
   // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry stays
   // absent, and the service leaves that column alone.
   const patch = buildTestPatch(settingsDraft, currentTest);
+
+  // PRD-50 FR-11: членство разделов в блоках — ПОСЛЕДНИМ, потому что раньше не из чего
+  // подставлять ключ: список блоков приходит с «Настроек», а имена блоков — со «Структуры»,
+  // и сходятся они только здесь. Список берётся из того, что уйдёт в базу: назвала книга
+  // блоки — из неё, промолчала — из теста, как он есть.
+  if (sections.length > 0) {
+    const groups = normalizeSectionGroups(patch.sectionGroupsJson ?? currentTest?.sectionGroupsJson);
+    const keyByLabel = new Map(groups.map((g) => [normalizeName(g.label), g.key]));
+    for (const [section, label] of groupLabelBySection) {
+      if (label === "") { section.groupKey = null; continue; }
+      const key = keyByLabel.get(normalizeName(label));
+      if (!key) {
+        // Молчаливое «вне блоков» здесь было бы хуже отказа: блок исчез бы у раздела, а
+        // автор узнал бы об этом на экране итогов, а не при загрузке книги.
+        result.errors.push(
+          `Структура: блок итогов "${label}" не объявлен — добавьте его в параметр «Блоки итогов» листа «Настройки»`,
+        );
+        continue;
+      }
+      section.groupKey = key;
+    }
+  }
+
+  keepRouterItemsFromBook(
+    currentTest?.flowPolicyJson,
+    patch,
+    sections.length > 0 ? sections.map((s) => s.topicId) : null,
+  );
   const saves = sections.length > 0 || Object.keys(patch).length > 0;
   const payload = {
     test: {
@@ -2149,6 +2473,7 @@ export async function importWorkbook(
       // and under `dryRun` there is no rewrite — the plan the preview reports does not
       // depend on it.
       if (sections.length > 0) await keepUnnamedSectionFeedback(testId, sections);
+      await keepSectionGroupsWhenUnnamed(testId, sections, structureNamesGroups);
       if (adaptiveTopics.length > 0) await keepUnnamedFailureFeedback(testId, adaptiveTopics);
       await saveOrCollect(testId, payload, result.errors);
     }

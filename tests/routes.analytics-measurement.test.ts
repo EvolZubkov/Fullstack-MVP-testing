@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
+import { observationsDouble } from "./helpers/observations-double";
 import express from "express";
 import session from "express-session";
 
@@ -22,7 +23,14 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTest: vi.fn(),
-    getAllAttempts: vi.fn(),
+    // The test-level book is the general one: it reads the tests directory and org spellings.
+    getTests: vi.fn().mockResolvedValue([]),
+    selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
+    getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); },
+    // PRD-56 FR-33: страница теста читает прохождения через выборку DAL.
+    selectObservations: vi.fn(),
+    // PRD-56 FR-25: ответы прохождений из LMS — часть выборки страницы теста.
+    selectAnswersForTest: vi.fn().mockResolvedValue([]),
     getAttempt: vi.fn(),
     getQuestionsByIds: vi.fn().mockResolvedValue([]),
     getTopics: vi.fn().mockResolvedValue([]),
@@ -37,6 +45,11 @@ const { storageMock } = vi.hoisted(() => ({
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     isTestAssignedToUser: vi.fn().mockResolvedValue(false),
+    // PRD-56 FR-21h: LMS runs of the book and their stored measurements.
+    getAllScormAttempts: vi.fn().mockResolvedValue([]),
+    getScormPackages: vi.fn().mockResolvedValue([]),
+    getScormAttemptMeasures: vi.fn().mockResolvedValue([]),
+    getScormAttemptOutcomes: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -148,6 +161,7 @@ const MEASUREMENT_ATTEMPT = {
 let app: express.Express;
 beforeEach(() => {
   vi.clearAllMocks();
+  storageMock.selectObservations.mockImplementation(observationsDouble(storageMock as never));
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getQuestionsByIds.mockResolvedValue([]);
   storageMock.getTopics.mockResolvedValue([]);
@@ -158,6 +172,9 @@ beforeEach(() => {
   storageMock.getScales.mockResolvedValue([]);
   storageMock.getQuestionMeasurements.mockResolvedValue([]);
   storageMock.getResultVariables.mockResolvedValue([]);
+  storageMock.getAllScormAttempts.mockResolvedValue([]);
+  storageMock.getScormPackages.mockResolvedValue([]);
+  storageMock.getScormAttemptMeasures.mockResolvedValue([]);
   storageMock.getUser.mockImplementation((id: string) =>
     Promise.resolve(id === "admin1" ? adminUser : { id, name: `User ${id}`, email: `${id}@t.com` }),
   );
@@ -165,23 +182,26 @@ beforeEach(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe("GET /tests/:testId/attempts — a measurement run is registered in full", () => {
+describe("GET /attempts/:attemptId — измерительное прохождение разбирается полностью", () => {
+  // PRD-56 FR-23: список попыток теста снят, и проверки его полей переехали на РАЗБОР одного
+  // прохождения — единственное место, где шкалы и показатели участника видны целиком.
   beforeEach(() => {
     storageMock.getTest.mockResolvedValue(MEASUREMENT_TEST);
     storageMock.getScales.mockResolvedValue(SCALE_ROWS);
     storageMock.getResultVariables.mockResolvedValue(RV_ROWS);
-    storageMock.getAllAttempts.mockResolvedValue([MEASUREMENT_ATTEMPT]);
+    storageMock.getAttempt.mockResolvedValue(MEASUREMENT_ATTEMPT);
   });
 
-  it("names the test's scales and indicators, in the AUTHOR's order", async () => {
-    const res = await asAdmin(request(app).get("/api/analytics/tests/test1/attempts"));
+  it("называет шкалы и показатели теста в АВТОРСКОМ порядке", async () => {
+    const res = await asAdmin(request(app).get("/api/analytics/attempts/atmp1"));
+
     expect(res.status).toBe(200);
     expect(res.body.measures.scales).toEqual([
-      // `hasLevels` says whether the scale can ever produce a band label, so a report
-      // adds a level column only where one can be filled. None of these are banded.
+      // `hasLevels` говорит, может ли шкала вообще дать подпись уровня: отчёт добавляет
+      // колонку уровня только там, где её есть чем заполнить.
       { key: "cel", label: "Целевой", hasLevels: false },
       { key: "kom", label: "Командный", hasLevels: false },
-      // An empty label falls back to the key — the column still has a name.
+      // Пустая подпись падает на ключ — колонка всё равно названа.
       { key: "pro", label: "pro", hasLevels: false },
     ]);
     expect(res.body.measures.indicators).toEqual([
@@ -189,69 +209,69 @@ describe("GET /tests/:testId/attempts — a measurement run is registered in ful
     ]);
   });
 
-  it("carries each attempt's STORED scale values and indicators", async () => {
-    const res = await asAdmin(request(app).get("/api/analytics/tests/test1/attempts"));
-    const a = res.body.attempts[0];
-    expect(a.scaleValues.cel).toMatchObject({ raw: 21, level: "" });
-    expect(a.scaleValues.kom).toMatchObject({ raw: 35, level: "high", label: "Высокий" });
-    expect(a.indicatorValues).toMatchObject({ lead_style: "kom" });
+  it("несёт записанные значения шкал и показателей", async () => {
+    const res = await asAdmin(request(app).get("/api/analytics/attempts/atmp1"));
+
+    expect(res.body.scaleResults.cel).toMatchObject({ raw: 21, level: "" });
+    expect(res.body.scaleResults.kom).toMatchObject({ raw: 35, level: "high", label: "Высокий" });
+    expect(res.body.resultVariables).toMatchObject({ lead_style: "kom" });
   });
 
-  it("pronounces NO verdict on a run with nothing to grade (PRD-29 §6.7)", async () => {
-    const res = await asAdmin(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.body.attempts[0].scored).toBe(false);
-    expect(res.body.attempts[0].verdictPronounced).toBe(false);
-  });
-});
+  it("не выносит вердикта там, где оценивать было нечего (PRD-29 §6.7)", async () => {
+    const res = await asAdmin(request(app).get("/api/analytics/attempts/atmp1"));
 
-describe("GET /tests/:testId/attempts — a control test is untouched", () => {
-  it("keeps grading and the verdict when there ARE points", async () => {
-    storageMock.getTest.mockResolvedValue({ ...MEASUREMENT_TEST, title: "Контрольный" });
-    storageMock.getAllAttempts.mockResolvedValue([{
+    expect(res.body.scored).toBe(false);
+    expect(res.body.verdictPronounced).toBe(false);
+  });
+
+  it("оставляет вердикт контрольному тесту, где баллы есть", async () => {
+    storageMock.getAttempt.mockResolvedValue({
       ...MEASUREMENT_ATTEMPT,
       resultJson: {
         ...STORED_RESULT,
         overallPercent: 80, totalEarnedPoints: 8, totalPossiblePoints: 10,
         overallPassed: true, scaleResults: undefined, resultVariables: undefined,
       },
-    }]);
+    });
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
 
-    const res = await asAdmin(request(app).get("/api/analytics/tests/test1/attempts"));
-    const a = res.body.attempts[0];
-    expect(a.scored).toBe(true);
-    expect(a.verdictPronounced).toBe(true);
-    expect(a.passed).toBe(true);
-    expect(a.overallPercent).toBe(80);
-    // No scales configured: the block is empty, not absent-and-crashing.
+    const res = await asAdmin(request(app).get("/api/analytics/attempts/atmp1"));
+
+    expect(res.body.scored).toBe(true);
+    expect(res.body.verdictPronounced).toBe(true);
+    expect(res.body.passed).toBe(true);
+    expect(res.body.overallPercent).toBe(80);
+    // Шкал у теста нет: блок пуст, а не отсутствует и роняет страницу.
     expect(res.body.measures).toEqual({ scales: [], indicators: [] });
-    expect(a.scaleValues).toBeUndefined();
   });
 
-  it("an ADAPTIVE run keeps its verdict — levels grade it, points do not", async () => {
-    // An adaptive result carries no `totalPossiblePoints` at all: its verdict comes
-    // from the confirmed levels. Feeding the points gate with the absent field would
-    // silence the verdict of every adaptive attempt in the product.
+  it("адаптивное прохождение сохраняет вердикт — его судят уровни, а не баллы", async () => {
+    // В адаптивном результате `totalPossiblePoints` нет вовсе: прогнав его через балльный
+    // гейт, мы заглушили бы вердикт каждого адаптивного прохождения в продукте.
     storageMock.getTest.mockResolvedValue({ ...MEASUREMENT_TEST, mode: "adaptive" });
-    storageMock.getAllAttempts.mockResolvedValue([{
+    storageMock.getAttempt.mockResolvedValue({
       ...MEASUREMENT_ATTEMPT,
       resultJson: { mode: "adaptive", overallPassed: true, topicResults: [] },
-    }]);
+    });
 
-    const res = await asAdmin(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.body.attempts[0].verdictPronounced).toBe(true);
-    expect(res.body.attempts[0].scored).toBe(true);
+    const res = await asAdmin(request(app).get("/api/analytics/attempts/atmp1"));
+
+    expect(res.body.verdictPronounced).toBe(true);
+    expect(res.body.scored).toBe(true);
   });
 
-  it("an author-declared «no threshold» silences the verdict of a graded run", async () => {
+  it("объявленное автором «порога нет» заглушает вердикт оценённого прохождения", async () => {
     storageMock.getTest.mockResolvedValue({ ...MEASUREMENT_TEST, overallPassRuleJson: { type: "none" } });
-    storageMock.getAllAttempts.mockResolvedValue([{
+    storageMock.getAttempt.mockResolvedValue({
       ...MEASUREMENT_ATTEMPT,
       resultJson: { ...STORED_RESULT, totalPossiblePoints: 10, overallPercent: 80 },
-    }]);
+    });
 
-    const res = await asAdmin(request(app).get("/api/analytics/tests/test1/attempts"));
+    const res = await asAdmin(request(app).get("/api/analytics/attempts/atmp1"));
+
     expect(res.body.hasPassThreshold).toBe(false);
-    expect(res.body.attempts[0].verdictPronounced).toBe(false);
+    expect(res.body.verdictPronounced).toBe(false);
   });
 });
 
@@ -319,7 +339,7 @@ describe("GET /tests/:testId — the summary stops averaging what was never grad
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe("GET /tests/:testId/export/excel — the workbook carries the measurements", () => {
+describe("POST /export/excel for one test — the workbook carries the measurements", () => {
   const ALLOCATION_QUESTION = {
     id: "q1",
     topicId: "t1",
@@ -336,6 +356,7 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
 
   beforeEach(() => {
     storageMock.getTest.mockResolvedValue(MEASUREMENT_TEST);
+    storageMock.getTests.mockResolvedValue([MEASUREMENT_TEST]);
     storageMock.getScales.mockResolvedValue(SCALE_ROWS);
     storageMock.getResultVariables.mockResolvedValue(RV_ROWS);
     storageMock.getAllAttempts.mockResolvedValue([MEASUREMENT_ATTEMPT]);
@@ -347,9 +368,9 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
   });
 
   it("grows a column per scale and per indicator, filled from the stored run", async () => {
-    const res = await asWorkbook(request(app).get("/api/analytics/tests/test1/export/excel"));
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
     expect(res.status).toBe(200);
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
 
     expect(rows[0]).toEqual(expect.arrayContaining(["Целевой", "Командный", "pro", "Ведущий стиль"]));
     const iCel = rows[0].indexOf("Целевой");
@@ -359,7 +380,7 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
   });
 
   it("stops calling an unchecked answer «Неверно» and shows what it DID measure", async () => {
-    const res = await asWorkbook(request(app).get("/api/analytics/tests/test1/export/excel"));
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
     const rows = await sheetRows(res.body, "Ответы");
     const head = rows[0];
     const row = rows[1];
@@ -375,7 +396,7 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
   });
 
   it("reports «неприменимо» instead of 0% in the summary and the item stats", async () => {
-    const res = await asWorkbook(request(app).get("/api/analytics/tests/test1/export/excel"));
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
     const summary = await sheetRows(res.body, "Сводка");
     const flat = summary.map((r) => r.join("|"));
     expect(flat).toContain("Средний результат|—");
@@ -481,5 +502,66 @@ describe("GET /attempts/:attemptId — the detail of a measurement run", () => {
     expect(res.body.scored).toBe(false);
     expect(res.body.verdictPronounced).toBe(false);
     expect(res.body.hasPassThreshold).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("POST /export/excel — measurements of LMS runs (PRD-56 FR-21h)", () => {
+  const SCALES = [{
+    id: "s1", testId: "test1", key: "kom", label: "Командный", sortOrder: 0, aggregation: "sum",
+    normalization: "none", direction: "positive",
+    configJson: { bands: [{ min: 0, max: 20, level: "low", label: "Низкий" }, { min: 21, max: 40, level: "high", label: "Высокий" }] },
+  }];
+  const INDICATORS = [{
+    id: "rv1", testId: "test1", name: "lead_style", label: "Ведущий стиль", type: "string", formula: "x",
+    sortOrder: 0, controlsStatus: null,
+    configJson: { outcomes: [{ code: "kom", label: "Командный стиль" }] },
+  }];
+  const lmsRow = (id: string, origin: string) => ({
+    id, testId: "test1", packageId: null, origin,
+    userId: null, participantKey: null, groupId: null, lmsUserId: id, lmsUserName: "Пётр",
+    startedAt: new Date("2026-09-01T09:00:00Z"), finishedAt: new Date("2026-09-01T09:30:00Z"),
+    resultPercent: null, resultPassed: null, maxPoints: 0, totalPoints: 0,
+  });
+
+  beforeEach(() => {
+    storageMock.getTest.mockResolvedValue(MEASUREMENT_TEST);
+    storageMock.getTests.mockResolvedValue([MEASUREMENT_TEST]);
+    storageMock.getScales.mockResolvedValue(SCALES);
+    storageMock.getResultVariables.mockResolvedValue(INDICATORS);
+    storageMock.getAllAttempts.mockResolvedValue([]);
+    storageMock.getAllScormAttempts.mockResolvedValue([lmsRow("tel-1", "telemetry"), lmsRow("imp-1", "import")]);
+    storageMock.getScormAttemptMeasures.mockResolvedValue([
+      { id: "tel-1", scalesJson: { kom: 30 }, variablesJson: { lead_style: "kom" } },
+      // An export without `var_*` blocks: the indicator was not reported.
+      { id: "imp-1", scalesJson: { kom: 12 }, variablesJson: null },
+    ]);
+  });
+
+  it("fills the scale and indicator columns of LMS rows on the passages sheet", async () => {
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
+    expect(res.status).toBe(200);
+    const rows = await sheetRows(res.body, "Прохождения");
+    const head = rows[0];
+    const row = (id: string) => rows.find(r => r.includes(id))!;
+
+    expect(row("tel-1")[head.indexOf("Командный")]).toBe("30");
+    expect(row("tel-1")[head.indexOf("Командный, уровень")]).toBe("Высокий");
+    expect(row("tel-1")[head.indexOf("Ведущий стиль")]).toBe("kom");
+    expect(row("imp-1")[head.indexOf("Командный")]).toBe("12");
+    expect(row("imp-1")[head.indexOf("Ведущий стиль")]).toBe("—");
+  });
+
+  it("lists LMS runs on the measurements sheet with the indicator's outcome as its level", async () => {
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
+    const rows = await sheetRows(res.body, "Измерения");
+    const head = rows[0];
+    const of = (id: string, kind: string) => rows.find(r => r.includes(id) && r[head.indexOf("Вид")] === kind)!;
+
+    expect(of("tel-1", "Показатель")[head.indexOf("Значение")]).toBe("kom");
+    expect(of("tel-1", "Показатель")[head.indexOf("Уровень")]).toBe("Командный стиль");
+    expect(of("tel-1", "Шкала")[head.indexOf("Уровень")]).toBe("Высокий");
+    expect(of("imp-1", "Показатель")[head.indexOf("Значение")]).toBe("—");
+    expect(of("imp-1", "Шкала")[head.indexOf("Значение")]).toBe("12");
   });
 });

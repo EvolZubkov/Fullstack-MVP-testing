@@ -10,7 +10,7 @@
  * routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { attempts, type Attempt, type InsertAttempt } from "@shared/schema";
 import { pickDefined } from "./shared";
@@ -74,6 +74,18 @@ export class AttemptsRepository {
     return updated || undefined;
   }
 
+  /**
+   * PRD-66 FR-06: попытки, НАЗВАННЫЕ поимённо, — разложение выборки до уровня ответа.
+   *
+   * Отбор уже сделан слоем наблюдений; здесь дочитывается то, чего в наблюдении нет: карта
+   * ответов, состав выдачи со штампами редакций и замером времени. Читать их по одной попытке
+   * значило бы выдать запрос на каждое прохождение выборки.
+   */
+  async getAttemptsByIds(ids: string[]): Promise<Attempt[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(attempts).where(inArray(attempts.id, ids));
+  }
+
   async getAttemptsByUser(userId: string): Promise<Attempt[]> {
     return db.select().from(attempts).where(eq(attempts.userId, userId));
   }
@@ -111,5 +123,14 @@ export class AttemptsRepository {
 
   async getAllAttempts(): Promise<Attempt[]> {
     return db.select().from(attempts);
+  }
+
+  /**
+   * Attempts of the given tests — analytics reads one test (or a reader's scope), not the whole
+   * table filtered in memory (PRD-70 FR-01). Served by `attempts_test_id_idx`.
+   */
+  async getAttemptsByTests(testIds: string[]): Promise<Attempt[]> {
+    if (testIds.length === 0) return [];
+    return db.select().from(attempts).where(inArray(attempts.testId, testIds));
   }
 }

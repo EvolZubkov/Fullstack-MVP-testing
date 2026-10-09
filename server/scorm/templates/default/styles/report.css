@@ -16,7 +16,9 @@
   padding: 20px 25px;
   box-sizing: border-box;
   position: relative;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* ШРИФТ ОТЧЁТА — параметр «Шрифт» шаблона (`--font-sans`), как у экранов. Жёсткая
+     гарнитура здесь печатала отчёт не тем шрифтом, что выбран у теста. */
+  font-family: var(--font-sans, Inter), 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
   color: #ffffff;
   /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
   background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
@@ -127,6 +129,16 @@
   color: #22c55e;
 }
 
+/* PRD-50: БЛОК РАЗДЕЛОВ — заголовок со счётчиком «пройдено N из M» над собственной
+   сеткой тем. Шапку печатает только блок разделов: в документе из блоков (PRD-51,
+   `layouts/report/topics.html`) обёртку получает и плоский список тем, но узла
+   `-head` в нём нет, поэтому тест без блоков не несёт пустой полосы. */
+.tb-report__topic-group { margin-bottom: 12px; }
+.tb-report__topic-group:last-child { margin-bottom: 0; }
+.tb-report__topic-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.tb-report__topic-group-title { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.tb-report__topic-group-counter { font-size: 11px; color: #aca9a9; white-space: nowrap; }
+
 /* Темы: сетка, число колонок ставит хост инлайном по `report.gridColumns`. */
 .tb-report__topics { display: grid; gap: 10px; }
 
@@ -221,6 +233,47 @@
 .tb-report__topic.is-fail .tb-report__topic-bar-fill { background: #ef4444; }
 .tb-report__topic.is-pass .tb-report__topic-bar-fill { background: #22c55e; }
 
+/* PRD-50: полосы разреза по ключам. Тот же род, что полоса карточки выше — узкая
+   дорожка с закруглением. Заливка нейтральна, пока у ключа нет применившегося
+   порога; ширина всегда задаётся инлайн-стилем из макета (`barPercent`). Цвета
+   литеральные, как везде в документе: отчёт печатается растром вне области DS-токенов,
+   поэтому тон исхода берётся теми же значениями, что у полосы карточки темы. */
+.tb-report__breakdown { margin-bottom: 6px; }
+.tb-report__breakdown-row { margin-bottom: 4px; }
+.tb-report__breakdown-row:last-child { margin-bottom: 0; }
+.tb-report__breakdown-name {
+  font-size: 7px;
+  color: #aca9a9;
+  margin-bottom: 2px;
+  overflow-wrap: anywhere;
+}
+.tb-report__breakdown-bar {
+  height: 2px;
+  background: #2f2f2f;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.tb-report__breakdown-bar span { display: block; height: 100%; border-radius: 2px; background: #6b7280; }
+.tb-report__breakdown-val { font-size: 7px; color: #aca9a9; margin-top: 2px; }
+/* PRD-50 §16: тон строки разреза. Красится ОДНА полоса — слово вердикта принадлежит
+   карточке темы вокруг. Порога нет — класса нет, и строка печатается ровно так, как
+   печаталась до §16. */
+.tb-report__breakdown-row.is-pass .tb-report__breakdown-bar span { background: #22c55e; }
+.tb-report__breakdown-row.is-fail .tb-report__breakdown-bar span { background: #ef4444; }
+/* Дорожка проваленной подтемы: при 0 % заливки нет, и строка читалась бы как «нет данных». */
+.tb-report__breakdown-row.is-fail .tb-report__breakdown-bar { background: #fee2e2; }
+.tb-report__breakdown-req { font-size: 7px; color: #aca9a9; margin-top: 2px; }
+/* PRD-50 Э4: СВОДНЫЙ блок разреза — своя карточка документа во всю ширину, а не строки
+   в тесной ячейке сетки тем. Размеры выше подобраны под колонку карточки темы и на
+   полной ширине читаются сноской, поэтому здесь всё на ступень крупнее. */
+.tb-report__breakdown--block { margin-bottom: 0; }
+.tb-report__breakdown--block .tb-report__breakdown-row { margin-bottom: 8px; }
+.tb-report__breakdown--block .tb-report__breakdown-name { font-size: 10px; margin-bottom: 4px; }
+.tb-report__breakdown--block .tb-report__breakdown-bar { height: 4px; border-radius: 3px; }
+.tb-report__breakdown--block .tb-report__breakdown-bar span { border-radius: 3px; }
+.tb-report__breakdown--block .tb-report__breakdown-val { font-size: 9px; }
+.tb-report__breakdown--block .tb-report__breakdown-req { font-size: 9px; }
+
 .tb-report__topic-fb {
   font-size: 10px;
   font-weight: 300;
@@ -293,6 +346,29 @@
    слушателю одним сплошным полотном. `pre-wrap` держит переносы автора и переносит
    длинные строки по ширине страницы. */
 .tb-report__scale-text { font-size: 12px; font-weight: 300; margin-top: 4px; white-space: pre-wrap; }
+
+/* ЛИНЕЙЧАТАЯ ДИАГРАММА ШКАЛ. Та же фигура, что на экране итогов, и по той же причине
+   объявленная здесь заново литералами: отчёт печатается ВНЕ сцены и токенов дизайн-системы
+   не видит (§6.3).
+
+   Дорожка — СЕРЫЙ с прозрачностью, а не белый (как рельс карточки выше) и не чёрный:
+   карточка документа тёмная по умолчанию (`.tb-report__card`), но её цвет задаёт оформление
+   отчёта, и на светлой подложке белая дорожка исчезла бы так же, как чёрная на тёмной.
+   Серединный серый виден на обеих, а без дорожки столбик сообщает длину, но не долю. */
+.tb-report__bars { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.tb-report__bar {
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.tb-report__bar-name { font-size: 12px; }
+.tb-report__bar-field { position: relative; height: 8px; }
+.tb-report__bar-fill {
+  position: absolute; inset: 0 auto 0 0;
+  background: hsl(var(--tb-zone)); border-radius: 999px;
+}
+.tb-report__bar-val { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Линейка шкалы. Ту же фигуру рисует экран итогов, но повторить её стилями оттуда
    нельзя: отчёт печатается ВНЕ сцены, токенов дизайн-системы не видит и правила
@@ -379,3 +455,31 @@
 }
 .tb-report .tb-rose__label { fill: #fafafa; font-size: 11px; }
 .tb-report .tb-rose__level { fill: rgba(250, 250, 250, 0.7); font-size: 10px; }
+
+/* AUTHOR LINKS. Declared here for the same reason as the list markers above: the report
+   is drawn inside the APPLICATION document (§6.3), where a link is under no obligation to
+   look like one. The colour is TAKEN from the text rather than assigned: the sheet differs
+   between templates (dark in the reference one, light in «Сертификация»), so the underline
+   is the only dependable mark of a link here. Scoped to the whole report, like the lists:
+   author markup and the feedback material links print in different cards. */
+.tb-report a { color: inherit; text-decoration: underline; }
+/* КНОПКА-ССЫЛКА в авторском тексте: <a class="tb-report__button" href="https://…">,
+   которую автор пишет в режиме HTML (например «Скачать карточки по развитию»). Это та же
+   ссылка — в PDF её делает настоящей ссылкой конвейер экспорта, как любую <a href>, —
+   только оформленная кнопкой в стиле чипов рекомендаций. Адрес должен быть ВНЕШНИМ
+   (https://…): файл, загруженный в продукт, из скачанного PDF и из пакета не откроется. */
+.tb-report a.tb-report__button {
+  display: inline-block;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: #fafafa;
+  background: #59209b;
+  text-decoration: none;
+}
+
+/* ЖИРНЫЙ В АВТОРСКОМ ТЕКСТЕ. Текст отчёта набран весом 300, а `b` / `strong` по умолчанию
+   `bolder` — от 300 это 400, обычное начертание: выделение автора пропадало. */
+.tb-report b, .tb-report strong { font-weight: 600; }

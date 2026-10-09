@@ -35,8 +35,9 @@ vi.mock("wouter", () => ({
   useLocation: () => ["/learner/test/test-1", navigateSpy],
 }));
 
-vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: toastSpy }),
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
 }));
 
 // This suite exercises standard (non-restricted) sessions only; the magic-link

@@ -193,7 +193,9 @@ export const FileItem = forwardRef<HTMLDivElement, FileItemProps>(
         )}
         {...rest}
       >
-        <div className={cn('ou-file__thumb', `ou-file__thumb--${kind}`)}>
+        {/* «other» has no colour of its own: the stylesheet names that tile `--default`.
+            Without the mapping the tile had no background and its white label vanished. */}
+        <div className={cn('ou-file__thumb', `ou-file__thumb--${kind === 'other' ? 'default' : kind}`)}>
           {thumb ?? KIND_LABEL[kind]}
         </div>
         <div className="ou-file__main">

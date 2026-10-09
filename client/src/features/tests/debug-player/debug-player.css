@@ -64,6 +64,9 @@
   gap: var(--ou-space-2) var(--ou-space-4);
 }
 .dbg__stat { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+/* Тот же показатель ВНУТРИ панели инспектора: там он строка над журналом, а не колонка
+   статусной панели, — подпись и значение стоят рядом. */
+.dbg__stat--inline { flex-direction: row; align-items: baseline; gap: var(--ou-space-3); }
 .dbg__stat-lbl {
   font: var(--ou-text-caption);
   text-transform: uppercase;
@@ -102,8 +105,10 @@
 .dbg__ribbon {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--ou-space-2);
+  /* Раскладку держит РАСПОРКА после подписи (`.dbg__bar-spacer`), как в эскизе: тумблеры
+     стоят парой у правого края. `justify-content: space-between` тут стоял вместо неё и
+     растаскивал три элемента по всей ширине — «Эталон» повисал посередине риббона. */
+  gap: var(--ou-space-4);
   font: var(--ou-text-caption);
   color: var(--ou-fg-muted);
   background: var(--ou-bg-muted);
@@ -285,3 +290,16 @@
 .dbg__lms--suspend { border-left-color: var(--ou-accent-default); }
 .dbg__lms--answer { border-left-color: var(--ou-accent-default); }
 .dbg__lms--warn { border-left-color: var(--ou-warning-default); }
+
+/*
+  Замечание о выполнимости выдачи (PRD-15 FR-05): лента НАД сценой, а не поверх неё —
+  прогон не блокируется, автор одновременно видит и причину, и сам экран, на котором
+  она проявится.
+*/
+.dbg__notice {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: 3;
+  padding: var(--ou-space-3);
+}

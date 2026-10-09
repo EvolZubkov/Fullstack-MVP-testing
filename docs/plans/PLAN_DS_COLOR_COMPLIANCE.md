@@ -23,7 +23,7 @@
 
 НЕ участвуют:
 
-- `client/src/styles/vendor/university-rt.css` и `vendor/ui-kit/**` — это сам DS, источник токенов;
+- `client/src/styles/vendor/skillum-ds.css` и `vendor/ui-kit/**` — это сам DS, источник токенов;
 - `server/scorm/templates/**` — шаблоны оформления, у них своя палитра по контракту PRD-7/PRD-12;
 - `docs/wireframes/**` — копии для эскизов, правятся вместе с исходником в своей задаче;
 - тесты (`**/__tests__/**`) — там литералы это фикстуры.

@@ -9,6 +9,7 @@
 
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
+import { Readable } from "node:stream";
 
 /** Width spec for a single column (matches the old `ws["!cols"] = [{wch: N}]` shape). */
 export interface ColumnWidth {
@@ -318,6 +319,94 @@ export async function readWorkbookFromBuffer(buf: Buffer): Promise<ExcelJS.Workb
       throw new WorkbookReadError("unparsable", { cause: retryFailure });
     }
     return retry;
+  }
+}
+
+// ─── Reading uploads: CSV ────────────────────────────────────────────────────
+//
+// The users list has always been offered as «CSV/XLSX», but the upload went
+// straight to `xlsx.load`, which rejects a .csv as "not a zip". Excel on a
+// Russian Windows saves «CSV (разделители — запятые)» with `;` and in
+// windows-1251, «CSV UTF-8» with a BOM — both are read here. exceljs ships its
+// own CSV reader and Node's TextDecoder knows windows-1251, so no new
+// dependency is needed.
+
+/** Delimiters a CSV upload may use, in order of preference on a tie. */
+const CSV_DELIMITERS = [";", ",", "\t"] as const;
+
+/**
+ * Decode CSV bytes: UTF-8 when the bytes are valid UTF-8 (BOM dropped),
+ * windows-1251 otherwise — the encoding of a plain «CSV» saved by Russian Excel.
+ *
+ * @param buf The uploaded bytes.
+ * @returns The text.
+ */
+function decodeCsv(buf: Buffer): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(buf);
+  } catch {
+    return new TextDecoder("windows-1251").decode(buf);
+  }
+}
+
+/**
+ * The delimiter of a CSV text: the candidate met most often in its first line.
+ *
+ * @param text The decoded CSV.
+ * @returns The delimiter.
+ */
+function detectCsvDelimiter(text: string): string {
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  let best: string = CSV_DELIMITERS[0];
+  let bestCount = -1;
+  for (const delimiter of CSV_DELIMITERS) {
+    const count = firstLine.split(delimiter).length - 1;
+    if (count > bestCount) {
+      best = delimiter;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/**
+ * Load a CSV upload as a one-sheet workbook, so the callers read it with the
+ * same `sheetToObjects` they use for .xlsx.
+ *
+ * Cells stay TEXT: exceljs would otherwise turn «00123» into 123 and an ISO-like
+ * string into a Date, and a key or a phone number must survive as written.
+ *
+ * @param buf The uploaded bytes.
+ * @returns The workbook with a single worksheet.
+ */
+export async function readCsvFromBuffer(buf: Buffer): Promise<ExcelJS.Workbook> {
+  const text = decodeCsv(buf);
+  const wb = new ExcelJS.Workbook();
+  await wb.csv.read(Readable.from([text]), {
+    parserOptions: { delimiter: detectCsvDelimiter(text) },
+    map: (value: unknown) => value,
+  } as any);
+  return wb;
+}
+
+/**
+ * Load a tabular upload — an .xlsx book or a CSV text.
+ *
+ * The package is tried first; only an upload that is not even a zip is read as
+ * CSV. A zip that fails to parse keeps its `unparsable` error: it is a broken
+ * book, not a text file.
+ *
+ * @param buf The uploaded bytes.
+ * @throws {WorkbookReadError} When the upload is a zip but not a readable book.
+ */
+export async function readTableFromBuffer(buf: Buffer): Promise<ExcelJS.Workbook> {
+  try {
+    return await readWorkbookFromBuffer(buf);
+  } catch (error) {
+    if (error instanceof WorkbookReadError && error.reason === "not_a_zip") {
+      return readCsvFromBuffer(buf);
+    }
+    throw error;
   }
 }
 

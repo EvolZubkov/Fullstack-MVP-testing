@@ -99,7 +99,7 @@ function renderCard(
  */
 async function openSelect(): Promise<HTMLElement> {
   // Триггер — кнопка с `aria-haspopup="listbox"`, подписанная своим `<label>`.
-  const trigger = await screen.findByLabelText("Вид отчёта");
+  const trigger = await screen.findByLabelText("Что показывать в отчёте");
   fireEvent.click(trigger);
   return trigger;
 }
@@ -128,21 +128,21 @@ afterEach(() => {
 describe("каталог видов", () => {
   it("запрашивается по ЧЕРНОВОМУ шаблону вкладки «Оформление» (§4.2)", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard({ draftTemplateId: "certification" });
+    renderCard({ scope: "content", draftTemplateId: "certification" });
     await waitFor(() => expect(requested.length).toBeGreaterThan(0));
     expect(requested[0]).toBe("/api/templates/certification");
   });
 
   it("предлагает только виды СВОЕГО режима (D-5)", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard({ mode: "standard" });
+    renderCard({ scope: "content", mode: "standard" });
     // «Уровни» — вид адаптивного режима, в обычном тесте его быть не должно.
     expect(await selectOptionLabels()).toEqual(["Сертификат", "Сводка"]);
   });
 
   it("адаптивный тест видит свои виды и не видит обычные", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard({ mode: "adaptive" });
+    renderCard({ scope: "content", mode: "adaptive" });
     expect(await selectOptionLabels()).toEqual(["Уровни"]);
   });
 
@@ -151,19 +151,19 @@ describe("каталог видов", () => {
     // сядет на тот же ключ, содержимое кэша определит тот хук, который сходил первым, и
     // карточка молча покажет «шаблон не предлагает видов».
     mockFetch({ certification: MANIFEST });
-    renderCard({}, (client) =>
+    renderCard({ scope: "content" }, (client) =>
       client.setQueryData(
         ["templates", "certification", "content-templates"],
         MANIFEST.manifest.contentTemplates,
       ),
     );
-    expect(await screen.findByLabelText("Вид отчёта")).toBeTruthy();
+    expect(await screen.findByLabelText("Что показывать в отчёте")).toBeTruthy();
     expect(screen.queryByText(/не предлагает видов отчёта/)).toBeNull();
   });
 
   it("подсказка называет шаблон ИМЕНЕМ, а не идентификатором", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard();
+    renderCard({ scope: "content" });
     // `certification` — служебный ключ; автору он ни о чём не говорит (эскиз, строка 172).
     const hint = await screen.findByText(/Виды предлагает шаблон оформления/);
     expect(hint.textContent).toContain("«Сертификация»");
@@ -172,16 +172,16 @@ describe("каталог видов", () => {
 
   it("шаблон без видов: вместо селектора объяснение деградации (FR-15)", async () => {
     mockFetch({ "my-template": BARE });
-    renderCard({ draftTemplateId: "my-template" });
+    renderCard({ scope: "content", draftTemplateId: "my-template" });
     expect(await screen.findByText(/не предлагает видов отчёта/)).toBeTruthy();
-    expect(screen.queryByLabelText("Вид отчёта")).toBeNull();
+    expect(screen.queryByLabelText("Что показывать в отчёте")).toBeNull();
   });
 });
 
 describe("поля выбранного вида", () => {
   it("показывает поля, объявленные вариантом, с их подписями", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard();
+    renderCard({ scope: "appearance" });
     expect(await screen.findByLabelText("Заголовок отчёта")).toBeTruthy();
     // «Показывать рекомендации» объявлено содержательным и живёт на другой стороне —
     // см. describe «две стороны настроек отчёта».
@@ -190,7 +190,7 @@ describe("поля выбранного вида", () => {
 
   it("правка поля сохраняет выбранный вид и значение", async () => {
     mockFetch({ certification: MANIFEST });
-    const { onChange } = renderCard();
+    const { onChange } = renderCard({ scope: "appearance" });
     const input = await screen.findByLabelText("Заголовок отчёта");
     fireEvent.change(input, { target: { value: "Аттестация" } });
     expect(onChange).toHaveBeenCalledWith({
@@ -200,7 +200,7 @@ describe("поля выбранного вида", () => {
 
   it("опубликованный тест не редактируется", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard({ readOnly: true });
+    renderCard({ scope: "appearance", readOnly: true });
     const input = await screen.findByLabelText("Заголовок отчёта");
     expect((input as HTMLInputElement).disabled).toBe(true);
   });
@@ -210,6 +210,7 @@ describe("смена вида (FR-14)", () => {
   it("называет теряемые значения по ИМЕНАМ полей", async () => {
     mockFetch({ certification: MANIFEST });
     renderCard({
+      scope: "content",
       value: { standard: { variantKey: "report.certificate", values: { headline: "X", showRecs: false } } },
     });
     await pickOption("Сводка");
@@ -222,6 +223,7 @@ describe("смена вида (FR-14)", () => {
   it("переносит совпадающие значения и отбрасывает чужие", async () => {
     mockFetch({ certification: MANIFEST });
     const { onChange } = renderCard({
+      scope: "content",
       value: { standard: { variantKey: "report.certificate", values: { headline: "X", showRecs: false } } },
     });
     await pickOption("Сводка");
@@ -232,7 +234,7 @@ describe("смена вида (FR-14)", () => {
 
   it("до смены предупреждения нет", async () => {
     mockFetch({ certification: MANIFEST });
-    renderCard();
+    renderCard({ scope: "content" });
     await openSelect();
     expect(screen.queryByTestId("report-drop-warning")).toBeNull();
   });
@@ -241,7 +243,7 @@ describe("смена вида (FR-14)", () => {
     // Пустое поле не значит «картинки не будет»: отчёт возьмёт файл шаблона. Автору это
     // надо видеть до того, как он решит, что подложка пропала.
     mockFetch({ certification: MANIFEST });
-    renderCard();
+    renderCard({ scope: "appearance" });
     const input = await screen.findByLabelText("Подложка страницы");
     expect((input as HTMLInputElement).value).toBe("");
     expect(input.getAttribute("placeholder")).toContain("assets/report/bg.png");
@@ -249,7 +251,7 @@ describe("смена вида (FR-14)", () => {
 
   it("дефолт шаблона в черновик не пишется", async () => {
     mockFetch({ certification: MANIFEST });
-    const { onChange } = renderCard();
+    const { onChange } = renderCard({ scope: "appearance" });
     await screen.findByLabelText("Подложка страницы");
     // Открытие карточки ничего не меняет: значение по умолчанию живёт в манифесте.
     expect(onChange).not.toHaveBeenCalled();
@@ -260,21 +262,24 @@ describe("две стороны настроек отчёта", () => {
   // Настройки отчёта разложены по двум экранам: «что получит слушатель» — в «Настройках»,
   // рядом с обратной связью; «как это выглядит» — в «Оформлении». Делит поля САМ ШАБЛОН
   // признаком `scope`, поэтому карточка обязана показывать ровно свою половину.
-  it("оформление: вид отчёта и картинки, без содержательных полей", async () => {
+  it("оформление: картинки и НАЗВАНИЕ вида, но выбирать его отсюда нельзя", async () => {
     mockFetch({ certification: MANIFEST });
     renderCard({ scope: "appearance" });
-    expect(await screen.findByLabelText("Вид отчёта")).toBeTruthy();
     expect(await screen.findByLabelText("Подложка страницы")).toBeTruthy();
     expect(screen.queryByLabelText("Показывать рекомендации")).toBeNull();
+    // Вид называется, чтобы автор знал, к чему относятся параметры, но выбор его —
+    // вопрос «что показывать», и живёт он на стороне содержания.
+    expect(screen.getByTestId("report-variant-readonly")).toBeTruthy();
+    expect(screen.queryByLabelText("Что показывать в отчёте")).toBeNull();
     // Выдача документа — вопрос содержания, здесь его нет.
     expect(screen.queryByTestId("report-enabled-switch")).toBeNull();
   });
 
-  it("содержание: выдача и содержательные поля, без вида и картинок", async () => {
+  it("содержание: выдача, выбор вида и содержательные поля, без картинок", async () => {
     mockFetch({ certification: MANIFEST });
     renderCard({ scope: "content" });
     expect(await screen.findByLabelText("Показывать рекомендации")).toBeTruthy();
-    expect(screen.queryByLabelText("Вид отчёта")).toBeNull();
+    expect(await screen.findByLabelText("Что показывать в отчёте")).toBeTruthy();
     expect(screen.queryByLabelText("Подложка страницы")).toBeNull();
     expect(screen.getByTestId("report-enabled-switch")).toBeTruthy();
   });

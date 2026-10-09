@@ -83,10 +83,11 @@ describe("buildResultContext + measures", () => {
     expect(ctx.result.scales).toBeUndefined();
   });
 
-  it("собирает рекомендации в порядке тест, показатель, шкала", () => {
+  it("собирает рекомендации в порядке показатель, шкала", () => {
+    // PRD-61 §10: текст ТЕСТА был первым в этом списке и снят вместе с уровнем. Порядок
+    // остальных источников не менялся: общее раньше частного.
     const ctx = buildResultContext(BASE, "Маслач", { testFeedback: TEST_FEEDBACK, measures: MEASURES });
     expect(ctx.result.recommendations!.texts).toEqual([
-      "Опросник носит справочный характер.",
       "Обсудите нагрузку с руководителем.",
       "Восстановите режим отдыха.",
     ]);
@@ -136,9 +137,9 @@ describe("buildResultContext + measures", () => {
       measures: { ...MEASURES, blockSettings: { scales: "hide" as const } },
     });
     expect(ctx.result.scales).toBeUndefined();
-    // Скрытый блок не отдаёт рекомендаций: ученик не видел, что их вызвало.
+    // Скрытый блок не отдаёт рекомендаций: ученик не видел, что их вызвало. Остаётся текст
+    // показателя — текст ТЕСТА снят вместе с уровнем (PRD-61 §10).
     expect(ctx.result.recommendations!.texts).toEqual([
-      "Опросник носит справочный характер.",
       "Обсудите нагрузку с руководителем.",
     ]);
   });
@@ -192,7 +193,7 @@ describe("buildAdaptiveResultContext + measures", () => {
     expect(ctx.result.scales).toHaveLength(1);
   });
 
-  it("рекомендации собираются в порядке тест, показатель, шкала, тема", () => {
+  it("рекомендации собираются в порядке показатель, шкала, тема", () => {
     const input = {
       passed: false,
       topicResults: [
@@ -209,7 +210,6 @@ describe("buildAdaptiveResultContext + measures", () => {
       measures: MEASURES,
     });
     expect(ctx.result.recommendations!.texts).toEqual([
-      "Опросник носит справочный характер.",
       "Обсудите нагрузку с руководителем.",
       "Восстановите режим отдыха.",
       "Повторите модуль.",
@@ -260,7 +260,8 @@ describe("вердикт теста", () => {
     });
     expect(ctx.result.statusLabel).toBe("");
     expect(ctx.result.passClass).toBe("");
-    expect(ctx.result.recommendations!.texts).toEqual([TEST_FEEDBACK.text]);
+    // PRD-61 §10: вторая половина этой пары проверялась обратной связью ТЕСТА — её сняли.
+    // Вердикт и без неё обязан молчать: именно его молчание и было предметом проверки.
   });
 
   it("контрольный тест без порога вердикта не выносит", () => {
@@ -271,7 +272,8 @@ describe("вердикт теста", () => {
     );
     expect(ctx.result.statusLabel).toBe("");
     expect(ctx.result.passClass).toBe("");
-    expect(ctx.result.recommendations!.texts).toEqual([TEST_FEEDBACK.text]);
+    // PRD-61 §10: вторая половина этой пары проверялась обратной связью ТЕСТА — её сняли.
+    // Вердикт и без неё обязан молчать: именно его молчание и было предметом проверки.
   });
 
   // ABSENT MEANS «UNKNOWN», and unknown only ever resolves in favour of showing — the

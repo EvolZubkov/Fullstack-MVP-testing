@@ -11,7 +11,7 @@ testId }`. Один guard-middleware стоит до всех роутеров �
 таблице разрешений, сверяя `testId` и принадлежность попытки. Клиент узнаёт об ограничении из
 `GET /api/auth/me` и сам не предлагает переходов за границу теста.
 
-**Tech Stack:** Express 4 плюс `express-session`, TypeScript, Drizzle ORM; React 19, Wouter, `@universityrt/ui-kit`;
+**Tech Stack:** Express 4 плюс `express-session`, TypeScript, Drizzle ORM; React 19, Wouter, `@skillum/ui-kit`;
 Vitest плюс supertest, jsdom.
 
 Основание: `docs/superpowers/specs/2026-07-30-magic-link-scope-design.md`.
@@ -846,8 +846,8 @@ git commit -m "feat(access): guard области включён в цепочк
 
 - [x] **Step 2: Подключить актуальный дизайн-систему**
 
-Взяты `client/src/styles/preflight.css` и `client/src/styles/vendor/university-rt.css` вместо обычной для
-эскизов копии `docs/wireframes/ds/university-rt.css`. Причины: docs-копия отстала (в ней нет `.ou-separator`),
+Взяты `client/src/styles/preflight.css` и `client/src/styles/vendor/skillum-ds.css` вместо обычной для
+эскизов копии `docs/wireframes/ds/skillum-ds.css`. Причины: docs-копия отстала (в ней нет `.ou-separator`),
 а без `preflight.css` ссылки рисуются подчёркнутыми, чего в приложении нет.
 
 - [x] **Step 3: Проверить в браузере**

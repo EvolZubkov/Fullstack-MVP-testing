@@ -28,7 +28,7 @@
     ИСТОЧНИКИ РАЗМЕТКИ.
       - сцена и её блоки — реальный шаблон «Стандартный»
         (server/scorm/templates/default/styles/theme.css, подключён как есть);
-      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - компоненты — ДС Skillum (client/src/styles/vendor/skillum-ds.css);
       - слой «Дельта PRD-34» — предлагаемое содержимое PROTECTION_CSS, который
         ядро впрыскивает в корень сцены (FR-33), а НЕ правка theme.css.
       Классы с префиксом wf- — каркас эскиза, не UI.
@@ -67,7 +67,7 @@
   <!-- Пути ОТНОСИТЕЛЬНЫЕ, а не от корня репозитория: так эскиз открывается и двойным
        щелчком (file://), и с локального сервера. Абсолютные пути соседних эскизов
        требуют http.server из корня и по file:// дают страницу без стилей. -->
-  <link rel="stylesheet" href="../../client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="../../client/src/styles/vendor/skillum-ds.css">
   <link rel="stylesheet" href="ds/wf-utils.css">
   <link rel="stylesheet" href="../../server/scorm/templates/default/styles/theme.css">
   <style>
@@ -693,7 +693,7 @@
       <tr><td>Сцена вопроса</td><td><code>server/scorm/templates/default/layouts/question.html</code>, дословно; мустейш-подстановки заменены значениями примера.</td></tr>
       <tr><td>Сцена итогов</td><td><code>server/scorm/templates/default/layouts/results.html</code>, верхний блок.</td></tr>
       <tr><td>Стили сцены</td><td><code>server/scorm/templates/default/styles/theme.css</code>, подключён как есть — не копия.</td></tr>
-      <tr><td>Компоненты</td><td>ДС UniversityRT, <code>client/src/styles/vendor/university-rt.css</code>.</td></tr>
+      <tr><td>Компоненты</td><td>ДС Skillum, <code>client/src/styles/vendor/skillum-ds.css</code>.</td></tr>
       <tr><td>Дельта PRD-34</td><td>Предлагаемое содержимое <code>PROTECTION_CSS</code>, который ядро впрыскивает в корень сцены (FR-33). В <code>theme.css</code> шаблона ничего из этого лежать не должно.</td></tr>
     </tbody>
   </table>

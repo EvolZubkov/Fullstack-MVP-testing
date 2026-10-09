@@ -8,3 +8,6 @@ drizzle/** text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 Dockerfile text eol=lf
+# Same reason: these vhost templates are shipped to the Linux host and written
+# into /etc/nginx by deploy.sh, so they must not pick up CRLF on a Windows checkout.
+docker/templates/nginx-site-*.conf text eol=lf

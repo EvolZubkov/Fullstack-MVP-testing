@@ -11,7 +11,7 @@
  * Exposed through the `IStorage` facade, never imported by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and, or, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, or, desc, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   testAssignments, assignmentAccessTokens, userGroups, tests,
@@ -154,7 +154,7 @@ export class AssignmentsRepository {
 
   // ── Assignment Access Tokens (magic links) ──────────────────────────────────
 
-  async createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
+  async createAssignmentAccessToken(data: { assignmentId: string | null; userId: string; testId: string; tokenHash: string; expiresAt: Date; purpose?: "attempt" | "review" }): Promise<AssignmentAccessToken> {
     const [token] = await db.insert(assignmentAccessTokens).values({
       id: randomUUID(),
       assignmentId: data.assignmentId,
@@ -162,6 +162,9 @@ export class AssignmentsRepository {
       testId: data.testId,
       tokenHash: data.tokenHash,
       expiresAt: data.expiresAt,
+      // PRD-52: назначение ссылки. По умолчанию — прохождение, как у всех ранее
+      // выданных ссылок, поэтому старые вызовы поля не передают.
+      purpose: data.purpose ?? "attempt",
     }).returning();
     return token;
   }
@@ -181,6 +184,25 @@ export class AssignmentsRepository {
     await db.update(assignmentAccessTokens)
       .set({ revokedAt: new Date() })
       .where(eq(assignmentAccessTokens.id, id));
+  }
+
+  /**
+   * PRD-52: отозвать ревью-ссылки человека на тесте.
+   *
+   * Отзыв идёт по ПАРЕ (тест, человек), а не по назначению: у рецензирования
+   * назначения нет вовсе, доступ несёт грант. Снимаются все живые ссылки — человеку
+   * могли выпустить не одну (перевыпуск после истечения срока), и оставить хоть одну
+   * значило бы оставить дверь открытой после отзыва доступа.
+   */
+  async revokeReviewLinks(testId: string, userId: string): Promise<void> {
+    await db.update(assignmentAccessTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(
+        eq(assignmentAccessTokens.testId, testId),
+        eq(assignmentAccessTokens.userId, userId),
+        eq(assignmentAccessTokens.purpose, "review"),
+        isNull(assignmentAccessTokens.revokedAt),
+      ));
   }
 
   async revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {

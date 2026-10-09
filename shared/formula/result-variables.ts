@@ -10,6 +10,10 @@
  * must not break attempt completion), and derives the `controls_status` override
  * for `cmi.success_status` / `cmi.completion_status` from the boolean controllers.
  *
+ * Several variables may control the same status; their verdicts combine with OR:
+ * one `true` is enough, `false` needs every controller that produced a value to say
+ * so. A controller whose formula failed (`null`) does not vote at all.
+ *
  * The runtime calls the plain-JS twin `FormulaDSL.computeResultVariables`
  * (server/scorm/template/app/dsl/formula.js); a golden parity test keeps them
  * identical.
@@ -64,7 +68,8 @@ export function computeResultVariables(
     computed[v.name] = value;
 
     if ((v.controlsStatus === "success" || v.controlsStatus === "completion") && typeof value === "boolean") {
-      status[v.controlsStatus] = value;
+      // OR across controllers of the same status: a `true` already cast is never undone.
+      status[v.controlsStatus] = status[v.controlsStatus] === true || value;
     }
   }
 

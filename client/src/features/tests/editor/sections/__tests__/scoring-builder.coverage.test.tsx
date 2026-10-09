@@ -329,3 +329,27 @@ describe("buildScoringJson()", () => {
     expect(buildScoringJson("single", ["А"], "exact", [], [])).toBeNull();
   });
 });
+
+// ─── Текстовый ввод: единица счёта — ПРАВИЛО (PRD-57 FR-28aa4) ──────────────
+
+describe("<ScoringBuilder /> — короткий ответ", () => {
+  it("предлагает ступени и объясняет счётчики через правила, а не через варианты", () => {
+    renderBuilder(<Harness type={"short" as QuestionType} initialMode="tiered" />);
+    const hint = screen.getByTestId("scoring-tiers");
+    expect(hint).toHaveTextContent("сколько правил выполнено");
+    expect(hint).toHaveTextContent("всего правил");
+    expect(hint).not.toHaveTextContent("верных выбрано");
+  });
+
+  it("счётчик в условии подписан правилами", () => {
+    renderBuilder(
+      <Harness
+        type={"short" as QuestionType}
+        initialMode="tiered"
+        initialTiers={[{ conds: [{ lhs: "c", op: ">=", rhs: "2" }], score: "2" }]}
+      />,
+    );
+    const wrap = screen.getByTestId("scoring-cond-lhs-0-0");
+    expect(wrap).toHaveTextContent("Выполнено правил (c)");
+  });
+});

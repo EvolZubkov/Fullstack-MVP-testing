@@ -1,0 +1,1 @@
+ALTER TABLE "test_scenarios" ADD COLUMN "pass_rule_json" jsonb;

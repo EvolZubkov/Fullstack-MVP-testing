@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "breakdown_display_json" jsonb;

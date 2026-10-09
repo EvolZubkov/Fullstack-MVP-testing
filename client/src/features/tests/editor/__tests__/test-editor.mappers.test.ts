@@ -168,6 +168,36 @@ describe("1. apiToEditorModel — standard test with sections", () => {
     expect(payloads[0].topicPassRuleJson).toEqual({ source: "by_variant", byForm });
   });
 
+  // PRD-50 §16 (FR-53): индивидуальных порогов подтем больше нет — есть ОДИН флаг теста,
+  // и он обязан пережить круг «ответ API → модель → payload». Живёт он в `passRules`:
+  // гейт уточняет вердикт ТЕМЫ и стоит рядом с «Тест пройден, если».
+  it("PRD-50 FR-53: гейт подтем читается и пишется", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      breakdownGateEnabled: true,
+    });
+    expect(model.passRules.breakdownGateEnabled).toBe(true);
+    expect(editorModelToPayload(model).breakdownGateEnabled).toBe(true);
+  });
+
+  // Тест, сохранённый до §16, судится ровно как судился: колонка `NOT NULL DEFAULT false`,
+  // а отсутствие поля в ответе — то же «выключено».
+  it("PRD-50 FR-53: отсутствие поля читается как выключено", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+    });
+    expect(model.passRules.breakdownGateEnabled).toBe(false);
+    expect(editorModelToPayload(model).breakdownGateEnabled).toBe(false);
+  });
+
   it("drops malformed by_variant entries instead of trusting them", () => {
     const model = apiToEditorModel({
       id: "t",
@@ -961,5 +991,247 @@ describe("quickAdvance (PRD-43)", () => {
     const model = emptyEditorModel({ folderId: null });
     model.runtime.quickAdvance = true;
     expect(editorModelToPayload(model).quickAdvance).toBe(true);
+  });
+});
+
+// ─── Свободная навигация внутри раздела (PRD-19 FR-11a) ───────────────────────
+
+describe("свободная навигация внутри раздела (PRD-19 FR-11a)", () => {
+  it("новый тест заводится с выключенной свободой", () => {
+    expect(emptyEditorModel({ folderId: null }).runtime.allowFreeSectionNavigation).toBe(false);
+  });
+
+  it("тест без этой колонки читается как ВЫКЛ, а не как «неизвестно» (FR-11c)", () => {
+    // Существующий тест обязан сохранить нынешнее поведение без правок автора, поэтому
+    // отсутствие поля — это «выключено», и таким же оно уедет обратно на сервер.
+    expect(apiToEditorModel({}).runtime.allowFreeSectionNavigation).toBe(false);
+  });
+
+  it("явное значение читается дословно и переживает круг до полезной нагрузки", () => {
+    expect(
+      apiToEditorModel({ allowFreeSectionNavigation: true }).runtime.allowFreeSectionNavigation,
+    ).toBe(true);
+    const model = emptyEditorModel({ folderId: null });
+    model.runtime.allowFreeSectionNavigation = true;
+    expect(editorModelToPayload(model).allowFreeSectionNavigation).toBe(true);
+  });
+});
+
+// ─── PRD-50 FR-11/FR-12: section-group (block) round-trip ────────────────────
+
+describe("PRD-50 FR-44 положение показа разреза (Э4)", () => {
+  const apiTest = (breakdownDisplayJson?: unknown) => ({
+    id: "t",
+    title: "T",
+    mode: "standard",
+    status: "draft",
+    overallPassRuleJson: { type: "percent", value: 70 },
+    sections: [apiSection({ topicId: "a" })],
+    ...(breakdownDisplayJson === undefined ? {} : { breakdownDisplayJson }),
+  });
+
+  it("читает положение и возвращает его в тело запроса без изменений", () => {
+    const model = apiToEditorModel(
+      apiTest({ visibility: "bar", basis: "points", placement: "both" }),
+    );
+    expect(model.runtime.breakdownDisplay).toEqual({
+      visibility: "bar",
+      basis: "points",
+      placement: "both",
+    });
+    expect(editorModelToPayload(model).breakdownDisplayJson).toEqual({
+      visibility: "bar",
+      basis: "points",
+      placement: "both",
+    });
+  });
+
+  it("настройка, сохранённая до Э4, поля НЕ приобретает: пусто и есть «в карточках тем»", () => {
+    const model = apiToEditorModel(apiTest({ visibility: "bar", basis: "units" }));
+    expect(model.runtime.breakdownDisplay).toEqual({ visibility: "bar", basis: "units" });
+    // Открытие и сохранение теста не должно переписывать настройку автора.
+    expect(editorModelToPayload(model).breakdownDisplayJson).toEqual({
+      visibility: "bar",
+      basis: "units",
+    });
+  });
+
+  it("чужое значение положения игнорируется, а не уезжает на сервер", () => {
+    const model = apiToEditorModel(apiTest({ visibility: "bar", basis: "units", placement: "card" }));
+    expect(model.runtime.breakdownDisplay).toEqual({ visibility: "bar", basis: "units" });
+  });
+});
+
+describe("PRD-50 FR-11 section groups mapping", () => {
+  const groups = [
+    { key: "intro", label: "Вводный блок", order: 0 },
+    { key: "core", label: "Основной блок", order: 1 },
+  ];
+
+  it("apiToEditorModel reads sectionGroupsJson into model.sectionGroups", () => {
+    const api = {
+      id: "t",
+      version: 1,
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sectionGroupsJson: groups,
+      sections: [apiSection({ topicId: "a", groupKey: "core" })],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.sectionGroups).toEqual(groups);
+    expect(model.sections[0].groupKey).toBe("core");
+  });
+
+  it("apiToEditorModel defaults to an empty list for absent/malformed sectionGroupsJson", () => {
+    const withoutField = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({ topicId: "a" })],
+    });
+    expect(withoutField.sectionGroups).toEqual([]);
+    // A section without groupKey (legacy row) reads as "no block".
+    expect(withoutField.sections[0].groupKey).toBeNull();
+
+    const malformed = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sectionGroupsJson: [{ key: "", label: "Пустой ключ" }], // invalid: empty key
+      sections: [],
+    });
+    expect(malformed.sectionGroups).toEqual([]);
+  });
+
+  it("editorModelToPayload collapses an empty block list to null; a non-empty one round-trips", () => {
+    const empty = emptyEditorModel({ folderId: null });
+    expect(editorModelToPayload(empty).sectionGroupsJson).toBeNull();
+
+    const withGroups = emptyEditorModel({ folderId: null });
+    withGroups.sectionGroups = groups;
+    expect(editorModelToPayload(withGroups).sectionGroupsJson).toEqual(groups);
+  });
+
+  it("mapEditorSectionsToPayload sends groupKey, defaulting a missing value to null", () => {
+    const model = makeStandardModel({
+      sections: [
+        {
+          topicId: "a",
+          topicName: "A",
+          maxQuestions: 10,
+          drawCount: 5,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+          groupKey: "core",
+        } as never,
+        {
+          topicId: "b",
+          topicName: "B",
+          maxQuestions: 10,
+          drawCount: 5,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+        } as never,
+      ],
+    });
+    const payloads = mapEditorSectionsToPayload(model);
+    expect(payloads[0].groupKey).toBe("core");
+    expect(payloads[1].groupKey).toBeNull();
+  });
+});
+
+describe("вводный текст по исходу (PRD-61)", () => {
+  it("поднимает тексты исхода вместе с общим вступлением", () => {
+    const model = apiToEditorModel({
+      introJson: {
+        results: {
+          format: "plain",
+          text: "Общее",
+          passed: { format: "html", text: "<p>Поздравляем</p>" },
+          failed: { format: "plain", text: "Не хватило" },
+        },
+      },
+    });
+    expect(model.intro?.results?.text).toBe("Общее");
+    expect(model.intro?.results?.passed).toEqual({ format: "html", text: "<p>Поздравляем</p>" });
+    expect(model.intro?.results?.failed).toEqual({ format: "plain", text: "Не хватило" });
+  });
+
+  it("поднимает тексты исхода, ДАЖЕ когда общее вступление пусто", () => {
+    // Иначе тексты, заведённые книгой или через API, не доедут до модели, и первое же
+    // сохранение теста из ящика молча их сотрёт.
+    const model = apiToEditorModel({
+      introJson: {
+        report: { format: "plain", text: "", failed: { format: "plain", text: "Не хватило" } },
+      },
+    });
+    expect(model.intro?.report?.failed?.text).toBe("Не хватило");
+    expect(model.intro?.report?.text).toBe("");
+  });
+
+  it("ветвь без единого текста не поднимается вовсе", () => {
+    const model = apiToEditorModel({
+      introJson: { results: { format: "plain", text: "  ", passed: { format: "plain", text: " " } } },
+    });
+    expect(model.intro?.results).toBeUndefined();
+  });
+
+  it("старая форма читается как раньше", () => {
+    const model = apiToEditorModel({ introJson: { results: { format: "richText", text: "Об итогах" } } });
+    expect(model.intro?.results).toEqual({ format: "richText", text: "Об итогах" });
+  });
+});
+
+// ─── «Сценарий в ИС»: тест «Сценарий» ────────────────────────────────────────
+
+describe("apiToEditorModel — тест «Сценарий»", () => {
+  it("читает режим и пункт-сценарий; темы при этом не теряются (FR-40)", () => {
+    const model = apiToEditorModel({
+      id: "t-sim",
+      version: 3,
+      title: "Регистрация документов",
+      mode: "scenario",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({ topicId: "old-topic" })],
+      scenarios: [{ id: "i1", topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed" }],
+    });
+    expect(model.mode).toBe("scenario");
+    expect(model.scenarioItems).toEqual([{ id: "i1", topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed", title: null, required: true }]);
+    expect(model.sections.map((s) => s.topicId)).toEqual(["old-topic"]);
+  });
+
+  it("порог пункта-сценария — в passRules.byTopic под ключом пункта; без порога — «Как у теста» (техдолг №8)", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      version: 1,
+      title: "x",
+      mode: "standard",
+      sections: [apiSection({ topicId: "t1" })],
+      scenarios: [
+        { id: "s1", topicId: "bank", passRuleJson: { source: "custom", type: "percent", value: 80 } },
+        { id: "s2", topicId: "bank", passRuleJson: null },
+      ],
+    });
+    expect(model.passRules.byTopic["scenario:s1"]).toEqual({ source: "custom", type: "percent", value: 80 });
+    expect(model.passRules.byTopic["scenario:s2"]).toEqual({ source: "inherit_overall" });
+  });
+
+  it("тест без пунктов — пункта нет; случайная выдача читается как questionId = null", () => {
+    expect(apiToEditorModel({ id: "t", version: 1, title: "x", mode: "standard", sections: [] }).scenarioItems).toEqual([]);
+    const random = apiToEditorModel({ id: "t", version: 1, title: "x", mode: "scenario", sections: [], scenarios: [{ topicId: "bank", questionId: null }] });
+    expect(random.scenarioItems).toEqual([{ topicId: "bank", topicName: "", questionId: null, title: null, required: true }]);
   });
 });

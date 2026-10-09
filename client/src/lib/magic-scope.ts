@@ -37,3 +37,21 @@ export function resetScopeViolation(): void {
   violated = false;
   listeners.clear();
 }
+
+/**
+ * Whether a 403 body is the guard's scope refusal rather than an ordinary denial.
+ *
+ * Matches the structured `code` field, never the message text: a body that merely
+ * mentions `MAGIC_SCOPE` (a plain-text error, someone's echoed input) is not a
+ * refusal by the guard. Shared by every caller that has to tell "this session may
+ * not leave its link" apart from "you may not do this" — the two need different
+ * answers on screen.
+ */
+export function isScopeRefusalBody(body: string): boolean {
+  try {
+    return (JSON.parse(body) as { code?: string }).code === "MAGIC_SCOPE";
+  } catch {
+    // A non-JSON body is not a scope refusal.
+    return false;
+  }
+}

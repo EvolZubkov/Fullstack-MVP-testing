@@ -54,12 +54,93 @@ export interface AppConfig {
   session: { secret: string };
   encryption: { password: string; salt: string };
   access: { superadminEmails: readonly string[] };
+  /** PRD-54: поведение импорта выгрузок отчётов LMS. */
+  analytics: {
+    lmsImport: {
+      /**
+       * Хранить ли человекочитаемые поля участника. При `true` в базу идёт только псевдоним
+       * `participant_key`; `lms_user_name`/`lms_user_email`/`lms_user_org` остаются пустыми.
+       *
+       * Псевдоним считается ВСЕГДА, в любом режиме: на нём держатся ключ идемпотентности импорта
+       * и подсчёт уникальных участников. Параметр решает не то, есть ли псевдоним, а то, лежит ли
+       * рядом с ним имя — поэтому переключение не меняет идентичность участника и не рвёт уже
+       * накопленные ключи.
+       *
+       * На живую телеметрию НЕ распространяется: она продолжает хранить ФИО, почту и организацию.
+       */
+      anonymizeParticipants: boolean;
+    };
+    /**
+     * PRD-56 FR-06d: сколько прохождений должно быть в срезе, чтобы показывать ПРОЦЕНТ.
+     *
+     * Ниже порога экран печатает «мало данных» и само число прохождений. Причина
+     * арифметическая: половина 95-процентного доверительного интервала для доли около
+     * половины — это ±44 п.п. на пяти прохождениях, ±31 на десяти и ±22 на двадцати. «33 %
+     * сдали» на группе из трёх — не статистика, а шум, на котором принимают решения о людях.
+     *
+     * Умолчание 10 — решение владельца 2026-09-14: на пяти процент не несёт информации вовсе,
+     * а двадцать отсекают типовую учебную группу в 8–15 человек, то есть ровно тех, ради кого
+     * инструмент и делается. Порог касается ПОКАЗА, а не расчёта: внутри всё считается как есть.
+     *
+     * Для анализа вопросов (трудность, различающая способность) этот порог не годится — там
+     * приличный минимум начинается от тридцати; настройка заведётся отдельно.
+     */
+    minObservations: number;
+    /**
+     * PRD-70 §3.2: во сколько раз доля прохождений с вопросом должна превысить ожидаемую (квота
+     * раздела / размер пула), чтобы вопрос считался переэкспонированным. Свойство эксплуатации
+     * банка — одно на инстанс, как окно счётчика выдач.
+     */
+    overexposureRatio: number;
+  };
+  /** PRD-55: поведение выдачи заданий. */
+  delivery: {
+    /**
+     * Окно наблюдения экспозиции в месяцах (FR-04).
+     *
+     * Живёт в конфигурации инстанса, а не в настройках теста, потому что описывает ЭКСПЛУАТАЦИЮ
+     * банка — как быстро сменяется поток обучающихся, — и одинаково для всех тестов установки.
+     * Выдачи старше окна в расчёт весов не идут: утечка стареет вместе с потоком.
+     */
+    exposureWindowMonths: number;
+  };
+  /** Пакет SCORM: то, что относится к установке, а не к отдельному тесту. */
+  scorm: {
+    /**
+     * Базовый адрес, на который пакет с включённой телеметрией отправляет данные
+     * (`<адрес>/api/scorm-telemetry/...`). Пустая строка — берётся `server.appUrl`.
+     *
+     * Живёт в конфигурации установки, а не в настройках теста: принимает телеметрию эта
+     * система, и адрес у неё один для всех тестов. Тест решает только, включена ли она.
+     */
+    telemetryBaseUrl: string;
+  };
   /** Operational ceilings that an installation may tune without a code change. */
   limits: {
     /** Maximum rows accepted from one uploaded workbook (participants and users import). */
     participantsImportMaxRows: number;
     /** Password-setup letters per person per hour, shared by recovery and invitation. */
     passwordEmailsPerHour: number;
+    /**
+     * PRD-57 FR-28v: how many characters a short answer holds.
+     *
+     * 250 is the SCORM 2004 recommendation for a `fill-in` interaction, and the author's
+     * own limit is set inside it. It lives in configuration rather than in code because
+     * how WebTutor behaves at that boundary is not measured yet (#51): the measurement
+     * must change a NUMBER, not the editor and not questions that are already saved.
+     */
+    shortAnswerMaxLength: number;
+    /**
+     * PRD-57 FR-28q: how long ONE comparison may block before the answer is left
+     * unchecked. An author's regular expression runs on OUR server, and Node is single
+     * threaded — the budget is what keeps one bad expression from stopping everyone.
+     */
+    answerCheckBudgetMs: number;
+    /**
+     * PRD-57 FR-28o: when the author is told their expression is slow. A warning, never a
+     * refusal — the rule saves either way (FR-28p1).
+     */
+    answerCheckWarnMs: number;
   };
 }
 
@@ -91,6 +172,16 @@ function asNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/**
+ * Целое БОЛЬШЕ НУЛЯ или запасное значение. Отличается от {@link asNumber} тем, что не пропускает
+ * ноль и отрицательные: у величин вроде окна наблюдения такое значение не «настройка», а тихая
+ * поломка расчёта.
+ */
+function asPositiveInt(value: unknown, fallback: number): number {
+  const n = asNumber(value, Number.NaN);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
 function asBool(value: unknown, fallback: boolean): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.toLowerCase() === "true";
@@ -120,8 +211,13 @@ function normalizeEmails(value: unknown): string[] {
   return Array.from(seen);
 }
 
-/** Shape a raw (getConfig-resolved) object into a typed AppConfig with defaults. */
-function shape(raw: Record<string, unknown>): AppConfig {
+/**
+ * Shape a raw (getConfig-resolved) object into a typed AppConfig with defaults.
+ *
+ * Exported for its own test: every branch here is a default that a misconfigured instance falls
+ * back to, and those are worth asserting without booting the service.
+ */
+export function shape(raw: Record<string, unknown>): AppConfig {
   const log = asRecord(raw.log);
   const logLevel = asRecord(log.level);
   const common = asLevel(logLevel.common) ?? (process.env.NODE_ENV === "production" ? "info" : "debug");
@@ -133,6 +229,10 @@ function shape(raw: Record<string, unknown>): AppConfig {
   const encryption = asRecord(raw.encryption);
   const access = asRecord(raw.access);
   const limits = asRecord(raw.limits);
+  const analytics = asRecord(raw.analytics);
+  const lmsImport = asRecord(analytics.lmsImport);
+  const delivery = asRecord(raw.delivery);
+  const scorm = asRecord(raw.scorm);
 
   return {
     log: {
@@ -164,9 +264,35 @@ function shape(raw: Record<string, unknown>): AppConfig {
       salt: asString(encryption.salt, ""),
     },
     access: { superadminEmails: normalizeEmails(access.superadminEmails) },
+    analytics: {
+      lmsImport: {
+        // По умолчанию ВКЛЮЧЕНО: инстанс, где про параметр не знают, не должен копить ФИО.
+        anonymizeParticipants: asBool(lmsImport.anonymizeParticipants, true),
+      },
+      // Ноль или отрицательный порог означал бы «показывать процент всегда», включая срез из
+      // одного человека, — такое значение не принимается, а не «работает как задано».
+      minObservations: asPositiveInt(analytics.minObservations, 10),
+      // Множитель не больше единицы назвал бы переэкспонированным любой вопрос с ожидаемой долей
+      // — такое значение не принимается, а не «работает как задано».
+      overexposureRatio: (() => {
+        const ratio = asNumber(analytics.overexposureRatio, 1.5);
+        return ratio > 1 ? ratio : 1.5;
+      })(),
+    },
+    delivery: {
+      // Ноль или отрицательное окно прочитали бы счётчик пустым и молча выключили поправку
+      // целиком — такое значение не принимается, а не «работает как задано».
+      exposureWindowMonths: asPositiveInt(delivery.exposureWindowMonths, 12),
+    },
+    scorm: {
+      telemetryBaseUrl: asString(scorm.telemetryBaseUrl, "").trim().replace(/\/$/, ""),
+    },
     limits: {
       participantsImportMaxRows: asNumber(limits.participantsImportMaxRows, 500),
       passwordEmailsPerHour: asNumber(limits.passwordEmailsPerHour, 3),
+      shortAnswerMaxLength: asNumber(limits.shortAnswerMaxLength, 250),
+      answerCheckBudgetMs: asNumber(limits.answerCheckBudgetMs, 1000),
+      answerCheckWarnMs: asNumber(limits.answerCheckWarnMs, 200),
     },
   };
 }
@@ -205,4 +331,15 @@ export function appBaseUrl(): string {
   if (config.server.appUrl) return config.server.appUrl;
   const port = process.env.PORT ?? String(config.server.port);
   return `http://localhost:${port}`;
+}
+
+/**
+ * Адрес приёма телеметрии SCORM: `scorm.telemetryBaseUrl`, иначе `server.appUrl`.
+ *
+ * `null` — адрес не задан. Запасного `localhost`, как у {@link appBaseUrl}, здесь нет
+ * намеренно: пакет уходит в LMS на чужой машине, и запечённый туда `localhost` молча
+ * отправлял бы данные в никуда.
+ */
+export function telemetryBaseUrl(): string | null {
+  return config.scorm.telemetryBaseUrl || config.server.appUrl || null;
 }

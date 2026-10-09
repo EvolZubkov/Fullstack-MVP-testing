@@ -13,7 +13,10 @@ vi.mock("wouter", () => ({
   useLocation: () => ["/reset-password", vi.fn()],
   Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toast, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import ResetPasswordPage from "../reset-password";
 
@@ -100,7 +103,7 @@ describe("<ResetPasswordPage />", () => {
     fireEvent.change(screen.getByLabelText("Подтвердите новый пароль"), { target: { value: "abcd1234" } });
     fireEvent.click(screen.getByRole("button", { name: "Сброс пароля" }));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(screen.queryByRole("heading", { name: "Пароль успешно изменён" })).not.toBeInTheDocument();
   });

@@ -1,0 +1,531 @@
+/**
+ * @module server/routes/analytics/psychometrics
+ * @description PRD-66 FR-56 - FR-58: психометрика теста одной ручкой.
+ *
+ * Расширение `/api/analytics`, а не свой раздел API: психометрика — взгляд на те же
+ * прохождения, что и остальная аналитика, и отдельный домен развёл бы их права и выборки.
+ *
+ * Права — ТЕ ЖЕ, что на аналитику теста (FR-58): `analytics.read` плюс область видимости.
+ * Отдельного права не заводится — психометрика не раскрывает ничего сверх того, что уже
+ * показывает страница теста, а второе право означало бы, что один и тот же читатель видит
+ * трудность задания на одной вкладке и не видит на другой.
+ *
+ * Расчёт по требованию с кэшированием (FR-57): материализованной таблицы метрик нет, потому
+ * что любое её состояние немедленно устаревает — выборка задаётся фильтром, а фильтр у каждого
+ * читателя свой.
+ */
+import { Router, type Request, type Response } from "express";
+import ExcelJS from "exceljs";
+
+import { config } from "../../config";
+import { logger } from "../../logger";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
+import { storage } from "../../storage";
+import { loadResponseMatrix } from "../../services/analytics/response-matrix";
+import { adhocSource, conditionsOf, dateOf, withinFrame } from "./slices";
+import {
+  computeItemBreakdown,
+  computePsychometrics,
+  defaultVersionOf,
+  pickMatrixResponses,
+  type PsychometricsContext,
+} from "../../services/analytics/psychometrics";
+import {
+  itemsSheet,
+  matrixSheet,
+  testSheet,
+  type ExportContext,
+} from "../../services/analytics/psychometrics-export";
+import { computeScalePsychometrics } from "../../services/analytics/scale-psychometrics";
+import { toMeasurementSpecs } from "../../services/scale-domain";
+import { loadDeliveryPool } from "../../services/delivery-pool";
+import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
+import { hasOwnExternalIdFormat } from "../../utils/crypto";
+import type { ObservationFilter } from "../../services/analytics/observations";
+import { analyticsScope } from "./helpers";
+import { listOf, readTestFilterQuery } from "./observation-query";
+import {
+  buildGrader,
+  cached,
+  correctIndexesOf,
+  coreKey,
+  cutRatioOf,
+  deliveryIsUneven,
+  resetPsychometricsCache,
+  testPsychometrics,
+} from "../../services/analytics/test-psychometrics";
+
+// Сброс кэша и ядро расчёта живут в сервисе; прежние импорты из маршрута продолжают работать.
+export { resetPsychometricsCache, testPsychometrics };
+import { isSuspicious } from "@shared/psychometrics/question-flag";
+import { NO_GROUP_ID } from "@shared/analytics/no-group";
+import { DEFAULT_ATTEMPT_PICK, type AttemptPick } from "@shared/analytics/attempt-pick";
+
+const router = Router();
+
+/**
+ * Условия выборки из адреса — ОДИН разбор на все ручки психометрики и на ответы задания.
+ *
+ * Экран, отчёт и матрица обязаны отбирать одинаково (FR-54b): выгрузка, собранная по другим
+ * условиям, чем показанные на экране, невоспроизводима и неоспорима. Умолчание — «только первая
+ * попытка» (FR-51): повторные попытки одного человека не независимы. Иное правило (все, лучшая,
+ * последняя) читатель выбирает осознанно, а смещённые из них экран сопровождает предупреждением.
+ */
+function readQuery(req: Request, testId: string): { filter: ObservationFilter; attempts: AttemptPick } {
+  return readTestFilterQuery(req, testId, DEFAULT_ATTEMPT_PICK);
+}
+
+/**
+ * Смешаны ли в выборке `external_id`, построенные РАЗНЫМИ алгоритмами (PRD-66 FR-43).
+ *
+ * Один человек попадает в выборку дважды, только если его ключи в двух файлах построены
+ * по-разному. Смешение файлов с колонкой `external_id` и без неё само по себе этого НЕ значит:
+ * скрипт обезличивания и импорт считают ключ одним алгоритмом (PRD-54 BR-54-22). Поэтому признак —
+ * соседство ключей нашего вида и ключей заведомо чужого вида среди импортированных наблюдений.
+ * Смотрится сама выборка, а не флажки партий: снятые с учёта партии в неё уже не попали, а фильтр
+ * по группе или периоду может убрать одну из сторон смешения.
+ *
+ * @param observations наблюдения выборки
+ */
+function mixesKeyAlgorithms(
+  observations: ReadonlyArray<{ source: string; participantKey: string | null }>,
+): boolean {
+  let own = false;
+  let foreign = false;
+  for (const observation of observations) {
+    if (observation.source !== "import" || !observation.participantKey) continue;
+    if (hasOwnExternalIdFormat(observation.participantKey)) own = true;
+    else foreign = true;
+    if (own && foreign) return true;
+  }
+  return false;
+}
+
+/**
+ * Сколько взаимодействий импорта не нашли своего задания в тесте (PRD-66 FR-11).
+ *
+ * Число хранится на партии, поэтому отбор повторяет выборку там, где это возможно: только если
+ * импорт вообще входит в источники, только отобранные группы. Период к партии не приложить —
+ * даты у прохождений свои, у партии лишь дата загрузки, — поэтому по периоду число не режется:
+ * это верхняя граница потерь, а не точная доля.
+ *
+ * @param batches партии импорта теста
+ * @param filter условия выборки
+ */
+function unmatchedOf(
+  batches: ReadonlyArray<{ groupId?: string | null; rowsUnmatched?: number | null }>,
+  filter: ObservationFilter,
+): number {
+  if (filter.sources?.length && !filter.sources.includes("import")) return 0;
+  return batches
+    // «Без группы» — партии, загруженные без группы.
+    .filter(batch => !filter.groupIds?.length
+      || (batch.groupId ? filter.groupIds.includes(batch.groupId) : filter.groupIds.includes(NO_GROUP_ID)))
+    .reduce((sum, batch) => sum + (batch.rowsUnmatched ?? 0), 0);
+}
+
+
+// GET /api/analytics/psychometrics/:testId — качество заданий и надёжность теста
+router.get(
+  "/psychometrics/:testId",
+  requirePermission("analytics.read"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const testId = req.params.testId;
+      const test = await storage.getTest(testId);
+      if (!test) return res.status(404).json({ error: "Тест не найден" });
+
+      const { filter, attempts } = readQuery(req, testId);
+
+      // Состав партий — часть ключа: загрузка и откат меняют выборку, не трогая ни теста, ни его
+      // содержания. Ключ экрана — ключ ядра с пометкой: подписи заданий кэшируются поверх общего
+      // расчёта, и сброс по тесту снимает оба.
+      const batches = await storage.getLmsImportBatches(testId);
+      const result = await cached(coreKey(test, batches, filter, attempts) + "#screen", async () => {
+        const { psychometrics, observations, sections } = await testPsychometrics(test, filter, attempts);
+        const importShare = psychometrics.sample.responses === 0
+          ? 0
+          : (psychometrics.sample.bySource.import ?? 0) / psychometrics.sample.responses;
+
+        // Подписи заданий: без них в колонке стоял бы uuid — вскрыто приёмкой.
+        const topics = new Map((await storage.getTopics()).map(topic => [topic.id, topic.name]));
+        const questionRows = await storage.getQuestionsByIds(psychometrics.items.map(i => i.questionId));
+        const labels = new Map(questionRows.map(q => [q.id, {
+          prompt: q.prompt,
+          topicName: topics.get(q.topicId) ?? "",
+          questionType: q.type,
+        }]));
+
+        return {
+          ...psychometrics,
+          items: psychometrics.items.map(item => ({ ...item, ...labels.get(item.questionId) })),
+          observations: observations.length,
+          // FR-11: видимая потеря выборки — рядом с n, а не только в протоколе загрузки.
+          unmatched: unmatchedOf(batches, filter),
+          // FR-46: с какого числа наблюдений показывается трудность — порог инстанса (FR-38a).
+          // Экран «данных мало» называет его словами, а придумывать его на клиенте нельзя.
+          minObservations: config.analytics.minObservations,
+          attempts,
+          // FR-52: тест, где ВСЕ задания измерительные. Трудности и дискриминации там нет по
+          // построению, и таблица с восемью строками «мало данных · 0 из 30» читается как
+          // поломка — вскрыто приёмкой на синтетических данных.
+          // Невыданные вопросы пула здесь не в счёт: ноль наблюдений у них — от того, что их не
+          // выдавали, а не от того, что они измерительные.
+          measurementOnly: psychometrics.items.some(item => !item.neverDelivered)
+            && psychometrics.items.every(item => item.neverDelivered || item.observations === 0),
+          // FR-39, FR-40: два повода к одному баннеру — неоднородная выдача и заметная доля
+          // импорта, где исход бинарный, а редакция неизвестна.
+          bias: {
+            unevenDelivery: deliveryIsUneven(test.mode, sections),
+            importShare,
+            // FR-43: в выборке соседствуют `external_id` нашего вида и заведомо чужого — один
+            // человек мог получить два ключа и завысить число респондентов. Имя поля осталось
+            // прежним, чтобы не трогать контракт ответа ради одного названия.
+            mixedAnonymity: mixesKeyAlgorithms(observations),
+          },
+        };
+      });
+
+      res.json(result);
+    } catch (error) {
+      logger.error("Psychometrics error: " + (error as Error).message, "analytics");
+      res.status(500).json({ error: "Не удалось посчитать психометрику" });
+    }
+  },
+);
+
+
+// GET /api/analytics/psychometrics/:testId/slices — психометрика по сравниваемым срезам (FR-04b)
+//
+// Свой механизм сравнения трек НЕ заводит: режим, слоты и правила берутся у раздела
+// «Аналитика» (PRD-56 FR-07), меняется только СОДЕРЖИМОЕ таблиц. Один механизм обязан
+// выглядеть и считаться одинаково на обоих экранах, иначе автор учит его дважды.
+router.get(
+  "/psychometrics/:testId/slices",
+  requirePermission("analytics.read"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const testId = req.params.testId;
+      const test = await storage.getTest(testId);
+      if (!test) return res.status(404).json({ error: "Тест не найден" });
+
+      const requested = listOf(req.query.sliceId);
+      // Срезы принадлежат читателю: их видит тот, кто сохранил (PRD-56 FR-07b). Э3: и только
+      // срезы этого теста — чужой срез сравнивался бы не в своей рамке.
+      const saved = await storage.getSlices(req.currentUser?.id ?? "", "slice", testId);
+      const sources = [
+        // «Тест целиком» — законный участник сравнения: без него срез не с чем сопоставить,
+        // кроме другого среза, а вопрос «а как у всех?» возникает первым.
+        ...(String(req.query.withWhole ?? "") === "1"
+          ? [{ id: "whole", name: "Тест целиком", conditionsJson: {} as Record<string, unknown> }]
+          : []),
+        // Отбор, присланный кнопкой «Сравнить со срезом», — временный срез с id `adhoc`, как у
+        // ручки срезов PRD-56: без него переключение метрик теряло первый слот сравнения.
+        ...adhocSource(req.query.conditions, req.query.conditionsName),
+        ...saved.filter(slice => requested.length === 0 || requested.includes(slice.id)),
+      ];
+
+      const { attempts } = readQuery(req, testId);
+      // Рамка вкладки «Срезы» — период; пустой означает «за всё время» (PRD-56 FR-07j).
+      const from = dateOf(req.query.from, "start");
+      const to = dateOf(req.query.to, "end");
+      const scope = await analyticsScope(req);
+      const { grade, questionById } = await buildGrader(testId);
+      const ctx: PsychometricsContext = {
+        questionById,
+        minObservations: config.analytics.minObservations,
+        cutRatio: cutRatioOf(test.overallPassRuleJson),
+        // FR-20: срезы считаются тем же способом, что и выборка целиком.
+        unevenDelivery: deliveryIsUneven(test.mode, await storage.getTestSections(testId)),
+      };
+
+      const slices = [];
+      for (const slice of sources) {
+        // Тест рамки перебивает тест среза (PRD-56 FR-07e): он общий для всех сравниваемых.
+        // Период рамки ПЕРЕСЕКАЕТСЯ с периодом среза — тем же `withinFrame`, что у «Результата и
+        // тем»: две метрики одного сравнения обязаны считаться по одним прохождениям.
+        const matrix = await loadResponseMatrix(
+          withinFrame(conditionsOf(slice.conditionsJson), testId, from, to),
+          scope,
+          grade,
+        );
+        const responses = pickMatrixResponses(matrix, attempts);
+        const psychometrics = computePsychometrics(responses, ctx);
+
+        slices.push({
+          id: slice.id,
+          name: slice.name,
+          conditions: slice.conditionsJson,
+          alpha: typeof psychometrics.reliability === "string" ? null : psychometrics.reliability.alpha,
+          reliabilityGap: typeof psychometrics.reliability === "string" ? psychometrics.reliability : null,
+          // Ошибка измерения — в процентных пунктах результата, как на плитке одной выборки:
+          // сумма долей по вопросам зависит от длины варианта, и срезы с разной длиной по ней
+          // несравнимы (план сверки 5.3).
+          sem: psychometrics.semPercent,
+          respondents: psychometrics.sample.respondents,
+          observations: psychometrics.sample.responses,
+          itemsCount: psychometrics.items.length,
+          // Счётная величина: разницу между срезами по ней НЕ считают (FR-04b2) — она
+          // говорит о размере группы, а не о качестве теста.
+          // Э3.4: правило признака — общее (`question-flag`). Эвристики ревизии сюда не идут: они
+          // описывают выдачу ВСЕГО теста (экспозицию, время), а не группы среза (PRD-70 FR-03).
+          suspiciousCount: psychometrics.items.filter(item => isSuspicious(item)).length,
+          items: psychometrics.items.map(item => ({
+            questionId: item.questionId,
+            prompt: questionById.get(item.questionId)?.prompt ?? "",
+            difficulty: item.difficulty,
+            itemRest: item.itemRest,
+            observations: item.observations,
+          })),
+        });
+      }
+
+      res.json({ slices, attempts });
+    } catch (error) {
+      logger.error("Psychometrics slices error: " + (error as Error).message, "analytics");
+      res.status(500).json({ error: "Не удалось посчитать психометрику по срезам" });
+    }
+  },
+);
+
+/** Подписи градаций задания-шкалы — их задаёт автор (PRD-26), придумывать нельзя. */
+function gradeLabelsOf(dataJson: unknown): string[] {
+  const data = dataJson as { options?: unknown[]; labels?: unknown[]; min?: number; max?: number } | null;
+  if (Array.isArray(data?.options)) {
+    return data.options.map(option =>
+      typeof option === "string" ? option : String((option as { text?: unknown })?.text ?? ""));
+  }
+  if (Array.isArray(data?.labels)) return data.labels.map(String);
+  // Шкала, заданная диапазоном: подписи — сами числа градаций.
+  if (typeof data?.min === "number" && typeof data?.max === "number" && data.max >= data.min) {
+    return Array.from({ length: data.max - data.min + 1 }, (_, i) => String(data.min! + i));
+  }
+  return [];
+}
+
+// GET /api/analytics/psychometrics/:testId/scales — психометрика измерительных шкал (FR-29)
+router.get(
+  "/psychometrics/:testId/scales",
+  requirePermission("analytics.read"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const testId = req.params.testId;
+      const test = await storage.getTest(testId);
+      if (!test) return res.status(404).json({ error: "Тест не найден" });
+
+      const { filter, attempts } = readQuery(req, testId);
+      const scope = await analyticsScope(req);
+      const { grade } = await buildGrader(testId);
+      const matrix = await loadResponseMatrix(filter, scope, grade);
+      const responses = pickMatrixResponses(matrix, attempts);
+
+      const [scales, measurements] = await Promise.all([
+        storage.getScales(testId),
+        storage.getQuestionMeasurements(testId),
+      ]);
+      const questionIds = [...new Set(measurements.map(m => m.questionId))];
+      const questions = await storage.getQuestionsByIds(questionIds);
+
+      const result = computeScalePsychometrics(responses, {
+        // Единицы измерения переводятся ТЕМ ЖЕ построителем, что и в расчёте результата:
+        // вторая трансляция была бы вторым мнением о том, какая строка к какой шкале.
+        measurements: toMeasurementSpecs(measurements, scales),
+        scaleLabels: new Map(scales.map(scale => [scale.key, scale.label ?? scale.key])),
+        itemById: new Map(questions.map(question => [question.id, {
+          questionId: question.id,
+          prompt: question.prompt,
+          type: question.type,
+          gradeLabels: gradeLabelsOf(question.dataJson),
+        }])),
+      });
+
+      res.json({ scales: result, attempts });
+    } catch (error) {
+      logger.error("Psychometrics scales error: " + (error as Error).message, "analytics");
+      res.status(500).json({ error: "Не удалось посчитать психометрику шкал" });
+    }
+  },
+);
+
+// GET /api/analytics/psychometrics/:testId/items/:questionId — разбор одного задания
+router.get(
+  "/psychometrics/:testId/items/:questionId",
+  requirePermission("analytics.read"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const { testId, questionId } = req.params;
+      const test = await storage.getTest(testId);
+      if (!test) return res.status(404).json({ error: "Тест не найден" });
+
+      const { filter, attempts } = readQuery(req, testId);
+      const scope = await analyticsScope(req);
+      const { grade, questionById } = await buildGrader(testId);
+      const matrix = await loadResponseMatrix(filter, scope, grade);
+      const responses = pickMatrixResponses(matrix, attempts);
+
+      const [question] = await storage.getQuestionsByIds([questionId]);
+      const currentVersion = question?.psychoHash ?? null;
+      // FR-49a: выбранная редакция — это СМЕНА ВЫБОРКИ, и приходит она параметром. Пустая
+      // строка означает серию «версия неизвестна» (FR-49b): её тоже можно посмотреть. Без
+      // параметра карточка считается по текущей редакции (эскиз: «По умолчанию — текущая»):
+      // наблюдения разных редакций не складываются.
+      const requested = typeof req.query.version === "string" ? req.query.version : undefined;
+      const version = requested === undefined
+        ? defaultVersionOf(responses, questionId, currentVersion)
+        : (requested === "" ? null : requested);
+      const breakdown = computeItemBreakdown(
+        responses,
+        {
+          questionById,
+          minObservations: config.analytics.minObservations,
+          cutRatio: cutRatioOf(test.overallPassRuleJson),
+        },
+        questionId,
+        correctIndexesOf(question?.correctJson),
+        version,
+      );
+      // Наблюдений за заданием нет вовсе — это не ошибка запроса, а пустая выборка: задание
+      // могли добавить вчера, и разбирать в нём пока нечего.
+      if (!breakdown) return res.json({ breakdown: null, questionId });
+
+      // Подзаголовок карточки — «Тема · подтема · N наблюдений» (эскиз); подтемы в продукте —
+      // теги вопроса (PRD-11).
+      const topicName = question
+        ? (await storage.getTopics()).find(topic => topic.id === question.topicId)?.name ?? ""
+        : "";
+
+      res.json({
+        ...breakdown,
+        questionId,
+        prompt: question?.prompt ?? questionById.get(questionId)?.prompt ?? "",
+        questionType: question?.type ?? questionById.get(questionId)?.type ?? "",
+        topicName,
+        tags: Array.isArray(question?.tags) ? question.tags : [],
+        // Какая редакция текущая и по какой посчитана карточка (FR-49a). `selectedVersion`
+        // отсутствует, когда редакция одна и карточка считается по всей выборке.
+        currentVersion,
+        ...(version !== undefined ? { selectedVersion: version } : {}),
+      });
+    } catch (error) {
+      logger.error("Psychometrics item error: " + (error as Error).message, "analytics");
+      res.status(500).json({ error: "Не удалось посчитать разбор вопроса" });
+    }
+  },
+);
+
+/**
+ * Собрать всё, что нужно выгрузке: наблюдения, расчёт и справочник текстов.
+ *
+ * Выгрузка берёт выборку ТЕМИ ЖЕ условиями, что экран (FR-54b): иначе файл невозможно ни
+ * повторить, ни сверить с тем, что человек видел, когда его заказывал.
+ */
+async function collectForExport(req: Request, testId: string) {
+  const { filter, attempts } = readQuery(req, testId);
+  const scope = await analyticsScope(req);
+  const { grade, questionById } = await buildGrader(testId);
+  const matrix = await loadResponseMatrix(filter, scope, grade);
+  const responses = pickMatrixResponses(matrix, attempts);
+  const test = await storage.getTest(testId);
+
+  const ctx: ExportContext = {
+    testTitle: test?.title ?? testId,
+    conditions: describeFilter(filter),
+    attempts,
+    generatedAt: new Date(),
+  };
+  const psychometrics = computePsychometrics(responses, {
+    questionById,
+    minObservations: config.analytics.minObservations,
+    cutRatio: cutRatioOf(test?.overallPassRuleJson),
+    // FR-20: выгрузка считает надёжность тем же способом, что экран.
+    unevenDelivery: deliveryIsUneven(test?.mode, await storage.getTestSections(testId)),
+    // FR-46a, решение владельца 2026-09-26: в отчёте — тот же список вопросов, что на экране,
+    // вместе с ещё не выданными. Матрицу это не трогает: её колонки строятся по ответам, а
+    // колонка из одних «не выдавался» внешнему пакету ничего не даёт.
+    poolQuestionIds: (await loadDeliveryPool(testId)).questionIds,
+  });
+
+  return { ctx, psychometrics, responses, questionById };
+}
+
+/** Условия отбора словами — то же, что подписано на экране. */
+function describeFilter(filter: ObservationFilter): string {
+  const parts: string[] = [];
+  if (filter.groupIds?.length) parts.push(`группы: ${filter.groupIds.length}`);
+  if (filter.sources?.length) parts.push(`источники: ${filter.sources.join(", ")}`);
+  if (filter.formIds?.length) parts.push(`варианты: ${filter.formIds.length}`);
+  if (filter.snapshotIds?.length) parts.push(`версии публикации: ${filter.snapshotIds.length}`);
+  // Оргзначения читаются словами, а не числом: это имена, и отчёт без них не воспроизвести.
+  if (filter.organizations?.length) parts.push(`организация: ${filter.organizations.join(", ")}`);
+  if (filter.units?.length) parts.push(`подразделение: ${filter.units.join(", ")}`);
+  if (filter.positions?.length) parts.push(`должность: ${filter.positions.join(", ")}`);
+  if (filter.from) parts.push(`с ${filter.from.toISOString().slice(0, 10)}`);
+  if (filter.to) parts.push(`по ${filter.to.toISOString().slice(0, 10)}`);
+  return parts.join("; ");
+}
+
+/** Отдать книгу файлом. */
+async function sendWorkbook(res: Response, workbook: ExcelJS.Workbook, name: string): Promise<void> {
+  const buffer = await workbookToBuffer(workbook);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(name)}"`);
+  res.send(buffer);
+}
+
+/** Имя файла: тест и дата, без символов, которые ломают выгрузку на чужой машине. */
+function fileName(prefix: string, title: string): string {
+  const safe = title.replace(/[^a-zA-Zа-яА-Я0-9]/g, "_");
+  return `${prefix}_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+}
+
+// GET /api/analytics/psychometrics/:testId/export — психометрический отчёт (FR-53)
+router.get(
+  "/psychometrics/:testId/export",
+  // Отдельное право на выгрузку — как и у всякого файла, который уносят из системы.
+  requirePermission("analytics.export"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const testId = req.params.testId;
+      const { ctx, psychometrics, questionById } = await collectForExport(req, testId);
+
+      const prompts = new Map([...questionById].map(([id, info]) => [id, info.prompt]));
+      const workbook = new ExcelJS.Workbook();
+      addAoaSheet(workbook, "Вопросы", itemsSheet(ctx, psychometrics, prompts), [38, 60, 12, 12, 16, 16, 16, 14, 14, 16, 18, 40]);
+      addAoaSheet(workbook, "Тест", testSheet(ctx, psychometrics), [34, 22, 60]);
+
+      await sendWorkbook(res, workbook, fileName("psychometrics", ctx.testTitle));
+    } catch (error) {
+      logger.error("Psychometrics export error: " + (error as Error).message, "analytics");
+      res.status(500).json({ error: "Не удалось выгрузить психометрический отчёт" });
+    }
+  },
+);
+
+// GET /api/analytics/psychometrics/:testId/matrix — матрица ответов «участники × задания» (FR-54)
+router.get(
+  "/psychometrics/:testId/matrix",
+  requirePermission("analytics.export"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const testId = req.params.testId;
+      const { ctx, psychometrics, responses } = await collectForExport(req, testId);
+
+      const workbook = new ExcelJS.Workbook();
+      addAoaSheet(workbook, "Матрица ответов", matrixSheet(ctx, responses, psychometrics.sample));
+
+      await sendWorkbook(res, workbook, fileName("response_matrix", ctx.testTitle));
+    } catch (error) {
+      logger.error("Psychometrics matrix error: " + (error as Error).message, "analytics");
+      res.status(500).json({ error: "Не удалось выгрузить матрицу ответов" });
+    }
+  },
+);
+
+export default router;

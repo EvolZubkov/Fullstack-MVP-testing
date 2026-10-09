@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import { cn } from '../utils';
 
-/* UniversityRT · Matching — touch-to-connect pair matching.
+/* Skillum · Matching — touch-to-connect pair matching.
  *
  * Two equal columns. One side is draggable (configurable). Pairing
  * happens by *physically touching* the draggable card to its target —

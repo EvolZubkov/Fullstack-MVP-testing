@@ -14,11 +14,12 @@
  *   - Save button is disabled until the draft is dirty
  *   - Layout / Progress panes still show «следующий шаг» stubs
  */
+import { useState } from "react";
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DesignSection } from "../design-section";
-import { useDesignSettings } from "../../use-design-settings";
+import { useDesignSettings, type DesignSettings } from "../../use-design-settings";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,22 @@ const TEMPLATE = {
       { key: "showProgressBar", type: "boolean", label: "Показывать прогресс-бар", default: true },
       { key: "fontFamily", type: "select", label: "Шрифт", options: ["Inter", "Roboto"], default: "Inter" },
       { key: "logoUrl", type: "image", label: "Логотип" },
+      // §6: select с картинками вариантов — редактор рисует карточки, а не список.
+      {
+        key: "brandLogo",
+        type: "select",
+        label: "Логотип направления",
+        options: ["none", "plain", "b2b"],
+        optionLabels: { none: "Без логотипа", plain: "Без направления", b2b: "B2B" },
+        // Две формы записи разом: путь строкой и пара под темы интерфейса.
+        // У «none» превью нет вовсе — «ничего не показывать» и есть его смысл.
+        optionPreviews: {
+          plain: "assets/logos/plain.png",
+          b2b: { light: "assets/logos/b2b-light.png", dark: "assets/logos/b2b-dark.png" },
+        },
+        dataAttr: "data-brand-logo",
+        default: "plain",
+      },
     ],
     contentTemplates: [
       { key: "intro-default", kind: "intro", label: "Вступление" },
@@ -59,6 +76,16 @@ const TEMPLATE = {
       { key: "summary-default", kind: "summary", label: "Итоги" },
     ],
   },
+};
+
+/** Встроенный шаблон — с него начинает НОВЫЙ тест, пока автор не выбрал другой. */
+const DEFAULT_TEMPLATE = {
+  ...TEMPLATE,
+  id: "default",
+  name: "Стандартный",
+  description: "Базовое оформление",
+  version: "2.0.0",
+  manifest: { ...TEMPLATE.manifest, id: "default", name: "Стандартный", version: "2.0.0" },
 };
 
 const DESIGN_SETTINGS_DEFAULT = { templateId: "corporate", params: {} };
@@ -95,6 +122,8 @@ beforeEach(() => {
   mockFetch((url) => {
     if (url === `/api/tests/${TEST_ID}/design`) return jsonResponse(DESIGN_SETTINGS_DEFAULT);
     if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+    if (url === `/api/templates/default`) return jsonResponse(DEFAULT_TEMPLATE);
+    if (url === `/api/templates`) return jsonResponse([DEFAULT_TEMPLATE, TEMPLATE]);
     return jsonResponse({ error: "unexpected" }, 500);
   });
 });
@@ -115,9 +144,11 @@ describe("<DesignSection /> — rail navigation", () => {
     expect(screen.getByTestId("design-rail-branding")).toBeInTheDocument();
     // The fixture declares a colour, so «Цвета» is there…
     expect(screen.getByTestId("design-rail-colors")).toBeInTheDocument();
-    // …and nothing for layout/progress, so those items are not shown at all
-    // (before PRD-23 they opened on a banner saying there is nothing here).
+    // …а макета и диаграмм фикстура не объявляет, поэтому их пунктов нет вовсе
+    // (до PRD-23 они открывались на баннере «здесь ничего нет»).
     expect(screen.queryByTestId("design-rail-layout")).toBeNull();
+    expect(screen.queryByTestId("design-rail-charts")).toBeNull();
+    // Э3.7: прогресс объявляет тот же манифест, но рисует его «Правила прохождения».
     expect(screen.queryByTestId("design-rail-progress")).toBeNull();
   });
 
@@ -187,11 +218,85 @@ describe("<DesignSection /> — rail navigation", () => {
   });
 });
 
-describe("<DesignSection /> — create-mode notice", () => {
-  it("shows the create-mode notice when testId is undefined", () => {
-    renderWithClient(<DesignSection testId={undefined} />);
-    expect(screen.getByTestId("design-create-notice")).toBeInTheDocument();
-    expect(screen.queryByTestId("design-template-pane")).toBeNull();
+// ─── Режим создания: настраивается до первого сохранения ────────────────────
+//
+// Ящик поднимает хук наверх и привязывает его к черновику редактора: набранное
+// оформление хранится ТАМ и уезжает вместе с созданием теста. Здесь та же связка
+// собрана вручную, и проверяется главное — раздел не отличает режим создания от
+// правки существующего теста.
+
+function CreateModeHarness({ onChange }: { onChange?: (next: DesignSettings) => void }) {
+  const [draft, setDraft] = useState<DesignSettings>({ templateId: "default", params: {} });
+  const design = useDesignSettings(undefined, {
+    draft,
+    onChange: (next) => {
+      setDraft(next);
+      onChange?.(next);
+    },
+  });
+  return <DesignSection testId={undefined} design={design} />;
+}
+
+describe("<DesignSection /> — режим создания", () => {
+  it("рисует карточку выбранного шаблона и все действия над ним", async () => {
+    renderWithClient(<CreateModeHarness />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-name")).toHaveTextContent("Стандартный"),
+    );
+    // Никаких «сначала сохраните»: тот же экран, что у существующего теста.
+    expect(screen.queryByTestId("design-create-notice")).toBeNull();
+    expect(screen.getByTestId("design-template-replace")).toBeInTheDocument();
+    expect(screen.getByTestId("design-template-reset")).toBeInTheDocument();
+  });
+
+  it("пункты рейла открыты — параметры настраиваются сразу", async () => {
+    renderWithClient(<CreateModeHarness />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-card")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-rail-template")).not.toBeDisabled();
+    expect(screen.getByTestId("design-rail-branding")).not.toBeDisabled();
+    expect(screen.getByTestId("design-rail-report")).not.toBeDisabled();
+  });
+
+  it("правка параметра уходит в черновик редактора", async () => {
+    const onChange = vi.fn();
+    renderWithClient(<CreateModeHarness onChange={onChange} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-card")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByTestId("design-param-input-companyName"), {
+      target: { value: "Ромашка" },
+    });
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ params: { companyName: "Ромашка" } }),
+    );
+  });
+
+  it("выбор из галереи уходит туда же и меняет карточку", async () => {
+    const onChange = vi.fn();
+    renderWithClient(<CreateModeHarness onChange={onChange} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-card")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("design-template-replace"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-gallery-card-corporate")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-gallery-card-corporate"));
+    fireEvent.click(screen.getByTestId("design-gallery-apply"));
+
+    expect(onChange).toHaveBeenCalledWith({ templateId: "corporate", params: {} });
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-name")).toHaveTextContent("Корпоративный"),
+    );
   });
 });
 
@@ -300,6 +405,82 @@ describe("<DesignSection /> — Брендирование pane", () => {
     // wrapper testid stays; the upload button uses the same input testid.
     expect(screen.getByTestId("design-param-row-logoUrl")).toBeInTheDocument();
     expect(screen.getByTestId("design-param-input-logoUrl")).toBeInTheDocument();
+  });
+
+  // §6 `optionPreviews`: выбор между ОБЛИКАМИ нельзя сделать словом в списке —
+  // шаблон отдаёт картинку на вариант, и редактор рисует карточки с превью,
+  // а картинка берётся у файлов ЭТОГО шаблона.
+  it("рисует карточки с превью вместо списка и переключает выбор", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
+    );
+
+    const group = screen.getByTestId("design-param-input-brandLogo");
+    expect(group.tagName).toBe("FIELDSET");
+    const plain = screen.getByTestId("design-param-option-brandLogo-plain");
+    const b2b = screen.getByTestId("design-param-option-brandLogo-b2b");
+
+    const img = plain.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("/api/templates/corporate/assets/assets/logos/plain.png");
+    expect(b2b).toHaveTextContent("B2B");
+
+    // Умолчание манифеста выбрано, пока автор не тронул параметр.
+    expect(plain.className).toContain("is-selected");
+    expect(b2b.className).not.toContain("is-selected");
+
+    fireEvent.click(b2b.querySelector("input")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-option-brandLogo-b2b").className).toContain("is-selected"),
+    );
+    expect(screen.getByTestId("design-param-option-brandLogo-plain").className).not.toContain("is-selected");
+  });
+
+  // §6: превью может приходить парой под темы интерфейса. Лок, нарисованный под
+  // светлый фон, на тёмном редакторе нечитаем, поэтому карточка берёт картинку по теме,
+  // в которой сейчас сидит АВТОР (класс `.ou--dark` на body ставит провайдер темы).
+  it("в тёмной теме берёт тёмное превью, в светлой — светлое", async () => {
+    document.body.classList.add("ou--dark");
+    try {
+      renderWithClient(<DesignSection testId={TEST_ID} />);
+      await waitFor(() =>
+        expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+      );
+      fireEvent.click(screen.getByTestId("design-rail-branding"));
+      await waitFor(() =>
+        expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
+      );
+      const b2b = screen.getByTestId("design-param-option-brandLogo-b2b");
+      expect(b2b.querySelector("img")?.getAttribute("src")).toBe(
+        "/api/templates/corporate/assets/assets/logos/b2b-dark.png",
+      );
+      // Одиночный путь темы не различает — он один на обе.
+      expect(
+        screen.getByTestId("design-param-option-brandLogo-plain").querySelector("img")?.getAttribute("src"),
+      ).toBe("/api/templates/corporate/assets/assets/logos/plain.png");
+    } finally {
+      document.body.classList.remove("ou--dark");
+    }
+  });
+
+  it("вариант без превью показывает значок-заглушку, а не пустую плитку", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
+    );
+    const none = screen.getByTestId("design-param-option-brandLogo-none");
+    expect(none.querySelector("img")).toBeNull();
+    const stub = none.querySelector(".tpl-choice__empty");
+    expect(stub?.tagName.toLowerCase()).toBe("svg");
+    expect(none).toHaveTextContent("Без логотипа");
   });
 
   // PRD-22 (plan Э8): a colour label names the token, not the screen element, so
@@ -540,7 +721,7 @@ describe("<DesignSection /> — template-incompatible state (S12-G6)", () => {
     expect(screen.getByTestId("design-rail-template-error-dot")).toBeInTheDocument();
     expect(screen.getByTestId("design-rail-branding")).toBeDisabled();
     expect(screen.getByTestId("design-rail-layout")).toBeDisabled();
-    expect(screen.getByTestId("design-rail-progress")).toBeDisabled();
+    expect(screen.getByTestId("design-rail-charts")).toBeDisabled();
   });
 
   it("clicking «Применить «Стандартный»» switches the draft to the default template", async () => {

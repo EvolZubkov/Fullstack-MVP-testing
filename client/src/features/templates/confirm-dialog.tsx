@@ -5,7 +5,7 @@
  * and delete-blocked (confirm disabled + explanation). Built on the DS
  * `ModalDialog`; the optional banner carries the cascade/usage notice.
  */
-import { Banner, Button, ModalDialog, type ButtonVariant, type BannerTone } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog, type ButtonVariant, type BannerTone } from "@skillum/ui-kit";
 
 export interface ConfirmDialogProps {
   open: boolean;

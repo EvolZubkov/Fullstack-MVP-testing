@@ -16,7 +16,9 @@
 
 import { reportFileName } from "./report-html";
 import { renderScreenInto } from "../template/render-screen";
+import { renderReportInto, type ReportBlockToRender } from "./render-report";
 import { buildReportPages, PAGE_HEIGHT_PX, PAGE_WIDTH_PX } from "./paginate-dom";
+import { syncCloneFonts } from "./clone-fonts";
 
 /** Minimal surface this module uses from jsPDF. */
 export interface JsPdfLike {
@@ -68,7 +70,10 @@ const FONT_PROBE_CSS =
   'img[src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"]' +
   "{display:inline!important;vertical-align:baseline!important}";
 
-/** A clickable region carried over from a `.pdf-link-btn` chip. */
+/**
+ * A clickable region carried over into the PDF: a `.pdf-link-btn` chip or one line of an
+ * author's `<a href>`.
+ */
 interface LinkBox {
   url: string;
   x: number;
@@ -78,21 +83,33 @@ interface LinkBox {
 }
 
 /**
- * Кликабельные области страницы: чипы рекомендаций, снятые с ОТРИСОВАННОГО листа.
+ * Адрес авторской ссылки, который можно перенести в PDF.
  *
- * Растр сам по себе делает из чипа мёртвую картинку, поэтому каждый адрес возвращается в
- * PDF настоящей ссылкой. Координаты отсчитываются от верха ЭТОГО листа: на второй странице
- * они иначе указали бы в начало документа.
+ * Берутся только адреса, ведущие НАРУЖУ документа: `http(s)` и `mailto`. Якорь `#…` или
+ * относительный путь в PDF вести некуда — у файла нет ни страницы-источника, ни адреса.
+ */
+const PDF_LINK_URL = /^(?:https?:\/\/|mailto:)/i;
+
+/**
+ * Кликабельные области страницы, снятые с ОТРИСОВАННОГО листа.
+ *
+ * Растр сам по себе делает из любой ссылки мёртвую картинку, поэтому каждый адрес
+ * возвращается в PDF настоящей ссылкой. Источников два:
+ * - чипы рекомендаций `.pdf-link-btn` — адрес в `data-url`, область — сам чип;
+ * - ссылки `<a href>` из авторского текста (страницы, колонки, вводный блок). Такая ссылка
+ *   строчная и может переноситься, поэтому область берётся ПО СТРОКАМ
+ *   (`getClientRects`): одна общая рамка накрыла бы и чужой текст между концом первой
+ *   строки и началом второй.
+ *
+ * Координаты отсчитываются от верха ЭТОГО листа: на второй странице они иначе указали бы
+ * в начало документа.
  *
  * @param pageRoot Корень листа (страница целиком либо её клон).
  */
 function collectLinks(pageRoot: Element): LinkBox[] {
   const pageRect = pageRoot.getBoundingClientRect();
   const links: LinkBox[] = [];
-  pageRoot.querySelectorAll(".pdf-link-btn").forEach((chip) => {
-    const url = chip.getAttribute("data-url");
-    if (!url) return;
-    const rect = chip.getBoundingClientRect();
+  const push = (url: string, rect: DOMRect | DOMRectReadOnly) => {
     links.push({
       url,
       x: rect.left - pageRect.left,
@@ -100,6 +117,20 @@ function collectLinks(pageRoot: Element): LinkBox[] {
       width: rect.width,
       height: rect.height,
     });
+  };
+  pageRoot.querySelectorAll(".pdf-link-btn").forEach((chip) => {
+    const url = chip.getAttribute("data-url");
+    if (!url) return;
+    push(url, chip.getBoundingClientRect());
+  });
+  pageRoot.querySelectorAll("a[href]").forEach((anchor) => {
+    const url = (anchor.getAttribute("href") ?? "").trim();
+    if (!PDF_LINK_URL.test(url)) return;
+    // Пустые прямоугольники отбрасываются: у строчного элемента их дают стыки переноса, и
+    // область нулевого размера нажать всё равно нельзя.
+    for (const rect of Array.from(anchor.getClientRects())) {
+      if (rect.width > 0 && rect.height > 0) push(url, rect);
+    }
   });
   return links;
 }
@@ -122,6 +153,16 @@ export interface ReportPage {
   cssVars?: Record<string, string>;
   /** Контекст из `buildReportContext` / `buildAdaptiveReportContext`. */
   context: unknown;
+  /**
+   * PRD-51: ОБОЛОЧКА документа — корневой узел `.tb-report`. Приходит вместе с
+   * {@link blocks} у шаблона, объявившего блоки; вместе с ней {@link layout} не нужен.
+   */
+  shell?: string;
+  /**
+   * PRD-51: блоки документа в порядке печати, с уже прочитанными раскладками. Пусто или
+   * отсутствует — шаблон блоков не объявил, и печатается цельный {@link layout} (§5.4).
+   */
+  blocks?: readonly ReportBlockToRender[];
 }
 
 /**
@@ -129,8 +170,8 @@ export interface ReportPage {
  *
  * Renders the variant's LAYOUT through the shared renderer — the same renderer the
  * learner screens use — then rasterizes it off-screen, scales it to A4 width and re-adds
- * the recommendation chips as REAL PDF links (the raster alone would make them dead
- * pictures).
+ * the recommendation chips and the author's external `<a href>` links as REAL PDF links
+ * (the raster alone would make them dead pictures).
  *
  * @param page Layout, optional CSS and context. See {@link ReportPage}.
  * @param testName Test title — only used to name the downloaded file.
@@ -143,7 +184,10 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
   const doc = deps.document || (typeof document !== "undefined" ? document : null);
   if (!doc) throw new Error("Экспорт отчёта требует браузерного окружения");
   if (!deps.jsPDF || !deps.html2canvas) throw new Error("Библиотеки jsPDF или html2canvas не загружены");
-  if (!page || !page.layout) throw new Error("Шаблон не предоставил макет отчёта");
+  // PRD-51: документ приходит ЛИБО блоками (оболочка + список), ЛИБО цельной раскладкой.
+  // Пусто и то и другое — печатать нечего, и молча отдать слушателю пустой PDF нельзя.
+  const asDocument = !!page?.shell && !!page.blocks?.length;
+  if (!page || (!asDocument && !page.layout)) throw new Error("Шаблон не предоставил макет отчёта");
 
   const container = doc.createElement("div");
   container.style.position = "absolute";
@@ -168,12 +212,25 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
   doc.body.appendChild(container);
 
   try {
-    renderScreenInto(stage, { layout: page.layout, context: page.context });
+    // ДОКУМЕНТ ИЗ БЛОКОВ (PRD-51 §5.3). Шаблон, объявивший блоки, приходит с оболочкой
+    // и списком; шаблон без них — со старым цельным `layout`, и путь совместимости
+    // остаётся живым (§5.4). Разводить это по двум конвейерам нельзя: постраничная
+    // раскладка, стыки листов и растеризация ниже одни и те же, и вторая копия
+    // разошлась бы с первой на первой же правке.
+    if (asDocument) {
+      renderReportInto(stage, { shell: page.shell!, context: page.context, blocks: page.blocks! });
+    } else {
+      renderScreenInto(stage, { layout: page.layout, context: page.context });
+    }
     const rendered = stage.firstElementChild as HTMLElement | null;
     if (!rendered) throw new Error("Макет отчёта ничего не отрисовал");
 
-    // Let the browser lay the page out (web fonts, grid) before rasterizing.
+    // Let the browser lay the page out (web fonts, grid) before rasterizing. The fonts are
+    // awaited explicitly: html2canvas places every word where the layout measured it and
+    // draws it with the canvas font, so a layout taken while the face was still loading
+    // puts words on top of each other — spaces and punctuation vanish from the PDF.
     await new Promise((resolve) => setTimeout(resolve, 100));
+    await doc.fonts?.ready;
 
     // РАСКЛАДКА ПО СТРАНИЦАМ. Отчёт печатался одной страницей произвольной высоты,
     // которую нельзя ни распечатать, ни пролистать; теперь лист всегда A4, а разрыв
@@ -199,13 +256,16 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
         allowTaint: true,
         backgroundColor: null,
         logging: false,
+        // Слова меряются в КЛОНЕ, а рисуются холстом этого документа: клон обязан видеть те
+        // же начертания, иначе слова ложатся друг на друга и пробелы пропадают (clone-fonts).
+        onclone: (clonedDoc: Document) => syncCloneFonts(doc, clonedDoc),
       });
       if (index > 0) pdf.addPage?.();
       // Страница и лист — одно и то же, поэтому снимок ложится на всю бумагу: ни белой
       // полосы внизу, ни искажения пропорций.
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
       // Ссылки берутся с САМОЙ страницы: содержимое на ней уже сдвинуто, поэтому
-      // координаты чипа отсчитываются от верха листа и поправок не требуют.
+      // координаты чипа и строки ссылки отсчитываются от верха листа и поправок не требуют.
       for (const link of collectLinks(page)) {
         if (link.y < 0 || link.y >= PAGE_HEIGHT_PX) continue;
         pdf.link(link.x * pxToMm, link.y * pxToMm, link.width * pxToMm, link.height * pxToMm, {

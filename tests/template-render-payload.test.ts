@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import path from "node:path";
-import { readResultsRenderPayload } from "../server/services/template-render";
+import { readReportRenderPayload, readResultsRenderPayload } from "../server/services/template-render";
 import { getTemplatesRootDir } from "../server/scorm/builders/template-copy";
 
 /** The built-in `default` template directory — what the route resolves for the default id. */
@@ -92,5 +92,40 @@ describe("readResultsRenderPayload", () => {
     const p = readResultsRenderPayload(DEFAULT_DIR, standardResult, "Тест");
     expect(typeof p!.theme.background).toBe("string");
     expect(typeof p!.theme.foreground).toBe("string");
+  });
+});
+
+// ─── PRD-51: документ отчёта для ВЕБ-выдачи ─────────────────────────────────────
+
+describe("веб-выдача отчёта получает БЛОКИ документа, а не только оболочку", () => {
+  /**
+   * Дефект, пойманный живой приёмкой: веб печатал пустой документ — оболочку без единого
+   * блока, — потому что путь браузера остался на цельной раскладке, когда эталон уже
+   * переехал на блоки. Пакет при этом печатал верно, и расхождение двух выдач не видел
+   * ни один тест.
+   */
+  const kinds = ["report", "report.adaptive"] as const;
+
+  for (const kind of kinds) {
+    it(`${kind}: блоки приходят с раскладками`, () => {
+      const payload = readReportRenderPayload(DEFAULT_DIR, kind, null);
+      expect(payload, "макет отчёта не разрешился").not.toBeNull();
+      expect(payload!.blocks, "блоки документа отсутствуют — веб напечатает пустой лист").toBeDefined();
+      expect(payload!.blocks!.length).toBeGreaterThan(0);
+      for (const b of payload!.blocks!) {
+        if (b.nature === "page-break") continue;
+        expect(b.layout.length, `у блока ${b.block} пустая раскладка`).toBeGreaterThan(0);
+      }
+    });
+  }
+
+  it("строки теста задают порядок и показ, а не документ по умолчанию", () => {
+    const payload = readReportRenderPayload(DEFAULT_DIR, "report", null, null, undefined, undefined, null, [
+      { block: "topics", sortOrder: 0, enabled: true, templateKey: null, valuesJson: {}, settingsJson: {} },
+      { block: "header", sortOrder: 1, enabled: false, templateKey: null, valuesJson: {}, settingsJson: {} },
+    ]);
+    const order = payload!.blocks!.map((b) => b.block);
+    expect(order.slice(0, 2)).toEqual(["topics", "header"]);
+    expect(payload!.blocks!.find((b) => b.block === "header")!.enabled).toBe(false);
   });
 });

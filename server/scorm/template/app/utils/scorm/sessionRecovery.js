@@ -3,23 +3,46 @@
 // Manages saving and restoring mid-test session progress.
 //
 // Design:
-//   - No timer  → save current question index + answers on every question advance
-//                 and restore on next load (user continues where they left off)
-//   - With timer → time is gone; cannot restore. Show last attempt result.
+//   - Save the current question index + answers on every question advance and restore
+//     them on the next load (the learner continues where they left off).
+//   - Timed tests resume too (PRD-20 5.12): the remaining time comes back from the
+//     active-time anchor, not from a fresh limit.
 //   - Adaptive   → mid-session state is too complex to restore. Show last attempt.
 //
 // PRD-4 v1.1 §3.2 (Phase 4f) — sectional recovery:
 //   - router_by_topics: completed sections + their results are persisted across
-//     SCO reload. In-progress sections are NOT restored (learner re-enters the
-//     section and re-runs questions); the router shows the previously-completed
-//     topics as «Пройдена». Section timers are not persisted — time passing
-//     while the SCO was closed is real-world unrecoverable, so re-entry to a
-//     timed section starts the timer fresh.
-//   - linear_by_topics: same conservative behaviour as before (no per-section
-//     checkpoint, only mid-question restore when no test timer is set).
+//     SCO reload, and PRD-20 (2e) resumes INSIDE an unfinished topic.
+//   - Section time is persisted too (`suspend_data.sectionBudgets`, timer.js): a
+//     re-entered section continues from its frozen remainder.
+//   - PRD-67: under «Закрывать раздел при выходе» a section the previous session broke
+//     off inside is CLOSED on load (timer.js closeInterruptedSectionOnLoad) and comes
+//     back «Пройдена»; a test without sections is handed in.
 //
 // currentSession stored inside suspend_data object:
 //   { attemptsUsed, attempts: [...], currentSession: { ... } | null }
+
+/**
+ * Техдолг №8: исходы пунктов роутера (`state.sectionPassed`) в `suspend_data` — `1` пройден, `0`
+ * не пройден. Пункт без порога (`null`) не пишется: его нельзя не пройти, а бюджет `suspend_data`
+ * не резиновый (PRD-36).
+ */
+function encodeSectionPassed(map) {
+  var out = {};
+  Object.keys(map || {}).forEach(function (key) {
+    if (map[key] === true) out[key] = 1;
+    else if (map[key] === false) out[key] = 0;
+  });
+  return out;
+}
+
+/** Обратное к {@link encodeSectionPassed}; сеанс до появления поля — пустая карта. */
+function decodeSectionPassed(raw) {
+  var out = {};
+  Object.keys(raw || {}).forEach(function (key) {
+    out[key] = raw[key] === 1;
+  });
+  return out;
+}
 
 function saveCurrentSession() {
   // PRD-4 v1.1: router mode persists sectional checkpoint even with a test
@@ -36,30 +59,46 @@ function saveCurrentSession() {
   }
 
   var s = readSuspendObj();
+  var questions = [], answers = [], statuses = [], shuffles = [];
+  var fq = state.flatQuestions || [];
+  for (var i = 0; i < fq.length; i++) {
+    var q = fq[i].question;
+    questions.push(q);
+    answers.push((state.answers || {})[q.id]);
+    statuses.push((state.questionStatuses || {})[q.id] || 'unanswered');
+    shuffles.push((state.shuffleMappings || {})[q.id] || null);
+  }
   s.currentSession = {
-    savedAt: new Date().toISOString(),
-    currentIndex: state.currentIndex,
-    answers: JSON.parse(JSON.stringify(state.answers)),
-    flatQuestions: JSON.parse(JSON.stringify(state.flatQuestions || [])),
-    remainingSeconds: null,
+    at: new Date().toISOString(),
+    i: state.currentIndex,
+    // PRD-36 FR-10: rows instead of question objects. The checkpoint used to carry a full
+    // copy of every delivered question — one of the two copies that overflowed the budget.
+    dl: TBRunState.encodeDelivery(state.deliveryPositions || []),
+    an: TBRunState.encodeAnswers(answers, questions),
+    // PRD-19 (Block B): per-question status travels with the checkpoint so a resumed
+    // session restores skipped/answered marks.
+    st: TBRunState.encodeStatuses(statuses),
+    // PRD-36 §8: the option order survives the break. Without it the learner returns to a
+    // screen whose options sit in the AUTHOR's order — answers stay right, the screen lies.
+    sh: TBRunState.encodeShuffle(shuffles),
+    // PRD-36 FR-19 / §8: the delivered PRD-17 variant. Without it `deliveredFormId` returns
+    // null after a resume and a `by_variant` threshold silently degrades to the topic's own.
+    f: JSON.parse(JSON.stringify(state.deliveredForms || {})),
     // PRD-4 v1.1 §3.2 / Phase 4f — sectional checkpoint. Only meaningful in
-    // router mode; restored by restoreSession to keep completed topics
+    // router mode; restored by restoreRouterSession to keep completed topics
     // marked as such after a SCO reload. sectionTimer is intentionally
     // not persisted (see module header).
-    flowMode:
-      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat',
-    routerTopicStates: JSON.parse(JSON.stringify(state.routerTopicStates || {})),
-    sectionResults: JSON.parse(JSON.stringify(state.sectionResults || {})),
-    routerFinished: state.routerFinished === true,
+    fm: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat',
+    rt: JSON.parse(JSON.stringify(state.routerTopicStates || {})),
+    sr: JSON.parse(JSON.stringify(state.sectionResults || {})),
+    // Техдолг №8: исходы пунктов роутера для хаба — `1`/`0`, пункт без порога не пишется.
+    sp: encodeSectionPassed(state.sectionPassed),
+    rf: state.routerFinished === true,
     // PRD-20 (2e): in-progress router topic + position within its chunk, so a
     // reload resumes INSIDE the unfinished non-adaptive topic (not re-run).
-    currentRouterTopic: state.currentRouterTopic || null,
-    currentPageIndex: state.currentPageIndex || 0,
-    // PRD-19 (Block B): per-question status + per-section commit freeze travel
-    // with the checkpoint so a resumed session restores skipped/answered marks.
-    // Absent keys on legacy packages restore as {} (everything 'unanswered').
-    questionStatuses: JSON.parse(JSON.stringify(state.questionStatuses || {})),
-    sectionCommitted: JSON.parse(JSON.stringify(state.sectionCommitted || {})),
+    crt: state.currentRouterTopic || null,
+    cpi: state.currentPageIndex || 0,
+    sc: JSON.parse(JSON.stringify(state.sectionCommitted || {})),
   };
   writeSuspendObj(s);
   console.log('💾 Session saved at question', state.currentIndex);
@@ -75,7 +114,7 @@ function clearCurrentSession() {
 
 function isSessionStale(session) {
   try {
-    var saved = new Date(session.savedAt).getTime();
+    var saved = new Date(session.at).getTime();
     if (isNaN(saved)) return true;
     var maxAge = 24 * 60 * 60 * 1000; // 24 hours
     return Date.now() - saved > maxAge;
@@ -92,7 +131,9 @@ function isSessionStale(session) {
 function determineRecovery() {
   var s = readSuspendObj();
   var session = s.currentSession || null;
-  var attempts = s.attempts || [];
+  // PRD-36 FR-03: the state no longer keeps a list — «show the last attempt» reads the
+  // stored last summary (`last: 0` means it is the same object as the best one).
+  var last = s.best ? ((s.last === 0 || !s.last) ? s.best : s.last) : null;
   var isRouterMode =
     TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode === 'router_by_topics';
 
@@ -110,7 +151,7 @@ function determineRecovery() {
   // already frozen, in-flight adaptive state is dropped on save (we don't
   // persist adaptiveState).
   if (isRouterMode) {
-    if (session && session.flowMode === 'router_by_topics') {
+    if (session && session.fm === 'router_by_topics') {
       return { action: 'restore_router', session: session };
     }
     return { action: 'start_fresh' };
@@ -118,14 +159,14 @@ function determineRecovery() {
 
   // Non-router adaptive — same conservative «show last attempt» as before.
   if (TEST_DATA.mode === 'adaptive') {
-    if (attempts.length > 0) {
-      return { action: 'show_last_attempt', attempt: attempts[attempts.length - 1] };
+    if (last) {
+      return { action: 'show_last_attempt', attempt: last };
     }
     return { action: 'start_fresh' };
   }
 
-  // No session or empty questions (linear modes only — router handled above)
-  if (!session || !session.flatQuestions || session.flatQuestions.length === 0) {
+  // No session or empty delivery (linear modes only — router handled above)
+  if (!session || !session.dl) {
     return { action: 'start_fresh' };
   }
 
@@ -140,8 +181,8 @@ function determineRecovery() {
       typeof anchor.baselineTotalSec === 'number' &&
       totalNow !== null);
     if (!canRestoreTimer) {
-      if (attempts.length > 0) {
-        return { action: 'show_last_attempt', attempt: attempts[attempts.length - 1] };
+      if (last) {
+        return { action: 'show_last_attempt', attempt: last };
       }
       return { action: 'start_fresh' };
     }
@@ -151,15 +192,62 @@ function determineRecovery() {
   return { action: 'restore', session: session };
 }
 
-// Restores state from a saved session and moves to question phase
+/**
+ * PRD-36 FR-10: rebuild the runtime state from the stored ROWS. The delivered questions come
+ * back from TEST_DATA BY POSITION — the checkpoint carries addresses, not content — and the
+ * answers, statuses and option order come back from their own rows, keyed by the slot they
+ * occupy in the delivery.
+ */
+function applySessionRows(session) {
+  var positions = TBRunState.decodeDelivery(session.dl || '');
+  state.deliveryPositions = positions;
+  state.flatQuestions = [];
+  var questions = [];
+  for (var i = 0; i < positions.length; i++) {
+    var section = TEST_DATA.sections[positions[i].s];
+    var q = (section && section.questions) ? section.questions[positions[i].q] : null;
+    if (!q) continue;
+    questions.push(q);
+    state.flatQuestions.push({ question: q, topicId: section.topicId, topicName: section.topicName });
+  }
+  var answers = TBRunState.decodeAnswers(session.an || '', questions);
+  var statuses = TBRunState.decodeStatuses(session.st || '');
+  var shuffles = TBRunState.decodeShuffle(session.sh || '');
+  state.answers = {};
+  state.questionStatuses = {};
+  state.shuffleMappings = {};
+  for (var j = 0; j < questions.length; j++) {
+    if (answers[j] !== undefined) state.answers[questions[j].id] = answers[j];
+    // PRD-19 (Block B): restore navigation statuses; a checkpoint без ряда restores as
+    // all-'unanswered', which is what a legacy package's checkpoint means anyway.
+    state.questionStatuses[questions[j].id] = statuses[j] || 'unanswered';
+    // PRD-36 §8: the order the learner actually saw. Absent row = author's order, the
+    // pre-PRD-36 behaviour, which is also what the budget sacrifices fall back to.
+    if (shuffles[j]) state.shuffleMappings[questions[j].id] = shuffles[j];
+  }
+  // PRD-36 FR-19: restore the pinned variant map and make sure `state.variant` carries the
+  // same formIds — that is what `deliveredFormId` (PRD-24) reads when it resolves a
+  // `by_variant` topic threshold. In router mode a fresh variant has already been generated
+  // by the time we get here, so its sections are FILLED IN rather than replaced: they also
+  // carry the delivered questionIds, which nothing else can rebuild.
+  state.deliveredForms = session.f || {};
+  if (!state.variant || !state.variant.sections) state.variant = { sections: [] };
+  for (var tid in state.deliveredForms) {
+    if (!Object.prototype.hasOwnProperty.call(state.deliveredForms, tid)) continue;
+    var known = null;
+    for (var vi = 0; vi < state.variant.sections.length; vi++) {
+      if (state.variant.sections[vi].topicId === tid) { known = state.variant.sections[vi]; break; }
+    }
+    if (known) known.formId = state.deliveredForms[tid];
+    else state.variant.sections.push({ topicId: tid, formId: state.deliveredForms[tid] });
+  }
+  state.currentIndex = session.i || 0;
+  state.sectionCommitted = session.sc || {};
+}
+
+/** Restores state from a saved session and moves to question phase. */
 function restoreSession(session) {
-  state.flatQuestions = session.flatQuestions;
-  state.answers = session.answers || {};
-  state.currentIndex = session.currentIndex || 0;
-  // PRD-19 (Block B): restore navigation statuses; legacy checkpoints lack
-  // these keys and default to empty (treated as all-'unanswered').
-  state.questionStatuses = session.questionStatuses || {};
-  state.sectionCommitted = session.sectionCommitted || {};
+  applySessionRows(session);
   state.phase = 'question';
   state.submitted = false;
   state.feedbackShown = false;
@@ -179,15 +267,21 @@ function restoreSession(session) {
  */
 function restoreRouterSession(session) {
   if (!session) return;
-  state.routerTopicStates = JSON.parse(JSON.stringify(session.routerTopicStates || {}));
-  state.sectionResults = JSON.parse(JSON.stringify(session.sectionResults || {}));
-  state.routerFinished = session.routerFinished === true;
+  state.routerTopicStates = JSON.parse(JSON.stringify(session.rt || {}));
+  state.sectionResults = JSON.parse(JSON.stringify(session.sr || {}));
+  state.sectionPassed = decodeSectionPassed(session.sp);
+  state.routerFinished = session.rf === true;
+  // PRD-36 FR-19: the router run keeps its delivered variants too — a topic re-entered
+  // after the reload must be gated by the SAME variant threshold it was gated by before.
+  state.deliveredForms = session.f || {};
   // Drop in-progress topic — learner restarts that section.
   state.currentRouterTopic = null;
-  // Mark any in-progress topic as notStarted so it's re-enterable.
+  // Mark any in-progress topic as notStarted so it's re-enterable — unless the learner
+  // left it under «Закрывать раздел при выходе» (PRD-67): then it is done for good.
   Object.keys(state.routerTopicStates).forEach(function (tid) {
     if (state.routerTopicStates[tid] === 'inProgress') {
-      state.routerTopicStates[tid] = 'notStarted';
+      var closed = typeof isSectionClosedByLeave === 'function' && isSectionClosedByLeave(tid);
+      state.routerTopicStates[tid] = closed ? 'completed' : 'notStarted';
     }
   });
   console.log(

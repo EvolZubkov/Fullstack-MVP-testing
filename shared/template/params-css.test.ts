@@ -6,7 +6,41 @@
  * so these expectations also guard against drift between the two.
  */
 import { describe, it, expect } from "vitest";
-import { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
+import { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS, withParamDefaults } from "./params-css";
+
+describe("withParamDefaults", () => {
+  const manifest = [
+    { key: "levelScheme", default: "custom" },
+    { key: "levelColorMid", default: null },
+    { key: "breakdownBarFill", default: "share" },
+    { key: "progress.mode", default: "questions" },
+  ];
+
+  it("нетронутый параметр получает умолчание манифеста", () => {
+    expect(withParamDefaults({}, manifest)).toEqual({ levelScheme: "custom", breakdownBarFill: "share" });
+  });
+
+  it("выбор автора сильнее умолчания", () => {
+    expect(withParamDefaults({ levelScheme: "traffic" }, manifest).levelScheme).toBe("traffic");
+  });
+
+  it("пустое значение (null) считается нетронутым", () => {
+    expect(withParamDefaults({ breakdownBarFill: null }, manifest).breakdownBarFill).toBe("share");
+  });
+
+  it("параметр без умолчания и составной ключ не дописываются", () => {
+    const out = withParamDefaults({}, manifest);
+    expect(out).not.toHaveProperty("levelColorMid");
+    expect(out).not.toHaveProperty("progress.mode");
+  });
+
+  it("вход не меняется, без манифеста возвращается копия", () => {
+    const params = { a: 1 };
+    expect(withParamDefaults(params, manifest)).not.toBe(params);
+    expect(params).toEqual({ a: 1 });
+    expect(withParamDefaults(null, null)).toEqual({});
+  });
+});
 
 describe("buildTemplateCssVars", () => {
   it("maps the default colour/font param keys to their CSS variables", () => {

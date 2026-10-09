@@ -251,6 +251,60 @@ describe("PUT /api/topics/:id — update branches", () => {
     expect(res.body.error).toBe("invalid_topic_code");
   });
 
+  // Толкование темы (issue #56): три исхода, и они РАЗНЫЕ. Единственный редактор поля —
+  // ящик темы, и он шлёт запись ВСЕГДА, поэтому пустой текст обязан обнулять колонку,
+  // а тело без ключа — не трогать написанное.
+  it("keeps the stored interpretation when the body carries no key", async () => {
+    storageMock.getTopic.mockResolvedValue(
+      topic("t1", { interpretationJson: { format: "plain", text: "Старое толкование" } }),
+    );
+    storageMock.updateTopic.mockResolvedValue(topic("t1"));
+    const res = await asUser(request(app).put("/api/topics/t1").send({ name: "T-t1" }));
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1]).not.toHaveProperty("interpretationJson");
+  });
+
+  it("stores an interpretation that has text", async () => {
+    storageMock.getTopic.mockResolvedValue(topic("t1"));
+    storageMock.updateTopic.mockResolvedValue(topic("t1"));
+    const res = await asUser(
+      request(app)
+        .put("/api/topics/t1")
+        .send({ name: "T-t1", interpretationJson: { format: "richText", text: "<p>Толкование</p>" } }),
+    );
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1].interpretationJson).toEqual({
+      format: "richText",
+      text: "<p>Толкование</p>",
+    });
+  });
+
+  it("clears the column when the interpretation text is blank", async () => {
+    // Пустая запись в колонке ИСТИННА, и `readInterpretations` завела бы по ней тему без
+    // единого написанного текста. Стёртый текст обязан становиться NULL.
+    storageMock.getTopic.mockResolvedValue(
+      topic("t1", { interpretationJson: { format: "plain", text: "Старое толкование" } }),
+    );
+    storageMock.updateTopic.mockResolvedValue(topic("t1"));
+    const res = await asUser(
+      request(app)
+        .put("/api/topics/t1")
+        .send({ name: "T-t1", interpretationJson: { format: "plain", text: "   " } }),
+    );
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1].interpretationJson).toBeNull();
+  });
+
+  it("400 invalid_interpretation_json on a malformed interpretation", async () => {
+    storageMock.getTopic.mockResolvedValue(topic("t1"));
+    const res = await asUser(
+      request(app).put("/api/topics/t1").send({ name: "T-t1", interpretationJson: { format: 42 } }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_interpretation_json");
+    expect(storageMock.updateTopic).not.toHaveBeenCalled();
+  });
+
   it("409 duplicate_topic_name when renaming into an existing same-owner name", async () => {
     storageMock.getTopic.mockResolvedValue(topic("t1", { name: "Old", ownerId: "u1" }));
     storageMock.getTopics.mockResolvedValue([topic("t2", { name: "New", ownerId: "u1" })]);

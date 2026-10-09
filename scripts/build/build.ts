@@ -8,7 +8,7 @@ import { copyDsAssetsInto } from "../../server/scorm/builders/ds-styles";
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 // Dependencies to bundle (reduces cold start syscalls)
-// Note: archiver and bcryptjs excluded due to ESM/CJS interop issues
+// Note: bcryptjs excluded due to ESM/CJS interop issues
 const allowlist = [
   "@google/generative-ai",
   // ESM-only wrapper: bundle it into the CJS output so the production build does
@@ -17,7 +17,8 @@ const allowlist = [
   // is not disturbed by the bundler.
   "@vvlad1973/pino-logger-tree",
   // ESM-only config utilities (getConfig). Bundled so the CJS app does not
-  // `require()` an ES module (Node 20 in the image cannot require ESM).
+  // `require()` an ES module: the build does not lean on `require(esm)`, which only
+  // newer Node lines support, so the bundle does not depend on the runtime version.
   "@vvlad1973/utils",
   "axios",
   "cors",
@@ -45,7 +46,7 @@ const allowlist = [
 // pinned external explicitly: the wrapper is bundled, and esbuild would otherwise
 // follow its `import 'pino'` and bundle pino too — breaking pino's runtime resolution
 // of its own worker/transport internals. Kept external, pino resolves normally at runtime.
-const forceExternal = ["archiver", "bcryptjs", "@vvlad1973/crypto", "pino"];
+const forceExternal = ["bcryptjs", "@vvlad1973/crypto", "pino"];
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
@@ -88,25 +89,33 @@ async function buildAll() {
   // hand-written JS twin would be a second copy of the text pipeline. Bundling
   // them with the same esbuild config means the migration runs the SAME code the
   // application does.
+  //
+  // The same holds for the schema steps. `reconcile-migration-ledger` realigns the
+  // timestamps a regenerated migration leaves behind and runs BEFORE `migrate`;
+  // `migrate` applies drizzle/ with the migrator built into drizzle-orm, so the
+  // image needs no drizzle-kit (a devDependency). Both read drizzle/meta/_journal.json
+  // copied into the image. See each module's own header.
   console.log("building deploy scripts...");
-  await esbuild({
-    entryPoints: ["scripts/db/backfill-page-text.ts"],
-    platform: "node",
-    bundle: true,
-    format: "cjs",
-    outfile: "dist/backfill-page-text.cjs",
-    banner: {
-      js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
-    },
-    define: {
-      "process.env.NODE_ENV": '"production"',
-      "import.meta.url": "__importMetaUrl",
-      "import.meta.dirname": "__dirname",
-    },
-    minify: false,
-    external: externals,
-    logLevel: "info",
-  });
+  for (const name of ["backfill-page-text", "reconcile-migration-ledger", "migrate"]) {
+    await esbuild({
+      entryPoints: [`scripts/db/${name}.ts`],
+      platform: "node",
+      bundle: true,
+      format: "cjs",
+      outfile: `dist/${name}.cjs`,
+      banner: {
+        js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
+      },
+      define: {
+        "process.env.NODE_ENV": '"production"',
+        "import.meta.url": "__importMetaUrl",
+        "import.meta.dirname": "__dirname",
+      },
+      minify: false,
+      external: externals,
+      logLevel: "info",
+    });
+  }
 
   console.log("copying scorm assets...");
   await mkdir("dist/scorm/assets", { recursive: true });

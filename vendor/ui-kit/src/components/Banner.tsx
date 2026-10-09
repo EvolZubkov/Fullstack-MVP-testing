@@ -22,8 +22,12 @@ export interface BannerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 
   stacked?: boolean;
   /** Full-width (system-wide banner). */
   fullWidth?: boolean;
-  /** Icon on the left. */
-  icon?: React.ReactNode;
+  /**
+   * Icon on the left. `false` renders the banner WITHOUT one: the tone is already
+   * carried by the colour, and in a dense form a column of tone icons reads as a
+   * column of alarms. Absent — the tone's default icon.
+   */
+  icon?: React.ReactNode | false;
   /** Title. */
   title?: React.ReactNode;
   /** Body description. */
@@ -104,7 +108,9 @@ export const Banner = forwardRef<HTMLDivElement, BannerProps>(
       className,
     );
 
-    const iconEl = <span className="ou-banner__ico">{icon ?? DefaultIcons[tone]}</span>;
+    const iconEl = icon === false
+      ? null
+      : <span className="ou-banner__ico">{icon ?? DefaultIcons[tone]}</span>;
     const bodyEl = (
       <div className="ou-banner__body">
         {title && <div className="ou-banner__title">{title}</div>}

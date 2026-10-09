@@ -5,7 +5,7 @@
  * template params and the smoke-test journal. Opens the preview/check modal via
  * the footer action.
  */
-import { Button, ModalDialog, Tag } from "@universityrt/ui-kit";
+import { Button, ModalDialog, Tag } from "@skillum/ui-kit";
 import { Eye } from "lucide-react";
 import { useTemplateDetails, type AdminTemplate } from "./use-admin-templates";
 import { statusBadge, validationBadge, smokeBadge } from "./template-status";

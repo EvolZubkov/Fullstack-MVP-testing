@@ -1,0 +1,22 @@
+{{#if result.indicators}}
+<section class="tb-report__card">
+  {{#if labels.results.indicators}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.indicators }}</div>{{/if}}
+  <div class="tb-report__scales">
+    <div class="tb-report__scale-list">
+      {{#each result.indicators}}
+      <div class="tb-report__scale">
+        <!-- PRD-49: тумблеры слотов карточки гасят показ и в документе — ученик уносит
+             его с собой. Признаки инвертированы, поэтому проверка через unless: контекст,
+             собранный вручную (превью шаблонов, фикстуры), их не ставит вовсе. -->
+        {{#unless hideName}}<div class="tb-report__scale-name">{{name}}</div>{{/unless}}
+        <div class="tb-report__scale-meta">
+          {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+          {{#unless hideLevel}}{{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}{{/unless}}
+        </div>
+        {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </div>
+</section>
+{{/if}}

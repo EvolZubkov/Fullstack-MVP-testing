@@ -46,7 +46,7 @@ describe("DS-ассеты SCORM-пакета в прод-раскладке", ()
     const dist = path.join(tempDir(), "dist");
     copyDsAssetsInto(dist);
 
-    const css = path.join(dist, "scorm", "assets", "ds", "university-rt.css");
+    const css = path.join(dist, "scorm", "assets", "ds", "skillum-ds.css");
     expect(fs.existsSync(css)).toBe(true);
     expect(fs.readFileSync(css, "utf8")).toContain(".ou-");
     for (const file of PACKAGE_FONT_FILES) {

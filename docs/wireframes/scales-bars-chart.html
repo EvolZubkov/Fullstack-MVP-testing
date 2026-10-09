@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ru" class="ou ou--light">
+<head>
+<meta charset="utf-8">
+<title>Эскиз · линейчатая диаграмма шкал</title>
+<!-- Реальные стили: дизайн-система и слой сцены стандартного шаблона. Эскиз рисуется
+     тем же CSS, что и рабочие экраны, поэтому размеры и цвета здесь не «примерно». -->
+<link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css">
+<link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
+<style>
+  body { background: var(--ou-bg-page); padding: 24px; }
+  .wf { max-width: 1180px; margin: 0 auto 48px; }
+  .wf__note {
+    font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    margin: 0 0 12px; max-width: 70ch;
+  }
+  .wf__title { font: var(--ou-text-heading-m); margin: 32px 0 4px; }
+  .wf__frame {
+    background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-soft);
+    border-radius: var(--ou-radius-l); padding: 24px;
+  }
+
+  /* ── Предлагаемая механика ──────────────────────────────────────────
+     Линейчатая диаграмма всех шкал: одна ОБЩАЯ ось, поэтому длины столбиков
+     сравнимы между шкалами — этого не даёт карточка, каждая из которых
+     масштабируется своим доменом. */
+  .tb-bars { display: flex; flex-direction: column; gap: var(--ou-space-3); width: 100%; }
+  .tb-bars__row {
+    display: grid;
+    grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--ou-space-4);
+  }
+  .tb-bars__name { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+  .tb-bars__track {
+    position: relative; height: var(--ou-space-4);
+    background: var(--tb-track); border-radius: var(--ou-radius-pill);
+  }
+  .tb-bars__fill {
+    position: absolute; inset: 0 auto 0 0;
+    background: hsl(var(--tb-zone)); border-radius: var(--ou-radius-pill);
+  }
+  .tb-bars__val {
+    font: var(--ou-text-body-m); color: var(--ou-fg-default);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .tb-bars__val strong { font: var(--ou-text-display-s); }
+  /* Ось: подписи краёв общей шкалы под столбиками. */
+  .tb-bars__axis {
+    display: grid; grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) auto;
+    gap: var(--ou-space-4); margin-top: var(--ou-space-2);
+  }
+  .tb-bars__scale {
+    grid-column: 2; display: flex; justify-content: space-between;
+    font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .wf-b { grid-column: 3; }
+</style>
+</head>
+<body>
+
+<div class="wf">
+  <h2 class="wf__title">Как есть: карточки шкал (вид «Полоса-градусник»)</h2>
+  <p class="wf__note">
+    Каждая шкала — отдельная карточка со своей полосой. Полоса масштабируется ДОМЕНОМ СВОЕЙ
+    шкалы, поэтому одинаковая длина у двух шкал не значит одинаковый результат: у методики
+    с разными диапазонами столбики несравнимы. Разделитель между карточками — единственное,
+    что их разграничивает.
+  </p>
+  <div class="wf__frame">
+    <div class="tb-scene">
+      <div class="tb-measures__list">
+        <div class="ou-formsection tb-measure">
+          <div class="ou-formsection__intro">
+            <div class="tb-measure__head">
+              <h4 class="ou-formsection__title">Целеустремленный</h4>
+              <span class="ou-slider__val"><strong>21</strong></span>
+            </div>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-slider ou-slider--h tb-measure__slider">
+              <div class="ou-slider__rail">
+                <span class="ou-slider__fill tb-zone" style="left:0;width:21.4%;--tb-zone:271 76% 53%"></span>
+                <span class="ou-slider__thumb tb-measure__marker" style="left:21.4%"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ou-formsection tb-measure">
+          <div class="ou-formsection__intro">
+            <div class="tb-measure__head">
+              <h4 class="ou-formsection__title">Командный</h4>
+              <span class="ou-slider__val"><strong>35</strong></span>
+            </div>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-slider ou-slider--h tb-measure__slider">
+              <div class="ou-slider__rail">
+                <span class="ou-slider__fill tb-zone" style="left:0;width:35.7%;--tb-zone:162 90% 30%"></span>
+                <span class="ou-slider__thumb tb-measure__marker" style="left:35.7%"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wf">
+  <h2 class="wf__title">Вариант A — диаграмма ВМЕСТО карточек, во всю ширину</h2>
+  <p class="wf__note">
+    Один блок на все шкалы: имя, столбик, число. Ось общая — максимум берётся один на всю
+    диаграмму, поэтому столбики сравнимы между собой и профиль читается сразу. Карточек со
+    своими полосами при этом нет: толкования уровней у такой методики всё равно нет.
+  </p>
+  <div class="wf__frame">
+    <div class="tb-scene">
+      <div class="tb-bars">
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Целеустремленный</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:21.4%;--tb-zone:271 76% 53%"></span></div>
+          <div class="tb-bars__val"><strong>21</strong></div>
+        </div>
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Вдохновляющий</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:21.4%;--tb-zone:25 90% 48%"></span></div>
+          <div class="tb-bars__val"><strong>21</strong></div>
+        </div>
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Командный</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:35.7%;--tb-zone:162 90% 30%"></span></div>
+          <div class="tb-bars__val"><strong>35</strong></div>
+        </div>
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Процессный</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:21.4%;--tb-zone:14 78% 52%"></span></div>
+          <div class="tb-bars__val"><strong>21</strong></div>
+        </div>
+        <div class="tb-bars__axis"><div class="tb-bars__scale"><span>0</span><span>98</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wf">
+  <h2 class="wf__title">Вариант B — диаграмма РЯДОМ с карточками</h2>
+  <p class="wf__note">
+    Та же диаграмма, но в колонке слева, как сегодня стоят роза и радар: она даёт сравнение
+    шкал между собой, а карточки справа продолжают печатать уровень и толкование. Подходит
+    методике с уровнями; для методики без уровней правая колонка почти пуста.
+  </p>
+  <div class="wf__frame">
+    <div class="tb-scene">
+      <div class="tb-measures tb-measures--chart">
+        <div class="tb-chart">
+          <div class="tb-bars">
+            <div class="tb-bars__row">
+              <div class="tb-bars__name">Целеустремленный</div>
+              <div class="tb-bars__track"><span class="tb-bars__fill" style="width:21.4%;--tb-zone:271 76% 53%"></span></div>
+              <div class="tb-bars__val"><strong>21</strong></div>
+            </div>
+            <div class="tb-bars__row">
+              <div class="tb-bars__name">Командный</div>
+              <div class="tb-bars__track"><span class="tb-bars__fill" style="width:35.7%;--tb-zone:162 90% 30%"></span></div>
+              <div class="tb-bars__val"><strong>35</strong></div>
+            </div>
+            <div class="tb-bars__axis"><div class="tb-bars__scale"><span>0</span><span>98</span></div></div>
+          </div>
+        </div>
+        <div class="tb-measures__list">
+          <div class="ou-formsection tb-measure">
+            <div class="ou-formsection__intro">
+              <div class="tb-measure__head">
+                <h4 class="ou-formsection__title">Целеустремленный</h4>
+                <span class="ou-slider__val"><strong>21</strong></span>
+              </div>
+              <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Умеренный</span>
+            </div>
+            <div class="ou-formsection__body">
+              <p class="ou-formsection__sub">Толкование уровня, если методика его даёт.</p>
+            </div>
+          </div>
+          <div class="ou-formsection tb-measure">
+            <div class="ou-formsection__intro">
+              <div class="tb-measure__head">
+                <h4 class="ou-formsection__title">Командный</h4>
+                <span class="ou-slider__val"><strong>35</strong></span>
+              </div>
+              <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Ведущий</span>
+            </div>
+            <div class="ou-formsection__body">
+              <p class="ou-formsection__sub">Толкование уровня, если методика его даёт.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wf">
+  <h2 class="wf__title">Зачем общая ось: шкалы с РАЗНЫМИ диапазонами</h2>
+  <p class="wf__note">
+    Слева — как рисуют карточки сегодня (каждая от своего максимума): 27 из 45 и 30 из 98
+    дают почти одинаковые столбики. Справа — общая ось диаграммы: видно, что это разные
+    величины. Ось берётся как наибольший максимум среди показанных шкал.
+  </p>
+  <div class="wf__frame">
+    <div class="tb-scene">
+      <div class="tb-bars">
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Своя ось · 27 из 45</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:60%;--tb-zone:271 76% 53%"></span></div>
+          <div class="tb-bars__val"><strong>27</strong></div>
+        </div>
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Своя ось · 30 из 98</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:30.6%;--tb-zone:162 90% 30%"></span></div>
+          <div class="tb-bars__val"><strong>30</strong></div>
+        </div>
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Общая ось · 27</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:27.6%;--tb-zone:271 76% 53%"></span></div>
+          <div class="tb-bars__val"><strong>27</strong></div>
+        </div>
+        <div class="tb-bars__row">
+          <div class="tb-bars__name">Общая ось · 30</div>
+          <div class="tb-bars__track"><span class="tb-bars__fill" style="width:30.6%;--tb-zone:162 90% 30%"></span></div>
+          <div class="tb-bars__val"><strong>30</strong></div>
+        </div>
+        <div class="tb-bars__axis"><div class="tb-bars__scale"><span>0</span><span>98</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

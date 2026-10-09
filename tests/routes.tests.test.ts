@@ -14,20 +14,35 @@ import express from "express";
 import session from "express-session";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
-const { storageMock, serviceMock } = vi.hoisted(() => ({
+const { storageMock, serviceMock, dbRows } = vi.hoisted(() => ({
+  // Строки, которые отдаёт любой `db.select()` маршрута. По умолчанию пусто —
+  // так вёл себя прежний неизменяемый мок; тест на выбор шаблона при создании
+  // кладёт сюда строку шаблона.
+  dbRows: { current: [] as unknown[] },
   storageMock: {
     getTest: vi.fn(),
     getTests: vi.fn(),
     updateTest: vi.fn(),
     deleteTest: vi.fn(),
+    getTestDeleteImpact: vi.fn(),
     patchTestStatus: vi.fn(),
     getMigrationHealth: vi.fn(),
+    // PRD-51: маршрут читает документ отчёта. Здесь он не предмет проверки —
+    // пустой список означает «документ по умолчанию шаблона».
+    listReportBlocks: vi.fn().mockResolvedValue([]),
+    // PRD-52: счётчик открытых комментариев считается на весь список сразу.
+    countOpenReviewCommentsByTests: vi.fn().mockResolvedValue({}),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSections: vi.fn(),
     getTopics: vi.fn(),
     getUsers: vi.fn().mockResolvedValue([]),
     getQuestionsByTopic: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
+    // Per-topic levels — what the feasibility service reads (`assessTestPublish`).
+    getAdaptiveLevels: vi.fn().mockResolvedValue([]),
     getResultVariables: vi.fn().mockResolvedValue([]),
     getScales: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
@@ -79,7 +94,7 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/db", () => ({
-  db: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) },
+  db: { select: () => ({ from: () => ({ where: () => Promise.resolve(dbRows.current) }) }) },
 }));
 vi.mock("../server/scorm-exporter", () => ({ generateScormPackage: vi.fn() }));
 vi.mock("../server/template-registry", () => ({ isSupportedTemplateApiVersion: vi.fn().mockReturnValue(true) }));
@@ -291,6 +306,66 @@ describe("POST /api/tests/:id/republish-force", () => {
   });
 });
 
+// ─── GET /:id/feasibility ───────────────────────────────────────────────────
+//
+// PRD-15 FR-05 asks the feasibility service to run on EVERY change path, and its
+// policy for a draft is «предупреждение без блокировки». Authoring an adaptive
+// ladder was the one path that skipped it: a level whose difficulty range holds no
+// questions saved silently and only spoke up at publish (`409 publish_infeasible`)
+// — or not at all, if the test was played as a draft («Вопрос 1 из 0»).
+describe("GET /api/tests/:id/feasibility", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    app = makeApp();
+  });
+
+  it("reports an adaptive level whose difficulty range has no questions", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "s1", testId: "test1", topicId: "tp1", drawCount: 0, drawAll: false, drawBlueprintJson: null },
+    ]);
+    storageMock.getAdaptiveLevels.mockResolvedValue([
+      { levelIndex: 0, levelName: "Базовый", minDifficulty: 0, maxDifficulty: 40, questionsCount: 3 },
+    ]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([
+      { id: "q1", topicId: "tp1", tags: [], difficulty: 80 },
+    ]);
+    storageMock.getTopic.mockResolvedValue({ id: "tp1", name: "Тема" });
+    const res = await asAuthor(request(app).get("/api/tests/test1/feasibility"));
+    expect(res.status).toBe(200);
+    const issues = res.body.findings.flatMap((f: { issues: unknown[] }) => f.issues);
+    expect(issues).toContainEqual(
+      expect.objectContaining({ kind: "adaptive_shortfall", levelName: "Базовый", required: 3, available: 0 }),
+    );
+  });
+
+  it("returns an empty list when the ladder is fully stocked", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "s1", testId: "test1", topicId: "tp1", drawCount: 0, drawAll: false, drawBlueprintJson: null },
+    ]);
+    storageMock.getAdaptiveLevels.mockResolvedValue([
+      { levelIndex: 0, levelName: "Базовый", minDifficulty: 0, maxDifficulty: 40, questionsCount: 1 },
+    ]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([
+      { id: "q1", topicId: "tp1", tags: [], difficulty: 20 },
+    ]);
+    storageMock.getTopic.mockResolvedValue({ id: "tp1", name: "Тема" });
+    const res = await asAuthor(request(app).get("/api/tests/test1/feasibility"));
+    expect(res.status).toBe(200);
+    expect(res.body.findings).toEqual([]);
+  });
+
+  it("404 for a missing test", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await asAuthor(request(app).get("/api/tests/test1/feasibility"));
+    expect(res.status).toBe(404);
+  });
+});
+
 // ─── POST /:id/restore ────────────────────────────────────────────────────────
 describe("POST /api/tests/:id/restore", () => {
   let app: express.Express;
@@ -380,6 +455,39 @@ describe("DELETE /api/tests/:id — confirmTitle", () => {
   });
 });
 
+// ─── GET /:id/delete-impact (PRD-15 FR-07a) ──────────────────────────────────
+describe("GET /api/tests/:id/delete-impact", () => {
+  let app: express.Express;
+  const impact = { webAttempts: 12, lmsAttempts: 125, importBatches: 2, packages: 3 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTestDeleteImpact.mockResolvedValue(impact);
+    app = makeApp();
+  });
+
+  it("200 — names what the deletion takes and deletes nothing", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    const res = await asAuthor(request(app).get("/api/tests/test1/delete-impact"));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(impact);
+    expect(storageMock.getTestDeleteImpact).toHaveBeenCalledWith("test1");
+    expect(storageMock.deleteTest).not.toHaveBeenCalled();
+  });
+
+  it("404 — test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await asAuthor(request(app).get("/api/tests/x/delete-impact"));
+    expect(res.status).toBe(404);
+  });
+
+  it("401 — anonymous", async () => {
+    const res = await request(app).get("/api/tests/test1/delete-impact");
+    expect(res.status).toBe(401);
+  });
+});
+
 // ─── PUT /:id — section formSetJson round-trip (PRD-17 regression) ─────────────
 // Guards against the Zod-strip bug where sectionBodySchema omitted formSetJson, so
 // the editor's saved variant set was silently dropped (200 OK, but not persisted).
@@ -457,6 +565,99 @@ describe("PUT /api/tests/:id — section formSetJson (PRD-17)", () => {
     expect(res.status).toBe(400);
     expect(serviceMock.save).not.toHaveBeenCalled();
   });
+
+  // PRD-50 FR-11: блоки разделов — тот же класс срезания Zod. Без объявления в схеме
+  // тела автор сохранил бы структуру блоков и не узнал бы, что её нет.
+  it("проводит блоки разделов и ссылку раздела на блок до сервиса сохранения", async () => {
+    const sectionGroups = [
+      { key: "competencies", label: "Управленческие компетенции", order: 0 },
+      { key: "knowledge", label: "Знания", order: 1 },
+    ];
+    const res = await asAuthor(
+      request(app).put("/api/tests/test1").send({
+        title: "My Test",
+        mode: "standard",
+        sectionGroupsJson: sectionGroups,
+        sections: [{ topicId: "t1", drawCount: 2, groupKey: "knowledge" }],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const savePayload = serviceMock.save.mock.calls[0][1];
+    expect(savePayload.test.sectionGroupsJson).toEqual(sectionGroups);
+    expect(savePayload.sections[0].groupKey).toBe("knowledge");
+  });
+
+  it("отбивает два блока с одним ключом: принадлежность раздела была бы неоднозначной", async () => {
+    const res = await asAuthor(
+      request(app).put("/api/tests/test1").send({
+        title: "My Test",
+        mode: "standard",
+        sectionGroupsJson: [
+          { key: "k", label: "Первый" },
+          { key: "k", label: "Второй" },
+        ],
+        sections: [{ topicId: "t1", drawCount: 2 }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(serviceMock.save).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Снятие настройки. Тело различает два состояния, и они значат разное: поля НЕТ —
+   * «не трогай», поле есть со значением `null` — «сними». Маршрут схлопывал второе в
+   * первое (`?? undefined`), поэтому снять настройку через API было нельзя вовсе:
+   * сервер отвечал 200, а колонка держала прежнее значение.
+   *
+   * Проверено на живом стенде до правки: включили кулдаун, прислали `null`, получили
+   * 200 и прежнюю политику в базе. Автор снимал галку «Интервал между попытками»,
+   * видел «Сохранено» и получал её обратно после перезагрузки.
+   *
+   * Поля перечислены поимённо: редактор снимает каждое из них именно нулём
+   * (`retakePolicyJson: enabled ? … : null`, `sectionGroupsJson: length ? … : null`,
+   * и так далее), и молчаливая потеря любого читается автором как «сервис не сохраняет».
+   */
+  const NULLABLE_TEST_FIELDS = [
+    "feedbackJson",
+    "flowPolicyJson",
+    "retakePolicyJson",
+    "reportSettingsJson",
+    "introJson",
+    "breakdownDisplayJson",
+    "sectionGroupsJson",
+    "webhookUrl",
+  ] as const;
+
+  for (const field of NULLABLE_TEST_FIELDS) {
+    it(`доводит явный null поля ${field} до сервиса — это «снять настройку»`, async () => {
+      const res = await asAuthor(
+        request(app).put("/api/tests/test1").send({
+          title: "My Test",
+          mode: "standard",
+          [field]: null,
+          sections: [{ topicId: "t1", drawCount: 2 }],
+        }),
+      );
+      expect(res.status).toBe(200);
+      const savePayload = serviceMock.save.mock.calls[0][1];
+      expect(savePayload.test[field], `${field} должно дойти как null`).toBeNull();
+    });
+
+    it(`не выдумывает значение полю ${field}, которого нет в теле`, async () => {
+      const res = await asAuthor(
+        request(app).put("/api/tests/test1").send({
+          title: "My Test",
+          mode: "standard",
+          sections: [{ topicId: "t1", drawCount: 2 }],
+        }),
+      );
+      expect(res.status).toBe(200);
+      const savePayload = serviceMock.save.mock.calls[0][1];
+      // `undefined` — единственное, что Drizzle выбрасывает из UPDATE: колонка не
+      // участвует в запросе и держит прежнее значение.
+      expect(savePayload.test[field], `${field} без поля в теле не должно менять колонку`).toBeUndefined();
+    });
+  }
 });
 
 // ─── Backward compat: POST / and PUT /:id unchanged ──────────────────────────
@@ -587,6 +788,71 @@ describe("POST /api/tests — Zod validation", () => {
     expect(payload.test.status).toBe("published");
     expect(payload.test.telemetryEnabled).toBe(true);
     expect(payload.test.feedbackJson).toMatchObject({ format: "plain", text: "Well done" });
+  });
+});
+
+// ─── POST /api/tests — оформление, выбранное до первого сохранения ───────────
+//
+// Автор выбирает шаблон во вкладке «Оформление» ещё в форме создания. Выбор едет
+// тем же телом, что и остальной черновик: системные страницы теста связывает с
+// шаблоном та же транзакция, и «доехать позже» для них поздно.
+describe("POST /api/tests — designSettingsJson.templateId", () => {
+  let app: express.Express;
+
+  const corporate = {
+    id: "corporate",
+    name: "Корпоративный",
+    version: "1.2.0",
+    templateApiVersion: "1.0",
+    isActive: true,
+    manifest: { params: [] },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbRows.current = [];
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTestSections.mockResolvedValue([]);
+    serviceMock.create.mockResolvedValue(dbTest);
+    app = makeApp();
+  });
+
+  it("201 — штампует версию выбранного шаблона в designSettingsJson", async () => {
+    dbRows.current = [corporate];
+    const res = await asAuthor(request(app).post("/api/tests").send({
+      title: "С шаблоном",
+      sections: [{ topicId: "t1", drawCount: 3 }],
+      designSettingsJson: { templateId: "corporate" },
+    }));
+    expect(res.status).toBe(201);
+    const [payload] = serviceMock.create.mock.calls[0] as [{ test: Record<string, unknown> }];
+    expect(payload.test.designSettingsJson).toEqual({
+      templateId: "corporate",
+      templateVersion: "1.2.0",
+      templateApiVersion: "1.0",
+      params: {},
+    });
+  });
+
+  it("422 — шаблон не найден или выключен: тест не создаётся", async () => {
+    dbRows.current = [];
+    const res = await asAuthor(request(app).post("/api/tests").send({
+      title: "С мёртвым шаблоном",
+      sections: [{ topicId: "t1", drawCount: 3 }],
+      designSettingsJson: { templateId: "ghost" },
+    }));
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("templateId");
+    expect(serviceMock.create).not.toHaveBeenCalled();
+  });
+
+  it("201 — без выбора оформление не пишется вовсе (колонка остаётся умолчанием)", async () => {
+    await asAuthor(request(app).post("/api/tests").send({
+      title: "Без шаблона",
+      sections: [{ topicId: "t1", drawCount: 3 }],
+    }));
+    const [payload] = serviceMock.create.mock.calls[0] as [{ test: Record<string, unknown> }];
+    expect(payload.test.designSettingsJson).toBeUndefined();
   });
 });
 

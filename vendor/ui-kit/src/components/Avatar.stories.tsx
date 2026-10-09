@@ -54,7 +54,7 @@ export const BrandLogo: Story = {
   render: () => (
     <div className="ou-story-row">
       {(['xs', 's', 'm', 'l', 'xl', '2xl'] as const).map(s => (
-        <Avatar key={s} size={s} shape="rt" src="/assets/logo-mark.svg" alt="UniversityRT" />
+        <Avatar key={s} size={s} shape="rt" src="/assets/logo-mark.svg" alt="Skillum" />
       ))}
     </div>
   ),

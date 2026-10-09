@@ -12,6 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { db, closeDatabaseConnection } from "../../server/db";
 import { users, userRoles, topics, questions } from "../../shared/schema";
+import { computePsychoHash } from "../../shared/questions/psycho-hash";
 import { encryptEmail, hashEmail, hashPassword } from "../../server/utils/crypto";
 import { initConfig } from "../../server/config";
 import { loadEnv } from "../../server/config-loader.mjs";
@@ -108,7 +109,9 @@ async function seedDatabase(): Promise<void> {
   ];
 
   for (const q of [...iptvQuestions, ...wifiQuestions]) {
-    await db.insert(questions).values({ id: randomUUID(), ...q });
+    // PRD-66 FR-09a: демо-задания тоже получают отпечаток содержания — иначе засеянная
+    // база выглядит для психометрики пустой, и проверять расчёты на ней нечем.
+    await db.insert(questions).values({ id: randomUUID(), ...q, psychoHash: computePsychoHash(q) });
   }
 
   console.log(`[seed] Seeded admin (${adminEmail}) + learner (${learnerEmail}), 2 topics, 12 questions.`);

@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import { cn, cssStyleClass } from '../utils';
 
-/* UniversityRT · Ranking — drag-to-reorder list for test questions.
+/* Skillum · Ranking — drag-to-reorder list for test questions.
  *
  * Two answer affordances are always present (drag + ↑/↓ buttons), but
  * the buttons can be hidden via `showControls={false}` if the surrounding

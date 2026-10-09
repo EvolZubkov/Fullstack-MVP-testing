@@ -19,7 +19,10 @@ import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/re
 import type { Folder } from "@shared/schema";
 
 const { toastSpy } = vi.hoisted(() => ({ toastSpy: vi.fn() }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import {
   GroupMoveModal,
@@ -114,7 +117,7 @@ describe("GroupMoveModal — apply", () => {
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          variant: "destructive",
+          tone: "error",
           description: "Нельзя перенести папку внутрь себя или своего потомка",
         }),
       ),
@@ -329,6 +332,6 @@ describe("GroupDeleteFlow — dry-run → execute", () => {
     const onClose = vi.fn();
     render(<GroupDeleteFlow open topicIds={["t1"]} canForce onClose={onClose} onDone={() => {}} />);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" }));
   });
 });

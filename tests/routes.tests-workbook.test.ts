@@ -46,6 +46,8 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     upsertQuestionMeasurements: vi.fn(),
     // export
     getTestSections: vi.fn(),
+    // Техдолг №8: зависимость темы от пункта-сценария книга сверяет с пунктами теста.
+    getTestScenarios: vi.fn(),
     getQuestions: vi.fn(),
     getQuestionMeasurements: vi.fn(),
     // PRD-48 §4.1: «Папка» of the settings sheet is resolved from the folder tree;
@@ -65,6 +67,7 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getContentPages: vi.fn().mockResolvedValue([]),
     createContentPage: vi.fn(),
     updateContentPage: vi.fn(),
+    reorderContentPages: vi.fn(),
     deleteContentPage: vi.fn(),
   },
   // FR-16: the structure pass applies sections via testSettingsService.save.
@@ -252,6 +255,7 @@ beforeEach(() => {
   // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную связь
   // раздела, которого книга не назвала. По умолчанию тест-приёмник разделов не имеет.
   storageMock.getTestSections.mockResolvedValue([]);
+  storageMock.getTestScenarios.mockResolvedValue([]);
   // Адаптивных настроек у теста по умолчанию нет.
   storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
   storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
@@ -375,7 +379,7 @@ describe("POST /:id/workbook/import — ошибки и валидация", () 
     expect(storageMock.upsertQuestionMeasurements).not.toHaveBeenCalled();
   });
 
-  it("второй показатель с тем же controlsStatus → ошибка (гард ≤1)", async () => {
+  it("два показателя с одним controlsStatus импортируются оба (вердикты объединяются через ИЛИ)", async () => {
     const buf = await makeWorkbook({
       "Показатели": [
         { "Имя": "a", "Метка": "A", "Тип": "boolean", "Формула": "x", "Управляет статусом": "успех" },
@@ -384,8 +388,8 @@ describe("POST /:id/workbook/import — ошибки и валидация", () 
     });
     const res = await postWorkbook(buf);
 
-    expect(res.body.resultVariables.created).toBe(1);
-    expect(res.body.errors.some((e: string) => /success|управляет/i.test(e))).toBe(true);
+    expect(res.body.resultVariables.created).toBe(2);
+    expect(res.body.errors.some((e: string) => /управляет/i.test(e))).toBe(false);
   });
 
   it("невалидная формула → ошибка строки", async () => {
@@ -435,7 +439,7 @@ describe("POST /:id/workbook/import?dryRun=true — счётчики всех л
     return makeWorkbook({
       "Настройки": [
         { "Параметр": "Лимит времени теста", "Значение": "45" },
-        { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
+        { "Параметр": "Тип сценария", "Значение": "Линейный по темам" },
       ],
       "Вопросы": [questionRow],
       "Шкалы": [scaleRow],
@@ -637,7 +641,7 @@ describe("POST /:id/workbook/import — предпросмотр обещает 
   function book(): Promise<Buffer> {
     return makeWorkbook({
       "Настройки": [
-        { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
+        { "Параметр": "Тип сценария", "Значение": "Линейный по темам" },
         { "Параметр": "Лимит времени теста", "Значение": "45" },
       ],
       "Вопросы": [questionRow],
@@ -751,7 +755,7 @@ describe("POST /:id/workbook/import — предпросмотр обещает 
     const buf = await makeWorkbook({
       "Настройки": [
         { "Параметр": "Режим теста", "Значение": "Адаптивный" },
-        { "Параметр": "Сценарий прохождения", "Значение": "Линейный" },
+        { "Параметр": "Тип сценария", "Значение": "Линейный" },
       ],
       "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }],
     });
@@ -766,6 +770,35 @@ describe("POST /:id/workbook/import — предпросмотр обещает 
 
     expect(preview.body.errors.length).toBeGreaterThan(0);
     expect(preview.body.errors).toEqual(applied.body.errors);
+  });
+
+  // Сертификационный тест, 2026-10-01: «Итоги» приёмника стояли на 17, а созданная
+  // книгой «Как читать отчёт» получила номер строки листа — 2 — и ушла ПЕРЕД итогами.
+  it("страница за «Итогами» остаётся за ними: зона нумеруется в одной системе", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Итоги", "Номер": 1,
+          "Вариант": "results.default", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 2,
+          "Вариант": "info.wide", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+      ],
+    });
+    storageMock.getContentPages.mockImplementation(async () => [
+      { ...page("p-results", "results", null, "results.default"), sortOrder: 17 },
+    ]);
+    storageMock.createContentPage.mockImplementation(async (created: any) => ({ id: "p-howto", ...created }));
+
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(storageMock.reorderContentPages).toHaveBeenCalledWith([
+      { id: "p-results", sortOrder: 1 },
+      { id: "p-howto", sortOrder: 2 },
+    ]);
   });
 
   it("предпросмотр по-прежнему ничего не пишет", async () => {
@@ -1591,13 +1624,10 @@ describe("GET /:id/workbook/export — обратная связь и реком
     expect(res.status).toBe(200);
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
 
+    // PRD-61 §10: строки уровня «Тест» книга больше не выгружает — остаётся раздел.
     const fbRows = sheetToObjects(wb.getWorksheet("Обратная связь")!);
-    expect(fbRows).toHaveLength(2);
+    expect(fbRows).toHaveLength(1);
     expect(fbRows[0]).toMatchObject({
-      "Кому": "Тест", "Формат": "Простой", "Текст": "Общий отзыв по тесту",
-    });
-    expect(String(fbRows[0]["Раздел"] ?? "")).toBe("");
-    expect(fbRows[1]).toMatchObject({
       "Кому": "Раздел", "Раздел": "JavaScript", "Формат": "HTML", "Текст": "<b>Отзыв по теме</b>",
     });
 
@@ -1609,9 +1639,6 @@ describe("GET /:id/workbook/export — обратная связь и реком
       ),
     );
     expect(recRows).toEqual([
-      { "Кому": "Тест", "Раздел": "", "Тип": "Курс", "Заголовок": "Курс по JS", "Ссылка": "https://example.test/js" },
-      { "Кому": "Тест", "Раздел": "", "Тип": "Материал", "Заголовок": "Памятка", "Ссылка": "https://example.test/memo.pdf" },
-      { "Кому": "Тест", "Раздел": "", "Тип": "Мероприятие", "Заголовок": "Вебинар", "Ссылка": "" },
       {
         "Кому": "Раздел", "Раздел": "JavaScript", "Тип": "Курс",
         "Заголовок": "Курс по замыканиям", "Ссылка": "https://example.test/closures",
@@ -1621,6 +1648,52 @@ describe("GET /:id/workbook/export — обратная связь и реком
     // Раздел выгружен ИМЕНЕМ темы: идентификатор на другом стенде не найдёт никого.
     expect(JSON.stringify(fbRows)).not.toContain(jsTopic.id);
     expect(JSON.stringify(recRows)).not.toContain(jsTopic.id);
+  });
+
+  // PRD-50 FR-50: подтема — четвёртый владелец обратной связи, адресуется «Разделом» плюс
+  // «Подтемой». Её строка идёт сразу за своим разделом: адрес начинается с него, и книга
+  // читается сверху вниз, а не прыжками.
+  it("пишет строку на каждую подтему раздела, адресуя её темой и тегом", async () => {
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: jsTopic.id, drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: null, drawBlueprintJson: null, feedbackJson: sectionFeedback,
+        breakdownFeedbackJson: {
+          axis: "tag",
+          keys: {
+            "замыкания": {
+              format: "plain",
+              text: "Повторите замыкания",
+              links: [{ title: "Курс по замыканиям", url: "https://example.test/cl" }],
+              assets: [],
+              events: [],
+            },
+          },
+        },
+      },
+    ]);
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+
+    const fbRows = sheetToObjects(wb.getWorksheet("Обратная связь")!);
+    expect(fbRows).toHaveLength(2);
+    expect(fbRows[1]).toMatchObject({
+      "Кому": "Подтема",
+      "Раздел": "JavaScript",
+      "Подтема": "замыкания",
+      "Формат": "Простой",
+      "Текст": "Повторите замыкания",
+    });
+
+    // Рекомендации подтемы адресуются тем же адресом: без него строка не найдёт владельца.
+    const recRows = sheetToObjects(wb.getWorksheet("Рекомендации")!);
+    const keyRow = recRows.find((r: any) => String(r["Кому"] ?? "") === "Подтема");
+    expect(keyRow).toMatchObject({
+      "Раздел": "JavaScript",
+      "Подтема": "замыкания",
+      "Тип": "Курс",
+      "Заголовок": "Курс по замыканиям",
+    });
   });
 
   // Порядок листов описывает тест сверху вниз: обратная связь принадлежит структуре,
@@ -2161,7 +2234,7 @@ describe("Round-trip: обратная связь и рекомендации ч
     storageMock.getQuestionMeasurements.mockResolvedValue([]);
   });
 
-  it("книга переносит обратную связь теста и раздела со всеми рекомендациями в другой тест", async () => {
+  it("книга переносит обратную связь РАЗДЕЛА со всеми рекомендациями в другой тест", async () => {
     const exportRes = await getExport();
     expect(exportRes.status).toBe(200);
 
@@ -2179,7 +2252,8 @@ describe("Round-trip: обратная связь и рекомендации ч
 
     const [savedTestId, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
     expect(savedTestId).toBe("test-2");
-    expect(payload.test.feedbackJson).toEqual(testFeedback);
+    // PRD-61 §10: уровень «Тест» книга не выгружает, поэтому и переносить его нечем.
+    expect(payload.test.feedbackJson).toBeUndefined();
     expect(payload.sections).toHaveLength(1);
     expect(payload.sections[0].topicId).toBe(jsTopic.id);
     expect(payload.sections[0].feedbackJson).toEqual(sectionFeedback);
@@ -2218,6 +2292,76 @@ describe("Round-trip: экспорт → реимпорт", () => {
         expect.objectContaining({ scaleId: "s-1", sourceType: "option", sourceKey: "1", valueJson: 3 }),
       ]),
     );
+  });
+});
+
+// ─── PRD-50 FR-11: блоки итогов ──────────────────────────────────────────────
+
+describe("POST /:id/workbook/import — блоки итогов", () => {
+  const structureRow = (group?: string) => ({
+    "Раздел": "JavaScript", "Вопросов в выборке": "5",
+    ...(group === undefined ? {} : { "Блок итогов": group }),
+  });
+
+  it("книга объявляет блоки и раздаёт разделы по ним", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Настройки": [{ "Параметр": "Блоки итогов", "Значение": "Теория; Практика" }],
+      "Структура": [structureRow("Практика")],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const payload = testSettingsMock.save.mock.calls[0][1];
+    // Ключи заводит импорт: в книге их нет, автор видит только названия.
+    expect(payload.test.sectionGroupsJson).toEqual([
+      { key: "block-1", label: "Теория", order: 0 },
+      { key: "block-2", label: "Практика", order: 1 },
+    ]);
+    expect(payload.sections[0].groupKey).toBe("block-2");
+  });
+
+  it("блок, которого нет в списке, — ошибка, а не молчаливое «вне блоков»", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Настройки": [{ "Параметр": "Блоки итогов", "Значение": "Теория" }],
+      "Структура": [structureRow("Практика")],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /Практика/.test(e) && /Блоки итогов/.test(e))).toBe(true);
+  });
+
+  it("книга без колонки не разбирает блоки теста по одному разделу", async () => {
+    // Книга, выгруженная до появления колонки: «Структура» переписывает разделы целиком,
+    // и без переноса членство блока стёрлось бы молча.
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 5, sortOrder: 0, required: true, groupKey: "block-7" },
+    ]);
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [structureRow()],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(testSettingsMock.save.mock.calls[0][1].sections[0].groupKey).toBe("block-7");
+  });
+
+  it("пустая ячейка при наличии колонки выводит раздел из блока", async () => {
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 5, sortOrder: 0, required: true, groupKey: "block-7" },
+    ]);
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      // Колонка есть у СОСЕДНЕЙ строки-заголовка: значение пустое, а сама колонка объявлена.
+      "Структура": [structureRow("")],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(testSettingsMock.save.mock.calls[0][1].sections[0].groupKey).toBeNull();
   });
 });
 
@@ -2306,7 +2450,7 @@ describe("POST /:id/workbook/import — сценарий прохождения 
     id: "t-fin", name: "Финансы", description: null, folderId: null, createdAt: new Date(),
   };
   const structureRow = { "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 2 };
-  const flowRow = (value: string) => ({ "Параметр": "Сценарий прохождения", "Значение": value });
+  const flowRow = (value: string) => ({ "Параметр": "Тип сценария", "Значение": value });
 
   /** Аргумент `test` единственного вызова save. */
   const savedTest = () =>
@@ -2790,6 +2934,64 @@ describe("POST /:id/workbook/import — обратная связь и реко�
         events: [],
       });
     });
+
+    // Та же ловушка, но между ПОЛЯМИ одного листа: «Толкование» появилось в контракте
+    // 3.9.0, и книга прежнего формата называет обратную связь раздела, ничего не говоря
+    // о его толковании. Судить оба поля по одному признаку «раздел назван» значило бы
+    // стереть тексты, которых автор этой книги в глаза не видел.
+    it("книга прежнего формата заменяет обратную связь и сохраняет толкования", async () => {
+      storageMock.getTestSections.mockResolvedValue([
+        {
+          ...existingSection,
+          interpretationJson: { format: "plain", text: "Толкование темы теста" },
+          breakdownInterpretationJson: {
+            axis: "tag",
+            keys: { "Замыкания": { format: "plain", text: "Толкование подтемы" } },
+          },
+        },
+      ]);
+      const buf = await makeWorkbook({
+        "Структура": structureRows,
+        "Обратная связь": [
+          { "Кому": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "Новый отзыв" },
+        ],
+      });
+      const res = await postWorkbook(buf);
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toEqual([]);
+      const payload = testSettingsMock.save.mock.calls[0][1] as any;
+      expect(payload.sections[0].feedbackJson).toMatchObject({ text: "Новый отзыв" });
+      expect(payload.sections[0].interpretationJson).toEqual({
+        format: "plain",
+        text: "Толкование темы теста",
+      });
+      expect(payload.sections[0].breakdownInterpretationJson).toEqual({
+        axis: "tag",
+        keys: { "Замыкания": { format: "plain", text: "Толкование подтемы" } },
+      });
+    });
+
+    it("книга нынешнего формата с пустой ячейкой толкование снимает", async () => {
+      storageMock.getTestSections.mockResolvedValue([
+        { ...existingSection, interpretationJson: { format: "plain", text: "Было" } },
+      ]);
+      const buf = await makeWorkbook({
+        "Структура": structureRows,
+        "Обратная связь": [
+          {
+            "Кому": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "Новый отзыв",
+            "Формат толкования": "", "Толкование": "",
+          },
+        ],
+      });
+      const res = await postWorkbook(buf);
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toEqual([]);
+      const payload = testSettingsMock.save.mock.calls[0][1] as any;
+      expect(payload.sections[0].interpretationJson).toBeNull();
+    });
   });
 
   // Книга без «Структуры» разделы не переписывает — применить обратную связь разделу
@@ -2823,7 +3025,7 @@ describe("POST /:id/workbook/import — разблокировка раздел�
   const mainTopic = {
     id: "t-main", name: "Основной", code: null, description: null, folderId: null, createdAt: new Date(),
   };
-  const routerRow = { "Параметр": "Сценарий прохождения", "Значение": "Через страницу-маршрутизатор" };
+  const routerRow = { "Параметр": "Тип сценария", "Значение": "Через страницу-маршрутизатор" };
 
   beforeEach(() => {
     storageMock.getTopics.mockResolvedValue([introTopic, mainTopic]);
@@ -2847,6 +3049,38 @@ describe("POST /:id/workbook/import — разблокировка раздел�
       mode: "after_sections_completed",
       sectionIds: [introTopic.id],
     });
+  });
+
+  // Техдолг №8: тема может открываться после пункта-сценария. Книга сценариев не знает и выгружает
+  // такую зависимость ключом пункта — загрузка той же книги не должна её ронять.
+  it("зависимость от пункта-сценария этого теста возвращается ключом пункта", async () => {
+    storageMock.getTestScenarios.mockResolvedValue([{ id: "sc-1", testId: "t1", topicId: "bank" }]);
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [
+        { "Раздел": "Основной", "Порядок": 1, "Вопросов в выборке": 1, "Доступность раздела": "После успешного прохождения выбранных разделов", "Зависит от разделов": "scenario:sc-1" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const flow = (testSettingsMock.save.mock.calls[0][1] as any).test.flowPolicyJson;
+    expect(flow.router.sectionUnlockRules[mainTopic.id]).toEqual({
+      mode: "after_sections_passed",
+      sectionIds: ["scenario:sc-1"],
+    });
+  });
+
+  it("ключ чужого или исчезнувшего пункта-сценария — ошибка строки, как неизвестное имя", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [
+        { "Раздел": "Основной", "Порядок": 1, "Вопросов в выборке": 1, "Доступность раздела": "После успешного прохождения выбранных разделов", "Зависит от разделов": "scenario:gone" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /scenario:gone/.test(e))).toBe(true);
   });
 
   // Молча выброшенная зависимость ОТКРЫЛА бы раздел, который должен быть закрыт.
@@ -2901,7 +3135,7 @@ describe("POST /:id/workbook/import — отказ службы настроек
     const buf = await makeWorkbook({
       "Настройки": [
         { "Параметр": "Режим теста", "Значение": "Адаптивный" },
-        { "Параметр": "Сценарий прохождения", "Значение": "Линейный" },
+        { "Параметр": "Тип сценария", "Значение": "Линейный" },
       ],
       "Структура": [{ "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 2 }],
     });
@@ -3771,7 +4005,7 @@ describe("Адаптивные уровни: выгрузка и загрузк�
     const adaptiveBook = (sheets: Record<string, Record<string, unknown>[]>) => makeWorkbook({
       "Настройки": [
         { "Параметр": "Режим теста", "Значение": "Адаптивный" },
-        { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
+        { "Параметр": "Тип сценария", "Значение": "Линейный по темам" },
       ],
       "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4 }],
       ...sheets,

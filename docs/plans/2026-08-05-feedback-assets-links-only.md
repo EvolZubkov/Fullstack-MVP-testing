@@ -393,7 +393,7 @@ media-ref и обычный внешний URL.
     ModalDialog,
     SegmentedControl,
     Textarea,
-  } from "@universityrt/ui-kit";
+  } from "@skillum/ui-kit";
   import type { FeedbackAsset } from "../test-editor.types";
 
   // ─── Public types ────────────────────────────────────────────────────────────

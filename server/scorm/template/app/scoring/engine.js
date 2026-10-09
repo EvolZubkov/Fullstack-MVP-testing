@@ -8,6 +8,31 @@
  * Absent / `exact` scoring keeps the legacy 0/1 result (FR-02).
  */
 var ScoringEngine = (function () {
+  /** Пакет считает без бюджета — медленные выражения не запускаются (PRD-57 FR-28q). */
+  var SKIP_SLOW = { skipSlow: true };
+
+
+  // PRD-57 FR-24c, FR-26: исходы пропусков. Пропуск БЕЗ правил в счёт не идёт вовсе —
+  // это несделанная работа автора, и участник за неё не отвечает. Незаполненный пропуск
+  // не «лишний»: x считает ошибки, а не пробелы.
+  function blankTallies(correct, answer) {
+    var sets = (correct && Array.isArray(correct.blanks)) ? correct.blanks : [];
+    var written = (answer && typeof answer === 'object' && !Array.isArray(answer)) ? answer : {};
+    var c = 0;
+    var x = 0;
+    var total = 0;
+    for (var i = 0; i < sets.length; i++) {
+      var set = sets[i];
+      if (!set || !Array.isArray(set.rules) || set.rules.length === 0) continue;
+      total += 1;
+      var value = written[set.id];
+      if (typeof value !== 'string' || value.replace(/^\s+|\s+$/g, '') === '') continue;
+      if (typeof TBTemplate === 'undefined' || !TBTemplate.checkRuleSet) continue;
+      if (TBTemplate.checkRuleSet(set, value, undefined, SKIP_SLOW).passed) c += 1; else x += 1;
+    }
+    return { c: c, x: x, total: total };
+  }
+
   function clamp01(v) {
     return Math.max(0, Math.min(1, v));
   }
@@ -24,6 +49,24 @@ var ScoringEngine = (function () {
     // correctness is the same comparison (mirrors shared/scoring/engine.ts).
     if (typeof TBQType !== 'undefined' ? TBQType.isSingleIndexChoice(type) : type === 'single') {
       return answer === correct.correctIndex ? 1 : 0;
+    }
+    // PRD-57 §6.5. The comparison itself is NOT reimplemented here: it arrives with the
+    // shared runtime bundle (`TBTemplate`), which `server/scorm/index.ts` prepends before
+    // this file, the same way `TBQType` does. A second copy would mean the author saved a
+    // rule the learner was never checked against (FR-28s).
+    if (typeof TBQType !== 'undefined' && TBQType.isTextEntry(type)) {
+      if (typeof answer !== 'string') return 0;
+      if (typeof TBTemplate === 'undefined' || !TBTemplate.checkRuleSet) return 0;
+      // PRD-57 FR-28q: в пакете сравнение идёт в ОСНОВНОМ потоке, и прервать зависшее
+      // выражение там нечем. Поэтому правило, которое замер при сохранении уже назвал
+      // долгим, здесь не исполняется вовсе: ответ выйдет непроверенным, а не подвесит
+      // вкладку участника. У веб-хоста есть настоящий бюджет, и он этот признак не читает.
+      return TBTemplate.checkRuleSet(correct, answer, undefined, SKIP_SLOW).passed ? 1 : 0;
+    }
+    // PRD-57 FR-24: задание с пропусками верно, когда верны ВСЕ проверяемые пропуски.
+    if (typeof TBQType !== 'undefined' && TBQType.hasBlanks(type)) {
+      var bt = blankTallies(correct, answer);
+      return (bt.total > 0 && bt.c === bt.total) ? 1 : 0;
     }
     if (type === 'multiple') {
       var want = Array.isArray(correct.correctIndices) ? correct.correctIndices.slice() : [];
@@ -90,6 +133,20 @@ var ScoringEngine = (function () {
       }
       return { c: rc, x: rx, total: wantO.length };
     }
+    // PRD-57 FR-28aa4: единица счёта у написанного ответа — ПРАВИЛО. `c` — сколько
+    // правил выполнено, поэтому ступенчатая таблица над `c` платит по точности.
+    // Сравнение, как и везде, делегируется общему движку, а не повторяется здесь.
+    if (typeof TBQType !== 'undefined' && TBQType.hasBlanks(type)) return blankTallies(correct, answer);
+    if (typeof TBQType !== 'undefined' && TBQType.isTextEntry(type)) {
+      var tRules = (correct && Array.isArray(correct.rules)) ? correct.rules : [];
+      var tHits = 0;
+      if (typeof answer === 'string' && typeof TBTemplate !== 'undefined' && TBTemplate.checkRuleSet) {
+        var perRule = TBTemplate.checkRuleSet(correct, answer, undefined, SKIP_SLOW).perRule || [];
+        for (var ti = 0; ti < perRule.length; ti++) if (perRule[ti]) tHits += 1;
+      }
+      var tMiss = (typeof answer === 'string' && answer !== '' && tHits === 0) ? 1 : 0;
+      return { c: tHits, x: tMiss, total: tRules.length || 1 };
+    }
     // single: one correct option.
     var sc = exactCorrect('single', correct, answer);
     return { c: sc, x: (answer !== null && answer !== undefined) ? 1 - sc : 0, total: 1 };
@@ -117,12 +174,44 @@ var ScoringEngine = (function () {
     return true;
   }
 
+  // Index of the first tier whose predicate holds — the row that pays, since the
+  // step table is priority-ordered. null when no row applies (non-tiered method,
+  // unanswered question, implicit «иначе → 0»). Mirrors firstMatchingTier in the
+  // TS source; the golden port test keeps the two bit-identical.
+  function firstMatchingTier(input) {
+    var scoring = input.scoring;
+    var answer = input.answer;
+    if (!scoring || scoring.kind !== 'tiered') return null;
+    if (answer === null || answer === undefined) return null;
+    var tiers = Array.isArray(scoring.tiers) ? scoring.tiers : [];
+    var counters = countTallies(input.type, input.correct || {}, answer);
+    for (var i = 0; i < tiers.length; i++) {
+      if (evalPredicate(tiers[i].when, counters)) return i;
+    }
+    return null;
+  }
+
   function scoreAnswer(input) {
     var type = input.type;
     var correct = input.correct || {};
     var answer = input.answer;
     var scoring = input.scoring;
     var kind = (scoring && scoring.kind) || 'exact';
+
+    // «Сценарий в ИС»: эталона нет — долю цены даёт исход прогона за вычетом штрафов. Счёт НЕ
+    // повторяется здесь: он приходит из общего бандла (`TBTemplate.simulationRatio`,
+    // `shared/sim/scoring`), как сравнение текстовых ответов, — вторая копия разошлась бы.
+    if (typeof TBQType !== 'undefined' && TBQType.isSimulation(type)) {
+      // Штрафы и «засчитывать частичное» запечены в вопрос уже разрешёнными по цепочке
+      // система → тест → вопрос (`scoring.kind === 'simulation'`); без них — системные умолчания.
+      var sim = scoring && scoring.kind === 'simulation' ? scoring : null;
+      var simRatio = (typeof TBTemplate !== 'undefined' && TBTemplate.simulationRatio)
+        ? (sim
+          ? TBTemplate.simulationRatio(answer, sim.penalties, sim.countPartial !== false)
+          : TBTemplate.simulationRatio(answer))
+        : 0;
+      return { score: simRatio, sMax: 1, ratio: simRatio };
+    }
 
     if (kind === 'weighted') {
       var weights = (scoring && Array.isArray(scoring.weights)) ? scoring.weights : [];
@@ -138,13 +227,8 @@ var ScoringEngine = (function () {
     if (kind === 'tiered') {
       var tiers = (scoring && Array.isArray(scoring.tiers)) ? scoring.tiers : [];
       var tMax = (scoring && scoring.sMax) || maxOf(tiers.map(function (t) { return t.score; }));
-      var tScore = 0;
-      if (answer !== null && answer !== undefined) {
-        var counters = countTallies(type, correct, answer);
-        for (var i = 0; i < tiers.length; i++) {
-          if (evalPredicate(tiers[i].when, counters)) { tScore = tiers[i].score; break; }
-        }
-      }
+      var hit = firstMatchingTier(input);
+      var tScore = hit !== null ? tiers[hit].score : 0;
       tScore = Math.max(0, tScore);
       return { score: tScore, sMax: tMax, ratio: tMax > 0 ? clamp01(tScore / tMax) : 0 };
     }
@@ -170,6 +254,7 @@ var ScoringEngine = (function () {
     return {
       score: res.score, sMax: res.sMax, ratio: res.ratio, kind: kind,
       answered: isAnswered(input.type, input.answer), c: t.c, x: t.x, total: t.total,
+      tierIndex: firstMatchingTier(input),
     };
   }
 

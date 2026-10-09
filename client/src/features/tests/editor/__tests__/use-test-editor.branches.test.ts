@@ -116,43 +116,41 @@ afterEach(() => vi.unstubAllGlobals());
 describe("useTestEditor — tabOfField error attribution", () => {
   it("routes each field prefix to its owning tab (all arms + default fallback)", async () => {
     const errors: ValidationIssue[] = [
-      issue("sections", "error"), // → composition
-      issue("adaptive.topics", "error"), // → settings
-      issue("passRules.overall.value", "error"), // → settings
-      issue("runtime.timeLimit", "error"), // → settings
-      issue("retakePolicy.cooldown", "error"), // → settings
-      issue("basic.title", "error"), // → settings
-      issue("design.logo", "error"), // → design
-      issue("flow.mode", "error"), // → structure (left OR operand)
-      issue("structure.router", "error"), // → structure (right OR operand)
-      issue("scoring.default", "error"), // → scoring
-      issue("scales[0].key", "error"), // → scales
-      issue("resultVariables[0].name", "error"), // → metrics
-      issue("somethingUnknown", "error"), // → composition (fallback)
+      issue("sections", "error"), // → состав и сценарий
+      issue("adaptive.topics", "error"), // → состав и сценарий (лестница уровней)
+      issue("flow.mode", "error"), // → состав и сценарий (левая ветвь ИЛИ)
+      issue("structure.router", "error"), // → состав и сценарий (правая ветвь ИЛИ)
+      issue("passRules.overall.value", "error"), // → оценка результата (вердикт)
+      issue("scoring.default", "error"), // → оценка результата (цена ответа)
+      issue("scales[0].key", "error"), // → оценка результата (шкалы)
+      issue("resultVariables[0].name", "error"), // → оценка результата (показатели)
+      issue("runtime.timeLimit", "error"), // → правила прохождения
+      issue("retakePolicy.cooldown", "error"), // → правила прохождения
+      issue("basic.title", "error"), // → основное
+      issue("design.logo", "error"), // → оформление
+      issue("somethingUnknown", "error"), // → состав и сценарий (запасной адрес)
     ];
     const { result } = await renderWithValidation({ errors, warnings: [] });
     const s = result.current.tabStatuses;
 
     expect(s.composition.error).toBe(true);
-    expect(s.settings.error).toBe(true);
-    expect(s.design.error).toBe(true);
-    expect(s.structure.error).toBe(true);
+    expect(s.rules.error).toBe(true);
     expect(s.scoring.error).toBe(true);
-    expect(s.scales.error).toBe(true);
-    expect(s.metrics.error).toBe(true);
+    expect(s.main.error).toBe(true);
+    expect(s.design.error).toBe(true);
     // No warnings were injected — the warning flags stay clear.
-    expect(s.settings.warning).toBe(false);
+    expect(s.rules.warning).toBe(false);
   });
 
-  it("attributes the flow prefix to structure without warnings when only flow errs", async () => {
+  it("сценарий прохождения адресуется вкладке «Состав и сценарий»", async () => {
     const { result } = await renderWithValidation({
       errors: [issue("flowMode", "error")],
       warnings: [],
     });
     const s = result.current.tabStatuses;
-    expect(s.structure.error).toBe(true);
-    expect(s.composition.error).toBe(false);
-    expect(s.settings.error).toBe(false);
+    expect(s.composition.error).toBe(true);
+    expect(s.rules.error).toBe(false);
+    expect(s.main.error).toBe(false);
   });
 });
 
@@ -161,21 +159,20 @@ describe("useTestEditor — tabOfField error attribution", () => {
 describe("useTestEditor — buildTabStatuses warning loop", () => {
   it("flags the owning tab for each warning (no error flags when warnings-only)", async () => {
     const warnings: ValidationIssue[] = [
-      issue("adaptive.topics[0].levels", "warning"), // → settings
-      issue("scales[0]", "warning"), // → scales
-      issue("design.theme", "warning"), // → design
-      issue("resultVariables[1]", "warning"), // → metrics
+      issue("adaptive.topics[0].levels", "warning"), // → состав и сценарий
+      issue("scales[0]", "warning"), // → оценка результата
+      issue("design.theme", "warning"), // → оформление
+      issue("resultVariables[1]", "warning"), // → оценка результата
     ];
     const { result } = await renderWithValidation({ errors: [], warnings });
     const s = result.current.tabStatuses;
 
-    expect(s.settings.warning).toBe(true);
-    expect(s.scales.warning).toBe(true);
+    expect(s.composition.warning).toBe(true);
+    expect(s.scoring.warning).toBe(true);
     expect(s.design.warning).toBe(true);
-    expect(s.metrics.warning).toBe(true);
     // Warnings do not raise error flags.
-    expect(s.settings.error).toBe(false);
-    expect(s.scales.error).toBe(false);
+    expect(s.composition.error).toBe(false);
+    expect(s.scoring.error).toBe(false);
   });
 
   it("marks both error and warning on the same tab when both are present", async () => {

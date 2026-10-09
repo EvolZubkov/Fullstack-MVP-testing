@@ -62,3 +62,22 @@ describe("предпросмотр экрана итогов", () => {
     expect((result.scalesChart as { kind?: string } | undefined)?.kind).toBe("radar");
   });
 });
+
+describe("экран введения в предпросмотре шаблона (PRD-22 FR-42)", () => {
+  /** Манифест поставляемого шаблона — тот же файл, что читает предпросмотр. */
+  function manifest() {
+    return JSON.parse(
+      readFileSync("server/scorm/templates/default/manifest.json", "utf8"),
+    ) as Parameters<typeof buildScreenInputs>[1];
+  }
+
+  it("несёт подзаголовок раздела, иначе предпросмотр печатает карточку без надписи", () => {
+    const intro = buildScreenInputs(demoDataset(), manifest()).find(
+      (s) => s.layoutKey === "section-intro",
+    );
+
+    expect(intro, "экран введения не собрался — проверять нечего").toBeTruthy();
+    const page = (intro!.input.context as { page?: { sectionSubtitle?: string } }).page;
+    expect(page?.sectionSubtitle).toBe("Инструкция");
+  });
+});

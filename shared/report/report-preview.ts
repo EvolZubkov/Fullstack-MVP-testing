@@ -22,7 +22,15 @@
  */
 
 import type { AdaptiveReportInput, ReportInput, AdaptiveReportTopic } from "./report-html";
-import type { TopicInput } from "../template/result-context";
+// Ветвь отчёта выбирается ТЕМ ЖЕ правилом, что и в выдаче: предпросмотр, решающий иначе,
+// показывал бы не тот документ, что уйдёт в PDF.
+import { resolveReportIntro, type TestIntroLike } from "./report-intro";
+import type {
+  BreakdownDisplaySetting,
+  ResultHeadings,
+  TopicInput,
+} from "../template/result-context";
+import type { BarFillSetting } from "../template/bar-fill";
 
 /** Исход попытки, который показывает предпросмотр (FR-19). */
 export type ReportPreviewOutcome = "passed" | "failed";
@@ -33,6 +41,8 @@ export interface ReportPreviewSection {
   topicName: string;
   /** Сколько вопросов выдаётся из раздела; 0/отсутствие — берётся демонстрационное число. */
   questionCount?: number;
+  /** Группа тем, в которой стоит раздел; `null`/отсутствие — вне групп. */
+  groupKey?: string | null;
 }
 
 /** Структура редактируемого теста, на которой строится предпросмотр. */
@@ -41,6 +51,47 @@ export interface ReportPreviewTest {
   sections: ReportPreviewSection[];
   /** Лестница уровней адаптивного теста — названия по возрастанию. */
   levelNames?: string[];
+  /**
+   * Заголовки итога теста (свойства узла «Итоги теста»).
+   *
+   * Предпросмотр обязан их показывать: автор задаёт заголовок документа и смотрит, как он
+   * лёг, ИМЕННО в этом окне. Без них окно печатало название теста и «Тест не пройден» —
+   * то есть отвечало не на тот вопрос, ради которого его открыли.
+   */
+  headings?: ResultHeadings;
+  /**
+   * Настройка показа подытогов теста (`tests.breakdown_display_json`).
+   *
+   * Едет из РЕАЛЬНОГО теста, а не подставляется демонстрационной: печать полос и толкований
+   * подтем — авторский выбор, и предпросмотр, решающий его за автора, показал бы не тот
+   * документ, что уйдёт в PDF. Отсутствие = подытоги скрыты, как у теста без настройки.
+   */
+  breakdownDisplay?: BreakdownDisplaySetting;
+  /**
+   * Окраска полос подтем — из параметров оформления, которые автор правит в этом же окне
+   * настроек ({@link module:shared/template/bar-fill barFillFromParams}). Отсутствие =
+   * «по вердикту».
+   */
+  barFill?: BarFillSetting | null;
+  /**
+   * Группы тем теста (`tests.section_groups_json`).
+   *
+   * Блок со счётчиком — главная примета референсного вида, и предпросмотр без него
+   * показывал бы плоский список там, где слушатель получит блоки.
+   */
+  sectionGroups?: { key: string; label: string; order?: number }[];
+  /**
+   * Вводные блоки теста (`tests.intro_json`) — ЦЕЛИКОМ, обе ветви выдачи.
+   *
+   * Едут из РЕАЛЬНОГО теста, как и настройка подытогов выше: вводный текст автор пишет
+   * прямо перед тем, как открыть это окно, и не увидеть его здесь — значит проверять
+   * вёрстку вместо содержания. До PRD-61 окно не подавало `intro` вовсе, и это была одна
+   * из трёх его слепых зон.
+   *
+   * Какую ветвь взять, решает `resolveReportIntro` — то же правило, что и в выдаче; какой
+   * текст исхода напечатать, решает построитель по вердикту образца.
+   */
+  intro?: TestIntroLike | null;
 }
 
 /**
@@ -92,6 +143,33 @@ function demoCorrect(total: number, wantPass: boolean, i: number): number {
 /** Демонстрационная обратная связь непройденной темы — чтобы блок рекомендаций был виден. */
 const DEMO_FEEDBACK = "Демонстрационная рекомендация: повторите материал раздела.";
 
+/**
+ * Демонстрационное ТОЛКОВАНИЕ темы.
+ *
+ * Предпросмотр показывает раскладку, а не содержание теста («темы этого теста, показатели
+ * демонстрационные»), и без этого текста вариант блока со строкой в две колонки открывался
+ * бы пустой правой колонкой — то есть выглядел бы сломанным ровно там, где автор его и
+ * выбирает.
+ */
+/**
+ * Демонстрационные ПОДТЕМЫ: одна строка разреза на ключ.
+ *
+ * Без них правая колонка знаниевой темы в варианте «строка в две колонки» открывается
+ * пустой — то есть вариант выглядит сломанным ровно там, где автор его и выбирает. Доли
+ * разные намеренно: одинаковые полосы не показывают, чем строки отличаются.
+ */
+const DEMO_BREAKDOWN: { key: string; percent: number }[] = [
+  { key: "Демонстрационная подтема 1", percent: 40 },
+  { key: "Демонстрационная подтема 2", percent: 63 },
+  { key: "Демонстрационная подтема 3", percent: 85 },
+];
+
+const DEMO_KEY_INTERPRETATION =
+  "Демонстрационное толкование подтемы: что именно она проверяет.";
+
+const DEMO_INTERPRETATION =
+  "Демонстрационное толкование: что именно проверяет эта тема и что стоит за её результатом.";
+
 /** Сколько попыток «учитывает» подпись «Лучший результат за N попыток». */
 const DEMO_ATTEMPTS = 2;
 
@@ -122,6 +200,7 @@ export function buildReportPreviewInput(
     const passed = percent >= DEMO_TOPIC_THRESHOLD;
     return {
       ...(section.topicId ? { topicId: section.topicId } : {}),
+      ...(section.groupKey ? { groupKey: section.groupKey } : {}),
       topicName: section.topicName,
       correct,
       total,
@@ -132,6 +211,29 @@ export function buildReportPreviewInput(
       possiblePoints: total,
       passed,
       ...(passed ? {} : { feedback: DEMO_FEEDBACK }),
+      // Толкование печатается при ЛЮБОМ вердикте — в этом его отличие от рекомендации,
+      // и предпросмотр обязан показывать то же правило.
+      interpretation: { format: "plain", text: DEMO_INTERPRETATION },
+      // Полосы подтем: их печать включает настройка теста, и предпросмотр её не знает,
+      // поэтому записи едут всегда — показать их или нет, решает уже построитель.
+      breakdown: DEMO_BREAKDOWN.map(({ key, percent }) => ({
+        scope: "section:preview",
+        axis: "tag" as const,
+        key,
+        items: total,
+        answered: total,
+        earned: Math.round((total * percent) / 100),
+        possible: total,
+        unitEarned: Math.round((total * percent) / 100),
+        unitPossible: total,
+        percentPoints: percent,
+        percentUnits: percent,
+      })),
+      // Толкование ПОДТЕМЫ: печатать его или нет, решает настройка теста, поэтому текст
+      // едет всегда — иначе включённый показ было бы не на чем проверить.
+      breakdownInterpretation: {
+        [DEMO_BREAKDOWN[0].key]: { format: "plain" as const, text: DEMO_KEY_INTERPRETATION },
+      },
     };
   });
 
@@ -141,6 +243,12 @@ export function buildReportPreviewInput(
     testName: test.testName || "Тест",
     learnerName: PREVIEW_LEARNER_NAME,
     attemptsCount: DEMO_ATTEMPTS,
+    ...(test.headings ? { headings: test.headings } : {}),
+    ...(test.breakdownDisplay ? { breakdownDisplay: test.breakdownDisplay } : {}),
+    ...(test.barFill ? { barFill: test.barFill } : {}),
+    // PRD-61 FR-23: вводный блок отчёта. Текст исхода выберет построитель — по вердикту
+    // образца, который задаёт переключатель окна.
+    ...(resolveReportIntro(test.intro) ? { intro: resolveReportIntro(test.intro)! } : {}),
     result: {
       passed: outcome === "passed",
       percent: totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0,
@@ -149,6 +257,9 @@ export function buildReportPreviewInput(
       earnedPoints: correct,
       possiblePoints: totalQuestions,
       topicResults,
+      // Блоки разделов: их разбирает тот же построитель, что и в выдаче, поэтому счётчик
+      // в предпросмотре считается ровно так же, как его увидит слушатель.
+      ...(test.sectionGroups?.length ? { sectionGroups: test.sectionGroups } : {}),
     },
   };
 }
@@ -185,6 +296,9 @@ export function buildAdaptiveReportPreviewInput(
     testName: test.testName || "Тест",
     learnerName: PREVIEW_LEARNER_NAME,
     attemptsCount: DEMO_ATTEMPTS,
+    // PRD-61: вводный блок печатается и здесь, но БЕЗ текстов исхода — адаптивный режим
+    // вердикта не выносит (FR-14b), и построитель их не возьмёт.
+    ...(resolveReportIntro(test.intro) ? { intro: resolveReportIntro(test.intro)! } : {}),
     result: { passed: outcome === "passed", topicResults },
   };
 }

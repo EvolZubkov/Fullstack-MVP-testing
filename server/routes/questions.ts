@@ -14,8 +14,12 @@ import { requirePermission } from "../middleware/auth";
 import { rejectBase64MediaUrl, respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
 import { syncEntityUsages, canonicalizeEntityMedia, clearCascadedUsages } from "../services/media/usage-index";
 import { normalizeTags } from "@shared/tags";
-import { normalizeAuthorText } from "@shared/text";
-import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
+import { normalizeAuthorText, renderInlineMarkdown } from "@shared/text";
+import { normalizeOptionalText, normalizeQuestionData, normalizePromptByFormat } from "../services/question-text";
+import { promptFormatOf } from "@shared/questions/prompt-format";
+import { normalizeOptionFeedback, optionCountOf } from "@shared/questions/option-feedback";
+import type { SanitizeRemoval } from "@shared/security/html-sanitize";
+import { formulasFor, promptHtmlOf } from "../services/prompt-html";
 import { importQuestionRows } from "../services/questions-import";
 import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
@@ -34,6 +38,21 @@ import {
 import { allocationDataSchema } from "@shared/schema";
 import { distributesBudget } from "@shared/questions/question-type";
 import type { Question } from "@shared/schema";
+import { shortAnswerDataSchema } from "@shared/schema";
+import { isSimulation, isTextEntry } from "@shared/questions/question-type";
+import {
+  MAX_ARCHIVE_BYTES,
+  ScenarioArchiveError,
+  archiveFileName,
+  buildScenarioArchive,
+  scenarioMediaBytes,
+  importScenarioArchive,
+  storedScenarioErrors,
+} from "../services/sim/scenario-archive";
+import type { Scenario } from "@shared/sim/contract";
+import { summarizeScenario } from "@shared/sim/validate";
+import multer from "multer";
+import { config } from "../config";
 
 /**
  * PRD-44 FR-46: границы полей и ВЫПОЛНИМОСТЬ распределения проверяются на сервере,
@@ -45,11 +64,79 @@ import type { Question } from "@shared/schema";
  * невыполнимой, и вводить общую проверку «на всякий случай» значит менять поведение,
  * о котором PRD-44 не просил.
  */
+/**
+ * Положить в содержимое задания готовые формулы (PRD-57 FR-07).
+ *
+ * Пустой словарь НЕ кладётся: задание без формул обязано остаться байт в байт таким же,
+ * каким было, иначе хеш содержимого дрогнет у каждого вопроса в базе.
+ */
+function withFormulas(dataJson: unknown, prompt: string): unknown {
+  const formulas = formulasFor(prompt);
+  if (Object.keys(formulas).length === 0) return dataJson;
+  const base = (dataJson ?? {}) as Record<string, unknown>;
+  return { ...base, formulas };
+}
+
+/**
+ * Приложить к ответу то, что санитайзер вырезал из текста задания (согласованный эскиз
+ * `prd57-question-text.html`, состояние `s-diag`).
+ *
+ * Поле-спутник, а не колонка: оно описывает ЭТО сохранение, а не сам вопрос, и живёт ровно
+ * до следующей правки — тем же приёмом, каким страница содержимого отдаёт свою диагностику
+ * (`sanitizeDiagnostics` в `content-pages`). Пустой список не кладётся: ящик решает по
+ * НАЛИЧИЮ поля, и «вырезано ничего» не должно выглядеть как находка.
+ */
+function withSanitizeReport<T extends object>(question: T, removed: SanitizeRemoval[]): T {
+  if (removed.length === 0) return question;
+  return { ...question, promptSanitizeRemoved: removed };
+}
+
 function allocationConfigError(type: string | undefined, dataJson: unknown): string | null {
   if (!distributesBudget(type ?? "")) return null;
   const parsed = allocationDataSchema.safeParse(dataJson);
   if (parsed.success) return null;
   return parsed.error.issues.map((i) => i.message).join("; ");
+}
+
+/**
+ * PRD-57 FR-28v: авторский предел длины короткого ответа — в рамках системного потолка.
+ *
+ * Проверка живёт ЗДЕСЬ, а не в редакторе, потому что настройку инстанса знает только
+ * сервер: канала серверных настроек к браузеру в продукте нет. Без неё автор поставил бы
+ * предел 4000, а участник упёрся бы в 250 и не понял почему.
+ *
+ * Потолок назван в тексте ошибки числом: «слишком большой предел» заставляет автора
+ * подбирать значение наугад.
+ *
+ * Возвращает текст ошибки или `null`.
+ */
+function shortAnswerConfigError(type: string | undefined, dataJson: unknown): string | null {
+  if (!isTextEntry(type ?? "")) return null;
+  const parsed = shortAnswerDataSchema.safeParse(dataJson ?? {});
+  if (!parsed.success) {
+    return "Предел длины ответа — целое число больше нуля";
+  }
+  const ceiling = config.limits.shortAnswerMaxLength;
+  const own = parsed.data.maxLength;
+  if (own !== undefined && own > ceiling) {
+    return `Предел длины ответа не может превышать ${ceiling} символов`;
+  }
+  return null;
+}
+
+/**
+ * «Сценарий в ИС»: содержимое — сценарий контракта с изображениями из медиатеки.
+ *
+ * Те же проверки, что при загрузке архива (`shared/sim/validate`), в режиме хранимого
+ * сценария: ЗАПРОС может прийти и не из ящика, а принятый архив и сохранённый вопрос не
+ * имеют права расходиться в том, что считать годным сценарием.
+ *
+ * Возвращает текст ошибки или `null`.
+ */
+function scenarioConfigError(type: string | undefined, dataJson: unknown): string | null {
+  if (!isSimulation(type ?? "")) return null;
+  const errors = storedScenarioErrors(dataJson);
+  return errors.length ? errors.join("; ") : null;
 }
 
 // PRD-15 FR-02: fields whose change affects delivery or grading of dependent
@@ -108,6 +195,8 @@ interface CreateQuestionBody {
   topicId: string;
   type: "single" | "multiple" | "matching" | "ranking";
   prompt: string;
+  /** PRD-57 §4.3: в каком режиме автор набрал текст. Отсутствие = разметка. */
+  promptFormat?: "markdown" | "richText" | "html";
   dataJson: unknown;
   correctJson: unknown;
   difficulty?: number;
@@ -118,6 +207,11 @@ interface CreateQuestionBody {
   feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
+  /**
+   * Feedback texts of individual options (single choice only), aligned by position with
+   * `dataJson.options`; `null` = no override. Stored as NULL for every other type.
+   */
+  optionFeedbackJson?: Array<string | null> | null;
   /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
   tags?: string[];
   /**
@@ -141,6 +235,47 @@ interface ExportQuery {
 
 // Сериализация строки вопроса (экспорт) — server/services/questions-export.ts;
 // разбор (импорт) — server/services/questions-import.ts.
+
+// ============================================
+// GET /api/questions/scenario-banks — темы, служащие банками сценариев
+// ============================================
+//
+// Для вкладки «Задание» теста «Сценарий» и пункта-сценария роутера: какие темы можно выбрать
+// банком (в них есть хотя бы один сценарий) и что в каждой лежит — сводка сценария и вес его
+// изображений. Только видимые автору темы. Отдельный маршрут, а не общий список вопросов:
+// редактору теста незачем тянуть весь банк ради одного типа.
+router.get("/scenario-banks", requirePermission("questions.read"), async (req: Request, res: Response) => {
+  try {
+    const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const topics = await storage.getTopics();
+    const visibleTopics = topics.filter((topic) => scope.all || scope.ids.has(topic.id));
+    const banks = [];
+    for (const topic of visibleTopics) {
+      const scenarios = (await storage.getQuestionsByTopic(topic.id)).filter((q) => isSimulation(q.type));
+      if (scenarios.length === 0) continue;
+      banks.push({
+        topicId: topic.id,
+        topicName: topic.name,
+        scenarios: await Promise.all(
+          scenarios.map(async (q) => {
+            const scenario = (q.dataJson as { scenario: Scenario }).scenario;
+            return {
+              questionId: q.id,
+              summary: summarizeScenario(scenario),
+              mediaBytes: await scenarioMediaBytes(scenario),
+              // Для «Сыграть» фиксированного сценария прямо из ящика теста.
+              scenario,
+            };
+          }),
+        ),
+      });
+    }
+    res.json(banks);
+  } catch (error) {
+    logger.error("Get scenario banks error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to get scenario banks" });
+  }
+});
 
 // ============================================
 // GET /api/questions - Список вопросов
@@ -169,6 +304,38 @@ router.get("/", requirePermission("questions.read"), async (req: Request, res: R
 });
 
 // ============================================
+// POST /api/questions/preview - Разметка задания для предпросмотра (PRD-57 FR-24g)
+// ============================================
+//
+// Предпросмотр обязан показать то, что увидит участник, а увидит он подсвеченный листинг и
+// формулу картинкой. И подсветка (`highlight.js`), и MathJax живут ТОЛЬКО на сервере,
+// поэтому разметку для окна считает он же — тем самым `promptHtmlOf`, которым разметка
+// уходит на выдаче. Второй путь означал бы, что однажды предпросмотр покажет не то.
+//
+// Задание приходит НЕСОХРАНЁННЫМ: предпросмотр нужен до сохранения, ради этого он и есть.
+// Маршрут ничего не пишет и ничего не читает — чистое преобразование текста.
+router.post("/preview", requirePermission("questions.read"), async (req: Request, res: Response) => {
+  try {
+    const { prompt, dataJson, promptFormat } = req.body ?? {};
+    if (prompt !== undefined && typeof prompt !== "string") {
+      return res.status(400).json({ error: "Текст задания должен быть строкой" });
+    }
+    const text = typeof prompt === "string" ? prompt : "";
+    // Формулы считаются на месте: у несохранённого задания запаса картинок ещё нет, а
+    // показать формулу автору важнее, чем сэкономить на рендере одного окна.
+    // PRD-57 §4.3: предпросмотр обязан считать текст по ТОМУ ЖЕ формату, в каком автор его
+    // сейчас набирает, — иначе окно покажет HTML сырыми тегами, а разметку тегами не покажет.
+    const rendered = promptHtmlOf({ prompt: text, dataJson, promptFormat });
+    // Разметки нет — текст печатается тем же инлайновым рендером, каким его печатает
+    // хост, когда сервер не считал разметку заранее (см. `template-question-screen`).
+    res.json({ promptHtml: rendered.promptHtml ?? (text === "" ? "" : renderInlineMarkdown(text)) });
+  } catch (error) {
+    logger.error("Question preview error: " + (error as Error).message);
+    res.status(500).json({ error: "Не удалось собрать предпросмотр" });
+  }
+});
+
+// ============================================
 // POST /api/questions - Создать вопрос
 // ============================================
 router.post(
@@ -180,6 +347,7 @@ router.post(
         topicId,
         type,
         prompt,
+        promptFormat,
         dataJson,
         correctJson,
         difficulty,
@@ -190,6 +358,7 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        optionFeedbackJson,
         tags,
         orderIndex,
       } = req.body;
@@ -197,8 +366,12 @@ router.post(
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
       // Canonical form BEFORE the required-field check: a prompt of nothing but
-      // spaces is an empty prompt, not a filled one.
-      const canonicalPrompt = normalizeAuthorText(prompt);
+      // spaces is an empty prompt, not a filled one. Приводится ПО ФОРМАТУ (PRD-57 §4.3):
+      // у разметки — проход по строке, у размеченного текста — санитайзер и типографика
+      // по текстовым узлам.
+      const format = promptFormatOf({ promptFormat });
+      const canonical = normalizePromptByFormat(prompt ?? "", format);
+      const canonicalPrompt = canonical.prompt;
 
       if (!topicId || !type || !canonicalPrompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
@@ -215,13 +388,29 @@ router.post(
         return res.status(422).json({ error: allocationError, field: "dataJson" });
       }
 
+      const shortAnswerError = shortAnswerConfigError(type, dataJson);
+      if (shortAnswerError) {
+        return res.status(422).json({ error: shortAnswerError, field: "dataJson" });
+      }
+
+      const scenarioError = scenarioConfigError(type, dataJson);
+      if (scenarioError) {
+        return res.status(422).json({ error: scenarioError, field: "dataJson" });
+      }
+
       const questionInput = {
         topicId,
         type,
         prompt: canonicalPrompt,
-        dataJson: normalizeQuestionData(dataJson),
+        promptFormat: format,
+        // PRD-57 FR-07: готовые SVG формул кладутся В ЗАДАНИЕ. Требование прямое: при
+        // переносе теста между установками картинка едет вместе с вопросом, а не
+        // пересчитывается на приёмнике — иначе её вид зависит от версии библиотеки там.
+        dataJson: withFormulas(normalizeQuestionData(dataJson), canonicalPrompt),
         correctJson,
-        difficulty: difficulty || 50,
+        // PRD-16 FR-10: `null` — «Не задано», а не 50; ноль — сложность, а не пустота. Умолчание 50
+        // только для запроса, где поля нет вовсе. `||` подменял и то и другое.
+        difficulty: difficulty === undefined ? 50 : difficulty,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
         shuffleAnswers: shuffleAnswers ?? true,
@@ -229,6 +418,12 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
         feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
+        optionFeedbackJson: normalizeOptionFeedback(
+          optionFeedbackJson,
+          type,
+          optionCountOf(dataJson),
+          normalizeAuthorText,
+        ),
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
         // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index; absent
         // means «не задано» and stores NULL.
@@ -251,12 +446,84 @@ router.post(
         logger.error(`Media usage sync failed for question ${question.id}: ${(error as Error).message}`);
       }
 
-      res.status(201).json(question);
+      res.status(201).json(withSanitizeReport(question, canonical.removed));
     } catch (error) {
       logger.error("Create question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to create question" });
     }
   }
+);
+
+// ============================================
+// POST /api/questions/scenario-archive — принять архив сценария («Сценарий в ИС»)
+// ============================================
+//
+// Ящик вопроса присылает `.scenario.zip`; сервер проверяет контракт и, если ошибок нет,
+// кладёт изображения в медиатеку автора и возвращает готовое содержимое вопроса. Сам вопрос
+// здесь НЕ пишется: его сохраняет обычное «Создать»/«Обновить», и сценарий проходит ту же
+// проверку ещё раз — уже как хранимый.
+//
+// Ошибки сценария — не сбой запроса: ответ `200` с `ok: false` и перечнем, его показывает
+// ящик. `422` — только когда сам файл не прочитать (не ZIP, нет `scenario.json`).
+const scenarioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_ARCHIVE_BYTES } });
+
+router.post(
+  "/scenario-archive",
+  requirePermission("questions.manage"),
+  (req: Request, res: Response, next) =>
+    scenarioUpload.single("file")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: `Архив больше ${MAX_ARCHIVE_BYTES / 1024 / 1024} МБ`, maxBytes: MAX_ARCHIVE_BYTES });
+      }
+      next(err);
+    }),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Файл не передан" });
+      const result = await importScenarioArchive(req.file.buffer, req.currentUser?.id ?? "");
+      res.json(result);
+    } catch (error) {
+      if (error instanceof ScenarioArchiveError) {
+        return res.status(422).json({ error: error.message, ok: false, errors: [error.message], warnings: [] });
+      }
+      logger.error("Scenario archive import error: " + (error as Error).message);
+      res.status(500).json({ error: "Не удалось принять архив сценария" });
+    }
+  },
+);
+
+// ============================================
+// GET /api/questions/:id/scenario-archive — архив сценария, собранный из сохранённого
+// ============================================
+//
+// Исходный файл не хранится: архив собирается заново — сценарий и его изображения из
+// медиатеки, — поэтому загружается обратно сюда же или в другую установку.
+router.get(
+  "/:id/scenario-archive",
+  requirePermission("questions.read"),
+  async (req: Request, res: Response) => {
+    try {
+      const question = await storage.getQuestion(req.params.id);
+      if (!question || !isSimulation(question.type)) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+      if (!scope.all && !scope.ids.has(question.topicId)) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      const scenario = (question.dataJson as { scenario: Scenario }).scenario;
+      const archive = await buildScenarioArchive(scenario);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="scenario.zip"; filename*=UTF-8''${encodeURIComponent(archiveFileName(scenario.meta.title))}`,
+      );
+      res.send(archive);
+    } catch (error) {
+      logger.error("Scenario archive export error: " + (error as Error).message);
+      res.status(500).json({ error: "Не удалось собрать архив сценария" });
+    }
+  },
 );
 
 // ============================================
@@ -271,6 +538,7 @@ router.put(
         topicId,
         type,
         prompt,
+        promptFormat,
         dataJson,
         correctJson,
         difficulty,
@@ -281,6 +549,7 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        optionFeedbackJson,
         tags,
         orderIndex,
       } = req.body as UpdateQuestionBody;
@@ -313,6 +582,19 @@ router.put(
         if (allocationError) {
           return res.status(422).json({ error: allocationError, field: "dataJson" });
         }
+        // PRD-57 FR-28v: по той же причине — предел мог быть поднят правкой, а потолок
+        // инстанса мог быть понижен после заведения вопроса.
+        const shortAnswerError = shortAnswerConfigError(type ?? existing.type, dataJson);
+        if (shortAnswerError) {
+          return res.status(422).json({ error: shortAnswerError, field: "dataJson" });
+        }
+      }
+      // Смена типа НА сценарий без нового содержимого оставила бы под типом чужие данные.
+      if (dataJson !== undefined || (type !== undefined && type !== existing.type)) {
+        const scenarioError = scenarioConfigError(type ?? existing.type, dataJson ?? existing.dataJson);
+        if (scenarioError) {
+          return res.status(422).json({ error: scenarioError, field: "dataJson" });
+        }
       }
       let feasibilityWarnings: unknown[] = [];
       const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
@@ -336,14 +618,29 @@ router.put(
         return respondDryRun(req, res, { blocking: [], warnings: [] });
       }
 
+      // PRD-57 §4.3: правка приходит В СВОЁМ формате. Формат, которого клиент не прислал,
+      // берётся у самого задания — иначе текст, набранный разметкой, прошёл бы очистку по
+      // правилам HTML (или наоборот), и автор получил бы чужую канонизацию своего текста.
+      const editFormat = promptFormatOf({ promptFormat: promptFormat ?? existing.promptFormat });
+      const canonical = typeof prompt === "string"
+        ? normalizePromptByFormat(prompt, editFormat)
+        : null;
+      const canonicalEdit = canonical?.prompt;
+
       const questionUpdate = {
         topicId,
         type,
         // A field the client did not send stays `undefined` — the storage layer
         // reads that as «leave unchanged», so normalisation must not turn it
         // into an empty string.
-        prompt: normalizeOptionalText(prompt),
-        dataJson: normalizeQuestionData(dataJson),
+        prompt: canonicalEdit,
+        // Формат сохраняется только вместе с присланным текстом: переключение режима без
+        // перевода текста означало бы, что то же содержимое читается по другим правилам.
+        promptFormat: typeof prompt === "string" ? editFormat : undefined,
+        // PRD-57 FR-07: готовые SVG формул кладутся В ЗАДАНИЕ. Требование прямое: при
+        // переносе теста между установками картинка едет вместе с вопросом, а не
+        // пересчитывается на приёмнике — иначе её вид зависит от версии библиотеки там.
+        dataJson: withFormulas(normalizeQuestionData(dataJson), canonicalEdit ?? ""),
         correctJson,
         difficulty,
         mediaUrl,
@@ -353,6 +650,18 @@ router.put(
         feedbackMode,
         feedbackCorrect: normalizeOptionalText(feedbackCorrect),
         feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
+        // Option texts are re-derived whenever anything they depend on is sent — the
+        // texts, the type or the options: switching away from single choice or dropping
+        // options must not leave texts behind. Untouched otherwise (`undefined`).
+        optionFeedbackJson:
+          optionFeedbackJson !== undefined || type !== undefined || dataJson !== undefined
+            ? normalizeOptionFeedback(
+                optionFeedbackJson !== undefined ? optionFeedbackJson : existing.optionFeedbackJson,
+                type ?? existing.type,
+                optionCountOf(dataJson ?? existing.dataJson),
+                normalizeAuthorText,
+              )
+            : undefined,
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
         // PRD-30 FR-01: `null` CLEARS the index, `undefined` leaves it alone —
@@ -380,7 +689,10 @@ router.put(
       }
 
       res.json(
-        feasibilityWarnings.length > 0 ? { ...updated, warnings: feasibilityWarnings } : updated,
+        withSanitizeReport(
+          feasibilityWarnings.length > 0 ? { ...updated, warnings: feasibilityWarnings } : updated,
+          canonical?.removed ?? [],
+        ),
       );
     } catch (error) {
       logger.error("Update question error: " + (error as Error).message);
@@ -552,7 +864,11 @@ router.get(
       });
 
       // Формируем строки (общая сериализация — server/services/questions-export.ts)
-      const rows = questions.map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
+      // Сценарии в книгу не идут: строка без их содержимого при обратном импорте была бы
+      // пропущена, а книга обещает перенос без потерь. Сценарий переносится своим архивом.
+      const rows = questions
+        .filter((q) => !isSimulation(q.type))
+        .map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
 
       const wb = new ExcelJS.Workbook();
       addJsonSheet(wb, "Вопросы", rows, QUESTION_WIDTHS);
@@ -615,6 +931,7 @@ router.get(
         ["Режим ОС", "общая (по умолчанию) | условная"],
         ["ОС при верном", "Текст; только при режиме «условная»"],
         ["ОС при неверном", "Текст; только при режиме «условная»"],
+        ["ОС по вариантам", "Только multiple_choice: тексты через «#» в порядке вариантов; пустой слот — у варианта свой текст не задан и показывается обратная связь вопроса. Напр.: « # Почему не B # »"],
         ["", ""],
         ["Балл и «Цена ответа»", "Здесь их нет: сколько стоит вопрос — свойство ТЕСТА, а не вопроса (один вопрос может стоить по-разному в разных тестах). Задаются на листе «Оценка» книги теста: раздел «Импорт» → «Скачать шаблон»"],
         ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],

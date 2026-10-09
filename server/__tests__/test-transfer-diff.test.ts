@@ -65,6 +65,7 @@ function emptyTarget(): TargetSnapshot {
   return {
     test: null,
     sections: [],
+    scenarios: [],
     topics: [],
     scales: [],
     measurements: [],
@@ -84,6 +85,7 @@ function populatedTarget(): TargetSnapshot {
   return {
     test: { id: "src-test" },
     sections: [{ id: "sec-a", topicId: "topic-a" }],
+    scenarios: [],
     topics: [
       {
         id: "topic-a",
@@ -354,6 +356,7 @@ describe("diffTransfer: the test row, which three parts write into", () => {
     // The pass rule belongs to «Оценивание», the intro block and appearance to «Итоги».
     expect(test.omitFields).toEqual([
       "overallPassRuleJson",
+      "passDecisionPolicy",
       "defaultQuestionPoints",
       "introJson",
       "designSettingsJson",
@@ -388,5 +391,34 @@ describe("diffTransfer: the parts declared safe", () => {
       sourceId: "page-res",
       title: "results",
     });
+  });
+});
+
+describe("«Сценарий в ИС»: пункты-сценарии", () => {
+  /** Пакет с пунктом-сценарием на теме-банке «topic-a». */
+  function withScenario(): TestTransferPackage {
+    const pkg = sourcePackage();
+    (pkg.content as unknown as { scenarios: unknown[] }).scenarios = [
+      { id: "scn-1", testId: "src-test", topicId: "topic-a", questionId: null, title: "Работа в СЭД" },
+    ];
+    return pkg;
+  }
+
+  it("на пустом приёмнике пункт создаётся с тем же идентификатором", () => {
+    const ops = of(diffTransfer(withScenario(), emptyTarget(), options()), "scenario");
+    expect(ops).toEqual([expect.objectContaining({ kind: "create", id: "scn-1", sourceId: "scn-1" })]);
+  });
+
+  it("у приёмника с тем же пунктом — обновление; лишний пункт уходит только при «полной замене» темы", () => {
+    const target = { ...populatedTarget(), scenarios: [{ id: "scn-1", topicId: "topic-a" }, { id: "scn-old", topicId: "topic-a" }] };
+    const merged = of(diffTransfer(withScenario(), target, options()), "scenario");
+    expect(merged.map((op) => [op.kind, op.id])).toEqual([["update", "scn-1"]]);
+    const replaced = of(diffTransfer(withScenario(), target, options({ topics: { "topic-a": "replace" } })), "scenario");
+    expect(replaced.map((op) => [op.kind, op.id])).toEqual([["update", "scn-1"], ["delete", "scn-old"]]);
+  });
+
+  it("без части «Структура» пункты не трогаются", () => {
+    const ops = diffTransfer(withScenario(), emptyTarget(), options({ parts: { structure: false, scoring: true, scales: true, results: true, media: true } }));
+    expect(of(ops, "scenario")).toEqual([]);
   });
 });

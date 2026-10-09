@@ -109,6 +109,8 @@ export interface TBInspectorApi {
   buildDraw(pkg: TBPkg | null): DrawVM;
   /** «Эталон»: paint correct-answer markers onto the live question render in the iframe (§5.4). */
   applyReference(iframeWin: Window | null): void;
+  /** PRD-52: вопрос текущего экрана — по нему панель подставляет место комментария. */
+  currentScreenQuestion?(iframeWin: Window | null): { id?: string; topicId?: string } | null;
   /** Remove all «Эталон» markers from the iframe. */
   clearReference(iframeWin: Window | null): void;
   /** Disable the «Завершить тест» button after it's clicked (debug — no re-submit). */
@@ -243,10 +245,54 @@ export interface InspectorSnapshot {
   adaptive: AdaptiveBar;
   status: StatusVM;
   attempts: { value: string; label: string }[];
+  /** PRD-36 FR-17: занятая доля бюджета `cmi.suspend_data` и жертвы последней записи. */
+  runState: RunStateVM;
+}
+
+/**
+ * PRD-36 FR-17: состояние прогона как БЮДЖЕТ, а не корзина. Показывается в плеере, потому что
+ * иначе о переполнении нельзя узнать вовремя: LMS обрезает строку молча, и о потере состояния
+ * становится известно уже по её последствиям.
+ */
+export interface RunStateVM {
+  /** Длина строки состояния в символах. */
+  length: number;
+  /** Бюджет, на который состояние рассчитано (FR-15). */
+  budget: number;
+  /** Занятая доля бюджета, 0..1 (может превысить 1 — это и есть сигнал). */
+  share: number;
+  /** Версия формата: 2 — компактный, 1 — состояние пакета, собранного до PRD-36. */
+  version: number;
 }
 
 function num(s: string | undefined): boolean {
   return s != null && s !== "";
+}
+
+/**
+ * PRD-36 FR-15: бюджет строки состояния — предел `cmi.suspend_data` в SCORM 1.2. Продублирован
+ * здесь числом сознательно: рантайм пакета живёт в другом окне и до его загрузки в плеере уже
+ * есть что показывать, а значение задано спецификацией, а не выведено из кода.
+ */
+const RUN_STATE_BUDGET = 4096;
+
+/** PRD-36 FR-17: занятая доля бюджета состояния прогона по сырой строке из RTE. */
+function runStateVM(cmi: Record<string, string>): RunStateVM {
+  const raw = cmi["cmi.suspend_data"] || "";
+  let version = 2;
+  try {
+    const parsed = JSON.parse(raw || "null");
+    // Пакет, собранный до PRD-36, пишет массив попыток и поля версии не несёт.
+    if (parsed && typeof parsed === "object") version = (parsed as { v?: number }).v === 2 ? 2 : 1;
+  } catch {
+    version = 1;
+  }
+  return {
+    length: raw.length,
+    budget: RUN_STATE_BUDGET,
+    share: raw.length / RUN_STATE_BUDGET,
+    version,
+  };
 }
 
 /**
@@ -288,6 +334,25 @@ function watchObject(pkg: TBPkg | null, cmi: Record<string, string>, src: WatchS
 }
 
 /**
+ * What the run could NOT compute, named (PRD-18 §8: the badge must say WHICH scale or
+ * indicator stayed empty, not merely that something did).
+ *
+ * Only genuine failures reach here. A scale whose questions have not been delivered yet
+ * is not one of them: the engine stays silent while there is nothing to normalize, so a
+ * healthy test no longer meets the author with a red badge on the start screen.
+ */
+function buildAlarm(pkg: TBPkg): string | null {
+  if (pkg.engineError) return pkg.engineError;
+  const named = [
+    ...(pkg.scaleErrors || []).map((e) => `шкала «${e.key}»`),
+    ...(pkg.resultErrors || []).map((e) => `показатель «${e.name}»`),
+  ];
+  if (!named.length) return null;
+  const head = named.slice(0, 3).join(", ");
+  return `Не рассчитано: ${head}${named.length > 3 ? ` и ещё ${named.length - 3}` : ""}`;
+}
+
+/**
  * Build the immutable inspector snapshot for one tick.
  * @param iframeWin the package window (same-origin), or null before it loads
  * @param scorm the RTE mirror, or null before the shim is hosted
@@ -312,6 +377,7 @@ export function buildSnapshot(
     adaptive: { visible: false },
     status: { drawn: 0, answered: 0, percentDone: 0, score: null, verdict: null, completed: false, alarm: null },
     attempts: [{ value: "live", label: "Текущая (live)" }],
+    runState: { length: 0, budget: RUN_STATE_BUDGET, share: 0, version: 2 },
   };
   if (!TB) return empty;
 
@@ -355,12 +421,16 @@ export function buildSnapshot(
     }
   }
   const completed = cmi["cmi.completion_status"] === "completed" || reachedEnd;
-  const errs = ((pkg && pkg.scaleErrors) || []).length + ((pkg && pkg.resultErrors) || []).length;
-  const alarm = pkg && pkg.engineError ? pkg.engineError : errs ? "Ошибка расчёта показателей или шкал" : null;
+  const alarm = pkg ? buildAlarm(pkg) : null;
 
   const attempts: { value: string; label: string }[] = [{ value: "live", label: "Текущая (live)" }];
   (TB.getSuspendAttempts(cmi) || []).forEach((a, i) => {
-    attempts.push({ value: "att:" + i, label: "#" + (a.attemptNumber || i + 1) + " — " + Math.round(a.percent) + "%" });
+    // PRD-36: у сводки короткие имена (n/pc), у записи легаси-пакета — прежние. Плеер
+    // показывает обе, поэтому читает ту пару, которая есть.
+    const record = a as unknown as { attemptNumber?: number; percent?: number; n?: number; pc?: number };
+    const number = record.attemptNumber ?? record.n ?? i + 1;
+    const percent = record.percent ?? record.pc ?? 0;
+    attempts.push({ value: "att:" + i, label: "#" + number + " — " + Math.round(percent) + "%" });
   });
 
   return {
@@ -377,6 +447,7 @@ export function buildSnapshot(
     adaptive,
     status: { drawn, answered, percentDone: drawn ? Math.round((answered / drawn) * 100) : 0, score, verdict, completed, alarm },
     attempts,
+    runState: runStateVM(cmi),
   };
 }
 

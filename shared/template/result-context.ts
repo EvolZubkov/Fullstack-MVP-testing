@@ -22,20 +22,40 @@ import type {
   CtxSectionResult,
   CtxSectionIntro,
   CtxTopicResultView,
+  CtxTopicGroup,
   CtxAdaptiveTopicView,
   CtxRecommendation,
+  CtxBreakdownRow,
 } from "./context";
+import type { BreakdownEntry } from "../breakdown/types";
 import { resolveBlockOrder, DEFAULT_BLOCK_ORDER, type ResultsBlockKey } from "./results-order";
 import { labelsTree } from "./labels";
-import { buildMeasureView, type RenderKind } from "./measure-view";
+import { buildMeasureView, type CtxMeasureView, type RenderKind } from "./measure-view";
 import { richTextToHtml, type RichTextFormat } from "./rich-text";
+import { barFillCss, type BarFillSetting } from "./bar-fill";
+import { formatMinutesHuman } from "./duration";
 import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
+import { buildScaleBars, type CtxScaleBars } from "./scale-bars";
 import { parseScaleAppearance } from "./scale-appearance";
 import { collectRecommendations } from "./recommendations";
+import { collectBreakdownFeedback } from "../breakdown/feedback";
+import {
+  resolveTopicInterpretation,
+  resolveBreakdownInterpretation,
+  type InterpretationText,
+} from "../interpretation/resolve";
 import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
 // PRD-29 §6.7 lives in the scoring layer, not here: the results screen was its first
 // reader, not its owner (see the two gates in `buildResultContext`).
-import { hasGradedScore as isGradedRun, hasPronouncedVerdict } from "../scoring/pass-rule";
+import { hasGradedScore as isGradedRun, hasPronouncedVerdict, type ResolvedRule } from "../scoring/pass-rule";
+import { sectionIsRequiredForVerdict, sectionPassConditionText, sectionTimerWarningText } from "./pass-condition";
+// PRD-61: КАКИЕ вводные тексты печатать — вопрос выдачи, и ответ на него один на оба хоста.
+// Лежит он в `shared/report`, потому что тот же ответ нужен внутри SCORM-пакета.
+import { introBlocksToPrint, type IntroBlockLike } from "../report/report-intro";
+// PRD-50 FR-26: the counter rule lives with the verdict it counts, not with the layout —
+// `aggregateStandardResult` stamps the same numbers onto the stored result through it.
+import { groupSections } from "../scoring/section-groups";
+import { findOutcome } from "../scales/interpretation";
 import type {
   FeedbackBlock,
   IndicatorInterpretation,
@@ -58,6 +78,7 @@ const BLOCK_FLAG: Record<ResultsBlockKey, keyof CtxResultBlock> = {
   scales: "isScales",
   indicators: "isIndicators",
   topics: "isTopics",
+  breakdown: "isBreakdown",
 };
 
 /** Ring geometry from `layouts/results.html` (`<circle r="63">`). */
@@ -122,6 +143,46 @@ export interface TopicFeedbackInput {
    * the SCORM package from the same two blocks baked into `TEST_DATA`.
    */
   feedbackTexts?: string[] | null;
+  /**
+   * PRD-50 FR-50: тексты ПОДТЕМ этого раздела (`test_sections.breakdown_feedback_json`),
+   * ключ подтемы -> её блок обратной связи в том же формате, что у темы.
+   *
+   * Отбор — не дело хоста: подтему выдаёт тот, чей результат ниже общего проходного
+   * порога теста (решение владельца 2026-09-03), и правило живёт в одном месте,
+   * {@link module:shared/breakdown/feedback}. Хост только привозит написанное.
+   */
+  breakdownFeedback?: Record<string, FeedbackBlock> | null;
+}
+
+/**
+ * PRD-50 FR-13 display setting for the topic breakdown rows (`tests.breakdown_display_json`).
+ * `hidden` (the default when the column is null) means the topic card prints no breakdown at
+ * all, byte-identical to a test built before PRD-50. `basis` picks the NUMBER shown, not the
+ * pass verdict's currency — the threshold is always evaluated in points.
+ */
+export interface BreakdownDisplaySetting {
+  visibility: "hidden" | "bar" | "bar_and_value";
+  basis: "units" | "points";
+  /**
+   * PRD-50 FR-44 (Э4): WHERE the visible breakdown is printed — inside the topic cards
+   * (`topics`, the projection Э1 shipped), as the summary block of the whole test
+   * (`block`, {@link CtxResult.breakdown}), or both.
+   *
+   * OPTIONAL, and absence means `topics`: every setting saved before Э4 says nothing here,
+   * and such a test must keep printing exactly what it printed — nested bars and no block.
+   * The two projections answer different questions (a key inside ONE section vs. the same
+   * key across the whole test), so the author picks either, both, or neither — but
+   * {@link visibility} still governs them jointly: `hidden` prints none of them (FR-31).
+   */
+  placement?: "topics" | "block" | "both";
+  /**
+   * Печатать ли ТОЛКОВАНИЯ подтем под их полосами.
+   *
+   * OPTIONAL, и отсутствие значит НЕ печатать: тексты подтем — новая возможность, и ни один
+   * тест, сохранённый до неё, не должен получить их молча. Показ вложен в {@link visibility}:
+   * при `hidden` строк подтем нет, и печатать толкование некуда.
+   */
+  showInterpretation?: boolean;
 }
 
 /** Normalized per-topic input (host adapts its own field names into this). */
@@ -136,6 +197,26 @@ export interface TopicInput extends TopicFeedbackInput {
   passed: boolean | null;
   /** SCORM-extra: per-topic pass threshold label, e.g. "Требуется: 70%". */
   requiredLabel?: string;
+  /** PRD-50: breakdown records of this topic, as the host stored them. */
+  breakdown?: BreakdownEntry[] | null;
+  /**
+   * PRD-50 FR-11: the group this section belongs to (`test_sections.group_key`, echoed by
+   * the aggregate onto the stored topic result). Absent/null, or a key the test does not
+   * declare, all mean the same: no group (FR-12).
+   */
+  groupKey?: string | null;
+  /**
+   * ТОЛКОВАНИЕ самой темы (`topics.interpretation_json`) и толкование, заданное ЭТИМ тестом
+   * (`test_sections.interpretation_json`). Разрешает их ядро одной функцией — и для выдачи,
+   * и для карточки редактора, чтобы автор видел ровно тот текст, который получит участник.
+   */
+  interpretation?: InterpretationText | null;
+  sectionInterpretation?: InterpretationText | null;
+  /**
+   * ТОЛКОВАНИЯ ПОДТЕМ этого раздела: «ключ подтемы -> текст»
+   * (`test_sections.breakdown_interpretation_json.keys`). Хост только привозит написанное.
+   */
+  breakdownInterpretation?: Record<string, InterpretationText> | null;
 }
 
 /**
@@ -172,12 +253,42 @@ export function buildTopicRecommendationsView(t: TopicFeedbackInput): {
 /** Normalized standard result input. */
 export interface ResultInput {
   passed: boolean;
+  /**
+   * PRD-57 FR-36: оценка завершена. `false` — в попытке есть ответ, который ждёт
+   * проверки, и экран итогов обязан уметь это сказать (FR-41). Отсутствие поля означает
+   * «попытка собрана до этой работы», и экран ведёт себя как раньше.
+   */
+  gradingComplete?: boolean;
   percent: number;
   totalQuestions: number;
   correct: number;
   earnedPoints: number;
   possiblePoints: number;
   topicResults: TopicInput[];
+  /**
+   * PRD-50 FR-11: the test's declared groups (`tests.section_groups_json`), in any shape —
+   * they are normalised by `shared/scoring/section-groups`, so a host may hand over the
+   * jsonb column, a snapshot's copy or the value baked into `TEST_DATA` as it is. Absent /
+   * empty = no groups, and the built context is byte-identical to what it was before this
+   * stage (FR-27).
+   *
+   * Named `sectionGroups` on the INPUT and `topicGroups` on the OUTPUT on purpose: the
+   * input speaks the words of the test's structure (a group of SECTIONS, which is what the
+   * author edits), the output the words of the render contract, where FR-29 fixes the name
+   * `result.topicGroups` because `result.blocks` is already taken by PRD-49.
+   */
+  sectionGroups?: unknown;
+  /**
+   * PRD-50 FR-28/FR-39: the breakdown records of the TEST scope, as the host STORED them
+   * with the attempt (`attempts.result_json.breakdowns`, the package's saved attempt).
+   *
+   * Taken, never recomputed: the test scope is a separate pass over the delivered items
+   * (FR-04), so it cannot be derived from the per-topic records this input also carries —
+   * a question delivered in two sections counts twice there and once here. Absent/empty =
+   * the attempt produced none (a test without keys, or one graded before PRD-50), and the
+   * summary block simply does not appear.
+   */
+  breakdowns?: BreakdownEntry[] | null;
 }
 
 /** One scale or indicator as the host hands it over, before presentational shaping. */
@@ -197,6 +308,19 @@ export interface MeasureInput {
    */
   showName?: boolean;
   showLevel?: boolean;
+  /**
+   * PRD-53 §4.4. Собственное описание шкалы (`scales.description`). Читает только карточка
+   * «вне профиля»: она собирает текст ИЗ ШКАЛ, а не из копий, разложенных по исходам показателя.
+   */
+  description?: string;
+  /**
+   * PRD-53 §4.4. Показатель-профиль печатает вторую карточку — шкалы группы, не вошедшие в набор.
+   *
+   * `keys` дублируют группу из формулы намеренно: контекст отрисовки формулы не несёт — он
+   * получает уже посчитанные значения, — и разбирать её здесь значило бы тащить парсер в оба
+   * хоста ради списка, который редактор и так знает.
+   */
+  restScales?: { show: boolean; label: string; keys: string[] };
 }
 
 /** PRD-29 measurement input: the visible measures plus the design-param choices. */
@@ -204,6 +328,12 @@ export interface MeasuresInput {
   ramp: LevelRamp;
   scaleKind: RenderKind;
   indicatorKind: RenderKind;
+  /**
+   * Print «из N» beside a measure's value, or the value alone. A design param of the
+   * test (`scaleShowMax`), read here by both hosts exactly like the two kinds above;
+   * absent = print it, so a test saved before the param keeps its readout.
+   */
+  showMax?: boolean;
   scales: MeasureInput[];
   indicators: MeasureInput[];
   /** Whether the test has a pass threshold — the `auto` answer for the score summary. */
@@ -224,6 +354,17 @@ export interface MeasuresInput {
    * contribution model they came from.
    */
   ipsativeScales?: boolean;
+  /**
+   * PRD-50 FR-11: блоки разделов теста, как их отдал хост вместе с остальным материалом
+   * итогов.
+   *
+   * Поле объявлено ЗДЕСЬ, а не только у входа результата, потому что отчёт строится в
+   * браузере: у него нет доступа к тесту, и блоки доезжают до него единственным путём —
+   * этим же материалом. Пока поля в контракте не было, документ печатал плоский список
+   * тем даже там, где экран печатал блоки со счётчиком, — и расхождение двух выдач
+   * поймала только живая приёмка.
+   */
+  sectionGroupsJson?: unknown;
 }
 
 /**
@@ -289,46 +430,39 @@ function blockText(block: unknown): string {
 }
 
 /**
- * Feedback TEXTS due to the learner for ONE topic of ONE test, ready for
- * {@link TopicFeedbackInput.feedbackTexts}: the topic's own text and that of this test's
- * section over it, in that order.
+ * Обратная связь темы в этом тесте — РАЗРЕШЁННАЯ, одним значением (PRD-29 §7.1a).
  *
- * ONE exported rule, like {@link feedbackAssets}, because both hosts must hand the
- * learner the SAME text: the web grader stores the result of this call with the attempt,
- * the SCORM bake writes it into the section of `TEST_DATA`. A second copy of the rule
- * would drift silently and surface as the two players showing different feedback — the
- * very defect this consolidation repairs.
+ * Задан текст раздела (`test_sections.feedback_json`) — печатается он; не задан —
+ * печатается текст темы (`topics.feedback_json`). Сложение двух текстов не допускается:
+ * до этой правки печатались ОБА подряд, и ученик получал склейку, которую автор нигде не
+ * видел и не собирал (решение владельца 2026-09-02).
  *
- * WHERE THE TOPIC'S TEXT COMES FROM. The current source is `topics.feedback_json.text`,
- * with the legacy `topics.feedback` column as the fallback. That fallback is not
- * back-compat decoration: the in-service topic editor sends ONLY `feedback_json`, so the
- * legacy column still holds the WHOLE text of every topic the editor has never touched,
- * and reading `feedback_json` alone would silently drop what the author did write. Where
- * both carry a text the CURRENT source wins — a topic already migrated to
- * `feedback_json` may still drag an outdated copy in the column.
+ * ОДНО правило на оба хоста, как и {@link feedbackAssets}: веб-хост сохраняет результат
+ * этого вызова вместе с попыткой, сборка SCORM пишет его в раздел `TEST_DATA`. Вторая
+ * копия правила разошлась бы молча и всплыла бы как два плеера с разным текстом.
  *
- * A LIST and not one glued string: the topic and the section are two INDEPENDENT
- * authoring points, and that boundary is what the consolidated recommendations block
- * de-duplicates on. The order is load-bearing — the topic, the more general source,
- * comes first, so its copy is the one dedup keeps. A blank text (empty, or whitespace
- * only) contributes nothing: an empty paragraph is not a recommendation. The same
- * sentence written in both places is returned once.
+ * ОТКУДА БЕРЁТСЯ ТЕКСТ ТЕМЫ. Нынешний источник — `topics.feedback_json.text`, запасной —
+ * легаси-колонка `topics.feedback`. Запасной не украшение совместимости: редактор тем
+ * шлёт ТОЛЬКО `feedback_json`, и у темы, которой редактор не касался, весь текст лежит в
+ * колонке. Где есть оба, побеждает нынешний источник.
  *
- * @param topic The topic row: its `feedbackJson` block and legacy `feedback` column.
- * @param sectionFeedback `test_sections.feedback_json` of THIS test's section over it.
+ * Возвращается СПИСОК, хотя значений в нём теперь не больше одного: имя и форма поля
+ * (`feedbackTexts`) — контракт с обоими хостами и с сохранёнными попытками, а попытки,
+ * сданные до этой правки, везут в нём два текста и обязаны печатать их как прежде.
+ * Пустой текст (пробелы) не даёт ничего: пустой абзац — не рекомендация.
+ *
+ * @param topic Строка темы: её блок `feedbackJson` и легаси-колонка `feedback`.
+ * @param sectionFeedback `test_sections.feedback_json` раздела ЭТОГО теста над темой.
  */
 export function topicFeedbackTexts(
   topic: { feedbackJson?: unknown; feedback?: string | null } | null | undefined,
   sectionFeedback?: unknown,
 ): string[] {
+  const sectionText = blockText(sectionFeedback);
+  if (sectionText) return [sectionText];
   const legacy = typeof topic?.feedback === "string" ? topic.feedback.trim() : "";
   const topicText = blockText(topic?.feedbackJson) || legacy;
-  const out: string[] = [];
-  for (const text of [topicText, blockText(sectionFeedback)]) {
-    if (!text || out.includes(text)) continue;
-    out.push(text);
-  }
-  return out;
+  return topicText ? [topicText] : [];
 }
 
 /**
@@ -388,9 +522,62 @@ function firedFeedback(m: MeasureInput): FeedbackBlock | null {
     const band = interpretation.bands.find((b) => (m.value as number) >= b.min && (m.value as number) <= b.max);
     return normalizeFeedback(band?.feedback);
   }
+  // Через `findOutcome`, а не собственным сравнением: набор ключей и запасной `count:<N>`
+  // (PRD-53 §4.3) обязаны действовать и в карточке, и в блоке рекомендаций. Две копии правила
+  // означали бы, что текст профиля нашёлся, а совет к нему — нет.
   const outcomes = (interpretation as IndicatorInterpretation).outcomes ?? [];
-  const outcome = outcomes.find((o) => o.code === String(m.value));
-  return normalizeFeedback(outcome?.feedback);
+  return normalizeFeedback(findOutcome(outcomes, m.value as string | boolean)?.feedback);
+}
+
+/**
+ * Вторая карточка показателя-профиля: шкалы группы, НЕ вошедшие в верхнюю зону (PRD-53 §4.4).
+ *
+ * Порядок — по убыванию значения, а не канонический: канонический порядок хранит КОД набора, а
+ * методика перечисляет оставшиеся стили от более выраженного к менее. Текст берётся из самих шкал,
+ * поэтому правка описания шкалы правит и этот блок, а не расходится с ним.
+ *
+ * `null` — печатать нечего: переключатель выключен, значение не код набора, или в набор вошла вся
+ * группа.
+ *
+ * @public
+ */
+export function buildRestScalesView(
+  indicator: MeasureInput,
+  scales: readonly MeasureInput[],
+): CtxMeasureView | null {
+  const config = indicator.restScales;
+  if (!config?.show) return null;
+  const code = typeof indicator.value === "string" ? indicator.value : "";
+  if (!code) return null;
+
+  const inProfile = new Set(code.split("+").filter(Boolean));
+  const group = new Set(config.keys);
+  const rest = scales
+    .filter((s) => group.has(s.key) && !inProfile.has(s.key))
+    .filter((s) => typeof s.value === "number" && Number.isFinite(s.value))
+    .sort((a, b) => (b.value as number) - (a.value as number));
+  if (rest.length === 0) return null;
+
+  const text = rest.map((s) => `${s.name}\n${s.description ?? ""}`.trimEnd()).join("\n\n");
+  return {
+    key: `${indicator.key}__rest`,
+    name: config.label,
+    renderKind: "label",
+    showValue: false,
+    // Заголовок уровня погашен: его роль у этой карточки играет её собственное имя.
+    hideLevel: true,
+    valueText: "",
+    maxText: "",
+    valueLabel: "",
+    levelLabel: "",
+    tone: "neutral",
+    toneClass: "tb-tone--neutral",
+    bannerVariant: "info",
+    text,
+    textHtml: richTextToHtml(text),
+    zones: [],
+    marks: [],
+  };
 }
 
 /**
@@ -418,8 +605,12 @@ interface ResolvedMeasures {
  *   measurement blocks answer `auto` from their own emptiness, in both modes alike.
  */
 function resolveMeasures(measures: MeasuresInput, hasGradedScore: boolean): ResolvedMeasures {
-  const visibleScales = measures.scales.filter((m) => m.visibility !== "hidden");
-  const visibleIndicators = measures.indicators.filter((m) => m.visibility !== "hidden");
+  // Измерение без значения карточку не печатает (PRD-53 §7.2). Показатель, заведённый ПОСЛЕ
+  // завершения попытки, значения в ней не имеет, и прежде это давало пустую карточку с одними
+  // отступами. `null`/`undefined` — единственные признаки отсутствия: `false` и `0` это значения.
+  const hasValue = (m: MeasureInput) => m.value !== null && m.value !== undefined;
+  const visibleScales = measures.scales.filter((m) => m.visibility !== "hidden" && hasValue(m));
+  const visibleIndicators = measures.indicators.filter((m) => m.visibility !== "hidden" && hasValue(m));
   return {
     visibleScales,
     visibleIndicators,
@@ -458,6 +649,7 @@ function fillMeasureBlocks(
         requestedKind: measures.scaleKind,
         ramp: measures.ramp,
         color: appearance[m.key]?.color,
+        showMax: measures.showMax,
       }));
     // PRD-35/46. The chart is built INSIDE the scales branch: a hidden block must not
     // leave a dangling diagram on the screen. `buildScalesChart` returns null on every
@@ -475,10 +667,40 @@ function fillMeasureBlocks(
       result.scalesChart = chart;
       result.scalesBlockClass = "tb-measures tb-measures--chart";
     }
+    // ЛИНЕЙЧАТАЯ ДИАГРАММА печатается ВМЕСТО списка карточек и НЕ вместо розы: роза
+    // отвечает на «как делится целое», диаграмма — на «сколько по каждой шкале», и обе
+    // могут стоять на одном экране. Поэтому строится она здесь, рядом с карточками, а не
+    // в `buildScalesChart`, который выбирает ОДНУ фигуру из взаимоисключающих.
+    //
+    // Карточки при этом остаются в контексте: макет старого шаблона о диаграмме не знает и
+    // обязан продолжать печатать их (гейт стоит в разметке, а не тут). Диаграмма же берёт
+    // из карточек готовые надписи, чтобы число под столбиком и число в карточке не
+    // разошлись форматом.
+    if (measures.scaleKind === "bars") {
+      const bars = buildScaleBars({
+        measures: visibleScales.map((m) => ({ ...m, color: appearance[m.key]?.color })),
+        views: result.scales,
+        ramp: measures.ramp,
+      });
+      if (bars) result.scaleBars = bars;
+    }
   }
   if (blocks.indicators && visibleIndicators.length) {
-    result.indicators = visibleIndicators.map((m) =>
-      buildMeasureView({ ...m, requestedKind: measures.indicatorKind, ramp: measures.ramp }));
+    result.indicators = visibleIndicators.flatMap((m) => {
+      const card = buildMeasureView({
+        ...m,
+        requestedKind: measures.indicatorKind,
+        ramp: measures.ramp,
+        showMax: measures.showMax,
+      });
+      // PRD-53 §4.4. Карточка «вне профиля» идёт СРАЗУ за своим профилем: она его продолжение, а
+      // не отдельный показатель, и чужая карточка между ними была бы разрывом мысли.
+      //
+      // Читается ПОЛНЫЙ список шкал, а не `visibleScales`: шкала, скрытая от ученика на своей
+      // карточке, всё равно может входить в группу профиля, и её описание блок печатает.
+      const rest = buildRestScalesView(m, measures.scales);
+      return rest ? [card, rest] : [card];
+    });
   }
   return [
     ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
@@ -487,9 +709,40 @@ function fillMeasureBlocks(
 }
 
 /** Optional SCORM-richer additions to the standard results context. */
+/**
+ * Заголовки итога — три строки, которыми тест называет свой результат сам.
+ *
+ * Свойства узла «Итоги теста» в структуре сценария (`content_pages.settings_json`), а не
+ * надписи словаря PRD-49: словарь переименовывает НАДПИСИ ИНТЕРФЕЙСА, общие для всех
+ * тестов шаблона, а это — содержание конкретного теста, и живёт оно там же, где остальные
+ * свойства его итоговой карточки.
+ *
+ * Пустая строка равна отсутствию: тест, ничего не заполнивший, печатает ровно то, что
+ * печатал, — название теста в заголовке и «Тест пройден» / «Тест не пройден» в шапке.
+ */
+export interface ResultHeadings {
+  /** Заголовок документа и экрана; пусто — название теста. */
+  document?: string;
+  /** Заголовок при успехе; пусто — умолчание поверхности. */
+  passed?: string;
+  /** Заголовок при неуспехе; пусто — умолчание поверхности. */
+  failed?: string;
+}
+
+/** Непустая строка настройки либо `undefined`: пробелы не заголовок. */
+export function headingText(value: string | undefined | null): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : undefined;
+}
+
 export interface ResultContextOptions {
   /** Add the per-topic "Баллов" row (`pointsLabel`) — SCORM shows it, web omits. */
   withTopicPoints?: boolean;
+  /**
+   * Заголовки итога этого теста (см. {@link ResultHeadings}). Отсутствие оставляет
+   * контекст прежним до поля.
+   */
+  headings?: ResultHeadings;
   /**
    * Keep the per-topic "Баллов" row even when the test's score-summary block is
    * switched off (`blockSettings.scoreSummary: "hide"`). Set by the PDF report ONLY:
@@ -517,6 +770,23 @@ export interface ResultContextOptions {
    */
   testFeedback?: FeedbackBlock | null;
   /**
+   * PRD-50 FR-13: the test's breakdown display setting (`tests.breakdown_display_json`).
+   * Absent/`null` (no setting saved) leaves every topic's {@link CtxTopicResultView.breakdown}
+   * unset — the byte-identical context a test built before PRD-50 produces. Lives OUTSIDE
+   * {@link measures}, like {@link testFeedback}: it is a property of the test's results
+   * screen, not of whether the test measures anything, and a control test must be able to
+   * turn it on too.
+   */
+  breakdownDisplay?: BreakdownDisplaySetting | null;
+  /**
+   * How the breakdown bars are coloured (design param `breakdownBarFill`, resolved by
+   * {@link module:shared/template/bar-fill barFillFromParams}). Absent/`null` is the
+   * `verdict` mode — the byte-identical rows of a test built before the setting. Lives
+   * OUTSIDE {@link measures} for the same reason as {@link breakdownDisplay}: a control test
+   * has breakdown bars and no measurements.
+   */
+  barFill?: BarFillSetting | null;
+  /**
    * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`
    * with a `type` other than `none`). It answers ONE question the builder cannot answer
    * from {@link ResultInput.passed}, which is a plain `boolean`: was a verdict actually
@@ -543,18 +813,32 @@ export interface ResultContextOptions {
    */
   hasPassThreshold?: boolean;
   /**
+   * Общее правило прохождения теста (`tests.overall_pass_rule_json`) — не признак, а
+   * САМО правило: тексты подтем выдаются по сравнению с его порогом (PRD-50 FR-50).
+   *
+   * Отдельно от {@link ResultContextOptions.hasPassThreshold}, который отвечает на другой
+   * вопрос («вердикт вообще выносился?») и читается ещё двумя потребителями. Отсутствие
+   * значит «порога нет»: сравнивать не с чем, и тексты подтем выдаются везде, где автор
+   * их написал.
+   */
+  overallPassRule?: { type?: string | null; value?: number | null } | null;
+  /**
    * PRD-29 measurement blocks. Absent (a test with neither scales nor indicators)
    * leaves the context byte-identical to what a control test has always produced.
    */
   measures?: MeasuresInput;
   /**
-   * Вводный блок этой выдачи: авторский текст и его формат (`tests.intro_json`).
+   * Вводный блок этой выдачи: общее вступление и тексты по исходу (`tests.intro_json`).
    *
    * Разметку строит построитель, а не хост: правило одно и то же для экрана и для отчёта,
    * а два его применения разошлись бы ровно так же, как разошлись бы два расчёта вердикта.
    * Пустой текст блока не даёт (см. {@link CtxResult.introHtml}).
+   *
+   * PRD-61: ветвь выдачи приезжает ЦЕЛИКОМ — какой из текстов исхода печатать, решает
+   * {@link module:shared/report/report-intro introBlocksToPrint} здесь же, где уже известен
+   * вердикт. Хост вынимать текст не должен и не умеет.
    */
-  intro?: { text?: string | null; format?: RichTextFormat | null } | null;
+  intro?: IntroBlockLike | null;
   /**
    * PRD-49: resolved labels of THIS screen, flat map from `shared/template/labels`
    * (`{"results.scales": "По шкалам"}`). Absent = the caller has not been taught the
@@ -623,8 +907,155 @@ export function topicHasContent(t: TopicInput): boolean {
   );
 }
 
+/**
+ * PRD-50 FR-34 fallback wording — the words this file has always printed for the topic
+ * verdict tag. A caller that hands over no `labels` (or a template whose manifest has
+ * not declared the `topic.verdict.*` keys) must keep seeing exactly these, so today's
+ * test keeps today's screen the day this stage ships.
+ */
+const DEFAULT_TOPIC_VERDICT_LABEL: Record<"passed" | "failed" | "unknown", string> = {
+  passed: "Пройдено",
+  failed: "Не пройдено",
+  unknown: "",
+};
+
+/**
+ * The topic verdict's own wording, resolved against the PRD-49 dictionary (FR-34).
+ *
+ * ONE function for both places that speak a topic's verdict — the card's own tag
+ * ({@link topicView}) and the breakdown row inside it (§8.1): the methodology names its
+ * verdict once, and a row must not disagree with the card that holds it about what word
+ * that verdict is. `labels` is the flat resolved map the caller already built
+ * ({@link module:shared/template/labels.resolveLabels}); `??` (not `||`) so an author who
+ * switched a label OFF (an explicit `""`) is honoured rather than papered over with the
+ * fallback — only an ABSENT key (the caller passed no `labels`, or an older template
+ * manifest never declared this one) falls back to the hard-coded word.
+ */
+function topicVerdictLabel(passed: boolean | null, labels?: Record<string, string>): string {
+  const state = passed === true ? "passed" : passed === false ? "failed" : "unknown";
+  return labels?.[`topic.verdict.${state}`] ?? DEFAULT_TOPIC_VERDICT_LABEL[state];
+}
+
+/**
+ * One breakdown record as the LAYOUT receives it (§8.1) — the ONE mapping both projections
+ * run: the bars nested in a topic card and the summary block of the test scope (FR-28).
+ *
+ * A second copy of this shaping is exactly the drift PRD-50 §8.1 exists to prevent: the two
+ * projections show the same kind of fact, and a row that rounded or worded itself
+ * differently depending on where it is printed would read as two different measurements.
+ */
+function breakdownRow(
+  e: BreakdownEntry,
+  display: BreakdownDisplaySetting,
+  interpretations?: Record<string, InterpretationText> | null,
+  barFill?: BarFillSetting | null,
+): CtxBreakdownRow {
+  const showValue = display.visibility === "bar_and_value";
+  const value = display.basis === "points" ? e.percentPoints : e.percentUnits;
+  const passed = e.passed ?? null;
+  const threshold = typeof e.thresholdPercent === "number" ? e.thresholdPercent : null;
+  // Окраска «по доле» и «нейтральная» снимают с полосы вердикт: класс исхода красит полосу
+  // в шаблоне, и рядом с заливкой по доле он спорил бы с ней на любом значении между порогом
+  // и серединой рампы. Сам исход (`passed`) остаётся — его читают не только полосы.
+  const verdictClass = barFill ? "" : passed === true ? "is-pass" : passed === false ? "is-fail" : "";
+  const fill = barFill?.mode === "share" ? barFillCss(barFill.ramp, Math.round(value)) : "";
+  return {
+    key: e.key,
+    items: e.items,
+    answered: e.answered,
+    // One decimal everywhere a real number reaches the layout, exactly like
+    // `pointsLabel` does: these fields are bound DIRECTLY by templates, and a raw
+    // ratio prints as «73.33333333333333». The bar keeps its own integer.
+    earned: round1(e.earned),
+    possible: round1(e.possible),
+    percent: round1(value),
+    percentUnits: round1(e.percentUnits),
+    percentPoints: round1(e.percentPoints),
+    barPercent: Math.round(value),
+    showValue,
+    valueLabel: showValue ? Math.round(value) + " %" : "",
+    // PRD-50 FR-54: исход ВЗЯТ у записи, а не вычислен здесь. Считать его в контексте значило
+    // бы завести вторую правду о пороге и перекрашивать старые попытки при смене настроек.
+    passed,
+    passClass: verdictClass,
+    ...(fill ? { barFill: fill } : {}),
+    ...(showValue && threshold !== null ? { requiredLabel: "Нужно " + Math.round(threshold) + " %" } : {}),
+    // ТОЛКОВАНИЕ подтемы печатается только при включённом показе: настройка решает, а не
+    // наличие текста. Автор может написать тексты заранее и не показывать их участнику.
+    ...(display.showInterpretation === true ? breakdownInterpretationHtml(e.key, interpretations) : {}),
+  };
+}
+
+/**
+ * Разметка толкования подтемы для строки разреза, или пустой объект.
+ *
+ * Пустой объект, а не пустая строка: поле должно ОТСУТСТВОВАТЬ, иначе `{{#if}}` макета
+ * напечатает пустой блок под полосой.
+ */
+function breakdownInterpretationHtml(
+  key: string,
+  interpretations?: Record<string, InterpretationText> | null,
+): { interpretationHtml?: string } {
+  const resolved = resolveBreakdownInterpretation(interpretations, key);
+  if (!resolved) return {};
+  const html = richTextToHtml(resolved.text, resolved.format as RichTextFormat);
+  return html ? { interpretationHtml: html } : {};
+}
+
+/**
+ * PRD-50 FR-44: does the setting ask for the bars NESTED in the topic cards?
+ *
+ * `visibility` is the joint gate of both projections (FR-31), and `placement` splits them.
+ * An ABSENT `placement` is `topics` — the projection Э1 shipped — so a setting saved before
+ * Э4 keeps its screen unchanged.
+ */
+function showsNestedBreakdown(display?: BreakdownDisplaySetting | null): boolean {
+  return !!display && display.visibility !== "hidden" && (display.placement ?? "topics") !== "block";
+}
+
+/** PRD-50 FR-28/FR-44: does the setting ask for the test-scope SUMMARY block? */
+function showsBreakdownBlock(display?: BreakdownDisplaySetting | null): boolean {
+  return !!display && display.visibility !== "hidden" && (display.placement ?? "topics") !== "topics";
+}
+
+/**
+ * Fill the test-scope summary block, for EITHER results screen (FR-28).
+ *
+ * ONE function for the standard and the adaptive builder, not because the code is short
+ * but because the block asks the same question in both modes — «как ты по подтемам по
+ * всему тесту» — and a second copy is how one mode would start rounding, wording or
+ * gating it differently. The adaptive screen speaks in confirmed LEVELS, so its topic
+ * cards carry no bars; this block does not compete with the ladder and shows the very
+ * records the engine already computed for an adaptive run (FR-17/FR-39).
+ *
+ * Both halves of the gate matter and neither is a proxy for the other: the author's own
+ * switch (`placement`) and the presence of records. A test may carry keys and want only
+ * the nested bars; a test with the block on may deliver an attempt without a single key.
+ *
+ * Nothing is summed here, and nothing may be: the records come from the attempt as
+ * stored. Adding up the per-topic rows instead would silently double-count a question
+ * delivered in two sections and would be a SECOND answer to a question the core already
+ * answered (FR-04).
+ */
+function fillBreakdownBlock(
+  result: CtxResult,
+  breakdowns: readonly BreakdownEntry[] | null | undefined,
+  display: BreakdownDisplaySetting | null | undefined,
+  labels?: Record<string, string>,
+  barFill?: BarFillSetting | null,
+): void {
+  if (!display || !showsBreakdownBlock(display) || !breakdowns?.length) return;
+  result.breakdown = breakdowns.map((e) => breakdownRow(e, display, null, barFill));
+}
+
 /** Map a normalized topic to its presentational view (Core-prepared class + label). */
-function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
+function topicView(
+  t: TopicInput,
+  withPoints: boolean,
+  breakdownDisplay?: BreakdownDisplaySetting | null,
+  labels?: Record<string, string>,
+  barFill?: BarFillSetting | null,
+): CtxTopicResultView {
   const passed = t.passed;
   const view: CtxTopicResultView = {
     topicId: t.topicId,
@@ -633,7 +1064,7 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
     total: t.total,
     percent: Math.round(t.percent || 0),
     passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
-    statusLabel: passed === true ? "Пройдено" : passed === false ? "Не пройдено" : "",
+    statusLabel: topicVerdictLabel(passed, labels),
     // Courses and events only. The topic's feedback TEXT is deliberately absent: it
     // reaches the learner through the consolidated «Рекомендации» block (fed by
     // `feedbackTexts` above), and the standard layouts no longer carry a per-topic slot
@@ -649,7 +1080,52 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
   // down; the layout drops the sibling «Правильно» row on the same `total` check.
   if (withPoints && t.total > 0) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
   if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
+  // ТОЛКОВАНИЕ темы: печатается ВСЕГДА, когда автор его написал, — вердикт здесь ни при чём.
+  // Текст теста заменяет текст темы целиком; правило одно на выдачу и на редактор.
+  const interpretation = resolveTopicInterpretation(t.interpretation, t.sectionInterpretation);
+  if (interpretation) {
+    const html = richTextToHtml(interpretation.text, interpretation.format as RichTextFormat);
+    if (html) view.interpretationHtml = html;
+  }
+  // PRD-50: the breakdown rows print only when the author turned them on FOR THIS
+  // PROJECTION (FR-44) AND the topic actually carries at least one key — a list of keys,
+  // not a decomposition of the topic into parts, so keys are not required to partition its
+  // questions.
+  const display = breakdownDisplay;
+  if (display && showsNestedBreakdown(display) && t.breakdown?.length) {
+    view.breakdown = t.breakdown.map((e) => breakdownRow(e, display, t.breakdownInterpretation, barFill));
+    // Несёт ли хоть одна полоса свой текст. Признак нужен РАСКЛАДКЕ: включённое толкование
+    // разворачивает сетку колонок в список во всю ширину, и решить это построчно нельзя —
+    // модификатор стоит на всей сетке. Считается здесь, потому что макет (подмножество
+    // mustache) перебрать строки и свести ответ не умеет.
+    if (view.breakdown.some((row) => row.interpretationHtml)) view.hasBreakdownNotes = true;
+  }
+  // Есть ли что нести правой колонке. Ставится ПОСЛЕ обоих слотов — толкования темы и
+  // полос подтем: любого из них хватает, чтобы строка стала двухколоночной, а темы без
+  // обоих остаются такими, какими были.
+  if (view.interpretationHtml || view.breakdown?.length) view.hasAside = true;
   return view;
+}
+
+/**
+ * Default format of {@link groupCounterLabel} — the spec's own `{passed} / {total}`
+ * (§8.1), printed until the author writes their own via the `group.counter` label.
+ */
+const DEFAULT_GROUP_COUNTER_FORMAT = "{passed} / {total}";
+
+/**
+ * The group counter as the layout receives it (PRD-50 §8.1 `counterLabel`).
+ *
+ * The wording is the CORE's job, not the layout's — same reason `statusLabel` is. The
+ * format is resolved from the `group.counter` label of the PRD-49 dictionary (FR-34):
+ * `{passed}`/`{total}` are substituted wherever the author's own wording places them, so
+ * "пройдено {passed} из {total}" is as valid a format as the default. `??`, not `||`: an
+ * author who switched the label OFF (an explicit `""`) gets a silent counter rather than
+ * the fallback text papering over the switch.
+ */
+function groupCounterLabel(passedCount: number, totalCount: number, labels?: Record<string, string>): string {
+  const format = labels?.["group.counter"] ?? DEFAULT_GROUP_COUNTER_FORMAT;
+  return format.replace(/\{passed\}/g, String(passedCount)).replace(/\{total\}/g, String(totalCount));
 }
 
 /** PRD-49 input {@link attachBlocksAndLabels} takes from either results builder's `opts`. */
@@ -700,6 +1176,10 @@ function attachBlocksAndLabels(
     scales: !!result.scales?.length,
     indicators: !!result.indicators?.length,
     topics: !!result.topicResults?.length,
+    // PRD-50 FR-28: same principle as the three above — the sub-block is «visible» exactly
+    // when the field the layout gates its own markup on carries something. The author's
+    // switch and the attempt's records were both consulted where that field was built.
+    breakdown: !!result.breakdown?.length,
   };
   const labels = opts.labels ?? {};
   const order = resolveBlockOrder(opts.blockOrder, opts.templateBlockOrder ?? DEFAULT_BLOCK_ORDER);
@@ -785,24 +1265,80 @@ export function buildResultContext(
   // out via {@link ResultContextOptions.topicPointsIgnoreScoreSummary}.
   const withTopicPoints =
     !!opts.withTopicPoints && (opts.topicPointsIgnoreScoreSummary || !blocks || blocks.scoreSummary);
+  // A topic with nothing to report brings no card — see {@link topicHasContent}. The
+  // filter runs BEFORE the mapping so the array can end up empty, which is what takes
+  // the whole «Результаты по темам» section down with it.
+  //
+  // The card is kept PAIRED with the input it came from: the groups below are resolved off
+  // the input's `groupKey` and `passed`, which the presentational view no longer carries
+  // (it holds a class and a label instead — deliberately, so the layout cannot judge).
+  const topicCards = (input.topicResults || [])
+    .filter(topicHasContent)
+    .map((t) => ({
+      groupKey: t.groupKey ?? null,
+      passed: t.passed,
+      view: topicView(t, withTopicPoints, opts.breakdownDisplay, opts.labels, opts.barFill),
+    }));
   const result: CtxResult = {
     passed,
     passClass: passed ? "is-pass" : "is-fail",
-    statusLabel: passed ? "Пройден" : "Не пройден",
+    // Заголовок исхода: авторский, если задан, иначе прежняя подпись пилюли. Гейт стоит на
+    // ТЕКСТЕ, а не на наличии поля: настройка, из которой текст стёрли, обязана вернуть
+    // умолчание, а не напечатать пустую пилюлю.
+    statusLabel: passed
+      ? headingText(opts.headings?.passed) ?? "Пройден"
+      : headingText(opts.headings?.failed) ?? "Не пройден",
     scorePercent: percent,
     ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
     totalQuestions: input.totalQuestions,
     correct: input.correct,
     earnedPoints: round1(input.earnedPoints),
     possiblePoints: round1(input.possiblePoints),
-    // A topic with nothing to report brings no card — see {@link topicHasContent}. The
-    // filter runs BEFORE the mapping so the array can end up empty, which is what takes
-    // the whole «Результаты по темам» section down with it.
-    topicResults: (input.topicResults || []).filter(topicHasContent).map((t) => topicView(t, withTopicPoints)),
+    // PRD-57 FR-41: поле появляется, только когда есть что сказать, — контекст теста без
+    // открытых ответов остаётся байт в байт прежним.
+    ...(input.gradingComplete === false ? { pendingReview: true } : {}),
+    topicResults: topicCards.map((c) => c.view),
   };
+  // PRD-50 FR-24 - FR-27. Counting over the FILTERED cards gives the same numbers as
+  // `aggregateStandardResult` does over all of them: `topicHasContent` only ever drops a
+  // topic whose verdict is `null`, and such a topic counts in neither half of the counter
+  // (FR-26). Both fields stay ABSENT unless a group actually holds a card, so a test
+  // without groups produces the byte-identical context it always did.
+  const grouped = groupSections(input.sectionGroups, topicCards);
+  if (grouped.groups.length) {
+    result.topicGroups = grouped.groups.map(
+      (g): CtxTopicGroup => ({
+        key: g.key,
+        label: g.label,
+        topics: g.sections.map((c) => c.view),
+        passedCount: g.passedCount,
+        totalCount: g.totalCount,
+        counterLabel: groupCounterLabel(g.passedCount, g.totalCount, opts.labels),
+      }),
+    );
+    if (grouped.ungrouped.length) result.ungroupedTopics = grouped.ungrouped.map((c) => c.view);
+  }
+  // PRD-50 FR-28: the summary block of the TEST scope — see {@link fillBreakdownBlock},
+  // shared with the adaptive builder.
+  fillBreakdownBlock(result, input.breakdowns, opts.breakdownDisplay, opts.labels, opts.barFill);
   // Вводный блок — первым, до всего остального (см. `CtxResult.introHtml`). Разметку
   // строит ядро, поэтому правило одно и то же для экрана и для отчёта.
-  const introHtml = richTextToHtml(opts.intro?.text, opts.intro?.format ?? undefined);
+  //
+  // PRD-61: блоков может быть два — общее вступление и текст исхода. Исход берётся из
+  // `noVerdict`, посчитанного выше ДЛЯ ВЕРДИКТНОЙ ШАПКИ: одна причина — один ответ, иначе
+  // шапка и текст под ней снова начнут говорить разное, как в боевом отчёте 2026-09-22
+  // («Сертификация пройдена» над абзацем о нехватке баллов).
+  const introHtml = introBlocksToPrint(opts.intro, {
+    verdictPronounced: !noVerdict,
+    passed: !!input.passed,
+  })
+    .map((b) => richTextToHtml(b.text, b.format ?? undefined))
+    .filter(Boolean)
+    // Пустая строка между блоками, а не пустой шов: простой текст приходит без обёртки в
+    // абзац, и склейка встык давала «…прохождение теста.Пока вам не хватает баллов…» одной
+    // строкой. `join` на единственном блоке не добавляет ничего, поэтому старая форма — один
+    // текст — печатается байт в байт как печаталась.
+    .join("<br><br>");
   if (introHtml) result.introHtml = introHtml;
   if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
   if (opts.recommendedEvents && opts.recommendedEvents.length) result.recommendedEvents = opts.recommendedEvents;
@@ -826,19 +1362,19 @@ export function buildResultContext(
   // pronounced and `passed` is a default, not a judgement), and the verdict must be a
   // PASS. A measurement test without a threshold therefore keeps its feedback whatever
   // `passed` holds — that feedback IS its result, the whole point of PRD-29.
-  const explicitPass = hasGradedScore && passed;
   // Sources of the ONE recommendations block, gathered in the order dedup should keep:
-  // the general before the specific. Collected rather than merged on the spot because
-  // the measurement sources are conditional while the other two are not — a test with
-  // neither scales nor indicators still hands the learner its own feedback and what its
-  // topics and sections attached (PRD-32). The test's own block leads: it is the widest.
+  // the general before the specific.
   //
-  // Unless the learner PASSED: a test the learner is through with owes no work on the
-  // mistakes, so its own block is dropped at the source (owner's agreed rule). The
-  // per-measure blocks below are NOT dropped with it — a scale's band or an indicator's
-  // outcome is the interpretation of a measurement, not guidance on a failure, and a
-  // learner who passed still gets to read what was measured.
-  const recommendationSources: Array<FeedbackBlock | null | undefined> = explicitPass ? [] : [opts.testFeedback];
+  // PRD-61 §10: обратная связь УРОВНЯ ТЕСТА снята — три вводных текста говорят то же самое
+  // и там, где автор этого ждёт, в начале документа, а не в конце среди рекомендаций.
+  // `opts.testFeedback` больше НЕ источник: поле убрано из ящика, не запекается в пакет и
+  // не печатается ни одним хостом.
+  //
+  // Тексты ТЕМ, ПОДТЕМ, ШКАЛ и ПОКАЗАТЕЛЕЙ не тронуты, и их собственный гейт — тоже: тема
+  // выдаёт написанное, пока не пройдена (`topic.passed !== true` ниже), по правилу «молчим
+  // только там, где уверены в успехе». Прежний `explicitPass` гасил ИМЕННО блок теста и
+  // вместе с ним ушёл.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = [];
   if (opts.measures && resolvedMeasures && blocks) {
     // `hasGradedScore`, the visible measures and `blocks` are resolved ONCE, above — the
     // score summary, the verdict tag, the topic points row and the feedback gate must not
@@ -868,6 +1404,10 @@ export function buildResultContext(
   for (const topic of input.topicResults || []) {
     recommendationSources.push(...topicRecommendationSources(topic, topic.passed !== true));
   }
+  // PRD-50 FR-55: тексты ПОДТЕМ — последними, они самые узкие (одна подтема одного раздела),
+  // и дедуп оставит копию пошире, если автор написал то же самое теме. Вердикт теста и темы
+  // здесь не спрашивается: исход подтемы уже вынесен ядром по порогу её темы.
+  recommendationSources.push(...collectBreakdownFeedback(input.topicResults || []));
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
   // PRD-49. The umbrella's sub-blocks + resolved labels, via the ONE rule shared with the
@@ -875,7 +1415,14 @@ export function buildResultContext(
   // screen itself reads, so the list says «visible» exactly where the summary prints —
   // including a control test, which never reaches the toggle and has always shown it.
   const labelsTreeOut = attachBlocksAndLabels(result, opts, !result.hideScoreSummary);
-  return { course: { title }, result, ...(labelsTreeOut ? { labels: labelsTreeOut } : {}) };
+  // Заголовок документа заменяет название теста — и на экране, и в отчёте: обе поверхности
+  // печатают одно и то же поле `course.title`, и расхождение здесь было бы расхождением
+  // между экраном и скачанным с него документом (PRD-51 §5.2).
+  return {
+    course: { title: headingText(opts.headings?.document) ?? title },
+    result,
+    ...(labelsTreeOut ? { labels: labelsTreeOut } : {}),
+  };
 }
 
 /** Normalized input for the staged section-results screen (PRD-19 FR-05a). */
@@ -965,16 +1512,6 @@ function pluralQuestions(n: number): string {
   return "вопросов";
 }
 
-/** Russian plural for «минута» (1 минута / 2 минуты / 5 минут). */
-function pluralMinutes(n: number): string {
-  const abs = Math.abs(n) % 100;
-  const d = abs % 10;
-  if (abs > 10 && abs < 20) return "минут";
-  if (d === 1) return "минута";
-  if (d > 1 && d < 5) return "минуты";
-  return "минут";
-}
-
 /** Normalized input for the «Введение раздела» screen (PRD-1 §4.3). */
 export interface SectionIntroInput {
   /** 1-based section index (for the «Раздел N из M» eyebrow + header tag). */
@@ -995,6 +1532,23 @@ export interface SectionIntroInput {
   /** Author section illustration URL; non-empty → the illustration column shows. */
   illustration?: string | null;
   continueLabel?: string;
+  /**
+   * The topic rule resolved against the overall one and the DELIVERED variant
+   * (`resolveTopicRule`); `null`/absent — the topic is not gated, no condition line.
+   */
+  passRule?: ResolvedRule | null;
+  /** Σ prices of the delivered graded questions of the section; absent — unknown. */
+  possiblePoints?: number | null;
+  /** `test_sections.required`; absent — required. */
+  required?: boolean | null;
+  /** «Тест пройден, если» — decides whether the topic is marked «Обязательная тема». */
+  passDecisionPolicy?: string | null;
+  /**
+   * The `passConditionShown` setting of the intro page (`passConditionShownOf`); `false`
+   * leaves `passCondition` empty, so the layout's `{{#if}}` drops the line. Absent — shown.
+   * The «Обязательная тема» mark and the verdict do not depend on it.
+   */
+  passConditionShown?: boolean;
 }
 
 /**
@@ -1022,11 +1576,17 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
     questionCount: count,
     questionCountLabel: count + " " + pluralQuestions(count),
     hasTimeLimit: hasTime,
-    timeLimitLabel: hasTime ? String(input.timeLimitMinutes) + " " + pluralMinutes(input.timeLimitMinutes as number) : "",
+    // Same formatter the start screen prints its limit with: one course must not
+    // say «45 минут» on the section intro and «45 мин» on the cover.
+    timeLimitLabel: formatMinutesHuman(input.timeLimitMinutes),
     hasInstruction: instrText.length > 0,
     illustrationUrl: illo,
     hasIllustration: illo.length > 0,
     continueLabel: input.continueLabel || "Далее",
+    passCondition:
+      input.passConditionShown === false ? "" : sectionPassConditionText(input.passRule, input.possiblePoints),
+    isRequired: sectionIsRequiredForVerdict(input.passDecisionPolicy, input.required, input.passRule),
+    timerWarning: sectionTimerWarningText(input.timeLimitMinutes, input.continueLabel || "Далее"),
   };
   if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
   return {
@@ -1040,16 +1600,43 @@ export interface AdaptiveTopicInput extends TopicFeedbackInput {
   topicName: string;
   achievedLevelIndex: number | null;
   achievedLevelName?: string | null;
+  /**
+   * PRD-50 §16: подытоги подтем ЭТОГО раздела, с уже вынесенным исходом
+   * (`adaptiveResultAsStandard` судит их общим порогом теста).
+   *
+   * В карточку темы они не попадают сознательно — она говорит подтверждённым УРОВНЕМ, — но
+   * без них построителю не из чего отобрать тексты подтем ({@link TopicFeedbackInput.breakdownFeedback}).
+   */
+  breakdown?: BreakdownEntry[] | null;
 }
 
 /** Normalized adaptive result input. */
 export interface AdaptiveResultInput {
   passed?: boolean;
   topicResults: AdaptiveTopicInput[];
+  /**
+   * PRD-50 FR-28/FR-39: records of the TEST scope, for the summary block.
+   *
+   * They exist for an adaptive attempt exactly as for a standard one — the axis is a
+   * property of the DELIVERED questions, not of the ladder, so `adaptiveResultAsStandard`
+   * computes them through the same engine (FR-17) and they are stored WITH the attempt
+   * (`adaptiveAttemptResultSchema.breakdowns`). Until this stage no screen read them back.
+   *
+   * SECTION-scope records are deliberately not taken: the adaptive topic card shows a
+   * confirmed LEVEL, and a percentage bar beside «Уровень 2» would invite a reading the
+   * ladder cannot support. Absent leaves the context byte-identical to what the adaptive
+   * screen produced before.
+   */
+  breakdowns?: BreakdownEntry[] | null;
 }
 
 /** Optional SCORM action flags for the adaptive results layout. */
 export interface AdaptiveResultContextOptions {
+  /**
+   * Заголовки итога (см. {@link ResultHeadings}). Адаптивный итог читает из них только
+   * заголовок документа: вердикта этот режим не выносит, и заголовков исхода у него нет.
+   */
+  headings?: ResultHeadings;
   hasScormActions?: boolean;
   showPdf?: boolean;
   canRetry?: boolean;
@@ -1064,6 +1651,16 @@ export interface AdaptiveResultContextOptions {
    * the option exists on both builders and is read by the same collector.
    */
   testFeedback?: FeedbackBlock | null;
+  /**
+   * Общее правило прохождения теста (`tests.overall_pass_rule_json`) — не признак, а
+   * САМО правило: тексты подтем выдаются по сравнению с его порогом (PRD-50 FR-50).
+   *
+   * Отдельно от {@link ResultContextOptions.hasPassThreshold}, который отвечает на другой
+   * вопрос («вердикт вообще выносился?») и читается ещё двумя потребителями. Отсутствие
+   * значит «порога нет»: сравнивать не с чем, и тексты подтем выдаются везде, где автор
+   * их написал.
+   */
+  overallPassRule?: { type?: string | null; value?: number | null } | null;
   /**
    * PRD-29 measurement blocks — scales and indicators of THIS attempt, in the very shape
    * the standard screen takes them (issue #33).
@@ -1082,8 +1679,26 @@ export interface AdaptiveResultContextOptions {
    * to what the adaptive screen produced before.
    */
   measures?: MeasuresInput;
-  /** Вводный блок этой выдачи — тот же, что у стандартного экрана (см. там же). */
-  intro?: { text?: string | null; format?: RichTextFormat | null } | null;
+  /**
+   * Вводный блок этой выдачи — тот же, что у стандартного экрана (см. там же).
+   *
+   * Тексты исхода в нём допустимы, но не печатаются: этот режим вердикта не выносит
+   * (PRD-61 FR-14b). Тип общий, чтобы хост не разбирал, какому построителю что отдавать.
+   */
+  intro?: IntroBlockLike | null;
+  /**
+   * PRD-50 FR-13/FR-44: the author's display setting, read here for ONE thing — the
+   * summary block ({@link AdaptiveResultInput.breakdowns}).
+   *
+   * The `placement` half of the setting therefore behaves differently in this mode, and
+   * knowingly so: «В карточках тем» prints nothing on an adaptive screen, because the
+   * card there speaks in confirmed levels. The editor says so in the field's hint rather
+   * than silently promoting the choice to «блоком» — substituting the author's answer
+   * would be worse than telling them what the mode can do.
+   */
+  breakdownDisplay?: BreakdownDisplaySetting | null;
+  /** Bar colouring of the summary block — see {@link ResultContextOptions.barFill}. */
+  barFill?: BarFillSetting | null;
   /**
    * PRD-49: resolved labels of THIS screen, same flat map the standard builder takes
    * ({@link ResultContextOptions.labels}). Absent = no `labels` key on the returned
@@ -1194,8 +1809,23 @@ export function buildAdaptiveResultContext(
     adaptive: true,
     topicResults: (input.topicResults || []).map(adaptiveTopicView),
   };
+  // PRD-50 FR-28: сводный блок разреза — ТОТ ЖЕ заполнитель, что у стандартного экрана.
+  // Записи для адаптивной попытки считаются и хранятся давно (FR-17/FR-39), но до этого
+  // этапа их никто не читал обратно: посчитанное молча не показывалось.
+  fillBreakdownBlock(result, input.breakdowns, opts.breakdownDisplay, opts.labels, opts.barFill);
   // Вводный блок — первым, до уровней и измерений: правило общее для обоих режимов.
-  const adaptiveIntroHtml = richTextToHtml(opts.intro?.text, opts.intro?.format ?? undefined);
+  //
+  // PRD-61 FR-14b: адаптивный режим вердикта НЕ выносит — заголовков исхода у него нет (см.
+  // {@link AdaptiveResultContextOptions.headings}), — поэтому печатается только общее
+  // вступление. Текст исхода ходит парой с заголовком исхода: там, где шапка не ветвится, не
+  // ветвится и текст.
+  const adaptiveIntroHtml = introBlocksToPrint(opts.intro, {
+    verdictPronounced: false,
+    passed: !!input.passed,
+  })
+    .map((b) => richTextToHtml(b.text, b.format ?? undefined))
+    .filter(Boolean)
+    .join("<br><br>");
   if (adaptiveIntroHtml) result.introHtml = adaptiveIntroHtml;
   if (opts.hasScormActions) {
     result.hasScormActions = true;
@@ -1204,23 +1834,17 @@ export function buildAdaptiveResultContext(
     result.showFinish = !!opts.showFinish;
   }
   // The SAME consolidated block the standard results screen carries, from the SAME
-  // collector and the same sources in the same order — the test's own feedback first,
-  // then what the topics of this attempt wrote and attached. Feedback is a property of
-  // the TEST, not of its flow mode, so a second assembly rule for the adaptive screen
-  // would only mean two screens disagreeing about what the learner is owed; the adaptive
-  // screen used to carry no block at all, which is that disagreement at its widest.
+  // collector and the same sources in the same order. Feedback is a property of the TEST,
+  // not of its flow mode, so a second assembly rule for the adaptive screen would only mean
+  // two screens disagreeing about what the learner is owed; the adaptive screen used to
+  // carry no block at all, which is that disagreement at its widest.
   //
   // What differs between the modes is ONE thing — how a topic's failure is spelled — and
   // it enters as the gate's argument (see `topicRecommendationSources`).
   //
-  // The test's own block obeys the same rule as on the standard screen: withheld on an
-  // EXPLICIT pass, because a learner who is through with the test owes no work on the
-  // mistakes. Here the verdict needs no threshold check — the adaptive mode has no
-  // pass-percentage setting to be absent, `overallPassed` is pronounced by
-  // `aggregateAdaptiveResult` from the levels actually confirmed. An absent flag is
-  // therefore not «unknown» but a plain non-success, and it shows.
-  const recommendationSources: Array<FeedbackBlock | null | undefined> =
-    input.passed === true ? [] : [opts.testFeedback];
+  // PRD-61 §10: обратная связь УРОВНЯ ТЕСТА снята и здесь — по той же причине и тем же
+  // заходом, что на стандартном экране. Блок собирается из тем, шкал и показателей.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = [];
   // The measurement blocks and what their fired bands / outcomes say — the SAME routine
   // the standard screen runs, so the two screens cannot draw the same scale differently
   // (issue #33). `false` for the score summary: this screen has none, and only that
@@ -1233,11 +1857,21 @@ export function buildAdaptiveResultContext(
   for (const topic of input.topicResults || []) {
     recommendationSources.push(...topicRecommendationSources(topic, !hasAchievedLevel(topic)));
   }
+  // PRD-50 FR-55: тексты ПОДТЕМ — последними, они самые узкие (одна подтема одного раздела),
+  // и дедуп оставит копию пошире, если автор написал то же самое теме. Вердикт теста и темы
+  // здесь не спрашивается: исход подтемы уже вынесен ядром по порогу её темы.
+  recommendationSources.push(...collectBreakdownFeedback(input.topicResults || []));
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
   // PRD-49. Same rule as the standard screen (see `attachBlocksAndLabels`), with
   // `hasSummary: false` fixed — this screen has never carried a score summary, so no
   // caller-supplied order can ever bring one back onto it.
   const labelsTreeOut = attachBlocksAndLabels(result, opts, false);
-  return { course: { title }, result, ...(labelsTreeOut ? { labels: labelsTreeOut } : {}) };
+  // Заголовок документа действует и здесь: как назван итог, от режима теста не зависит.
+  // Заголовки ИСХОДА у адаптивного итога предмета не имеют — вердикта он не выносит.
+  return {
+    course: { title: headingText(opts.headings?.document) ?? title },
+    result,
+    ...(labelsTreeOut ? { labels: labelsTreeOut } : {}),
+  };
 }

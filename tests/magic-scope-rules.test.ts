@@ -36,6 +36,17 @@ describe("matchMagicScopeRule", () => {
     expect(matchMagicScopeRule("DELETE", "/api/auth/me")).toBeNull();
   });
 
+  // The exits from a link. Losing any of these locks a person inside the link:
+  // the login form is where the client sends them, and answering 403 there reads
+  // as a wrong password, leaving no way out but deleting the cookie by hand.
+  it("keeps the ways out of a link reachable from inside it", () => {
+    expect(matchMagicScopeRule("POST", "/api/auth/login")?.rule.bind).toBe("none");
+    expect(matchMagicScopeRule("POST", "/api/auth/forgot-password")?.rule.bind).toBe("none");
+    expect(matchMagicScopeRule("GET", "/api/auth/verify-reset-token")?.rule.bind).toBe("none");
+    expect(matchMagicScopeRule("POST", "/api/auth/reset-password")?.rule.bind).toBe("none");
+    expect(matchMagicScopeRule("POST", "/api/auth/logout")?.rule.bind).toBe("none");
+  });
+
   it("denies anything absent from the table", () => {
     expect(matchMagicScopeRule("GET", "/api/learner/attempts")).toBeNull();
     expect(matchMagicScopeRule("GET", "/api/home")).toBeNull();
@@ -89,6 +100,26 @@ describe("matchMagicScopeRule", () => {
 
     it("метод по-прежнему значим", () => {
       expect(matchMagicScopeRule("POST", "/api/templates/default/assets/x.png")).toBeNull();
+    });
+  });
+
+  describe('PRD-52: ревью-пути рецензента', () => {
+    it('сессия комментариев привязана к тесту ссылки', () => {
+      expect(matchMagicScopeRule('GET', '/api/tests/t1/review/comments')?.rule.bind).toBe('test');
+      expect(matchMagicScopeRule('POST', '/api/tests/t1/review/comments')?.rule.bind).toBe('test');
+    });
+
+    it('прогон рецензирования открыт: сессия, раздача пакета и ассеты плеера', () => {
+      expect(matchMagicScopeRule('POST', '/api/tests/t1/review/session')?.rule.bind).toBe('test');
+      expect(matchMagicScopeRule('GET', '/api/tests/t1/review/play/tok/index.html')?.rule.bind).toBe('test');
+      expect(matchMagicScopeRule('GET', '/api/tests/t1/review/shim.js')?.rule.bind).toBe('test');
+      expect(matchMagicScopeRule('GET', '/api/tests/t1/review/inspector-compute.js')?.rule.bind).toBe('test');
+    });
+
+    it('ничего сверх рецензирования: отладчик и экспорт остаются закрытыми', () => {
+      expect(matchMagicScopeRule('POST', '/api/tests/t1/debug/session')).toBeNull();
+      expect(matchMagicScopeRule('GET', '/api/tests/t1/export/scorm')).toBeNull();
+      expect(matchMagicScopeRule('DELETE', '/api/tests/t1/review/comments/c1')).toBeNull();
     });
   });
 });

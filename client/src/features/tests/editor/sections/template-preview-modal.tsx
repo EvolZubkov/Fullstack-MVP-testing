@@ -13,10 +13,10 @@
  * Static visual evaluation only — controls are demo-only and persist nothing.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Banner, Button, ModalDialog, SegmentedControl } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog, SegmentedControl } from "@skillum/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
-import { buildTemplateCssVars } from "@shared/template/params-css";
+import { buildTemplateCssVars, buildTemplateDataAttrs } from "@shared/template/params-css";
 import { baseParams, buildTemplateThemeCss } from "@shared/template/theme-css";
 import { declaredThemes, type TestTheme, type ThemeId } from "@shared/template/themes";
 import { buildRail } from "@/features/templates/preview-rail";
@@ -75,6 +75,12 @@ export function TemplatePreviewModal({ open, onClose, template, params, theme, p
   const design = useMemo(() => ({ params, theme, paramsByTheme }), [params, theme, paramsByTheme]);
   const cssVars = useMemo(
     () => buildTemplateCssVars(baseParams(design, bundle?.manifest), bundle?.manifest?.params),
+    [design, bundle],
+  );
+  // Той же парой едет выбор, объявленный атрибутом (`dataAttr`): предпросмотр должен
+  // показывать выбранный вариант ДО сохранения, а по атрибуту шаблон выбирает правило.
+  const dataAttrs = useMemo(
+    () => buildTemplateDataAttrs(baseParams(design, bundle?.manifest), bundle?.manifest?.params),
     [design, bundle],
   );
   const themeCss = useMemo(
@@ -180,6 +186,7 @@ export function TemplatePreviewModal({ open, onClose, template, params, theme, p
                     content={selectedSpec.input.content}
                     css={bundle.css}
                     cssVars={cssVars}
+              dataAttrs={dataAttrs}
                     themeCss={themeCss}
                     dataTheme={shownTheme ?? undefined}
                     shell={(bundle.manifest as { mountShell?: boolean }).mountShell ? bundle.layouts.shell : undefined}

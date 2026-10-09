@@ -107,6 +107,73 @@ describe("buildQuestionProgress", () => {
     expect(r.total).toBe(4);
   });
 
+  // ── FR-11a - FR-11c: свободная навигация внутри раздела ──
+  //
+  // Правило считается ЗДЕСЬ, у общего построителя: карту рисуют оба хоста из него, и
+  // разойтись веб с пакетом могут только если разойдётся эта функция.
+
+  it("free navigation opens the frontier: будущий вопрос — обычная кликабельная точка", () => {
+    const r = buildQuestionProgress({
+      questions: flat,
+      statuses: { q1: "answered" },
+      currentIndex: 1,
+      commitScope: "test",
+      freeNavigation: true,
+    })!;
+    expect(r.states.map((s) => s.clickable)).toEqual([true, true, true, true]);
+    // «Не выдан» внутри охвата не остаётся: у будущего вопроса статус «не отвечен».
+    expect(r.states[3].ariaLabel).toBe("Вопрос 4, не отвечен");
+    // Текущий остаётся текущим, отвеченный — отвеченным: свобода не переписывает статусы.
+    expect(r.states.map((s) => s.statusClass)).toEqual(["is-answered", "is-current", "", ""]);
+  });
+
+  it("free navigation НЕ выходит за границу раздела: соседний раздел не в карте", () => {
+    const sectioned: BuildQuestionProgressInput["questions"] = [
+      { id: "a1", topicId: "A" },
+      { id: "a2", topicId: "A" },
+      { id: "b1", topicId: "B" },
+      { id: "b2", topicId: "B" },
+    ];
+    const r = buildQuestionProgress({
+      questions: sectioned,
+      statuses: {},
+      currentIndex: 0, // раздел A, первый вопрос
+      commitScope: "section",
+      freeNavigation: true,
+    })!;
+    // Охват — только A, и внутри него свободны оба вопроса, включая невиденный второй.
+    expect(r.states.map((s) => s.index)).toEqual([0, 1]);
+    expect(r.states.every((s) => s.clickable)).toBe(true);
+  });
+
+  it("free navigation не размораживает завершённый раздел", () => {
+    const sectioned: BuildQuestionProgressInput["questions"] = [
+      { id: "a1", topicId: "A" },
+      { id: "a2", topicId: "A" },
+    ];
+    const r = buildQuestionProgress({
+      questions: sectioned,
+      statuses: { a1: "answered" },
+      currentIndex: 0,
+      commitScope: "section",
+      sectionCommitted: { A: true },
+      freeNavigation: true,
+    })!;
+    expect(r.states.every((s) => !s.clickable)).toBe(true);
+  });
+
+  it("free navigation без возврата не даёт ничего: строгий режим сильнее (FR-11c)", () => {
+    const r = buildQuestionProgress({
+      questions: flat,
+      statuses: {},
+      currentIndex: 0,
+      commitScope: "test",
+      allowReturn: false,
+      freeNavigation: true,
+    })!;
+    expect(r.states.every((s) => !s.clickable)).toBe(true);
+  });
+
   it("review marking applies correct/incorrect/unanswered classes", () => {
     const r = buildQuestionProgress({
       questions: flat,

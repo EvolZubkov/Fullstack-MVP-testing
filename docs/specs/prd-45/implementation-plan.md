@@ -16,7 +16,7 @@
 отдаёт наверх через `onChange`. Порог хранится в двух местах (`bands[i].max` и `bands[i+1].min`)
 одной и той же строкой, поэтому круговой обход «строка → bands → строка» не теряет ввод.
 
-**Технологии:** React 19, TypeScript, Vitest + Testing Library, `@universityrt/ui-kit` (DS),
+**Технологии:** React 19, TypeScript, Vitest + Testing Library, `@skillum/ui-kit` (DS),
 CSS-слой `client/src/styles/tb-components.css`.
 
 **Прогон тестов:** только `npm test -- <путь>`. `npx vitest run` в этом репозитории падает.
@@ -707,7 +707,7 @@ describe("ToneChips", () => {
  * without moving markup around (see PRD-45 §7).
  */
 
-import { SegmentedControl } from "@universityrt/ui-kit";
+import { SegmentedControl } from "@skillum/ui-kit";
 
 import type { LevelTone } from "@shared/scales/interpretation";
 
@@ -936,7 +936,7 @@ import {
   IconButton,
   Input,
   Textarea,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
 
 import { hasFeedbackContent } from "../scales-api";

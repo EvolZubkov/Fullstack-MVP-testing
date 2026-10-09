@@ -25,6 +25,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
   return {
     key: "ee",
     label: "Истощение",
+    description: "",
     type: "number",
     aggregation: "sum",
     normalization: "none",
@@ -522,5 +523,37 @@ describe("loadContributionQuestions", () => {
     expect(out[0].units.find((u) => u.sourceKey === "1:0")?.correct).toBe(true);
     expect(out[0].units.find((u) => u.sourceKey === "0:1")?.correct).toBe(true);
     expect(out[0].units.find((u) => u.sourceKey === "0:0")?.correct).toBe(false);
+  });
+});
+
+// ─── PRD-53: описание шкалы в круге «редактор → API» ──────────────────────────
+
+describe("описание шкалы", () => {
+  it("пустое описание уходит как null, а не пустая строка", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: "new" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    await saveScales("t1", [scale({ key: "a", description: "  " })], []);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.description).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("заполненное описание уходит обрезанным", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: "new" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    await saveScales("t1", [scale({ key: "a", description: "  Текст  " })], []);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.description).toBe("Текст");
+    vi.unstubAllGlobals();
+  });
+
+  // Иначе правка описания не попала бы в сохранение вовсе: диф решает по этому списку.
+  it("правка описания считается изменением шкалы", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: "s1" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    const before = scale({ id: "s1", key: "a", description: "Было" });
+    await saveScales("t1", [{ ...before, description: "Стало" }], [before]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });

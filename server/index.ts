@@ -14,6 +14,8 @@ import { logger, requestContext, SLOW_REQUEST_MS } from "./logger";
 import { config, initConfig } from "./config";
 import { loadEnv } from "./config-loader.mjs";
 import { randomUUID } from "crypto";
+import { ensureBody } from "./middleware/ensure-body";
+import { startSuspiciousRefresh } from "./routes/analytics/suspicious-refresh";
 
 process.on("uncaughtException", async (err) => {
   // Пишем в файл через logger, затем закрываем БД и выходим.
@@ -51,6 +53,10 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
+
+// Тело запроса без парсера остаётся `undefined` (Express 5), а обработчики почти везде
+// начинаются с деструктуризации — см. `middleware/ensure-body`.
+app.use(ensureBody);
 
 export function log(message: string, source = "express") {
   logger.info(message, source);
@@ -200,6 +206,9 @@ app.use((req, res, next) => {
   // );
     httpServer.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
+      // Э3.4: фоновый пересчёт вопросов под подозрением по тестам — корзина «Требует внимания»
+      // и колонка вкладки «Тесты» читают готовое число.
+      startSuspiciousRefresh();
     });
 
     // Graceful shutdown handlers

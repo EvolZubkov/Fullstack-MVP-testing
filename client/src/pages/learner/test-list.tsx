@@ -14,11 +14,12 @@ import {
   Stack,
   Tag,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { PageHeader } from "@/components/page-header";
 import { LoadingState } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
 import type { Test, TestSection } from "@shared/schema";
+import { richTextToOneLine } from "@shared/template/rich-text";
 
 interface TestWithSections extends Test {
   sections: (TestSection & { topicName: string })[];
@@ -66,7 +67,14 @@ export default function LearnerTestListPage() {
 
             return (
               <Card key={test.id} data-testid={`card-learner-test-${test.id}`}>
-                <CardHeader title={test.title} subtitle={test.description || undefined} />
+                {/* PRD-59 FR-21: карточка — строка указателя, а не поверхность для
+                    чтения. Разметка снимается, переводы строк становятся пробелами,
+                    текст обрезается по длине: сетка берёт высоту ряда у самой высокой
+                    карточки, и одно длинное описание поднимало весь ряд. */}
+                <CardHeader
+                  title={test.title}
+                  subtitle={richTextToOneLine(test.description, test.descriptionFormat) || undefined}
+                />
                 <CardBody>
                   <Stack gap={4}>
                     {!isAdaptive && (

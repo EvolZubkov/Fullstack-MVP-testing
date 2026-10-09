@@ -31,6 +31,7 @@ const meta: Meta<typeof DataGrid<Row>> = {
     onSelectChange: { control: false },
     bulkActions: { control: false },
     renderExpanded: { control: false },
+    canExpand: { control: false },
     onPageChange: { control: false },
     onPageSizeChange: { control: false },
     emptyMessage: { control: false },
@@ -88,4 +89,33 @@ export const Default: Story = {
       </div>
     );
   },
+};
+
+/**
+ * Раскрываются не все строки. `canExpand` отвечает, есть ли под строкой что
+ * показывать: здесь раскрываются только сотрудники ОИТ, у остальных шеврона
+ * нет и ячейка под ним пуста, поэтому имена стоят в одной колонке.
+ */
+export const SomeRowsExpandable: Story = {
+  render: () => (
+    <div className="ou-story-pad">
+      <DataGrid<Row>
+        title="Сотрудники"
+        rows={ROWS.slice(0, 6)}
+        rowKey={r => r.id}
+        expandable
+        canExpand={r => r.dept === 'ОИТ'}
+        renderExpanded={r => (
+          <div>
+            <strong>{r.name}</strong> · последний вход {r.lastLogin}
+          </div>
+        )}
+        columns={[
+          { key: 'name', header: 'Сотрудник', frozen: true, width: 220 },
+          { key: 'dept', header: 'Подразделение' },
+          { key: 'lastLogin', header: 'Последний вход' },
+        ]}
+      />
+    </div>
+  ),
 };

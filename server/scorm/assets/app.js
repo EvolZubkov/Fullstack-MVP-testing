@@ -1,11 +1,63 @@
 // Initialize
 
+// PRD-55: вес задания по экспозиции — плейн-JS порт shared/draw/exposure.ts.
+//
+// Счётчики выдач в пакет НЕ попадают: он автономен и о популяции ничего не знает, поэтому
+// получает уже посчитанный вес запечённым в TEST_DATA (FR-27/FR-28). Эти функции нужны, чтобы
+// отбор внутри пула шёл ровно так же, как на вебе, — иначе два хоста при одинаковой истории
+// выдач начали бы выдавать разные задания.
+//
+// Держится в парности golden-тестом tests/exposure-port.test.ts.
+var EXPOSURE_WEIGHT_RATIO = 4;
+
+function computeExposureWeights(poolIds, counts) {
+  var weights = new Map();
+  if (poolIds.length === 0) return weights;
+  var values = poolIds.map(function (id) {
+    var c = counts.get(id);
+    return c === undefined ? 0 : c;
+  });
+  var min = values[0];
+  var max = values[0];
+  values.forEach(function (v) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  });
+  if (max === min) {
+    poolIds.forEach(function (id) { weights.set(id, 1); });
+    return weights;
+  }
+  var span = max - min;
+  for (var i = 0; i < poolIds.length; i += 1) {
+    weights.set(poolIds[i], 1 + (EXPOSURE_WEIGHT_RATIO - 1) * ((max - values[i]) / span));
+  }
+  return weights;
+}
+
+function weightedPick(pool, k, weights, rnd) {
+  if (pool.length === 0 || k <= 0) return [];
+  var keyed = pool.map(function (item) {
+    var w = weights.get(item.id);
+    if (w === undefined) w = 1;
+    // Ровно ноль дал бы нулевой ключ при ЛЮБОМ весе — такой элемент всегда оказывался бы
+    // последним независимо от того, насколько он свежий. Сдвигаем в открытый интервал.
+    var u = Math.min(Math.max(rnd(), Number.EPSILON), 1 - Number.EPSILON);
+    return { item: item, key: Math.pow(u, 1 / w) };
+  });
+  keyed.sort(function (a, b) { return b.key - a.key; });
+  return keyed.slice(0, k).map(function (x) { return x.item; });
+}
+
 // PRD-11 stratified draw — plain-JS port of shared/draw/blueprint.ts. No
 // blueprint => uniform draw (FR-02). Kept in golden parity with the TS source
 // by tests/draw-blueprint-port.test.ts.
-function drawSection(questions, drawCount, blueprint, shuffleFn) {
+//
+// PRD-55 (FR-24): the SELECTION is injected as `pickFn(pool, k)`, not as a shuffle. A uniform
+// draw is the case where every weight is equal, so the package has one draw algorithm and no
+// "correction off" branch.
+function drawSection(questions, drawCount, blueprint, pickFn) {
   if (!blueprint || !blueprint.strata || blueprint.strata.length === 0) {
-    return { selected: shuffleFn(questions.slice()).slice(0, drawCount), warnings: [] };
+    return { selected: pickFn(questions.slice(), drawCount), warnings: [] };
   }
   var selected = [];
   var used = {};
@@ -23,7 +75,7 @@ function drawSection(questions, drawCount, blueprint, shuffleFn) {
   blueprint.strata.forEach(function (stratum) {
     var stratumKey = tagKey(stratum.tag);
     var pool = questions.filter(function (q) { return !used[q.id] && hasTag(q, stratumKey); });
-    var take = shuffleFn(pool.slice()).slice(0, stratum.count);
+    var take = pickFn(pool.slice(), stratum.count);
     if (take.length < stratum.count) {
       warnings.push({ tag: stratum.tag, requested: stratum.count, available: take.length });
     }
@@ -35,7 +87,7 @@ function drawSection(questions, drawCount, blueprint, shuffleFn) {
     var free = questions.filter(function (q) {
       return !used[q.id] && !(qKeys[q.id] || []).some(function (k) { return exactKeys[k]; });
     });
-    shuffleFn(free.slice()).slice(0, remainder).forEach(function (q) { used[q.id] = true; selected.push(q); });
+    pickFn(free.slice(), remainder).forEach(function (q) { used[q.id] = true; selected.push(q); });
   }
   return { selected: selected.slice(0, drawCount), warnings: warnings };
 }
@@ -158,6 +210,19 @@ function tbDebugForcedForms() {
   } catch (e) { return null; }
 }
 
+// PRD-52 review: deliver the WHOLE topic bank instead of the configured draw, so a
+// reviewer proof-reads the bank rather than one sampled variant. Like the PRD-18
+// form pin, the flag travels in the launch URL hash and is therefore INERT in
+// production: an LMS launches the package without a hash. `win` is injectable so a
+// unit test can pass a fake window; production calls it with no argument.
+function tbDebugFullDraw(win) {
+  try {
+    var w = win || (typeof window !== 'undefined' ? window : null);
+    var h = (w && w.location && w.location.hash) || '';
+    return /(?:^#|[#&])tbfa=1(?:&|$)/.test(h);
+  } catch (e) { return false; }
+}
+
 function generateVariant() {
   state.variant = { sections: [] };
   state.flatQuestions = [];
@@ -166,6 +231,8 @@ function generateVariant() {
   var usedIds = {}; // Track used question IDs across all sections to prevent duplicates
   // PRD-18 debug: per-topic pinned variants (null in production — inert).
   var tbForcedForms = tbDebugForcedForms();
+  // PRD-52 review: whole-bank delivery (false in production — inert).
+  var tbFullDraw = tbDebugFullDraw();
 
   // PRD-30 раздел 14: selection happens per topic here, the delivery ORDER of the
   // whole test is decided ONCE by assembleDelivery below — never by a second pass
@@ -186,7 +253,14 @@ function generateVariant() {
     // attempt state so grading can gate the topic by ITS variant's threshold
     // (`by_variant` rule). Stays null for non-variant topics.
     var deliveredFormId = null;
-    if (section.formSet && section.formSet.forms && section.formSet.forms.length) {
+    if (tbFullDraw) {
+      // PRD-52 FR-13: the whole topic bank, ahead of every other rule — variants,
+      // tag quotas and drawCount all NARROW the delivery, and the reviewer asked
+      // for the opposite. Order still follows the section's own setting, so the
+      // sequence is the one the author designed.
+      questions = orderQuestions(available, effectiveSectionOrder(testOrder, section.questionOrder), shuffle);
+      preordered = true;
+    } else if (section.formSet && section.formSet.forms && section.formSet.forms.length) {
       // PRD-17 variants mode (BR-12): deliver ONE curated variant whole, in random
       // order. No cross-attempt store in SCORM (NFR-17) -> previousFormIds empty, so
       // the pick is effectively random. Map the chosen variant's ids back to the
@@ -218,7 +292,16 @@ function generateVariant() {
       deliveredFormId = picked.formId;
       preordered = true;
     } else {
-      var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
+      var drawn = drawSection(available, section.drawCount, section.drawBlueprint, function (pool, k) {
+        // PRD-55 (FR-28): счётчиков у пакета нет — вес уже запечён в TEST_DATA на момент сборки.
+        // Карта строится из поля вопроса; отсутствие поля означает единицу, то есть прежнее
+        // поведение для пакетов, собранных до внедрения (FR-30).
+        var weights = new Map();
+        pool.forEach(function (q) {
+          weights.set(q.id, q.exposureWeight === undefined ? 1 : q.exposureWeight);
+        });
+        return weightedPick(pool, k, weights, Math.random);
+      });
       // PRD-30 FR-06: selection is untouched (quotas + random pick); the ORDER is
       // decided for the whole test below.
       questions = drawn.selected;
@@ -275,6 +358,25 @@ function generateVariant() {
       topicName: section.topicName
     });
   });
+  // PRD-36 FR-02: the ADDRESS of every delivered question — its position in TEST_DATA
+  // (section index, index inside that section's bank). Collected here, next to the draw,
+  // because this is the only place that still knows which bank object each question came
+  // from; recovering it later by id would cost a scan per question on every save.
+  var positionOf = {};
+  TEST_DATA.sections.forEach(function (section, si) {
+    (section.questions || []).forEach(function (q, qi) { positionOf[q.id] = { s: si, q: qi }; });
+  });
+  state.deliveryPositions = [];
+  state.flatQuestions.forEach(function (fq) {
+    state.deliveryPositions.push(positionOf[fq.question.id] || { s: -1, q: -1 });
+  });
+  // PRD-36 FR-19: the delivered PRD-17 variant per topic travels with the state, so a
+  // resumed run resolves the SAME `by_variant` threshold a continuous run would.
+  state.deliveredForms = {};
+  state.variant.sections.forEach(function (vs) {
+    if (vs.formId) state.deliveredForms[vs.topicId] = vs.formId;
+  });
+
   // PRD-19 (Block B): seed per-question status for the freshly built variant.
   // Every delivered question starts 'unanswered'; confirmAnswer / skipQuestion
   // transition it. Done here (post-draw) so the keys match flatQuestions.
@@ -308,6 +410,21 @@ function renderResults() {
     saveAttemptResult(results);
     state.attemptSavedForThisSession = true;
     console.log('💾 renderResults: результат попытки сохранён', Math.round(results.percent) + '%');
+  }
+
+  // Автор скрыл экран итогов (решение владельца 2026-09-20). Считать и СОХРАНИТЬ
+  // результат всё равно надо — он уходит в LMS и в отчёт; ученику не показывают только
+  // сам экран. Поэтому проверка стоит ПОСЛЕ сохранения: дальше идут авторские страницы
+  // «После теста», а если их нет — прохождение завершается.
+  if (typeof screenHidden === 'function' && screenHidden('results')) {
+    if (typeof enterPostResults === 'function' && (state.postResultsPages || []).length > 0) {
+      enterPostResults();
+      return;
+    }
+    if (typeof finishAndClose === 'function') {
+      finishAndClose();
+      return;
+    }
   }
 
   var app = document.getElementById('app');
@@ -568,6 +685,12 @@ function downloadPDF(preferBest) {
         };
       })
     };
+    // PRD-50 FR-28: записи области ТЕСТА для сводного блока документа. Сама адаптивная
+    // структура их не несёт — их даёт результат, восстановленный в стандартную форму, тот
+    // же источник, из которого их берёт ЭКРАН итогов (`renderAdaptiveResultsTemplated`).
+    // §5.2: документ не вправе показать иное, чем экран, с которого его скачали.
+    var adaptiveFlat = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+    if (adaptiveFlat && adaptiveFlat.breakdowns) resultsToExport.breakdowns = adaptiveFlat.breakdowns;
     timestamp = new Date().toISOString();
   } else {
     // Стандартный режим

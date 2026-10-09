@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Сценарий в ИС, этап Э0, экраны 4 и 5; экран 6 — сценарий в обычном разделе (техдолг №5,
+    docs/specs/sim-scenario/plan-tests.md), НА СОГЛАСОВАНИИ 2026-10-08: макет question.html
+    шаблона, дельта — обложка и окно правил из эскиза Э0 sim-scenario-task.html.
+    Сгенерировано: макеты шаблона default (content.html, start.html) отрисованы общим
+    renderScreenInto, тело хаба — общим buildRouterHubHtml. Дельта — только карточка сценария.
+    Стили — skillum-ds.css и theme.css шаблона, по ссылкам. Статус: СОГЛАСОВАНО владельцем 2026-10-06.
+    -->
+    <title>Сценарий в ИС — экраны участника</title>
+    <link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css" />
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css" />
+    <style>
+      .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--ou-bg-surface-1); border-bottom: 1px solid var(--ou-border-default); font: 13px/1.4 system-ui, sans-serif; }
+      .wf-nav button { padding: 4px 12px; border: 1px solid var(--ou-border-default); border-radius: 6px; background: transparent; color: var(--ou-fg-default); cursor: pointer; font: inherit; }
+      .wf-nav button.active { background: var(--ou-accent-default); border-color: var(--ou-accent-default); color: var(--ou-fg-on-accent, #fff); }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset, 48px); }
+      .wf-state.active { display: block; }
+      .wf-state .tb-player { position: relative; min-height: calc(100vh - var(--wf-nav-offset, 48px)); display: flex; flex-direction: column; }
+      .wf-state .tb-scene { flex: 1; }
+      /* Дельта продукта: обложка вопроса-сценария (эскиз Э0 sim-scenario-task.html). */
+      .tb-sim-cover { position: relative; width: 100%; max-width: 960px; border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m); overflow: hidden; }
+      .tb-sim-cover__shot { display: block; width: 100%; height: auto; filter: blur(2px); transform: scale(1.02); }
+      .tb-sim-cover__veil { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-4); background: color-mix(in srgb, var(--ou-bg-page) 60%, transparent); }
+      .tb-sim-cover__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      .tb-sim-cover__done { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-4); }
+      .tb-sim-cover__title { margin: 0; font: var(--ou-text-heading-l); color: var(--ou-fg-default); }
+      .tb-sim-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
+      .tb-sim-rules { margin: 0; display: flex; flex-direction: column; gap: var(--ou-space-2); }
+      .wf-notes { padding: 24px; font: 14px/1.5 system-ui, sans-serif; color: var(--ou-fg-default); }
+      .wf-notes table { border-collapse: collapse; width: 100%; }
+      .wf-notes th, .wf-notes td { border: 1px solid var(--ou-border-default); padding: 8px; text-align: left; vertical-align: top; }
+    </style>
+  </head>
+  <body class="ou">
+    <nav class="wf-nav">
+      <button type="button" class="active" onclick="showState(this, 'hub-fresh')">хаб: сценарий не начат</button>
+      <button type="button" class="" onclick="showState(this, 'hub-locked')">хаб: сценарий закрыт правилом</button>
+      <button type="button" class="" onclick="showState(this, 'hub-done')">хаб: сценарий завершён</button>
+      <button type="button" class="" onclick="showState(this, 'hub-retake')">хаб: завершён, менять ответ можно</button>
+      <button type="button" class="" onclick="showState(this, 'start')">тест «Сценарий»: старт</button>
+      <button type="button" class="" onclick="showState(this, 'section-fresh')">раздел: сценарий не начат</button>
+      <button type="button" class="" onclick="showState(this, 'section-rules')">раздел: правила</button>
+      <button type="button" class="" onclick="showState(this, 'section-done')">раздел: выполнено</button>
+      <button type="button" class="" onclick="showState(this, 'section-retake')">раздел: выполнено, менять ответ можно</button>
+      <button type="button" class="" onclick="showState(this, 'section-exited')">раздел: вышел досрочно</button>
+      <button type="button" class="" onclick="showState(this, 'section-timeout')">раздел: время вышло</button>
+      <button type="button" onclick="showState(this, 'notes')">пояснения</button>
+    </nav>
+    <div id="wf-hub-fresh" class="wf-state active"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Работа в информационных системах</h1>
+        
+      </div>
+      
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+  </header>
+
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content" data-slot="page-content"><div class="content-page content-page--router" data-template-key="router.menu"><div class="content-placeholder content-placeholder--title" data-placeholder="title">Выберите раздел</div><div class="content-placeholder content-placeholder--instruction" data-placeholder="instruction">Пройдите все разделы в любом порядке. Задание в информационной системе откроется на весь экран.</div></div><div class="router-progress" role="group" aria-label="Прогресс по разделам"><div class="router-progress__head"><span class="router-progress__label">Разделы</span><span class="router-progress__count">1 / 3</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:33%"></div></div></div><div class="router-topic-cards" role="list" aria-label="Доступные темы"><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t1" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Делопроизводство: основы</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">12 вопросов</span><span class="router-topic-card__chip">15 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--notStarted" data-topic-id="t2" data-router-status="notStarted" data-action="router-select:t2"><span class="router-topic-card__top"><span class="router-topic-card__name">Защита информации</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">8 вопросов</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status">Не начата</span><span class="router-topic-card__go">начать</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--notStarted router-topic-card--scenario" data-router-status="notStarted" data-action="router-select:scenario:sed" data-item-key="scenario:sed"><span class="router-topic-card__top"><span class="router-topic-card__name">Работа с документами в СЭД</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">Сценарий</span><span class="router-topic-card__chip">5 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status">Не начат</span><span class="router-topic-card__go">начать</span></span></button></div></div>
+  </main>
+  <footer class="tb-scene__foot">
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" disabled="" aria-disabled="true">Завершить</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-hub-locked" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Работа в информационных системах</h1>
+        
+      </div>
+      
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+  </header>
+
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content" data-slot="page-content"><div class="content-page content-page--router" data-template-key="router.menu"><div class="content-placeholder content-placeholder--title" data-placeholder="title">Выберите раздел</div><div class="content-placeholder content-placeholder--instruction" data-placeholder="instruction">Пройдите все разделы в любом порядке. Задание в информационной системе откроется на весь экран.</div></div><div class="router-progress" role="group" aria-label="Прогресс по разделам"><div class="router-progress__head"><span class="router-progress__label">Разделы</span><span class="router-progress__count">1 / 3</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:33%"></div></div></div><div class="router-topic-cards" role="list" aria-label="Доступные темы"><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t1" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Делопроизводство: основы</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">12 вопросов</span><span class="router-topic-card__chip">15 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--notStarted" data-topic-id="t2" data-router-status="notStarted" data-action="router-select:t2"><span class="router-topic-card__top"><span class="router-topic-card__name">Защита информации</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">8 вопросов</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status">Не начата</span><span class="router-topic-card__go">начать</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--notStarted router-topic-card--scenario router-topic-card--locked" data-router-status="notStarted" data-router-locked="true" disabled="" data-item-key="scenario:sed"><span class="router-topic-card__top"><span class="router-topic-card__name">Работа с документами в СЭД</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">Сценарий</span><span class="router-topic-card__chip">5 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status">Недоступен</span></span></button></div></div>
+  </main>
+  <footer class="tb-scene__foot">
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" disabled="" aria-disabled="true">Завершить</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-hub-done" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Работа в информационных системах</h1>
+        
+      </div>
+      
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+  </header>
+
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content" data-slot="page-content"><div class="content-page content-page--router" data-template-key="router.menu"><div class="content-placeholder content-placeholder--title" data-placeholder="title">Выберите раздел</div><div class="content-placeholder content-placeholder--instruction" data-placeholder="instruction">Пройдите все разделы в любом порядке. Задание в информационной системе откроется на весь экран.</div></div><div class="router-progress" role="group" aria-label="Прогресс по разделам"><div class="router-progress__head"><span class="router-progress__label">Разделы</span><span class="router-progress__count">3 / 3</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:100%"></div></div></div><div class="router-topic-cards" role="list" aria-label="Доступные темы"><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t1" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Делопроизводство: основы</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">12 вопросов</span><span class="router-topic-card__chip">15 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t2" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Защита информации</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">8 вопросов</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed router-topic-card--scenario" data-router-status="completed" disabled="" data-item-key="scenario:sed"><span class="router-topic-card__top"><span class="router-topic-card__name">Работа с документами в СЭД</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">Сценарий</span><span class="router-topic-card__chip">5 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершён</span></span></button></div></div>
+  </main>
+  <footer class="tb-scene__foot">
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">Завершить</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-hub-retake" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Работа в информационных системах</h1>
+        
+      </div>
+      
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+  </header>
+
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content" data-slot="page-content"><div class="content-page content-page--router" data-template-key="router.menu"><div class="content-placeholder content-placeholder--title" data-placeholder="title">Выберите раздел</div><div class="content-placeholder content-placeholder--instruction" data-placeholder="instruction">Пройдите все разделы в любом порядке. Задание в информационной системе откроется на весь экран.</div></div><div class="router-progress" role="group" aria-label="Прогресс по разделам"><div class="router-progress__head"><span class="router-progress__label">Разделы</span><span class="router-progress__count">3 / 3</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:100%"></div></div></div><div class="router-topic-cards" role="list" aria-label="Доступные темы"><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t1" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Делопроизводство: основы</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">12 вопросов</span><span class="router-topic-card__chip">15 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t2" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Защита информации</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">8 вопросов</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed router-topic-card--scenario" data-router-status="completed" data-item-key="scenario:sed" data-action="router-select:scenario:sed"><span class="router-topic-card__top"><span class="router-topic-card__name">Работа с документами в СЭД</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">Сценарий</span><span class="router-topic-card__chip">5 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершён</span><span class="router-topic-card__go">пройти заново</span></span></button></div></div>
+  </main>
+  <footer class="tb-scene__foot">
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">Завершить</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-start" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene tb-scene--cover">
+  <main class="tb-scene__body">
+    <div class="tb-cover">
+      <div class="tb-cover__main">
+        
+
+        <div class="tb-cover__content">
+          <div class="tb-cover__head">
+            <div class="tb-cover__eyebrow">
+              <span data-path="course.subtitle">Задание в информационной системе</span>
+              
+            </div>
+            <h1 class="tb-cover__title" data-path="course.title">Регистрация документов в СЭД</h1>
+            <div class="tb-cover__desc"><p>Вы выполните задание в учебной копии системы электронного документооборота — так же, как делаете это в работе.</p></div>
+          </div>
+
+          <div class="tb-facts">
+            
+            
+            <div class="tb-facts__item">
+              <div class="tb-facts__num"><span data-path="course.passPercent">70</span>%</div>
+              <div class="tb-facts__lbl">проходной балл</div>
+            </div>
+            
+            
+            
+            <div class="tb-facts__item">
+              <div class="tb-facts__num" data-path="course.timeLimitLabel">5 мин</div>
+              <div class="tb-facts__lbl">на прохождение</div>
+            </div>
+            
+            
+            <div class="tb-facts__item">
+              <div class="tb-facts__num" data-path="course.maxAttempts">2</div>
+              <div class="tb-facts__lbl">попыток</div>
+            </div>
+            
+          </div>
+
+          
+          <div class="tb-cover__note">
+            <span class="tb-scene__subhead">Как проходить</span>
+            <span class="tb-scene__note">После «Начать» задание откроется на весь экран. Действуйте как в настоящей системе: ошибочные щелчки и лишние действия снижают балл. Выйти досрочно можно кнопкой на панели — задание тогда засчитывается как невыполненное.</span>
+          </div>
+          
+
+          
+
+          
+
+          
+        </div>
+      </div>
+
+      
+    </div>
+  </main>
+
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="back">К списку тестов</button>
+    <div class="tb-scene__foot-spacer"></div>
+    
+    
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="start-test">Начать</button>
+    
+    
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-section-fresh" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Делопроизводство: итоговая аттестация</h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle">Обязательное обучение</span>
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:0" aria-label="Вопрос 1, отвечен">1</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:1" aria-label="Вопрос 2, отвечен">2</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:2" aria-label="Вопрос 3, отвечен">3</button>
+        
+        <button type="button" class="ou-quiz__dot is-current" data-action="goto:3" aria-label="Вопрос 4, текущий">4</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:4" aria-label="Вопрос 5, не выдан">5</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:5" aria-label="Вопрос 6, не выдан">6</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:6" aria-label="Вопрос 7, не выдан">7</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:7" aria-label="Вопрос 8, не выдан">8</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:8" aria-label="Вопрос 9, не выдан">9</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:9" aria-label="Вопрос 10, не выдан">10</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:10" aria-label="Вопрос 11, не выдан">11</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:11" aria-label="Вопрос 12, не выдан">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>3</strong> из 12</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+      </div>
+    </div>
+    
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: ; --tb-answer-fs: ">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral" data-path="state.sectionName">Работа с документами в СЭД</span>
+      </div>
+      <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
+        <div class="tb-scene__qtitle" role="heading" aria-level="2" data-slot="question-text">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</div>
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          
+          <div data-slot="protection-mark"></div>
+        </div>
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="sim-open"><span class="ou-btn__ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></span><span>Пройти</span></button>
+          <span class="tb-sim-cover__note">Задание выполняется на весь экран</span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-next" disabled="" data-path="state.nav.primaryLabel">Далее</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-section-rules" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Делопроизводство: итоговая аттестация</h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle">Обязательное обучение</span>
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:0" aria-label="Вопрос 1, отвечен">1</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:1" aria-label="Вопрос 2, отвечен">2</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:2" aria-label="Вопрос 3, отвечен">3</button>
+        
+        <button type="button" class="ou-quiz__dot is-current" data-action="goto:3" aria-label="Вопрос 4, текущий">4</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:4" aria-label="Вопрос 5, не выдан">5</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:5" aria-label="Вопрос 6, не выдан">6</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:6" aria-label="Вопрос 7, не выдан">7</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:7" aria-label="Вопрос 8, не выдан">8</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:8" aria-label="Вопрос 9, не выдан">9</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:9" aria-label="Вопрос 10, не выдан">10</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:10" aria-label="Вопрос 11, не выдан">11</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:11" aria-label="Вопрос 12, не выдан">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>3</strong> из 12</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+      </div>
+    </div>
+    
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: ; --tb-answer-fs: ">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral" data-path="state.sectionName">Работа с документами в СЭД</span>
+      </div>
+      <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
+        <div class="tb-scene__qtitle" role="heading" aria-level="2" data-slot="question-text">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</div>
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          
+          <div data-slot="protection-mark"></div>
+        </div>
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="sim-open"><span class="ou-btn__ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></span><span>Пройти</span></button>
+          <span class="tb-sim-cover__note">Задание выполняется на весь экран</span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-next" disabled="" data-path="state.nav.primaryLabel">Далее</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style><div class="ou-modal-root tb-sim-modal" role="dialog" aria-modal="true" aria-labelledby="rules-t">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head"><div class="ou-modal__head-text"><p class="ou-modal__title" id="rules-t">Практическое задание</p><p class="ou-modal__desc">Работа в СЭД · регистрация входящего документа</p></div></div>
+      <div class="ou-modal__body"><ul class="ou-list--bulleted tb-sim-rules"><li>Задание откроется на весь экран. Выполните действия в окне системы так, как делаете это в работе.</li><li>На задание отводится 5 минут. Таймер — на панели над окном системы; когда время выйдет, задание завершится.</li><li>Ошибочные клики и превышение нормы времени снижают балл.</li><li>После трёх ошибок на одном шаге появится подсказка. Подсказка тоже снижает балл.</li><li>Выйти досрочно можно кнопкой на панели. Задание тогда будет засчитано как невыполненное.</li></ul></div>
+      <div class="ou-modal__foot"><button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button><button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg></span><span>Старт</span></button></div>
+    </div>
+  </div></div></div>
+    <div id="wf-section-done" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Делопроизводство: итоговая аттестация</h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle">Обязательное обучение</span>
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:0" aria-label="Вопрос 1, отвечен">1</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:1" aria-label="Вопрос 2, отвечен">2</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:2" aria-label="Вопрос 3, отвечен">3</button>
+        
+        <button type="button" class="ou-quiz__dot is-current" data-action="goto:3" aria-label="Вопрос 4, текущий">4</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:4" aria-label="Вопрос 5, не выдан">5</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:5" aria-label="Вопрос 6, не выдан">6</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:6" aria-label="Вопрос 7, не выдан">7</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:7" aria-label="Вопрос 8, не выдан">8</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:8" aria-label="Вопрос 9, не выдан">9</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:9" aria-label="Вопрос 10, не выдан">10</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:10" aria-label="Вопрос 11, не выдан">11</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:11" aria-label="Вопрос 12, не выдан">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>4</strong> из 12</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+      </div>
+    </div>
+    
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: ; --tb-answer-fs: ">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral" data-path="state.sectionName">Работа с документами в СЭД</span>
+      </div>
+      <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
+        <div class="tb-scene__qtitle" role="heading" aria-level="2" data-slot="question-text">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</div>
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          
+          <div data-slot="protection-mark"></div>
+        </div>
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--success ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><h2 class="tb-sim-cover__title">Задание выполнено</h2></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-next" data-path="state.nav.primaryLabel">Далее</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-section-retake" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Делопроизводство: итоговая аттестация</h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle">Обязательное обучение</span>
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:0" aria-label="Вопрос 1, отвечен">1</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:1" aria-label="Вопрос 2, отвечен">2</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:2" aria-label="Вопрос 3, отвечен">3</button>
+        
+        <button type="button" class="ou-quiz__dot is-current" data-action="goto:3" aria-label="Вопрос 4, текущий">4</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:4" aria-label="Вопрос 5, не выдан">5</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:5" aria-label="Вопрос 6, не выдан">6</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:6" aria-label="Вопрос 7, не выдан">7</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:7" aria-label="Вопрос 8, не выдан">8</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:8" aria-label="Вопрос 9, не выдан">9</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:9" aria-label="Вопрос 10, не выдан">10</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:10" aria-label="Вопрос 11, не выдан">11</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:11" aria-label="Вопрос 12, не выдан">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>4</strong> из 12</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+      </div>
+    </div>
+    
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: ; --tb-answer-fs: ">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral" data-path="state.sectionName">Работа с документами в СЭД</span>
+      </div>
+      <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
+        <div class="tb-scene__qtitle" role="heading" aria-level="2" data-slot="question-text">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</div>
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          
+          <div data-slot="protection-mark"></div>
+        </div>
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--success ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><h2 class="tb-sim-cover__title">Задание выполнено</h2><button class="ou-btn ou-btn--secondary ou-btn--m" data-action="sim-open"><span>Пройти заново</span></button></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-next" data-path="state.nav.primaryLabel">Далее</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-section-exited" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Делопроизводство: итоговая аттестация</h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle">Обязательное обучение</span>
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:0" aria-label="Вопрос 1, отвечен">1</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:1" aria-label="Вопрос 2, отвечен">2</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:2" aria-label="Вопрос 3, отвечен">3</button>
+        
+        <button type="button" class="ou-quiz__dot is-current" data-action="goto:3" aria-label="Вопрос 4, текущий">4</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:4" aria-label="Вопрос 5, не выдан">5</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:5" aria-label="Вопрос 6, не выдан">6</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:6" aria-label="Вопрос 7, не выдан">7</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:7" aria-label="Вопрос 8, не выдан">8</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:8" aria-label="Вопрос 9, не выдан">9</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:9" aria-label="Вопрос 10, не выдан">10</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:10" aria-label="Вопрос 11, не выдан">11</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:11" aria-label="Вопрос 12, не выдан">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>4</strong> из 12</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+      </div>
+    </div>
+    
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: ; --tb-answer-fs: ">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral" data-path="state.sectionName">Работа с документами в СЭД</span>
+      </div>
+      <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
+        <div class="tb-scene__qtitle" role="heading" aria-level="2" data-slot="question-text">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</div>
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          
+          <div data-slot="protection-mark"></div>
+        </div>
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--warning ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out" aria-hidden="true"><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path></svg></span><h2 class="tb-sim-cover__title">Выход досрочно: задание не выполнено</h2></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-next" data-path="state.nav.primaryLabel">Далее</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-section-timeout" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Делопроизводство: итоговая аттестация</h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle">Обязательное обучение</span>
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:0" aria-label="Вопрос 1, отвечен">1</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:1" aria-label="Вопрос 2, отвечен">2</button>
+        
+        <button type="button" class="ou-quiz__dot is-answered" data-action="goto:2" aria-label="Вопрос 3, отвечен">3</button>
+        
+        <button type="button" class="ou-quiz__dot is-current" data-action="goto:3" aria-label="Вопрос 4, текущий">4</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:4" aria-label="Вопрос 5, не выдан">5</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:5" aria-label="Вопрос 6, не выдан">6</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:6" aria-label="Вопрос 7, не выдан">7</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:7" aria-label="Вопрос 8, не выдан">8</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:8" aria-label="Вопрос 9, не выдан">9</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:9" aria-label="Вопрос 10, не выдан">10</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:10" aria-label="Вопрос 11, не выдан">11</button>
+        
+        <button type="button" class="ou-quiz__dot " disabled="" data-action="goto:11" aria-label="Вопрос 12, не выдан">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>4</strong> из 12</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+      </div>
+    </div>
+    
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: ; --tb-answer-fs: ">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral" data-path="state.sectionName">Работа с документами в СЭД</span>
+      </div>
+      <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
+        <div class="tb-scene__qtitle" role="heading" aria-level="2" data-slot="question-text">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</div>
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          
+          <div data-slot="protection-mark"></div>
+        </div>
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--warning ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer-off" aria-hidden="true"><path d="M10 2h4"></path><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"></path><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"></path><path d="m2 2 20 20"></path><path d="M12 12v-2"></path></svg></span><h2 class="tb-sim-cover__title">Время вышло: задание не выполнено</h2></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-next" data-path="state.nav.primaryLabel">Далее</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-notes" class="wf-state"><div class="wf-notes">
+      <table>
+        <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr><td>Карточка сценария</td><td><code>test_scenarios</code>, ключ пункта <code>scenario:&lt;id&gt;</code>, <code>data-item-key</code></td><td>Карточка темы из <code>buildRouterHubHtml</code> без изменений структуры. Дельта: метка «Сценарий» первой в ряду меток, класс <code>router-topic-card--scenario</code>, мужской род подписей («Не начат», «Завершён», «Недоступен», «(необязательный)»)</td></tr>
+          <tr><td>Название карточки</td><td><code>test_scenarios.title</code></td><td>Название, которое автор задал пункту; какой сценарий выпадет из банка, участник до запуска не видит</td></tr>
+          <tr><td>Метка лимита</td><td><code>test_scenarios.time_limit_minutes</code>, иначе <code>settings.limitSeconds</code> сценария</td><td>У случайной выдачи сценарий ещё не выбран, поэтому лимит пункта задаёт автор; без него метки нет</td></tr>
+          <tr><td>Состояния</td><td>те же, что у темы</td><td>Хаб говорит, ЧТО пункт закрыт, а не КАК пройден: «Завершён» с галочкой, без цвета исхода. Повторный вход — по правилу теста «менять ответ»: запрещено — карточка закрыта, как у темы (хаб: сценарий завершён); разрешено — карточка нажимается и несёт «пройти заново» (хаб: завершён, менять ответ можно)</td></tr>
+          <tr><td>«пройти заново» в хабе</td><td>правило теста «менять ответ» (<code>allowAnswerChange</code>)</td><td>Техдолг №7. Щелчок сразу открывает плеер на весь экран, как первый вход, — без окна-подтверждения (не добавлять участнику лишних экранов). Сценарий начинается сначала; засчитывается последний прогон — кроме досрочного выхода: он не затирает результат завершённого прогона (решение владельца 2026-10-08); истечение времени — настоящее завершение и засчитывается. То же правило у «Пройти заново» в обычном разделе. Пункт остаётся завершённым, счётчик «Разделы» не меняется. Темы повторного входа не имеют — правило касается только пункта-сценария (решение владельца 2026-10-06)</td></tr>
+          <tr><td>Закрыт правилом</td><td>правило разблокировки пункта</td><td>На эскизе — «после тем 1 и 2». Тот же код <code>isSectionUnlocked</code>, что у тем</td></tr>
+          <tr><td>«Завершить»</td><td>стандартный подвал</td><td>Неактивна, пока не закрыты все обязательные пункты, сценарии считаются наравне с темами</td></tr>
+          <tr><td>Старт теста «Сценарий»</td><td>макет <code>start.html</code> шаблона без изменений</td><td>Описание — задание; «Как проходить» — правила полного экрана; факты — проходной балл, лимит, попытки. «вопросов» не показывается: в тесте один пункт</td></tr>
+          <tr><td>«Начать»</td><td><code>requestFullscreen</code> по щелчку</td><td>Сразу плеер на весь экран, без промежуточного окна правил; затем окно результата плеера и обычные итоги теста</td></tr>
+          <tr><td>Сценарий в обычном разделе</td><td>макет <code>question.html</code> шаблона без изменений</td><td>Решение владельца 2026-10-06: раздел выдаёт сценарии своей темы наравне с прочими вопросами — тот же отбор, квоты и поправка на экспозицию. Шапка, карта вопросов, счётчик, метка раздела и подвал — как у любого типа (<code>buildQuestionProgress</code>, <code>buildQuestionNav</code>). Дельта — только область ответа (слот <code>question-interaction</code>) и окно правил</td></tr>
+          <tr><td>Обложка сценария</td><td>изображение первой сцены сценария, класс <code>tb-sim-cover</code></td><td>Скриншот первого экрана, слегка размыт; поверх — «Пройти» и «Задание выполняется на весь экран». Из эскиза Э0 <code>sim-scenario-task.html</code> (состояния learn-start, learn-done, learn-exited) без изменений. Стили обложки — в общих стилях шаблона, как у прочих компонентов экрана вопроса</td></tr>
+          <tr><td>«Пройти»</td><td>окно правил, затем <code>requestFullscreen</code> по «Старт»</td><td>Окно правил собирается из настроек сценария и оценки в тесте: лимит, подсказки, штрафы, досрочный выход (путь участника 5.2). «Отмена» возвращает к форме, сценарий не начат</td></tr>
+          <tr><td>«Далее»</td><td><code>answerReady</code> = прогон завершён</td><td>Неактивна, пока сценарий не пройден до конца — прогон и есть ответ. «Пропустить» и «Назад» — по правилам теста, как у других типов; пропущенный сценарий можно начать позже</td></tr>
+          <tr><td>После прогона</td><td>исход прогона</td><td>Обложка говорит, ЗАВЕРШЁН ли сценарий, а не как: «Задание выполнено» — цель достигнута полностью, частично или не достигнута; «Выход досрочно» и «Время вышло» — не выполнено. Вид — <code>IconBadge</code> размера l в тоне исхода (success / warning, значки lucide check, log-out, timer-off) и заголовок; выбор владельца 2026-10-08 вместо мелкой метки. Исход и баллы участник видит в окне результата плеера по правилам показа результатов теста</td></tr>
+          <tr><td>«Пройти заново»</td><td>правило теста «менять ответ»</td><td>Есть, только если тест разрешает менять ответ; сценарий начинается сначала, засчитывается последнее выполнение. Без права менять ответ завершённый сценарий не перезапускается</td></tr>
+          <tr><td>Закрытие раздела при уходе (PRD-67)</td><td>как у других типов</td><td>Действует на форму вопроса так же; прогон на весь экран уходом с вопроса не считается</td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <script>
+      function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (s) { s.classList.toggle('active', s.id === 'wf-' + id); });
+        document.querySelectorAll('.wf-nav button').forEach(function (b) {
+          b.classList.toggle('active', btn ? b === btn : (b.getAttribute('onclick') || '').indexOf("'" + id + "'") >= 0);
+        });
+      }
+      window.addEventListener('DOMContentLoaded', function () {
+        var nav = document.querySelector('.wf-nav');
+        document.documentElement.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+        var want = new URLSearchParams(location.search).get('state');
+        if (want) showState(null, want);
+      });
+    </script>
+  </body>
+</html>

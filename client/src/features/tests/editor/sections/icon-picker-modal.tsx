@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input, ModalDialog, Spinner } from "@universityrt/ui-kit";
+import { Button, Input, ModalDialog, Spinner } from "@skillum/ui-kit";
 
 /** Glyph table: name → contours. */
 export type GlyphTable = Record<string, string[]>;

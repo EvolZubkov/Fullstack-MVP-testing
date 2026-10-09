@@ -19,7 +19,11 @@ import { syncEntityUsages } from "./media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 import { isAllocationFeasible } from "@shared/questions/allocation";
-import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
+import { normalizeOptionFeedback, optionCountOf, OPTION_FEEDBACK_TYPE } from "@shared/questions/option-feedback";
+import { normalizeIncomingText, normalizeQuestionData, normalizePromptByFormat } from "./question-text";
+import { blankIds } from "@shared/questions/blanks";
+import { parseRulesCell, parsePromptFormatCell } from "./workbook-answer-rules";
+import { isMarkupFormat } from "@shared/questions/prompt-format";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
 import {
@@ -44,9 +48,23 @@ const typeFromExcel: Record<string, string> = {
   // budget and the per-option domain come in three columns of their own.
   allocation: "allocation",
   распределение: "allocation",
+  // PRD-57 FR-31: текстовые типы. Каноническое написание пишет экспорт, короткое и
+  // русское принимает импорт — книгу дописывают руками.
+  short_answer: "short",
+  short: "short",
+  "короткий ответ": "short",
+  fill_in_blanks: "blanks",
+  blanks: "blanks",
+  "пропуски": "blanks",
+  long_answer: "long",
+  long: "long",
+  "развёрнутый ответ": "long",
+  "развернутый ответ": "long",
 };
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation";
+type QuestionType =
+  | "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation"
+  | "short" | "blanks" | "long";
 
 /** SHA-256 от type + prompt + нормализованные варианты ответов. */
 export function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -195,6 +213,12 @@ export async function importQuestionRows(
       // Тип вопроса.
       const rawType = String(row["Тип вопроса"] || row["Тип"] || "").trim().toLowerCase();
       const type = typeFromExcel[rawType] as QuestionType | undefined;
+      // «Сценарий в ИС» в клетку не помещается: его содержимое — граф сцен с изображениями,
+      // и переносится он только своим архивом. Строка называет это прямо, а не «неизвестный тип».
+      if (rawType === "simulation" || rawType === "сценарий") {
+        result.warnings.push(`Строка ${rowNum}: вопрос «Сценарий» переносится архивом .scenario.zip, а не книгой — строка пропущена`);
+        continue;
+      }
       if (!type) {
         result.errors.push(`Строка ${rowNum}: неизвестный тип "${row["Тип вопроса"] || row["Тип"]}"`);
         continue;
@@ -204,7 +228,13 @@ export async function importQuestionRows(
       // системы или из ручной правки, а храниться должна так же, как из редактора.
       // Разметку в ячейке переводим в markdown: автор её не набирал, а хранить
       // теги как видимые символы — значит показать ученику «<b>».
-      const prompt = cellText(row["Текст вопроса"] || row["Вопрос"]);
+      // PRD-57 §4.3: текст читается ПО СВОЕМУ ФОРМАТУ. У разметки прежний проход; у
+      // размеченного текста перевод в markdown НЕ делается — он и должен остаться
+      // разметкой, — но санитайзер и типографика по узлам обязательны.
+      const promptFormat = parsePromptFormatCell(row["Формат текста"]);
+      const prompt = isMarkupFormat(promptFormat)
+        ? normalizePromptByFormat(String(row["Текст вопроса"] || row["Вопрос"] || ""), promptFormat).prompt
+        : cellText(row["Текст вопроса"] || row["Вопрос"]);
       if (!prompt) {
         result.errors.push(`Строка ${rowNum}: пустой вопрос`);
         continue;
@@ -395,6 +425,48 @@ export async function importQuestionRows(
 
         dataJson = { left, right };
         correctJson = { pairs };
+      } else if (type === "short" || type === "blanks" || type === "long") {
+        // PRD-57 FR-31. У текстовых типов вариантов нет: содержимое задания — его текст,
+        // а эталон — набор правил сравнения, который живёт в той же колонке эталона.
+        const ids = type === "blanks" ? blankIds(prompt) : [];
+        if (type === "blanks" && ids.length === 0) {
+          result.errors.push(
+            `Строка ${rowNum}: в тексте задания с пропусками нет ни одного пропуска — ` +
+              `пропуск записывается двойными фигурными скобками, например {{city}}`,
+          );
+          continue;
+        }
+        const parsed = parseRulesCell(correctStr, {
+          type,
+          answerKind: String(row["Вид ответа"] ?? ""),
+          join: String(row["Связка правил"] ?? ""),
+          unit: String(row["Единица измерения"] ?? ""),
+          blankIds: ids,
+        });
+        if (parsed.errors.length > 0) {
+          for (const error of parsed.errors) result.errors.push(`Строка ${rowNum}: ${error}`);
+          continue;
+        }
+        correctJson = type === "blanks" ? { blanks: parsed.blanks ?? [] } : (parsed.set ?? {});
+
+        const maxLengthRaw = String(row["Предел длины"] ?? "").trim();
+        const maxLength = maxLengthRaw === "" ? undefined : parseInt(maxLengthRaw, 10);
+        if (maxLengthRaw !== "" && (!Number.isFinite(maxLength) || (maxLength as number) < 1)) {
+          result.errors.push(`Строка ${rowNum}: «Предел длины» — целое число больше нуля, получено "${maxLengthRaw}"`);
+          continue;
+        }
+        const placeholder = cellText(row["Подсказка в поле"]).trim();
+        const requiredRaw = String(row["Ответ обязателен"] ?? "").trim().toLowerCase();
+        const required = requiredRaw === "да" || requiredRaw === "yes" || requiredRaw === "true";
+
+        // Пустые свойства НЕ пишутся ключами со значением `undefined`: содержимое
+        // сравнивается по хешу, и `{}` против `{maxLength: undefined}` дали бы разные
+        // хеши одному и тому же заданию.
+        dataJson = {
+          ...(type !== "blanks" && maxLength !== undefined ? { maxLength } : {}),
+          ...(type === "long" && placeholder !== "" ? { placeholder } : {}),
+          ...(type === "long" && required ? { required: true } : {}),
+        };
       } else if (type === "ranking") {
         const separator = optionsStr.includes("#") ? "#" : "|";
         const items = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
@@ -457,8 +529,11 @@ export async function importQuestionRows(
 
       // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
       // «Балл» больше не свойство вопроса — цена задаётся листом «Оценка» теста.
-      const difficulty = parseIntCell(row["Сложность"], 50);
-      if (difficulty < 0 || difficulty > 100) {
+      // PRD-16 FR-10: пустая клетка — «Не задано» (NULL), как пустая клетка индекса ниже;
+      // раньше она становилась 50, и вопрос без сложности получал её после круга через книгу.
+      const difficultyCell = String(row["Сложность"] ?? "").trim();
+      const difficulty: number | null = difficultyCell === "" ? null : parseIntCell(difficultyCell, 50);
+      if (difficulty !== null && (difficulty < 0 || difficulty > 100)) {
         result.errors.push(`Строка ${rowNum}: сложность вне диапазона 0..100 ("${row["Сложность"]}")`);
         continue;
       }
@@ -491,6 +566,27 @@ export async function importQuestionRows(
       // Per element, AFTER the separator split — otherwise markup spanning two
       // options would swallow the `#`/`|` between them.
       dataJson = normalizeQuestionData(dataJson, { convertHtml: true });
+
+      // «ОС по вариантам»: слоты через `#` в порядке вариантов, пустой слот — у варианта
+      // своего текста нет. Разбирается ПОСЛЕ канонизации вариантов: число слотов сверяется
+      // с числом вариантов, которые действительно будут сохранены.
+      const optionFeedbackRaw = String(row["ОС по вариантам"] ?? "");
+      const optionFeedbackSlots = optionFeedbackRaw.trim() === "" ? [] : optionFeedbackRaw.split("#");
+      const optionCount = optionCountOf(dataJson);
+      const optionFeedback = normalizeOptionFeedback(optionFeedbackSlots, type, optionCount, cellText);
+      if (optionFeedbackSlots.some((slot) => slot.trim() !== "")) {
+        if (type !== OPTION_FEEDBACK_TYPE) {
+          result.warnings.push(
+            `Строка ${rowNum}: «ОС по вариантам» применяется только к вопросу с одним ответом — ` +
+              `у этого типа значение не используется`,
+          );
+        } else if (optionFeedbackSlots.slice(optionCount).some((slot) => slot.trim() !== "")) {
+          result.warnings.push(
+            `Строка ${rowNum}: в «ОС по вариантам» текстов больше, чем вариантов ответа (${optionCount}) — ` +
+              `лишние не сохранены`,
+          );
+        }
+      }
 
       // The unit count (options / pairs / items) backs the «Измерения» alias.
       const unitCount = unitCountOf(type, dataJson);
@@ -559,6 +655,9 @@ export async function importQuestionRows(
             topicId: topic.id,
             type,
             prompt,
+            // PRD-57 §4.3: формат едет вместе с текстом. Без него задание, набранное
+            // разметкой, прочиталось бы как markdown, и участник увидел бы теги.
+            promptFormat,
             dataJson,
             correctJson,
             contentHash,
@@ -575,6 +674,12 @@ export async function importQuestionRows(
             updatePayload.feedbackMode = "general";
           }
           if (hasCol("Теги")) updatePayload.tags = tags;
+          // Колонка есть — она задаёт тексты целиком (очищенная ячейка стирает). Колонки нет
+          // (книга до её появления) — сохранённые тексты остаются, но сверяются с новым типом
+          // и числом вариантов: текст не должен пережить свой вариант или одиночный выбор.
+          updatePayload.optionFeedbackJson = hasCol("ОС по вариантам")
+            ? optionFeedback
+            : normalizeOptionFeedback(existing.optionFeedbackJson, type, optionCount);
           if (!dryRun) {
             const updatedQuestion = await storage.updateQuestion(rowId, updatePayload as any);
             // Медиатека: индекс за импортом мимо не должен оставаться неактуальным.
@@ -628,6 +733,7 @@ export async function importQuestionRows(
           topicId: topic.id,
           type,
           prompt,
+          promptFormat,
           dataJson,
           correctJson,
           difficulty,
@@ -636,6 +742,7 @@ export async function importQuestionRows(
           feedback: feedbackMode === "general" ? feedback : null,
           feedbackCorrect: feedbackMode === "conditional" ? feedbackCorrect : null,
           feedbackIncorrect: feedbackMode === "conditional" ? feedbackIncorrect : null,
+          optionFeedbackJson: optionFeedback,
           tags,
           orderIndex,
           contentHash,

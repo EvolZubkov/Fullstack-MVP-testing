@@ -19,7 +19,7 @@ import {
   IconBadge,
   Stack,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { useAuth } from "@/lib/auth";
 
 export default function NoAccessPage() {

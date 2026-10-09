@@ -34,6 +34,16 @@
     }
   },
   "access": { "superadminEmails": { "env": "SUPERADMIN_EMAILS" } },
+  // PRD-54. Импорт выгрузок отчётов LMS.
+  "analytics": {
+    "lmsImport": {
+      // Хранить ли ФИО и организацию участника. true = в базе только псевдоним.
+      // Псевдоним считается в любом случае: на нём держится ключ повторной загрузки.
+      "anonymizeParticipants": true
+    }
+  },
+  // Пакет SCORM: адрес приёма телеметрии — см. config/config.jsonc. Пусто -> server.appUrl.
+  "scorm": { "telemetryBaseUrl": "" },
   // Operational ceilings — see config/config.jsonc for what each one bounds.
-  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3 }
+  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3, "shortAnswerMaxLength": 250, "answerCheckBudgetMs": 1000, "answerCheckWarnMs": 200 }
 }

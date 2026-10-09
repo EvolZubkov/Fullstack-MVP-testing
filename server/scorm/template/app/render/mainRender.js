@@ -38,11 +38,38 @@ function applySystemScreenStyles(layoutKey) {
     if (main) main.disabled = useFallback;
 }
 
+/**
+ * Отрисовка текущего экрана.
+ *
+ * «Сценарий в ИС»: обрамлена для слоя плеера сценария (`TBSimRun`) — экран, который не объявил
+ * себя сценарием, снимает смонтированный плеер. Без обрамления плеер пережил бы, например,
+ * истечение времени теста и закрыл бы собой итоги.
+ */
 function render() {
+    if (typeof TBSimRun === 'undefined') { renderScreen(); return; }
+    TBSimRun.beginRender();
+    try {
+        renderScreen();
+    } finally {
+        TBSimRun.endRender();
+    }
+}
+
+function renderScreen() {
     // Reset to the active template's stylesheet on every render; fallback system
     // screens (start/results) re-activate the default stylesheet from their own
     // templated renderers below.
     applySystemScreenStyles(null);
+
+    // Any screen that is NOT a question closes the open visit (обзор, итоги, контент,
+    // страница раздела). The question branch below re-opens it, and re-showing the same
+    // question is a no-op, so a plain redraw neither loses nor double-counts time.
+    if (typeof TBQuestionTime !== 'undefined') TBQuestionTime.leave();
+
+    // PRD-67: every screen change passes here, so this is where a section is opened, left
+    // (and closed, when the test says so) or skipped as already closed. A redirect draws
+    // its own screen — this one must not be drawn over it.
+    if (typeof syncSectionLeaveGate === 'function' && syncSectionLeaveGate()) return;
 
     // Check for adaptive mode
     if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
@@ -107,7 +134,50 @@ function render() {
     var qData = state.flatQuestions[current];
     var progress = ((current + 1) / total) * 100;
 
+    // Время на задании (`cmi.interactions.n.latency`): заход открывается здесь и суммируется
+    // по возвратам — учащийся, вернувшийся к пропущенному вопросу, думал над ним дважды.
+    if (typeof TBQuestionTime !== 'undefined' && qData && qData.question) {
+        TBQuestionTime.show(qData.question.id);
+    }
+
+    // «Сценарий в ИС»: в тесте «Сценарий» и пунктом роутера вопрос-сценарий играется плеером на
+    // месте экрана вопроса. В обычном разделе — экран вопроса с обложкой (техдолг №5), а идущий
+    // прогон удерживает свой слой: перерисовка по таймеру не должна его снять.
+    if (qData && qData.question && typeof TBQType !== 'undefined' && TBQType.isSimulation(qData.question.type)
+        && typeof TBSimRun !== 'undefined') {
+        if (TBSimRun.isFullScreenItem(qData)) {
+            TBSimRun.render(qData);
+            return;
+        }
+        if (TBSimRun.keep(qData)) return;
+    }
+
     renderStandardQuestion(qData, current, total, progress);
+}
+
+/**
+ * Текст задания для слота `question-text`.
+ *
+ * PRD-57 FR-24: у задания с пропусками поля стоят ВНУТРИ текста, а блок ответа пуст.
+ * Порядок обязателен: сначала разметка (`authorTextHtml`), потом подстановка полей —
+ * иначе поле окажется внутри кода или ссылки.
+ */
+function questionTextHtml(q, answer, review) {
+    // PRD-57 FR-03a: листинг приезжает ГОТОВОЙ разметкой — подсветка посчитана на
+    // сервере при выпечке, и библиотеки подсветки в пакете нет.
+    var html = (typeof q.promptHtml === 'string' && q.promptHtml !== '')
+        ? q.promptHtml
+        : authorTextHtml(q.prompt);
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!q || typeof TBQType === 'undefined' || !TBQType.hasBlanks(q.type)) return html;
+    if (!TB || !TB.renderBlanksPrompt) return html;
+    var key = q.correct || {};
+    return TB.renderBlanksPrompt(html, {
+        mode: review ? 'answer' : 'input',
+        blanks: Array.isArray(key.blanks) ? key.blanks : [],
+        answer: (answer && typeof answer === 'object' && !Array.isArray(answer)) ? answer : undefined,
+        readonly: !!review
+    });
 }
 
 /** Feedback block HTML shown under a question once the answer is accepted.
@@ -123,7 +193,7 @@ function buildQuestionFeedbackHtml(q) {
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
     if (!TB || !TB.feedbackBanner) return '';
     // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
-    var feedbackText = TB.feedbackTextFor(q, isCorrect);
+    var feedbackText = TB.feedbackTextFor(q, isCorrect, answer);
     return TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
@@ -161,6 +231,9 @@ function hasUnansweredInScope(topicId) {
 // (return to a skipped question, or revise an answer). Otherwise the flow goes
 // straight to the section results.
 function reviewIsWorthShowing(topicId) {
+    // Автор мог скрыть экран обзора целиком (решение владельца 2026-09-20) — тогда
+    // спрашивать, есть ли там что делать, уже не о чем.
+    if (typeof screenHidden === 'function' && screenHidden('review')) return false;
     var TB = typeof TBTemplate !== 'undefined' ? TBTemplate : null;
     var input = {
         allowReturnToUnanswered: TEST_DATA.allowReturnToUnanswered,
@@ -230,6 +303,10 @@ function showFinishConfirm(unansweredCount, finishLabel, onConfirm) {
 // (no later flatQuestions belong to a different topic). Drives «Завершить раздел»
 // vs «Завершить тест» labelling and the separate test-finish step.
 function isLastSectionTopic(topicId) {
+    // В роутере последнего раздела нет: порядок выбирает участник, и после раздела всегда идёт
+    // хаб — его «Завершить» и закрывает тест. Иначе раздел, последний в ВЫДАЧЕ, терял экран итогов
+    // раздела, а его кнопки обещали «Завершить тест».
+    if (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode()) return false;
     if (!state.flatQuestions || !state.flatQuestions.length) return true;
     var last = state.flatQuestions[state.flatQuestions.length - 1];
     return !!last && last.topicId === topicId;
@@ -264,9 +341,11 @@ function renderReviewScreen() {
         ? 'Завершить тест'
         : 'Завершить раздел';
     if (!layout || !TB || !TB.renderScreenInto || !TB.buildReviewContext) {
-        // No review layout — fall through to finishing (section or whole test).
+        // No review layout — fall through to finishing (section or whole test). Forced for
+        // the same reason the обзор's own finish is: the learner asked to finish, and there
+        // is no screen left to send them back to.
         if (sectionScope && scopeTopicId) { finishSection(scopeTopicId, isLast, 0, true); }
-        else { submit(); }
+        else { submit(true); }
         return;
     }
     // Opened via «К обзору» mid-flow? Then offer «Назад» to the origin question and
@@ -275,13 +354,17 @@ function renderReviewScreen() {
     // must not reveal not-yet-issued questions.
     var fromButton = (state.reviewOrigin !== null && state.reviewOrigin !== undefined);
     var frontier = state.currentIndex;
+    var freeNav = !!TEST_DATA.allowReturnToUnanswered && !!TEST_DATA.allowFreeSectionNavigation;
     var statusMap = state.questionStatuses || {};
     var built = TB.buildReviewContext({
         questions: state.flatQuestions.map(function (fq, i) {
             var st = statusMap[fq.question.id];
             return {
                 id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt,
-                delivered: (i <= frontier) || st === 'answered' || st === 'skipped'
+                // FR-11a: при свободной навигации «невыданных» внутри охвата нет — обзор
+                // обязан перечислить их все, иначе он умолчит о вопросе, к которому ученик
+                // мог перейти в один клик. Охват фильтруется ниже разделом, как и прежде.
+                delivered: freeNav || (i <= frontier) || st === 'answered' || st === 'skipped'
             };
         }),
         statuses: statusMap,
@@ -343,10 +426,13 @@ function renderReviewScreen() {
                     // Section finish (D5): confirm-if-unanswered handled inside finishSection.
                     finishSection(scopeTopicId, isLast, unanswered, false);
                 } else if (unanswered > 0) {
-                    // Flat test finish (FR-09): confirm when unanswered remain.
-                    showFinishConfirm(unanswered, built.review.finishLabel, function () { submit(); });
+                    // Flat test finish (FR-09): confirm when unanswered remain. The submit is
+                    // FORCED: the обзор has no «current question» to gate on — it shows the whole
+                    // list — so `requireAnswerOrToast` would bounce the learner back to a screen
+                    // they just chose to leave, with no way out of it at all.
+                    showFinishConfirm(unanswered, built.review.finishLabel, function () { submit(true); });
                 } else {
-                    submit();
+                    submit(true);
                 }
             });
         }
@@ -583,6 +669,10 @@ function renderStandardQuestion(qData, current, total, progress) {
             commitScope: sectionScope ? 'section' : 'test',
             sectionCommitted: state.sectionCommitted || {},
             allowReturn: !!TEST_DATA.allowReturnToUnanswered,
+            // PRD-19 (FR-11a): свободная навигация внутри раздела открывает фронтир на весь
+            // текущий охват сразу. Зависит от возврата (FR-11c): без него карта — индикатор,
+            // и открывать в ней нечего.
+            freeNavigation: !!TEST_DATA.allowReturnToUnanswered && !!TEST_DATA.allowFreeSectionNavigation,
             scopeLabel: sectionScope ? ('Вопросы раздела «' + (qData.topicName || '') + '»') : 'Вопросы теста'
         }) : null;
         var context = {
@@ -603,7 +693,7 @@ function renderStandardQuestion(qData, current, total, progress) {
         };
         if (qProgress) context.state.questionsProgress = qProgress;
         var slots = {
-            'question-text': authorTextHtml(q.prompt),
+            'question-text': questionTextHtml(q, state.answers[q.id], false),
             'question-media': renderQuestionMedia(q),
             'question-interaction': '<div id="question-input">' + renderQuestionInput(q) + '</div>',
             'question-feedback': showFeedback ? buildQuestionFeedbackHtml(q) : ''
@@ -686,7 +776,7 @@ function renderStandardQuestion(qData, current, total, progress) {
     }
     html += '<div class="card">';
     html += '<div style="color:#666;margin-bottom:8px;">Вопрос ' + (current + 1) + ' из ' + total + ' | ' + escapeHtml(qData.topicName) + '</div>';
-    html += '<div class="question-text">' + authorTextHtml(q.prompt) + '</div>';
+    html += '<div class="question-text">' + questionTextHtml(q, state.answers[q.id], true) + '</div>';
     html += renderQuestionMedia(q);
     html += '<div id="question-input">';
     html += renderQuestionInput(q);

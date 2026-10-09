@@ -11,7 +11,7 @@
               {{#if state.exhausted}}<span class="ou-tag ou-tag--neutral">Попытки исчерпаны</span>{{/if}}
             </div>
             <h1 class="tb-cover__title" data-path="course.title"></h1>
-            {{#if course.description}}<p class="tb-cover__desc" data-path="course.description"></p>{{/if}}
+            {{#if course.description}}<div class="tb-cover__desc">{{& course.descriptionHtml }}</div>{{/if}}
           </div>
 
           <div class="tb-facts">
@@ -27,9 +27,15 @@
               <div class="tb-facts__lbl">проходной балл</div>
             </div>
             {{/if}}
-            {{#if course.timeLimitMinutes}}
+            {{#if course.passCondition}}
             <div class="tb-facts__item">
-              <div class="tb-facts__num"><span data-path="course.timeLimitMinutes"></span> мин</div>
+              <div class="tb-facts__num" data-path="course.passCondition.countLabel"></div>
+              <div class="tb-facts__lbl" data-path="course.passCondition.label"></div>
+            </div>
+            {{/if}}
+            {{#if course.timeLimitLabel}}
+            <div class="tb-facts__item">
+              <div class="tb-facts__num" data-path="course.timeLimitLabel"></div>
               <div class="tb-facts__lbl">на прохождение</div>
             </div>
             {{/if}}

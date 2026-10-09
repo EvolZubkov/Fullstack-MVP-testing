@@ -18,7 +18,7 @@
  * перенос в общий DS (ENGINERING_HANDBOOK/handbook/design-system/...),
  * иначе оставляем здесь.
  *
- * Tokens: --ou-* из UniversityRT DS (см. ds/university-rt.css).
+ * Tokens: --ou-* из Skillum DS (см. ds/skillum-ds.css).
  * ───────────────────────────────────────────────────────────────────────── */
 
 /* ── Local tb-* literal-token aliases ─────────────────────────────────── */
@@ -31,8 +31,38 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+  /* PRD-46 «Оформление шкал»: ширина колонки цвета рассчитана на самую длинную
+     подпись чипа («По схеме уровней»), ширина превью — на читаемую розу. */
+  --tb-appearance-color-w: 190px;
+  --tb-appearance-icon-w: 170px;
+  --tb-appearance-preview-w: 260px;
+  --tb-icon-trigger-h: 36px;
+  --tb-icon-trigger-box: 28px;
+  --tb-icon-cell: 44px;
+  --tb-icon-grid-h: 320px;
+
   --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
+}
+
+/* ── Categorical series for charts ──────────────────────────────────────
+   The DS ships no --ou-chart* scale, so the set is assembled from its semantic
+   hues: distinguishable neighbours, and every entry follows the theme because
+   each one is a DS token.
+
+   Declared on `.ou` (the class the theme provider puts on <body>), NOT on
+   :root — the semantic tokens live in the `.ou, .ou--light` / `.ou--dark`
+   blocks, so a :root declaration referenced variables that do not exist there
+   and every series silently collapsed to the inherited text colour. */
+.ou {
+  --tb-chart-1: var(--ou-accent-default);
+  --tb-chart-2: var(--ou-info-default);
+  --tb-chart-3: var(--ou-success-default);
+  --tb-chart-4: var(--ou-warning-default);
+  --tb-chart-5: var(--ou-error-default);
+  --tb-chart-6: var(--ou-accent-hover);
+  --tb-chart-7: var(--ou-info-700);
+  --tb-chart-8: var(--ou-success-700);
 }
 
 /* ── Drawer body scroll contract ────────────────────────────────────────
@@ -42,6 +72,22 @@
    becoming scrollable. */
 .ou-drawer__body {
   min-height: 0;
+}
+
+/* ── Полоса вкладок ящика редактора ─────────────────────────────────────
+   Семь вкладок нового дерева с точками состояния в подписи шире, чем полоса
+   ящика: DS `.ou-tabs__list` — обычный flex без переноса и прокрутки, поэтому
+   последняя вкладка просто уезжала за правый край. Отступ вкладки внутри
+   ЯЩИКА уменьшен до 8px (ui-kit: 14px), а полосе разрешена прокрутка —
+   на узком экране или с длинными подписями седьмая вкладка достижима, а не
+   срезана. Правило живёт в `tb`-слое: сам DS не трогаем. */
+.ou-drawer > .ou-tabs--m .ou-tabs__tab {
+  padding-left: var(--ou-space-2);
+  padding-right: var(--ou-space-2);
+}
+.ou-drawer > .ou-tabs .ou-tabs__list {
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 /* ── Drawer body — flush variant for split layouts ──────────────────────
@@ -58,20 +104,52 @@
   overflow: hidden;
 }
 
+/* ── Select popup escape from `overflow: hidden` containers ─────────────
+   DS .ou-card sets `overflow: hidden` (rounded-corner clipping) and
+   DS .ou-acc--bordered / .ou-acc--separated do the same on accordion items.
+   The ui-kit Select renders its `.ou-select__menu` as `position: absolute`
+   inside the trigger wrapper — without portaling — so any `overflow: hidden`
+   ancestor clips the popup. Allow these containers to expand temporarily
+   while a Select inside is open. Modern browsers (Chromium 105+, Safari 15.4+,
+   Firefox 121+) support `:has`, which is now baseline.
+
+   For the surrounding scroll containers (`.tb-settings-content`,
+   `.ou-drawer__body`) we deliberately do NOT override overflow because they
+   need to keep scrolling — the popup is small enough (max-height: 280px) to
+   fit inside the body after the flush-layout fix above. */
+.ou-card:has(.ou-select.is-open),
+.ou-acc__item:has(.ou-select.is-open),
+.ou-acc--bordered:has(.ou-select.is-open),
+.ou-acc--separated:has(.ou-select.is-open),
+.tb-topic-row:has(.ou-select.is-open),
+.tb-structure-zone:has(.ou-select.is-open) {
+  overflow: visible;
+}
+
+/* Modal opt-in: a SHORT modal (`tb-select-modal`) lets the DS Select's absolute
+   `.ou-select__menu` escape the modal body's `overflow-y: auto` while it is open.
+   Safe here because `.ou-modal` has no overflow clip and the menu (z-index:50) sits
+   above the footer. NOT applied to all modals — a tall/scrolling modal would spill
+   its content when a Select opens. */
+.tb-select-modal .ou-modal__body:has(.ou-select.is-open) {
+  overflow: visible;
+}
+
 /* ── Settings content container (правая колонка drawer-а Настроек) ──── */
 /* container-type: inline-size — точка отсчёта для @container ниже:
    адаптив реагирует на ширину самой колонки настроек, а не viewport
    (drawer может быть узким даже на широком экране). */
-.tb-settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--ou-space-5); container-type: inline-size; }
+/* Отступ от краёв — 6x (эскиз `editor-settings-target.html`: «проектный слой: 20 -> 24»). */
+.tb-settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--ou-space-6); container-type: inline-size; }
 
 /* Page-level баннеры сверху форм: остаются на виду при прокрутке. Z-index выше
    баннера, чтобы он перекрывал scroll-контент. Закрытие — через .ou-banner__close. */
 .tb-settings-content > .ou-banner,
 .tb-settings-content > .wf-annot-wrap--block:has(> .ou-banner) {
   position: sticky;
-  top: calc(var(--ou-space-5) * -1);
+  top: calc(var(--ou-space-6) * -1);
   z-index: 2;
-  margin: calc(var(--ou-space-5) * -1) calc(var(--ou-space-5) * -1) var(--ou-space-4);
+  margin: calc(var(--ou-space-6) * -1) calc(var(--ou-space-6) * -1) var(--ou-space-4);
   border-radius: 0;
   border-left: 0;
   border-right: 0;
@@ -83,7 +161,37 @@
   border-right: 0;
   border-top: 0;
 }
-.tb-settings-content .ou-formfield { display: flex; flex-direction: column; gap: var(--ou-space-2); margin-bottom: var(--ou-space-4); }
+/* Кольцо у поля, к которому увёл переход «Перейти к ошибкам». Программный `focus()` не
+   поднимает `:focus-visible`, поэтому класс ставит сам ящик — см. `goToError`. Значения
+   из эскиза: кольцо 2px и такой же отступ. */
+.ou-field.is-focused .ou-field__box,
+.ou-textarea.is-focused .ou-textarea__box,
+.ou-select.is-focused .ou-select__trigger {
+  outline: 2px solid var(--ou-focus-ring, var(--ou-primary-default));
+  outline-offset: 2px;
+}
+
+/* Стопка баннеров РАЗНЫХ уровней (ошибки выше предупреждений) липнет ЦЕЛИКОМ, одним блоком.
+   Два отдельных sticky-баннера с одинаковым `top` при прокрутке наезжают друг на друга:
+   нижний останавливается на той же линии и закрывает верхний вместе с его действием. */
+.tb-settings-content > .tb-alerts {
+  position: sticky;
+  top: calc(var(--ou-space-6) * -1);
+  z-index: 2;
+  margin: calc(var(--ou-space-6) * -1) calc(var(--ou-space-6) * -1) var(--ou-space-4);
+  display: flex;
+  flex-direction: column;
+}
+.tb-settings-content > .tb-alerts > .ou-banner {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  margin: 0;
+}
+/* Метка и контрол — одна пара: 1x. Интервал ДО соседнего блока задаёт панель, поэтому
+   собственной нижней отбивки у поля нет (иначе она складывалась бы с интервалом группы). */
+.tb-settings-content .ou-formfield { display: flex; flex-direction: column; gap: var(--ou-space-1); margin-bottom: 0; }
 .tb-settings-content .ou-formfield > .ou-field,
 .tb-settings-content .ou-formfield > .ou-textarea { display: flex; width: 100%; }
 .tb-settings-content .ou-formfield > .ou-select { width: 100%; }
@@ -92,11 +200,223 @@
    ширине; max-width: 100% сжимается на узких viewport. */
 .tb-settings-content > .ou-formfield > .ou-number { width: var(--tb-input-w-md); max-width: 100%; }
 
+/* ── Проектный слой панели настроек (модульная сетка 4px) ───────────────────
+   Источник — утверждённый эскиз `docs/wireframes/editor-settings-target.html`,
+   блок «проектный слой». Эскиз ссылается на ЭТОТ файл, поэтому значения берутся
+   из него дословно: правило со своими числами меняло бы и вид самого эскиза.
+   1x = 4px внутри компонента, 4x = 16px между разными блоками, 6x = 24px от краёв
+   и перед группой. Разделительных ЛИНИЙ в панели нет — их работу делает интервал. */
+
+.tb-settings-content > * { margin-top: var(--ou-space-4); }
+.tb-settings-content > *:first-child { margin-top: 0; }
+
+/* Панели «Оформления» обёрнуты в собственный контейнер ради `data-testid`, и правило
+   выше до их блоков не доставало: строки параметров, таблица цветов и баннеры шли
+   вплотную. `display: contents` убирает обёртку из раскладки, оставляя её в разметке
+   для приёмочных проверок. */
+.tb-settings-content > [data-testid$="-pane"] { display: contents; }
+.tb-settings-content > .ou-formsection { margin-top: var(--ou-space-6); }
+.tb-settings-content > .ou-formsection:first-child { margin-top: 0; }
+
+/* Карточка объекта (тема, шкала, уровень): края 6x, содержимое 4x. Правила взяты из
+   проектного слоя эскиза дословно — эскиз ссылается на ЭТОТ файл, и свои числа здесь
+   меняли бы и его вид. Прежде тело темы имело собственные 12/16px, а строки внутри
+   отбивались на 8px: ни одно из этих значений сетке не принадлежит. */
+.tb-settings-content .ou-acc__trigger { padding: var(--ou-space-4) var(--ou-space-6); }
+.tb-settings-content .ou-acc__body { padding: 0 var(--ou-space-6) var(--ou-space-6); }
+.tb-settings-content .ou-acc__body > * { margin-top: var(--ou-space-4); }
+.tb-settings-content .ou-acc__body > *:first-child { margin-top: 0; }
+.tb-settings-content .ou-acc__body > .tb-table { margin-top: var(--ou-space-4); }
+
+/* Шапка карточки объекта: триггер, действия и шеврон одной строкой. Кнопка удаления
+   стоит РЯДОМ с триггером, а не внутри него: кнопка в кнопке невалидна, и клик по
+   удалению заодно сворачивал бы карточку. */
+.tb-acc-head { display: flex; align-items: center; gap: var(--ou-space-1); padding-right: var(--ou-space-6); }
+.tb-acc-head > .ou-acc__trigger { flex: 1 1 auto; min-width: 0; padding-right: var(--ou-space-3); }
+/* Шеврон этой шапки — мишень разворота (клик висит на нём), поэтому курсор обязан об этом
+   говорить: в ДС он лежит внутри кнопки и курсор достаётся ему от неё. */
+.tb-acc-head > .ou-acc__chev { cursor: pointer; }
+.tb-topic-actions { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
+
+/* Числовое поле имеет свою ширину; в группе-flex оно растягивалось на весь ящик.
+   Прежнее правило адресовало только ПРЯМОГО потомка панели и до полей внутри раздела
+   не доставало — отсюда растянутые «Лимит времени» и «Максимум попыток». */
+.tb-settings-content .ou-formsection__body > .ou-number,
+.tb-settings-content .ou-formsection__body > .ou-formfield > .ou-number {
+  width: var(--tb-input-w-md); max-width: 100%;
+}
+/* Баннер ПОСЛЕ карточки: у sticky-правила выше отрицательная верхняя отбивка, но она
+   про баннер в шапке панели, а не про баннер в середине списка карточек. */
+.tb-settings-content > :is(.ou-card, .ou-banner) + :is(.ou-card, .ou-banner) {
+  margin-top: var(--ou-space-4);
+}
+/* Внутри карточки действует та же сетка: собственной отбивки поля больше не носят. */
+.tb-settings-content .ou-card__body > * + * { margin-top: var(--ou-space-4); }
+
+/* Группа полей: ни границы, ни вертикальных полей дизайн-системы. Заголовок принадлежит
+   своему содержимому (1x), а группы разделяет 6x. */
+.tb-settings-content .ou-formsection,
+.ou-card__body .ou-formsection {
+  padding-block: 0;
+  border-bottom: 0;
+  gap: var(--ou-space-1);
+}
+/* Третий селектор — обёртка: панель надписей кладёт группы в свой `div`, и её первая
+   группа отбивается от предыдущего блока так же, как группа от группы. */
+.tb-settings-content .ou-formsection + .ou-formsection,
+.ou-card__body .ou-formsection + .ou-formsection,
+.tb-settings-content > * + * > .ou-formsection:first-child {
+  margin-top: var(--ou-space-6);
+}
+
+/* Родственные пары внутри компонента — 1x. */
+/* `ou-switch-field` — единственное, что осталось за проектным слоем: правила зазора
+   «тумблер — текст» в дизайн-системе нет вовсе, задавать его там было бы не переносом
+   утверждённого значения, а новым решением за все продукты. */
+.tb-settings-content .ou-switch-field { gap: var(--ou-space-1); }
+
+/* Хром ящика редактора: 6x от краёв, однородные строки списка — 1x. Правила адресованы
+   ИМЕННО этому ящику (рейл живёт только в его вкладках, подвал найден по телу
+   редактора): у остальных ящиков свои утверждённые эскизы. */
+/* Шапка и полоса вкладок: те же 6x от краёв, что у подвала и панели. Без этого вкладки
+   прижаты к краю ящика, а поля тела начинаются правее — колонка визуально не собирается.
+   ui-kit даёт шапке 20 и полосе 0 (`skillum-ds.css`), эскиз перебивает и то и другое. */
+.ou-drawer:has([data-testid="test-editor-body"]) .ou-tabs__list {
+  padding-inline: var(--ou-space-6);
+}
+/* Аккордеон в панели настроек: между свёртками — 4x, как между разными блоками. ui-kit
+   ставит 8px (`--ou-space-2`), а эскиз требует 16: свёртки тем — это разные блоки, а не
+   родственная пара. Правило появилось, когда реестр обратной связи вопросов переехал с
+   самодельной свёртки на `ou-acc` и впервые привёл аккордеон в ящик. */
+
+/* Родственные пары внутри компонентов ящика — 1x: иконка и подпись кнопки, вариант и его
+   метка, иконка и текст баннера. ui-kit ставит 8, 12 и 2 соответственно. */
+
+
 /* Section caption (subdued uppercase-like heading внутри формы). */
 .tb-section-label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); display: inline-flex; align-items: center; gap: var(--ou-space-2); }
 
+/* Result-variable visual builder (PRD-2 §4.1): template select + condition rows.
+   A condition row is «Элемент(grow) · Свойство · Оператор · Значение · удалить»;
+   the same primitive renders «Порог» (one row) and «Вердикт» (a list). */
+.tb-formula-builder { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-2); }
+/* Собранное конструктором выражение. Пунктирная рамка отличает ПОКАЗ от ввода: править
+   строку здесь нельзя, для этого есть режим «Выражение». */
+.tb-formula-preview {
+  font: var(--ou-text-body-s);
+  font-family: var(--ou-font-family-mono);
+  color: var(--ou-fg-muted);
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  overflow-x: auto;
+}
+.tb-rows { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-rows-actions { margin-top: var(--ou-space-2); }
+/* PRD-53: шкалы группы профиля — список тумблеров в столбик.
+   `.ou-switch-field` строчный, и без контейнера тумблеры сходятся в одну строку,
+   где название одной шкалы упирается в ключ соседней. Шаг 1x: строки родственные. */
+/* PRD-53: перечень исходов — карточки одного списка, шаг 1x. Раньше это была
+   таблица, где строка показывала только первую строку значения. */
+.tb-outcome-list { display: flex; flex-direction: column; gap: var(--ou-space-1); margin-bottom: var(--ou-space-2); }
+.tb-profile-scales { display: flex; flex-direction: column; gap: var(--ou-space-1); align-items: flex-start; }
+.tb-cond-row { display: flex; align-items: flex-end; gap: var(--ou-space-2); }
+.tb-cond-row > .tb-cond-row__grow { flex: 1 1 auto; min-width: 0; }
+.tb-cond-sep { font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; padding-bottom: var(--ou-space-2); }
+
+/* DSL «Функции» reference (modal): toolbar trigger + grouped function rows. */
+.tb-fn-toolbar { display: flex; justify-content: flex-end; margin-bottom: var(--ou-space-2); }
+.tb-fn-group { margin-bottom: var(--ou-space-5); }
+.tb-fn-group__title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
+.tb-fn-row { display: grid; grid-template-columns: max-content 1fr auto; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-2) 0; border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+.tb-fn-sig { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+.tb-fn-desc { color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+
 /* Card body paragraph (muted info). */
 .tb-card-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
+
+/* PRD-29 §7.1a: шапка строки темы в карточке «По темам» — подпись источника слева,
+   «Сбросить до установок темы» справа, в одну строку над предпросмотром. */
+/* Переопределённый текст помечается ТОЛЬКО полосой слева: подпись рядом с ней была бы
+   второй раз о том же (решение эскиза 13). Цвет — предупреждающий: это не ошибка, а
+   отступление от текста темы. */
+.tb-feedback-preview.is-overridden { border-left: var(--ou-space-1) solid var(--ou-warning-default); }
+
+.tb-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+
+/* Поле текста внутри группы: метка, под ней предпросмотр. Интервал — из DS (`.ou-field`
+   задаёт 1X между меткой и полем), а не назначенный: полей в группе теперь два, и своя
+   вертикальная шкала развела бы их иначе, чем остальные поля формы.
+   `margin-bottom` шапки гасится: здесь интервал держит `gap` контейнера, а сложение двух
+   правил давало 16 px вместо 8. */
+.tb-textfield { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-textfield .tb-feedback-head { margin-bottom: 0; align-items: center; }
+/* Кнопка сброса выше строки метки: её собственные отступы вытягивают шапку и двигают поле
+   вниз ровно у тех полей, где она есть. Гасим их, чтобы интервал не плясал от наличия
+   кнопки. */
+.tb-textfield .tb-feedback-head .ou-iconbtn { margin-top: -6px; margin-bottom: -6px; }
+/* Правая часть шапки: тег источника и действие над ним. Высота фиксирована по строке
+   метки — по той же причине. */
+.tb-feedback-head__trail {
+  display: flex; align-items: center; gap: var(--ou-space-1); height: 16px;
+}
+
+/* Группа полей одной темы (или подтемы): подзаголовок, под ним поля через 16 px — столько
+   же, сколько DS держит между полями формы. Своя обёртка, а не переопределение
+   `.ou-formsection__body`: то правило действует на КАЖДУЮ карточку панели настроек, и
+   развести две из них за счёт всех остальных было бы правкой чужой вёрстки.
+   Между группами 32 px — следующая ступень шкалы, иначе соседние темы читаются как
+   продолжение одной. Складывается из `gap` секции (16) и этого margin (16). */
+/* Карточка группы тем на вкладке «Состав». Геометрия — карточки уровня (`tb-level-card`),
+   потому что группа и тема стоят в одном списке и обязаны читаться как вещи одного
+   порядка. Здесь только то, чего у карточки уровня нет: зазор между карточками, подсветка
+   зоны приёма и отступ кнопки «Добавить тему» от списка. */
+.tb-group-card + .tb-group-card { margin-top: var(--ou-space-3); }
+.tb-group-card.is-drop-target { border-color: var(--ou-border-focus); }
+.tb-group-card__foot { margin-top: var(--ou-space-2); }
+/* Ручка группы стоит первой в шапке — до поля с именем; зазор тот же, что у ручки темы. */
+.tb-group-card .tb-level-card__head > .drag-handle { margin-right: var(--ou-space-2); }
+
+.tb-textgroup { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-textgroup + .tb-textgroup { margin-top: var(--ou-space-4); }
+/* Подзаголовок группы несёт свой нижний отступ; внутри flex-контейнера он сложился бы с
+   `gap` и дал 24 px вместо 16. */
+.tb-textgroup > .tb-section-label { margin: 0; }
+
+/* Э2.4: реестр «По вопросам» — дерево «тема -> вопрос», только чтение. Тема сворачивается,
+   потому что у теста бывает десяток тем по десятку вопросов. Само дерево собрано из
+   `ou-acc` и `tb-table`; прежняя ручная раскладка строки (`__row`/`__q`/`__texts`, доли
+   40/45%) снята вместе с ней — но ШИРИНЫ, которые она задавала, таблице никто не передал,
+   и столбец «Текст» схлопывался. Ниже они возвращены столбцам. */
+.tb-qfeedback-table { table-layout: fixed; }
+.tb-qfeedback-table__q { width: 40%; }
+.tb-qfeedback-table__mode { width: 96px; }
+.tb-qfeedback-table__act { width: 136px; }
+.tb-qfeedback__line { display: flex; gap: var(--ou-space-2); font: var(--ou-text-body-s); }
+.tb-qfeedback__line-lbl { color: var(--ou-fg-muted); flex: 0 0 auto; }
+/* `break-word`, а НЕ `anywhere`: `anywhere` уменьшает min-content содержимого до одной
+   буквы, и в авторастяжке таблицы столбец «Текст» ужимался до нескольких пикселей —
+   «не задано» рассыпалось в столбик «не / зада / но». `break-word` рвёт только то, что
+   иначе вылезет за край, а собственную ширину столбца не занижает. */
+.tb-qfeedback__line-text { overflow-wrap: break-word; min-width: 0; }
+.tb-qfeedback__line-text.is-empty { color: var(--ou-fg-disabled); }
+
+/* Registry «Обратная связь вопросов»: an option override is its own SUB-ROW under the
+   question. No rule between a question and its sub-rows, so the group reads as one; the
+   rule comes after the last sub-row. Approved wireframe: approved/option-feedback.html.
+   Scoped under `.tb-table`: the generic `.tb-table td` rule further down has the same
+   specificity and would otherwise win by order. */
+.tb-table .tb-qfeedback-row--has-sub > td { border-bottom: none; }
+.tb-table .tb-qfeedback-row--sub > td { padding-top: 0; vertical-align: top; }
+.tb-table .tb-qfeedback-row--sub:not(.is-last) > td { border-bottom: none; }
+.tb-qfeedback-sub { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding-left: var(--ou-space-4); color: var(--ou-fg-muted); }
+.tb-qfeedback-sub > svg { flex: none; margin-top: var(--ou-space-1); }
 
 /* Meta-count — компактный indicator «иконка + число» (например, число
    назначений теста в шапке drawer-а). Не chip, не tag — просто tone-muted
@@ -123,6 +443,76 @@
 .tb-table tr:last-child td { border-bottom: none; }
 .tb-table--mb { margin-bottom: var(--ou-space-3); }
 .tb-table__cell--nowrap { white-space: nowrap; }
+
+/* PRD-29 «Исходы» editor (OutcomesEditor): a row of DS Inputs must FIT the drawer
+   pane (it scrolls only vertically) instead of overflowing to the right. Fixed
+   layout + full-width, shrinkable inputs make the columns share the available
+   width; the actions column is a fixed narrow track for the delete button.
+   PRD-45 moved the NUMERIC twin off this table — see .tb-levels below. */
+.tb-bands-table { table-layout: fixed; }
+.tb-bands-table__act { width: 40px; }
+.tb-bands-table .ou-field,
+.tb-bands-table .ou-field__box { width: 100%; min-width: 0; }
+
+/* ─── PRD-5 «Вклады вопросов»: contribution matrix ───────────────────────────── */
+/* Scoped to .tb-contrib-grid so the shared .tb-table (bands, scoring, preview)
+   keeps its full-width auto layout. The answer-text column is widened and pinned;
+   the scale-value columns are narrowed; the table scrolls horizontally inside the
+   card body when the scale columns overflow the drawer width. */
+/* Таблица весов опций в модалке оценки вопроса. Колонка балла узкая и постоянной
+   ширины: иначе поле растягивается на половину модалки и текст варианта прижимается
+   к левому краю. 120px — ширина из эскиза (`--wf-w-rhs`). */
+.tb-weights td:last-child,
+.tb-weights th:last-child { width: 120px; }
+
+.tb-contrib-grid-wrap { overflow-x: auto; }
+/* table-layout: fixed + an EXPLICIT table width = the exact column sum. With
+   width:auto the table grows to max-content (the inputs' ~20ch intrinsic size)
+   and the surplus inflates the value columns, defeating the narrowing. Pinning
+   the width to (text col + N × value col) — N comes from the inline
+   --tb-contrib-cols var — makes fixed layout honor each column exactly, and the
+   table overflows the drawer when there are many scales → the wrapper scrolls. */
+/* 7rem хватало простому полю ввода, но в ячейке теперь счётчик со степперами, и две
+   кнопки съедают 56px из 112px: на число оставалось ~14px, туда не помещалось даже
+   «-1,5». 8.5rem возвращает полю ~40px под знаки — «-12,5» видно целиком. Ширина
+   объявлена ЗДЕСЬ, у таблицы: свойство наследуется, поэтому оба места ниже берут
+   одно значение и разъехаться не могут. */
+.tb-table.tb-contrib-grid {
+  --tb-contrib-val-w: 8.5rem;
+  table-layout: fixed;
+  width: calc(var(--tb-contrib-unit-w, 18rem) + var(--tb-contrib-cols, 0) * var(--tb-contrib-val-w));
+}
+
+/* Answer-text column: ~2x wider than its prior auto width, pinned on scroll. */
+.tb-contrib-grid__unit-col { width: var(--tb-contrib-unit-w, 18rem); }
+.tb-contrib-grid th.tb-contrib-grid__unit-col,
+.tb-contrib-grid td.tb-contrib-grid__unit-col {
+  position: -webkit-sticky; position: sticky; left: 0; z-index: 1;
+  box-shadow: 1px 0 0 0 var(--ou-border-soft);
+}
+/* Opaque fills so scrolled value cells pass cleanly under the pinned column. */
+.tb-contrib-grid td.tb-contrib-grid__unit-col { background: var(--ou-bg-elevated); }
+.tb-contrib-grid th.tb-contrib-grid__unit-col { background: var(--ou-bg-muted); }
+
+/* Check icon to the left of the option text; the reserved slot keeps the text
+   left edge aligned across rows whether or not the row is the correct answer. */
+.tb-contrib-grid__unit { display: flex; align-items: flex-start; gap: var(--ou-space-2); }
+.tb-contrib-grid__check {
+  flex: 0 0 1rem; display: inline-flex; align-items: center;
+  height: 1.25rem; color: var(--ou-success-default);
+}
+.tb-contrib-grid__unit-text { min-width: 0; }
+
+/* Scale value columns: ~half their prior auto width (input fills the cell). */
+.tb-contrib-grid__val-col { width: var(--tb-contrib-val-w); }
+/* A scale key ("EMOTIONAL_EXHAUSTION") is one unbreakable word — an underscore is
+   not a break opportunity — so in a fixed-width column it overflows and paints
+   over the neighbouring headers. The markup supplies <wbr> break points at each
+   underscore; `anywhere` is the fallback for a long key with no underscores. */
+.tb-contrib-grid th.tb-contrib-grid__val-col {
+  overflow-wrap: anywhere;
+  vertical-align: bottom;
+}
 
 /* Compact rule cell inside table (custom rule + fields + unit). */
 .tb-rule-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
@@ -190,7 +580,6 @@
 .tb-pass-card { margin-bottom: var(--ou-space-3); }
 .tb-pass-card > .ou-card__header { padding-bottom: var(--ou-space-2); }
 .tb-pass-card > .ou-card__body { padding-top: var(--ou-space-2); padding-bottom: var(--ou-space-3); }
-.tb-pass-card .ou-radio-group__items { gap: var(--ou-space-2); }
 
 .tb-pass-overall {
   display: grid;
@@ -209,7 +598,6 @@
 }
 .tb-pass-table th { font: var(--ou-text-body-s); font-weight: 500; }
 .tb-pass-table__topic-col { width: var(--wf-size-180); }
-.tb-pass-table__req-col { width: var(--wf-size-100); text-align: center; }
 
 /* Expand-row: 3-td layout. */
 .tb-pass-table__detail > td {
@@ -250,11 +638,18 @@
   font: var(--ou-text-body-s); font-weight: 500; color: var(--ou-fg-default);
   white-space: nowrap;
 }
-/* Field cells inside the grid: label sits inline before the control (как detail-inner). */
+/* Field cells inside the grid: label sits inline before the control (как detail-inner).
+   DS `.ou-select` is a flex COLUMN (label above the trigger) and renders its label
+   inside itself as `.ou-field__lbl`, so the row layout is applied to the control
+   itself — not to a wrapper — otherwise «Тип» stacks above and breaks the grid rows. */
 .tb-pass-table__variants .ou-formfield {
   display: inline-flex; flex-direction: row; align-items: center;
   gap: var(--ou-space-2); margin-bottom: 0; min-width: 0;
 }
+.tb-pass-table__variants .ou-select {
+  flex-direction: row; align-items: center; gap: var(--ou-space-2);
+}
+.tb-pass-table__variants .ou-field__lbl,
 .tb-pass-table__variants .ou-formfield__lbl {
   font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0; flex-shrink: 0;
 }
@@ -274,7 +669,14 @@
 /* Адаптив переехал в единый @container ниже (см. в конце файла). */
 
 /* ── Status dot (универсальный индикатор состояния) ──────────────────── */
+/* `display: inline-block` обязателен: размер точке задают `width`/`height`, а к
+   строчному элементу они не применяются. В рейле и в карточках точка попадала в
+   flex-контейнер и блокировалась им сама собой, а подпись вкладки ui-kit заворачивает
+   в `span.ou-tabs__label` с `display: block` — и там же точка схлопывалась в ноль
+   ширины: автор видел баннер «Название обязательно» и ни одной пометки на вкладке,
+   где это поле лежит. */
 .tb-status-dot {
+  display: inline-block; vertical-align: middle;
   width: var(--ou-space-3); height: var(--ou-space-3); border-radius: 50%;
   flex-shrink: 0; background: var(--ou-fg-muted);
 }
@@ -284,9 +686,130 @@
 .tb-status-dot--off   { background: var(--ou-border-default); }
 .tb-status-dot--dirty { background: var(--ou-accent-default); }
 
+/* ── Feedback editor modal (per prd7-editor-drawer.html s-feedback-edit) ──
+   Composite: format selector + (optional) RTE / Textarea + links + PDFs.
+   Used by features/tests/editor/sections/feedback-editor-modal.tsx. */
+.tb-feedback-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-5);
+}
+.tb-feedback-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-editor__section--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+.tb-feedback-editor__sec-title {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+}
+.tb-feedback-editor__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-editor__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-elevated);
+}
+.tb-feedback-editor__item-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: var(--ou-space-2);
+  min-width: 0;
+}
+.tb-feedback-editor__item-fields > .ou-field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── RTE (Rich Text Editor, execCommand-based toolbar) ───────────────────
+   Used in FeedbackEditorModal when format === "richText". No external RTE
+   library — only browser execCommand for bold/italic/link. */
+.tb-rte {
+  border: var(--wf-border-w, 1px) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+  background: var(--ou-bg-elevated);
+}
+.tb-rte__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  padding: var(--ou-space-1) var(--ou-space-2);
+  border-bottom: var(--wf-border-w, 1px) solid var(--ou-border-soft);
+  background: var(--ou-bg-subtle);
+}
+.tb-rte__sep {
+  width: var(--wf-border-w, 1px);
+  height: var(--ou-space-4);
+  background: var(--ou-border-default);
+  margin: 0 var(--ou-space-1);
+  flex-shrink: 0;
+  display: inline-block;
+}
+.tb-rte__area {
+  min-height: 120px;
+  padding: var(--ou-space-3);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  line-height: 1.5;
+  outline: none;
+}
+.tb-rte__area:focus { outline: none; }
+.tb-rte__area p { margin: 0 0 var(--ou-space-2); }
+.tb-rte__area p:last-child { margin-bottom: 0; }
+.tb-rte__area strong { font-weight: 700; }
+.tb-rte__area em { font-style: italic; }
+.tb-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
+.tb-rte__area ul,
+.tb-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
+/* preflight.css (@layer base) drops list markers from every ul/ol, and nothing
+   in the cascade puts them back: the rule above only restores the indent. The
+   RTE shows the RESULT, so the author must see the same bullets and numbers the
+   learner gets. Values mirror the browser defaults used on the render side. */
+.tb-rte__area ul { list-style: disc outside; }
+.tb-rte__area ul ul { list-style-type: circle; }
+.tb-rte__area ul ul ul { list-style-type: square; }
+.tb-rte__area ol { list-style: decimal outside; }
+
+/* Inline status dot for tabs / list rows (per prd7-editor-drawer.html
+   и prd7-structure-*.html wireframes). Smaller than .tb-status-dot —
+   renders next to text, not in a card lead slot. */
+/* Точка состояния во вкладке и в рейле — тот же `tb-status-dot`, что и в карточках
+   объектов; своей копии больше нет. Отбивка от подписи — единственное, что нужно
+   добавить к общему правилу.
+
+   Во вкладке отбор ПОТОМКОМ, а не прямым ребёнком: подпись вкладки ui-kit кладёт в
+   собственную обёртку `span.ou-tabs__label`, и правило `>` молча переставало
+   действовать. Разметка обёртки — внутреннее дело DS, опираться на неё нельзя. */
+.ou-tabs__tab .tb-status-dot,
+.ou-drawer__rail-item > .tb-status-dot { margin-left: var(--ou-space-1); }
+
 /* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
 .tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
-.tb-adaptive-topics .ou-acc__trigger { padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
+.tb-adaptive-topics__trigger { padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
 /* DS .ou-acc__body has padding-top: 0 — добавляем зазор, иначе hover-фон триггера
    визуально упирается в кнопку «Добавить уровень». */
 .tb-adaptive-topics .ou-acc__body { padding-top: var(--ou-space-3); }
@@ -349,11 +872,23 @@
   grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
   gap: var(--ou-space-2);
   margin-bottom: var(--ou-space-2);
-  align-items: end;
+  /* `start` keeps each label+control pair top-aligned so boxes line up across a
+     row. With `end` the select cell did not reach the row track bottom while the
+     number cell did, leaving the «Тип порога» and «Порог» boxes ~8px apart. The
+     responsive 2-col variant below already uses `start` for the same reason. */
+  align-items: start;
 }
 .tb-level-grid .ou-formfield { margin-bottom: 0; }
+/* Stretch every control to its grid cell. Select renders `.ou-select` (without a
+   bare `.ou-field`), so it must be listed explicitly — otherwise its content-width
+   `inline-flex` trigger overflows the cell and overlaps the neighbouring field. */
 .tb-level-grid > .ou-formfield > .ou-number,
-.tb-level-grid > .ou-formfield > .ou-field { display: flex; width: 100%; }
+.tb-level-grid > .ou-formfield > .ou-field,
+.tb-level-grid > .ou-formfield > .ou-select { display: flex; width: 100%; }
+/* The select trigger has a 180px min-width in the DS; allow it to shrink to the
+   narrower grid cell instead of overflowing into the neighbouring field.
+   (Uniform box height is handled by the DS itself — control boxes are border-box.) */
+.tb-level-grid > .ou-formfield > .ou-select .ou-select__trigger { min-width: 0; }
 
 /* Compact density inside level-card. */
 .tb-level-card .ou-card__body .ou-formfield {
@@ -388,7 +923,69 @@
 }
 .tb-topic-row__name { font: var(--ou-text-heading-s); flex: 1; min-width: 0; }
 .tb-topic-row__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-topic-row__required {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+  margin: 0; cursor: pointer;
+}
+.tb-topic-row__required-lbl { -webkit-user-select: none; user-select: none; }
 .tb-topic-row__body { padding: var(--ou-space-3) var(--ou-space-4); }
+
+/* «Все вопросы темы» toggle row — sits above the draw-count row in the body. */
+.tb-draw-all-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+  cursor: pointer;
+}
+.tb-draw-all-row__lbl { font: var(--ou-text-body-s); }
+.tb-draw-all-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* PRD-30: «Случайный порядок вопросов» — switch row in the topic card body.
+   Same anatomy as .tb-draw-all-row above (switch + label + muted hint): the new
+   row must sit in the SAME rank as «Все вопросы темы», otherwise the card body
+   falls apart into two different kinds of switch rows. */
+.tb-question-order-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+/* PRD-30 раздел 14 (эскиз approved/prd30-test-level-order.html): the row is no
+   longer a switch but a «label + control» pair, like «Вопросов в тест» right
+   above it — the label takes the same width, otherwise the left edges of two
+   neighbouring controls drift apart. */
+.tb-question-order-row__lbl {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-question-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* PRD-30 FR-16: the test-wide delivery rule, above the topic list. Same anatomy
+   as .tb-draw-count-row — label of a fixed width, control, muted tail. */
+.tb-test-order-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-test-order-row__label {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-test-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* The option labels do not fit the DS default 180px trigger: in the test row they
+   wrapped out of the fixed-height control, in the topic row they hit the chevron.
+   One width for both also lines the test rule up with the topics' rules. */
+.tb-test-order-row .ou-select__trigger,
+.tb-question-order-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
+
+/* PRD-50 FR-11/FR-43: the topic's block picker — same anatomy as
+   .tb-question-order-row (fixed-width label + Select), placed right below it. */
+.tb-group-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-group-row__lbl {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-group-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
 
 /* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
 .tb-draw-count-row {
@@ -400,9 +997,117 @@
   width: var(--wf-size-150); flex-shrink: 0;
 }
 .tb-draw-count-row__max { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* PRD-55 (FR-33): хвост сводки темы «· увидят N%» — подкрашивается, когда банк вырабатывается.
+   Тон тот же, что у баннера под «Вопросов в тест»: это одна и та же величина, и разный цвет у
+   двух её показов читался бы как два разных сигнала. */
+.tb-exposure-hint--warn { color: var(--ou-warning-default); }
 /* Adaptive mode: draw_count заменяется bag-таггом + ссылкой на уровни (FR-36).
    `--adaptive` modifier добавляет flex-wrap, поскольку link-tail длиннее number-input. */
 .tb-draw-count-row--adaptive { flex-wrap: wrap; }
+
+/* FR-20c: inline field-error state. The row label turns to the DS error colour
+   when its control is invalid; the message renders below the row. Mirrors the
+   tone of the ui-kit field error so highlighting is consistent editor-wide. */
+.tb-draw-count-row[data-invalid="true"] .tb-draw-count-row__label { color: var(--ou-error-default); }
+.tb-field-error {
+  font: var(--ou-text-body-s);
+  color: var(--ou-error-default);
+  margin: calc(var(--ou-space-1) * -1) 0 var(--ou-space-2);
+}
+
+/* ── PRD-11 draw quotas: toggle row + inline strata block in the topic body ──
+   Switch enables an inline per-tag quota table (no modal — the config is small).
+   Mirrors docs/wireframes/prd11-draw-quotas.html (approved). */
+.tb-quota-toggle {
+  display: flex; align-items: center; gap: var(--ou-space-3);
+  margin-top: var(--ou-space-4);
+  cursor: pointer;
+}
+.tb-quota-toggle .tb-section-label { margin: 0; }
+/* Квоты по подтемам — карточки: колонка с шагом 4x, как её задаёт проектный слой
+   эскиза. Собственные отступы у подвала блока при этом обнуляются: с общим шагом
+   колонки они складывались бы в двойной. */
+.tb-quota-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+  margin-top: var(--ou-space-3);
+  padding-left: var(--ou-space-4);
+  border-left: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-quota-block > .tb-quota-actions,
+.tb-quota-block > .tb-quota-sum { margin-top: 0; }
+.tb-quota-block__avail { color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+/* PRD-50 §16: знак тревоги рядом со значением строки квоты. Заменил чип в подвале таблицы —
+   тот говорил о таблице целиком и не показывал, какая именно строка виновата.
+   ТОН ЗНАКА = УРОВЕНЬ ПРОБЛЕМЫ (контракт редактора, «Индикация проблем»): жёлтый у
+   предупреждения, красный у ошибки. Нехватка вопросов под квоту сохранение не блокирует,
+   поэтому базовый тон здесь жёлтый, а красный включает модификатор. */
+/* Ячейка «Доступно»: значение и знак тревоги стоят одной строкой и центрируются по ней.
+   Без общей строки знак выравнивался бы по базовой линии текста и садился ниже числа. */
+.tb-quota-block__availrow { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
+.tb-quota-block__alarm { display: inline-flex; color: var(--ou-warning-default); }
+.tb-quota-block__alarm--error { color: var(--ou-error-default); }
+/* Пузырь подсказки внутри узкой ячейки таблицы ужимается по ширине ячейки, и текст встаёт
+   в колонку по одному слову. Ширина по содержимому это снимает; верхнюю границу по-прежнему
+   держит `--wrap` дизайн-системы. */
+.tb-quota-block .ou-tip__bubble--wrap { width: max-content; }
+.tb-quota-actions { margin-top: var(--ou-space-3); }
+/* Строка порядка подблоков итогов: имя слева, кнопки перемещения справа. Обведённая
+   строка, а не плоский текст — автор двигает СТРОКИ, и границу перетаскиваемого блока
+   надо видеть (эскиз `editor-settings-target.html`, `.wf-order-row`). */
+.tb-order-row {
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+}
+
+.tb-quota-sum {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-3); margin-top: var(--ou-space-3);
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+}
+.tb-quota-sum.is-error { color: var(--ou-error-default); font-weight: 600; }
+
+/* PRD-17 (BR-12): variants editor — modal toolbar (tabs + «Удалить вариант»),
+   footer (coverage + «Готово») and the question-type leading icon in the
+   TransferList rows (replaces the avatar initials via TransferItem.icon). */
+.tb-variants-modal__toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-4);
+}
+.tb-variants-modal__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-4); width: 100%;
+}
+.tb-variant-qtype {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ou-fg-muted);
+}
+.tb-variant-qtype svg { display: block; }
+
+/* Transfer inside the variants modal: make the dual-list fill the modal body
+   and scroll INTERNALLY instead of letting each pane balloon to its content
+   height (41+ question rows) and push the whole modal — and the move controls —
+   past the form edge. Ported from the approved wireframe (prd17-test-variants).
+   The body becomes a bounded flex column so `.ou-transfer { flex: 1 }` can take
+   the remaining height; `min-height: 0` on every level lets the list's
+   `overflow: auto` actually clip. Question prompts are long, so rows wrap and use
+   the smaller body-s font (WF), unlike the avatar-based single-line default. */
+.tb-variants-modal .ou-modal__body {
+  display: flex; flex-direction: column; min-height: 0;
+}
+.tb-variants-modal .ou-transfer {
+  flex: 1 1 auto; min-height: 0;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.tb-variants-modal .ou-transfer__pane { min-height: 0; }
+.tb-variants-modal .ou-transfer__list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.tb-variants-modal .ou-transfer__row { align-items: start; }
+.tb-variants-modal .ou-transfer__row-name {
+  white-space: normal; overflow: visible; font: var(--ou-text-body-s);
+}
+.tb-variants-modal .ou-transfer__row-meta { white-space: normal; overflow: visible; }
 
 /* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
    Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
@@ -415,13 +1120,14 @@
   padding: var(--ou-space-2) var(--ou-space-3);
   font: var(--ou-text-body-s);
   background: var(--ou-bg-elevated);
-  cursor: pointer;
   text-align: left;
 }
-.tb-feedback-preview:hover { border-color: var(--ou-accent-default); }
+/* TD-02: only the empty placeholder is click-to-edit; non-empty cards edit via
+   the pencil button and carry real item links. */
 .tb-feedback-preview.is-empty {
-  color: var(--ou-fg-muted); font-style: italic;
+  color: var(--ou-fg-muted); font-style: italic; cursor: pointer;
 }
+.tb-feedback-preview.is-empty:hover { border-color: var(--ou-accent-default); }
 .tb-feedback-preview__text {
   display: flex; align-items: baseline; gap: var(--ou-space-2);
 }
@@ -442,8 +1148,18 @@
 .tb-feedback-preview__rich p:last-child { margin-bottom: 0; }
 .tb-feedback-preview__rich ul,
 .tb-feedback-preview__rich ol { margin: 0; padding-left: 1.25em; }
+/* Same preflight reset as in .tb-rte__area: the preview shows authored HTML, so
+   it needs the markers back or the card disagrees with both the editor and the
+   published text. */
+.tb-feedback-preview__rich ul { list-style: disc outside; }
+.tb-feedback-preview__rich ul ul { list-style-type: circle; }
+.tb-feedback-preview__rich ul ul ul { list-style-type: square; }
+.tb-feedback-preview__rich ol { list-style: decimal outside; }
+/* Pencil on the EMPTY placeholder. There the whole card is the button, so this
+   is a decorative icon, not a control — it only has to sit where the real
+   pencil button sits on a filled card, so the two states read alike. */
 .tb-feedback-preview__edit-hint {
-  display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
+  display: inline-flex; align-items: center; flex-shrink: 0;
   color: var(--ou-fg-muted);
 }
 /* TD-02: head row (snippet/rich text + pencil edit button) */
@@ -469,110 +1185,36 @@
 .tb-feedback-preview__item-ico {
   display: inline-flex; flex-shrink: 0; color: var(--ou-fg-muted);
 }
-.tb-feedback-preview__item-ico svg { width: var(--wf-space-12, 14px); height: var(--wf-space-12, 14px); }
 .tb-feedback-preview__item a { color: var(--ou-accent-default); text-decoration: none; }
 .tb-feedback-preview__item a:hover { text-decoration: underline; }
-
-/* ── Feedback editor modal (per prd7-editor-drawer.html s-feedback-edit) ──
-   Composite: format selector + (optional) RTE / Textarea + links + PDFs.
-   Used by features/tests/editor/sections/feedback-editor-modal.tsx. */
-.tb-feedback-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ou-space-5);
-}
-.tb-feedback-editor__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ou-space-2);
-}
-.tb-feedback-editor__section--inline {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--ou-space-3);
-  flex-wrap: wrap;
-}
-.tb-feedback-editor__sec-title {
-  font: var(--ou-text-body-s);
-  font-weight: 600;
-  color: var(--ou-fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ou-space-1);
-}
-.tb-feedback-editor__list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--ou-space-2);
-}
-.tb-feedback-editor__item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--ou-space-2);
-  padding: var(--ou-space-2);
-  border: var(--wf-border-w) solid var(--ou-border-soft);
-  border-radius: var(--ou-radius-s);
-  background: var(--ou-bg-elevated);
-}
-.tb-feedback-editor__item-fields {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  gap: var(--ou-space-2);
-  min-width: 0;
-}
-.tb-feedback-editor__item-fields > .ou-field { flex: 1; min-width: 0; }
-
-/* ── RTE (Rich Text Editor, execCommand-based toolbar) ───────────────────
-   Used in FeedbackEditorModal when format === "richText". */
-.tb-rte {
-  border: var(--wf-border-w, 1px) solid var(--ou-border-default);
-  border-radius: var(--ou-radius-m);
-  overflow: hidden;
-  background: var(--ou-bg-elevated);
-}
-.tb-rte__toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--ou-space-1);
-  padding: var(--ou-space-1) var(--ou-space-2);
-  border-bottom: var(--wf-border-w, 1px) solid var(--ou-border-soft);
-  background: var(--ou-bg-subtle);
-}
-.tb-rte__sep {
-  width: 1px; height: var(--ou-space-4);
-  background: var(--ou-border-default);
-  margin: 0 var(--ou-space-1); flex-shrink: 0; display: inline-block;
-}
-.tb-rte__area {
-  min-height: 120px; padding: var(--ou-space-3);
-  font: var(--ou-text-body-m); color: var(--ou-fg-default);
-  line-height: 1.5; outline: none;
-}
-.tb-rte__area:focus { outline: none; }
-.tb-rte__area p { margin: 0 0 var(--ou-space-2); }
-.tb-rte__area p:last-child { margin-bottom: 0; }
-.tb-rte__area strong { font-weight: 700; }
-.tb-rte__area em { font-style: italic; }
-.tb-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
-.tb-rte__area ul, .tb-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
 
 /* ── Saving overlay (наложение со спиннером поверх Drawer body) ─────────
    Используется во время атомарного сохранения теста (PUT /api/tests/:id).
    Host-контейнер (например, ou-drawer__body) должен получить tb-saving-host
    modifier — он переключает positioning, чтобы overlay лёг абсолютом внутри.
-   В client/ — будущий React-компонент <SavingOverlay show={isSaving} />. */
-.tb-saving-host { position: relative; overflow: hidden; }
+   В client/ — будущий React-компонент <SavingOverlay show={isSaving} />.
+   ВНИМАНИЕ: `overflow: hidden` тут НЕ ставим — ou-drawer__body использует
+   собственный overflow-y:auto для вертикальной прокрутки контента, и любой
+   `overflow: hidden` на host'e ломает скролл (regression PRD-4 / S13.7-G1).
+   Overlay с inset:0 уже клиппится содержимым родителя без явного hidden. */
+.tb-saving-host { position: relative; }
+/* PRD-7 S13.7-G1 / scroll regression fix (2026-05-29): the inert wrapper
+   around the body's content must NOT participate in flex layout — otherwise
+   it becomes a flex child without `min-height: 0` and breaks scroll cascade
+   on tabs that don't carry their own internal scroll container (Состав,
+   Настройки, Оформление). `display: contents` removes the wrapper from
+   the layout tree while preserving the inert attribute on descendants. */
+.tb-saving-inert-wrap { display: contents; }
 .tb-saving-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
 .tb-saving-overlay__bd { position: absolute; inset: 0; background: var(--ou-bg-elevated); opacity: 0.88; }
 .tb-saving-overlay__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
-.tb-saving-overlay__spinner { color: var(--ou-accent-default); }
+.tb-saving-overlay__spinner { color: var(--ou-accent-default); display: inline-flex; }
 .tb-saving-overlay__text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.spin { animation: tb-spin 1s linear infinite; }
+@keyframes tb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 
 /* ── Changes popover (список изменений в Drawer footer) ─────────────────
    Открывается по клику на «Показать изменения» в Drawer footer; показывает
@@ -582,7 +1224,11 @@
 .tb-changes-anchor { position: relative; display: flex; align-items: center; }
 .tb-changes-popover {
   position: absolute; bottom: calc(100% + var(--wf-space-10)); right: 0;
-  width: var(--wf-size-400); max-height: var(--wf-size-420); overflow: hidden;
+  /* Токены `--wf-size-400` / `--wf-size-420` не объявлены нигде в проекте, поэтому правило
+     было невалидным и поповер схлопывался по содержимому — вместо 420px около 170, значения
+     переносились по два-три слова. Эскиз задаёт ширину поповера и ограничивает высоту ЕГО
+     ТЕЛА, а не всего поповера: иначе шапка со счётчиком уезжает вместе с содержимым. */
+  width: 420px; overflow: hidden;
   background: var(--ou-bg-elevated);
   border: var(--wf-border-w) solid var(--ou-border-default);
   border-radius: var(--ou-radius-m);
@@ -597,7 +1243,7 @@
 }
 .tb-changes-popover__title { font: var(--ou-text-body-s); font-weight: 600; }
 .tb-changes-popover__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-.tb-changes-popover__body { flex: 1; overflow-y: auto; }
+.tb-changes-popover__body { flex: 1; max-height: 320px; overflow-y: auto; }
 .tb-changes-popover__group { padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-3); }
 .tb-changes-popover__group + .tb-changes-popover__group {
   border-top: var(--wf-border-w) solid var(--ou-border-default);
@@ -609,23 +1255,14 @@
 }
 .tb-changes-popover__item {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ou-space-2);
-  padding: var(--ou-space-2) 0; font: var(--ou-text-body-s);
-  border-top: var(--wf-border-w) dashed var(--ou-border-default);
+  padding: var(--ou-space-1) 0; font: var(--ou-text-body-s);
 }
-.tb-changes-popover__item:first-of-type { border-top: none; }
 .tb-changes-popover__label { font-weight: 500; flex-basis: 100%; }
 .tb-changes-popover__old {
-  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
-  font-family: ui-monospace, monospace;
-  color: var(--ou-error-on-soft); background: var(--ou-error-soft);
+  color: var(--ou-fg-muted);
   text-decoration: line-through;
 }
-.tb-changes-popover__new {
-  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
-  font-family: ui-monospace, monospace;
-  color: var(--ou-success-on-soft); background: var(--ou-success-soft);
-  font-weight: 500;
-}
+.tb-changes-popover__new { font-weight: 600; }
 .tb-changes-popover__arrow { color: var(--ou-fg-muted); }
 .tb-changes-popover__context { color: var(--ou-fg-muted); flex-basis: 100%; }
 
@@ -655,6 +1292,1516 @@
 }
 /* gate-skip-end */
 
+/* ─── Topic picker modal (Состав вкладка → «+ Добавить тему») ──────────────
+ * Defined here because tb-* extensions live in this file. Used by
+ * features/tests/editor/sections/topics-structure-section.tsx.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+.tb-topic-picker__search { margin-bottom: var(--ou-space-3); }
+
+.tb-topic-picker__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tb-topic-picker__empty {
+  padding: var(--ou-space-3);
+  text-align: center;
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+}
+
+.tb-topic-picker__item {
+  width: 100%;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  background: var(--ou-bg-elevated);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-default);
+}
+
+.tb-topic-picker__item:hover { background: var(--ou-bg-hover); }
+.tb-topic-picker__item-count { color: var(--ou-fg-muted); }
+
+/* ─── Structure tab — section list ───────────────────────────────────────── */
+
+.tb-structure-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--ou-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+
+.tb-structure-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  background: var(--ou-bg-elevated);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  font: var(--ou-text-body-s);
+}
+
+.tb-structure-list__num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-on-soft);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.tb-structure-list__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--ou-fg-default);
+}
+
+.tb-structure-list__meta {
+  color: var(--ou-fg-muted);
+  white-space: nowrap;
+}
+
+/* ── Structure tab — zone-block / topic-block / page-row
+   Ported from prd7-structure-linear-flat.html / prd7-structure-linear-by-topics.html
+   (wireframe-local CSS); now lives in DS-extensions for use in
+   features/tests/editor/sections/start-pages-section.tsx. */
+
+/* Zone blocks — outer container for «До теста» / «Внутри теста» / «После теста». */
+.zone-block {
+  margin-bottom: var(--ou-space-3);
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+}
+.zone-block:has(.ou-select.is-open) { overflow: visible; }
+.zone-header {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--wf-space-14, 14px);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-default);
+}
+
+/* Inside-test container — dashed zone that wraps the router-row together with
+   its topic-branches (PRD-7 G45 / prd7-structure-router.html). Shares visual
+   contour with .zone-block, but uses a BEM-style label/body split so we don't
+   couple zone-header to a specific layout. */
+.inside-test {
+  margin-bottom: var(--ou-space-3);
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+}
+.inside-test__label {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--wf-space-14, 14px);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-default);
+}
+.inside-test__body { padding: var(--ou-space-2) var(--ou-space-4); }
+
+/* Tree-connectors — visual hierarchy router-row → topic branches (PRD-7 G20).
+   Thin DS lines via --ou-border-soft (no accent, no shadow). Vertical guide on
+   the left of the topic group; horizontal stub from guide to each topic.
+   The last branch overlays a background-coloured rectangle from its
+   connector down to the bottom, which clips the guide to draw └─. */
+.tree-branches {
+  position: relative;
+  margin-left: var(--ou-space-7);
+  padding-left: var(--ou-space-5);
+  padding-top: var(--ou-space-2);
+}
+.tree-branches::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--wf-border-w);
+  background: var(--ou-border-soft);
+}
+.tree-branches > .tree-branch {
+  position: relative;
+  margin-bottom: var(--ou-space-3);
+}
+.tree-branches > .tree-branch::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--ou-space-5));
+  top: var(--ou-space-5);
+  width: var(--ou-space-5);
+  height: var(--wf-border-w);
+  background: var(--ou-border-soft);
+}
+.tree-branches > .tree-branch:last-child { margin-bottom: 0; }
+.tree-branches > .tree-branch:last-child::after {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--ou-space-5));
+  top: var(--ou-space-5);
+  bottom: 0;
+  width: var(--wf-border-w);
+  background: var(--ou-bg-elevated);
+}
+
+/* Topic-blocks (cards) for linear_by_topics + router_by_topics layouts. */
+.topic-block {
+  margin-bottom: var(--ou-space-3);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-xs);
+  overflow: hidden;
+}
+.topic-block:has(.ou-select.is-open) { overflow: visible; }
+.topic-header {
+  display: flex;
+  align-items: center;
+  gap: var(--wf-space-10, 10px);
+  padding: var(--wf-space-10, 10px) var(--wf-space-14, 14px);
+  background: var(--ou-bg-surface-3);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.topic-grip {
+  color: var(--ou-fg-muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.topic-name { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
+.topic-count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.topic-body { padding: var(--ou-space-1) 0; }
+.zone-block > .topic-body { padding: var(--ou-space-2) var(--ou-space-4); }
+
+/* Page row — flexible list item for content pages and the questions stream. */
+.page-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* 1x между бейджем, заголовком и действиями: это одна строка, а не разные блоки
+     (эскиз `editor-settings-target.html`, «проектный слой: 8 -> 4»). */
+  gap: var(--ou-space-1);
+  padding: var(--wf-space-6, 6px) var(--wf-space-10, 10px) var(--wf-space-6, 6px) var(--wf-space-14, 14px);
+  position: relative;
+}
+.page-row:hover { background: var(--ou-bg-hover); }
+.page-row--template { background: var(--ou-bg-elevated); }
+.page-row--template .drag-handle {
+  opacity: 0.18;
+  cursor: default;
+  pointer-events: none;
+}
+.page-row--questions .page-title { color: var(--ou-fg-muted); }
+.page-row__meta {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wf-space-6, 6px);
+  padding-top: var(--wf-space-tiny, 2px);
+  margin-left: calc(var(--ou-space-4) + var(--ou-space-2));
+}
+.page-row--system .page-row__meta { margin-left: var(--ou-space-4); }
+.page-row__meta .ou-tag { display: inline-flex; align-items: center; gap: var(--wf-space-tiny, 2px); }
+
+/* Drag handle — grip for @dnd-kit page reordering (Структура). */
+.drag-handle {
+  color: var(--ou-fg-muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  touch-action: none;
+}
+.drag-handle:active { cursor: grabbing; }
+
+/* @dnd-kit sortable unit. The dragged row dims and lifts; the row currently
+   under the pointer shows an accent insertion line so the drop position is
+   explicit (complements the gap the sortable shift opens). */
+.structure-sortable-item { position: relative; }
+.page-row.dragging { opacity: 0.4; }
+/* Insertion line on the side where the dragged row will land. Rows do not shift;
+   the line marks the exact drop position (drop-before = above, drop-after = below). */
+.structure-sortable-item.drop-before > .page-row {
+  box-shadow: inset 0 var(--wf-space-half, 2px) 0 0 var(--ou-accent-default);
+}
+.structure-sortable-item.drop-after > .page-row {
+  box-shadow: inset 0 calc(-1 * var(--wf-space-half, 2px)) 0 0 var(--ou-accent-default);
+}
+/* Zone-level drop target (cross-zone move, incl. dropping into an empty zone). */
+.structure-drop-zone.is-zone-drop-target {
+  outline: var(--wf-border-w, 1px) dashed var(--ou-accent-default);
+  outline-offset: calc(-1 * var(--wf-space-half, 2px));
+  border-radius: var(--ou-radius-s, 4px);
+}
+
+/* Variant badge: neutral chip with the variant name (kind/template label). */
+.page-variant-badge {
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  padding: var(--wf-space-half, 4px) var(--wf-space-6, 6px);
+  border-radius: var(--wf-space-1q, 3px);
+  flex-shrink: 0;
+  background: var(--ou-bg-surface-3);
+  color: var(--ou-fg-default);
+}
+.page-title { font: var(--ou-text-body-s); flex: 1; min-width: 0; }
+.page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
+.page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+/* PRD-51 §7.2: строка документа отчёта. Выключенный блок читается приглушённым
+   названием — данные не печатаются, но строка остаётся на своём месте в списке. */
+.page-row.is-off .page-title,
+.page-row.is-off .page-variant-badge {
+  color: var(--ou-fg-muted);
+  opacity: 0.65;
+}
+
+/* Разрыв листа — не карточка и не страница, а строка-разделитель: следующий блок
+   начинается с нового листа. Пунктир справа договаривает то же самое. */
+/* Разрыв листа — такая же строка документа, как остальные: название обычным
+   регистром, без пунктирных линий по бокам. Отличает её ножницы перед названием и
+   отсутствие бейджа вида. */
+.page-row--break .page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  color: var(--ou-fg-muted);
+}
+
+/* PRD-19 FR-08a: «Обзор раздела/теста» navigation slot (section-finish /
+   test-finish). Accent left-bar marks it as the navigation slot; the disabled
+   variant (return OFF) dims it and drops the accent, with a `.page-comment`
+   below explaining how to enable it. */
+.page-row--obzor {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-accent-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+.page-row--obzor.page-row--disabled {
+  border-left-color: var(--ou-border-default);
+  opacity: 0.55;
+}
+.page-row--disabled .page-title { color: var(--ou-fg-muted); }
+
+/* Скрытая автором карточка (решение владельца 2026-09-20): заголовок и бейдж
+   приглушаются, а статус несёт ПИКТОГРАММА перед бейджем. Гасить строку целиком
+   (opacity, как у недоступного «Обзора») нельзя: погас бы и сам знак — единственное,
+   ради чего строка осталась в полотне. */
+.page-row--hidden .page-title { color: var(--ou-fg-muted); }
+.page-row--hidden .page-variant-badge { opacity: 0.6; }
+.page-hidden-ico {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--ou-fg-muted);
+}
+.page-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  padding: var(--wf-space-6, 6px) var(--wf-space-10, 10px) var(--wf-space-6, 6px) var(--wf-space-14, 14px);
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-surface-2);
+}
+.page-comment svg { flex-shrink: 0; margin-top: 1px; color: var(--ou-fg-muted); }
+
+/* Severity indicator on page-row: derived from meta tag tones. */
+.page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)) {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-info-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+.page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)),
+.page-row.page-row--warn {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-warning-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+.page-row:has(> .page-row__meta .ou-tag--error),
+.page-row.page-row--error {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-error-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+
+/* Empty-zone placeholder text inside a zone-block. */
+.page-row--empty {
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+}
+/* Inline delete confirm prompt next to a page-row's actions. */
+.page-row__delete-confirm-label {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* Legacy tb-page-row aliases kept temporarily for delete-confirm UI. */
+.tb-page-row--system { background: var(--ou-bg-subtle); }
+.tb-page-row--missing-template { border-color: var(--ou-warning-default); }
+.tb-page-row__badge {
+  font: var(--ou-text-caption);
+  background: var(--ou-bg-subtle);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  padding: 0 var(--ou-space-2);
+  color: var(--ou-fg-muted);
+  flex-shrink: 0;
+}
+.tb-page-row__title {
+  flex: 1;
+  min-width: 0;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-page-row__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  flex-shrink: 0;
+}
+.tb-page-row__confirm {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* ── Structure tab — inline-edit, insert-rows, variant picker ───────────
+   Used in features/tests/editor/sections/start-pages-section.tsx.
+   Ported from prd7-structure-*.html (closeout of PRD-1 §4). */
+
+/* Inline-edit expand toggle: a chevron that rotates 90° when the row is open. */
+.page-expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ou-space-5);
+  height: var(--ou-space-5);
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ou-fg-muted);
+  cursor: pointer;
+  border-radius: var(--ou-radius-xs);
+  transition: transform var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.page-expand-toggle:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
+.page-row.is-expanded {
+  background: var(--ou-bg-surface-2);
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-soft);
+}
+.page-row.dragging {
+  opacity: 0.5;
+  background: var(--ou-bg-surface-3);
+}
+
+/* Expand panel hosting the variant placeholder form. */
+.page-row-expand {
+  padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-4) var(--wf-space-14, 14px);
+  background: var(--ou-bg-surface-2);
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-soft);
+}
+.page-row-expand .ou-formfield { margin-bottom: var(--ou-space-3); }
+.page-row-expand .ou-formfield:last-child { margin-bottom: 0; }
+.page-row-expand-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-3);
+}
+
+/* Expand-toggle button on system page-rows that have variant placeholders
+   (PRD-7 G27). Rotates 90deg when the row is expanded; transition follows DS
+   motion timing. The :hover/:focus visuals mirror other iconbtn-ghost surfaces. */
+.page-expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ou-space-5);
+  height: var(--ou-space-5);
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ou-fg-muted);
+  cursor: pointer;
+  border-radius: var(--ou-radius-xs);
+  transition: transform var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.page-expand-toggle:hover {
+  background: var(--ou-bg-hover);
+  color: var(--ou-fg-default);
+}
+.page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
+
+/* Read-only mode (PRD-7 G19): drag affordances are visually dimmed and
+   non-interactive on every kind of row. The CSS doubles down on the
+   `useSortable({ disabled })` already neutralising the drag handler — having
+   pointer-events: none on the grip keeps the cursor from suggesting drag. */
+.page-row--readonly .drag-handle,
+.topic-block--readonly .topic-grip {
+  opacity: 0.2;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Inline validation banner for unfilled required placeholders (PRD-1 §4.3.6 /
+   PRD-7 G27). Lives at the top of `.page-row-expand`; pairs with the
+   `.page-row--error` border-left modifier on the parent row. */
+.validation-banner {
+  background: var(--ou-error-soft);
+  border: var(--wf-border-w) solid var(--ou-error-default);
+  border-radius: var(--ou-radius-s);
+  padding: var(--wf-space-10, 10px) var(--ou-space-3);
+  margin-bottom: var(--ou-space-3);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+}
+.validation-banner__ico {
+  color: var(--ou-error-default);
+  flex-shrink: 0;
+  margin-top: var(--wf-space-half, 4px);
+  display: inline-flex;
+}
+.validation-banner__body {
+  font: var(--ou-text-body-s);
+  color: var(--ou-error-on-soft);
+}
+.validation-banner__title {
+  font-weight: 600;
+  margin-bottom: var(--wf-space-tiny, 2px);
+}
+.validation-banner__list { margin: 0; padding-left: var(--ou-space-4); }
+.validation-banner__list li { margin-bottom: var(--wf-space-tiny, 2px); }
+.validation-banner__desc { margin-top: var(--wf-space-tiny, 2px); }
+
+/* PRD-7 S13.4-G18 / s-sanitize: warning variant of the same banner used to
+   list HTML tags / attributes the server stripped during sanitisation. Lives
+   inside .page-row-expand alongside the validation banner; dismissible. */
+.validation-banner--warning {
+  background: var(--ou-warning-soft);
+  border-color: var(--ou-warning-default);
+  align-items: flex-start;
+}
+.validation-banner--warning .validation-banner__ico { color: var(--ou-warning-default); }
+.validation-banner--warning .validation-banner__body { color: var(--ou-warning-on-soft); }
+.validation-banner--warning code {
+  font: var(--ou-text-code-s, var(--ou-text-caption));
+  background: var(--ou-bg-surface-3, rgba(0,0,0,.04));
+  padding: 0 var(--wf-space-tiny, 2px);
+  border-radius: var(--wf-space-1q, 3px);
+}
+
+/* Insert-row: a thin guideline with a reveal-on-hover «Добавить страницу» pill. */
+.insert-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: var(--wf-space-1q, 3px) var(--wf-space-14, 14px);
+}
+.insert-row-line { flex: 1; height: var(--wf-border-w); background: var(--ou-border-default); }
+.insert-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  margin: 0 var(--wf-space-6, 6px);
+  padding: var(--wf-space-half, 4px) var(--ou-space-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--wf-space-10, 10px);
+  background: var(--ou-bg-elevated);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-caption);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity var(--ou-motion-fast), color var(--ou-motion-fast),
+    border-color var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.insert-row:hover .insert-btn,
+.insert-row:focus-within .insert-btn {
+  opacity: 1;
+  color: var(--ou-accent-default);
+  border-color: var(--ou-accent-container-hover);
+  background: var(--ou-accent-soft);
+}
+
+/* Variant picker: the option list on the left, one live page preview on the right
+   (the «Список + панель превью» layout). Collapses to a single column on narrow modals. */
+.variant-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: var(--ou-space-4);
+  /* FIXED height so the modal doesn't jump as previews (different content heights)
+     render or the bundle loads — both panes fill it and scroll internally. */
+  height: var(--wf-size-440, 440px);
+  align-items: stretch;
+}
+.variant-picker__list { min-width: 0; min-height: 0; }
+.variant-picker__list .variant-list { max-height: 100%; height: 100%; }
+.variant-picker__preview {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-1);
+  overflow: hidden;
+}
+/* Fit-to-box: the preview renders at a fixed reference canvas (see ScaledPreview) and
+   is scaled UNIFORMLY to fit this box — proportional, no scroll, aspect preserved. */
+.variant-picker__box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.variant-picker__frame { flex: none; transform-origin: center center; }
+/* TemplateScreen's host fills the fixed reference frame so the scene lays out against
+   a definite size (its `height:100%` resolves) before the frame is scaled. */
+.variant-picker__frame > * { width: 100%; height: 100%; display: block; }
+/* Схема блока отчёта в палитре: лист с крупными штрихами. Не рендер — блок документа
+   не самостоятельный экран (эскиз `editor-settings-target.html`, `.tb-sheet`). */
+.tb-sheet {
+  width: 100%;
+  max-width: var(--wf-w-sheet, 320px);
+  align-self: center;
+  background: var(--ou-bg-surface);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  padding: var(--ou-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+}
+.tb-sheet__title { height: var(--ou-space-4); width: 60%; border-radius: var(--ou-radius-s); background: var(--ou-border-default); }
+.tb-sheet__line { height: var(--ou-space-2); border-radius: var(--ou-radius-s); background: var(--ou-border-soft); }
+.tb-sheet__line--short { width: 70%; }
+.tb-sheet__block {
+  height: var(--ou-space-12);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+}
+/* Разрыв листа: единственный блок, который на листе не печатается, а делит его. */
+.tb-sheet__break {
+  height: 0;
+  margin: var(--ou-space-2) 0;
+  border-top: var(--wf-border-w) dashed var(--ou-border-default);
+}
+
+.variant-picker__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ou-space-6);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .variant-picker { grid-template-columns: 1fr; height: auto; }
+  .variant-picker__list .variant-list { max-height: var(--wf-size-240, 240px); }
+  .variant-picker__preview { height: var(--wf-size-280, 280px); }
+}
+
+/* Variant picker list inside the «Добавить страницу» modal. */
+/* PRD-51 §7.3: поиск над списком палитры блоков. Иконка положена в поле, а не рядом:
+   строка поиска в модале узкая, и подпись съела бы её половину. */
+.variant-search { position: relative; margin-bottom: var(--ou-space-3); }
+.variant-search__icon {
+  position: absolute;
+  left: var(--ou-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ou-fg-muted);
+  pointer-events: none;
+}
+.variant-search__input {
+  width: 100%;
+  height: var(--ou-size-control-m);
+  padding: 0 var(--ou-space-3) 0 var(--ou-space-7);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-input);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  outline: none;
+}
+.variant-search__input:focus {
+  border-color: var(--ou-accent-default);
+  box-shadow: var(--ou-shadow-focus);
+}
+
+/* Заголовок группы внутри списка вариантов. */
+.variant-group {
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ou-fg-muted);
+  padding: var(--ou-space-2) var(--ou-space-3) var(--wf-space-tiny, 2px);
+}
+
+.variant-list {
+  list-style: none;
+  padding: var(--ou-space-1);
+  margin: 0;
+  max-height: var(--wf-size-360, 360px);
+  overflow-y: auto;
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-elevated);
+}
+.variant-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-radius: var(--ou-radius-xs);
+  cursor: pointer;
+}
+.variant-list__item:hover { background: var(--ou-bg-hover); }
+.variant-list__item.is-selected { background: var(--ou-accent-soft); }
+.variant-list__item.is-selected .variant-list__name {
+  color: var(--ou-accent-on-soft);
+  font-weight: 600;
+}
+.variant-list__name { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+.variant-list__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin-top: var(--wf-space-half, 4px);
+}
+/* Variant list — current/disabled state (PRD-7 S13.6, wf prd7-variant-replace). */
+.variant-list__item.is-current {
+  background: var(--ou-bg-surface-3);
+  cursor: default;
+  opacity: 0.7;
+}
+.variant-list__item.is-current:hover { background: var(--ou-bg-surface-3); }
+.variant-list__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  margin-top: var(--wf-space-tiny, 2px);
+}
+.variant-list__meta-tag {
+  font: var(--ou-text-caption);
+  padding: var(--wf-space-half, 1px) var(--wf-space-6, 6px);
+  border-radius: var(--wf-space-1q, 3px);
+  background: var(--ou-bg-surface-3);
+  color: var(--ou-fg-muted);
+}
+.variant-list__meta-tag--current {
+  background: var(--ou-info-soft);
+  color: var(--ou-info-on-soft);
+}
+
+/* Design tab — media param row (PRD-7 S12-G4 / FR-31a). Used for `image`,
+   `asset`, `file`, `downloadLink` param types. Upload button + chip with the
+   uploaded file's name + remove (×) action. */
+.design-media-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ou-space-2);
+}
+/* PRD-22: thumbnail of the loaded image next to the upload control. An empty
+   frame is kept when nothing is loaded, so the row does not jump on upload. */
+.image-field__preview {
+  width: 144px;
+  height: 96px;
+  flex-shrink: 0;
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-3) center / cover no-repeat;
+}
+.design-media-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wf-space-6, 6px);
+  padding: var(--wf-space-tiny, 2px) var(--wf-space-6, 6px) var(--wf-space-tiny, 2px) var(--ou-space-2);
+  background: var(--ou-bg-surface-3);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--wf-space-1q, 3px);
+  font: var(--ou-text-body-s);
+  max-width: 100%;
+}
+.design-media-chip__ico { color: var(--ou-fg-muted); flex-shrink: 0; }
+.design-media-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+/* Template gallery (PRD-7 S12-G3 / FR-33) — modal grid of template cards. */
+.tpl-gallery-modal { /* extends ModalDialog xl size class — width via DS */ }
+.tpl-gallery-search {
+  position: relative;
+  margin-bottom: var(--ou-space-3);
+}
+.tpl-gallery-empty {
+  margin: var(--ou-space-4) 0;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  text-align: center;
+}
+.tpl-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--ou-space-3);
+  margin-top: var(--ou-space-3);
+}
+.tpl-gallery-card {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tpl-gallery-card:hover { border-color: var(--ou-border-default); }
+.tpl-gallery-card:focus-visible {
+  outline: 2px solid var(--ou-accent-default);
+  outline-offset: 2px;
+}
+.tpl-gallery-card.is-selected {
+  border-color: var(--ou-accent-default);
+  box-shadow: 0 0 0 2px var(--ou-accent-soft) inset;
+}
+.tpl-gallery-card.is-current { opacity: 0.85; }
+.tpl-gallery-card__thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--ou-bg-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+}
+/* «Глаз» поверх миниатюры. Собственная подложка — под ним произвольная картинка
+   шаблона, и на светлой обложке иконка без неё теряется. */
+.tpl-gallery-card__preview-btn {
+  position: absolute;
+  top: var(--ou-space-1);
+  right: var(--ou-space-1);
+  z-index: 1;
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  box-shadow: var(--ou-shadow-s, 0 1px 3px rgb(0 0 0 / 0.18));
+}
+.tpl-gallery-card__thumb .preview-sketch {
+  width: 80%;
+  height: 80%;
+}
+/* The template's OWN preview asset (manifest.assets.preview). Fills the 16:9 thumb
+   edge to edge — same treatment as the PRD-3 admin registry card, so one template
+   reads the same wherever its thumbnail appears. The schematic sketch above stays
+   as the fallback for a template that ships no preview. */
+.tpl-thumb__img,
+.tpl-gallery-card__thumb .tpl-thumb__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tpl-gallery-card__body {
+  padding: var(--ou-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--wf-space-6, 6px);
+  flex: 1;
+}
+.tpl-gallery-card__name {
+  font: var(--ou-text-body-m);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+.tpl-gallery-card__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  flex: 1;
+}
+.tpl-gallery-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ou-space-1);
+  align-items: center;
+}
+/* Option previews of a design param (spec §6 `optionPreviews`): a template ships a
+   picture per option, so the choice is made by LOOK, not by a word in a dropdown.
+   Built on the gallery card above — one visual choice reads the same across the tab;
+   only the thumbnail differs, because a logo lockup is a wide strip, not a 16:9 cover. */
+.tpl-choice {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.tpl-choice__legend {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-soft);
+  padding: 0;
+  margin-bottom: var(--ou-space-2);
+}
+.tpl-choice__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--ou-space-3);
+}
+.tpl-choice__card {
+  cursor: pointer;
+  position: relative;
+}
+/* The radio stays a real input — keyboard and screen readers need it — but the CARD
+   is the visible control, so the circle itself is taken out of the layout. */
+.tpl-choice__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.tpl-choice__input:focus-visible + .tpl-choice__thumb {
+  outline: 2px solid var(--ou-accent-default);
+  outline-offset: -2px;
+}
+/* Подложка миниатюры — обычная поверхность темы: шаблон отдаёт превью ПОД ТЕМУ
+   интерфейса (пара путей в `optionPreviews`), поэтому подменять фон под картинку не
+   нужно — картинка сама приходит подходящая. */
+.tpl-choice__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Поле одинаковое у всех вариантов. `aspect-ratio` тут не годится: плитка —
+     элемент колоночного флекса карточки, у неё `min-height: auto`, и картинка выше
+     расчётной высоты растягивала поле: плитки выходили разной высоты, а локи —
+     разного масштаба. Фиксированная высота плюс `flex: none` снимают обе причины. */
+  flex: none;
+  height: 88px;
+  padding: var(--ou-space-3);
+  background: var(--ou-bg-surface-2);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+  overflow: hidden;
+}
+/* Вариант «ничего не показывать»: перечёркнутый квадрат вместо картинки, чтобы плитка
+   не читалась как незагрузившееся изображение. */
+.tpl-choice__empty {
+  color: var(--ou-fg-subtle);
+}
+/* Не `max-*`: мелкая картинка осталась бы в своём размере, и локи в ряду читались бы
+   разным кеглем. `contain` вписывает каждый в одно и то же поле. */
+.tpl-choice__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tpl-gallery-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--ou-space-3);
+}
+.tpl-gallery-foot__info {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tpl-gallery-foot__actions {
+  display: flex;
+  gap: var(--ou-space-2);
+}
+
+/* Close-confirm chip group (PRD-7 S13.7-G30) — Tag-list of dirty tab labels
+   inside the FR-05 close-confirm modal. */
+.tb-close-confirm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ou-space-1);
+  margin-top: var(--ou-space-3);
+}
+
+/* Conflict diff-table (PRD-7 S13.7-G5) — Поле / На сервере / Ваши изменения,
+   rendered inside the 409 conflict dialog. */
+.tb-conflict-diff {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+}
+.tb-conflict-diff th,
+.tb-conflict-diff td {
+  text-align: left;
+  padding: var(--wf-space-6, 6px) var(--ou-space-2);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+  vertical-align: top;
+}
+.tb-conflict-diff th {
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-surface-3);
+}
+.tb-conflict-diff tbody tr:last-child td { border-bottom: 0; }
+.tb-conflict-diff__loading {
+  margin-top: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* Search input above the variant list (PRD-7 S13.6-G28). Plain CSS — the DS
+   Input wraps in too much chrome for this lightweight in-modal filter. */
+.variant-search {
+  position: relative;
+  margin-bottom: var(--ou-space-3);
+}
+.variant-search__icon {
+  position: absolute;
+  left: var(--ou-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ou-fg-muted);
+  pointer-events: none;
+}
+.variant-search__input {
+  width: 100%;
+  height: var(--ou-size-control-m, 32px);
+  padding: 0 var(--ou-space-3) 0 var(--ou-space-7, 28px);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-input);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  outline: none;
+}
+.variant-search__input:focus {
+  border-color: var(--ou-accent-default);
+  box-shadow: var(--ou-shadow-focus);
+}
+.variant-search__empty {
+  padding: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  text-align: center;
+}
+
+/* Warning diff-block listing placeholder values that will be lost when the
+   author confirms a variant switch (PRD-7 S13.6-G28, wf prd7-variant-replace). */
+.diff-block {
+  margin-top: var(--ou-space-3);
+  border-radius: var(--ou-radius-s);
+  overflow: hidden;
+}
+.diff-block__group {
+  padding: var(--wf-space-10, 10px) var(--wf-space-14, 14px);
+  border: var(--wf-border-w) solid var(--ou-warning-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-warning-soft);
+}
+.diff-block__title {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  margin-bottom: var(--wf-space-6, 6px);
+  color: var(--ou-warning-on-soft);
+}
+.diff-block__list { list-style: none; padding: 0; margin: 0; }
+.diff-block__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ou-space-2);
+  padding: var(--wf-space-tiny, 2px) 0;
+  font: var(--ou-text-body-s);
+}
+.diff-block__field-name { font-weight: 600; color: var(--ou-fg-default); }
+.diff-block__field-value { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
+.diff-block__meta {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  margin-top: var(--wf-space-6, 6px);
+}
+
+/* ── Design tab — template card + savebar ──────────────────────────────
+   Used in features/tests/editor/sections/design-section.tsx.
+   tpl-block / tpl-thumb / preview-sketch ported from prd7-design-tab.html. */
+.tpl-block {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+  padding: var(--ou-space-3);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-3);
+  position: relative;
+}
+.tpl-preview-btn {
+  position: absolute;
+  top: var(--ou-space-1);
+  right: var(--ou-space-1);
+}
+.tpl-thumb {
+  width: 160px;
+  height: 90px;
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-muted);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.tpl-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+}
+.tpl-info__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+.tpl-name { font: var(--ou-text-body-m); font-weight: 600; }
+.tpl-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tpl-actions { display: flex; gap: var(--ou-space-2); margin: 0; }
+
+/* Colour param row: the picker plus the origin of the current value — either
+   «из шаблона» (no override yet) or the action that gives the colour back. */
+.design-color-field {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+}
+.design-color-field__origin {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* PRD-23 «Цвета» — theme switch and per-theme colour table.
+   The switch and the preview action share one row: the author picks how the test
+   looks and checks the result without leaving the field. */
+.design-theme-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-4);
+}
+
+/* The parameter column carries the description and is therefore greedy: without a
+   fixed layout it pushes the palette columns out of the pane. Palettes need only
+   enough width for a swatch and its reset action. */
+.design-colors-table table {
+  table-layout: fixed;
+}
+.design-colors-table__param {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-default);
+}
+.design-colors-table__hint {
+  /* Подпись под ячейкой цвета — обычный мелкий текст, а не капшен: капшен несёт
+     полужирное начертание и свой интерлиньяж, и строка выбивалась из соседних. */
+  font: var(--ou-text-body-xs);
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+
+/* Preview sketch — schematic template thumbnail with header/progress/body. */
+.preview-sketch {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--ou-space-2);
+}
+.ps-header {
+  height: 18px;
+  background: var(--ou-accent-default);
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  gap: var(--ou-space-1);
+}
+.ps-logo {
+  width: 10px;
+  height: 10px;
+  background: var(--ou-neutral-0);
+  border-radius: 2px;
+  opacity: 0.8;
+}
+.ps-title {
+  color: color-mix(in srgb, var(--ou-neutral-0) 80%, transparent);
+  font-size: 7px;
+}
+.ps-progress {
+  height: 3px;
+  background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent);
+}
+.ps-progress-bar {
+  height: 100%;
+  background: var(--ou-success-default);
+  width: 40%;
+}
+.ps-body { flex: 1; display: flex; }
+.ps-sidebar {
+  width: 28%;
+  background: var(--ou-bg-page);
+  border-right: var(--wf-border-w) solid var(--ou-border-soft);
+  padding: var(--ou-space-1);
+}
+.ps-nav-item {
+  height: 2px;
+  background: var(--ou-bg-surface-3);
+  border-radius: var(--wf-border-w);
+  margin-bottom: 4px;
+}
+.ps-nav-item.active {
+  background: color-mix(in srgb, var(--ou-accent-default) 30%, transparent);
+}
+.ps-content { flex: 1; padding: 2px 6px; }
+.ps-q {
+  font-size: 6px;
+  color: var(--ou-fg-default);
+  margin-bottom: var(--ou-space-1);
+  line-height: 1.3;
+}
+.ps-opt {
+  height: 2px;
+  background: var(--ou-bg-hover);
+  border-radius: var(--wf-border-w);
+  margin-bottom: 4px;
+}
+.ps-opt.sel {
+  background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent);
+  border: var(--wf-border-w) solid color-mix(in srgb, var(--ou-accent-default) 40%, transparent);
+}
+
+/* Legacy tb-template-card classes (kept for tests that target them). */
+.tb-template-card__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin: 0 0 var(--ou-space-3);
+}
+.tb-template-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+.tb-design-savebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-4);
+  padding-top: var(--ou-space-3);
+  border-top: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-design-savebar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ou-space-2);
+}
+
+/* ─── Template preview modal (PRD-7 S12-G2 / FR-30) ──────────────────────────
+   The modal hosts an iframe pointing at GET /api/templates/:id/preview-page,
+   which serves the generated standalone preview.html with embedding tweaks
+   (built-in builder chrome hidden, draft.params applied). */
+
+/* Sizing applies to .ou-modal (the dialog box) — the DS `className` prop lands on
+   .ou-modal-root (the fixed inset overlay), which is already full-viewport, so
+   width/height rules there have no effect. Targeting the inner .ou-modal lets
+   the dialog actually grow to the preview's intended ~1120×860 footprint. */
+.tpl-preview-modal .ou-modal {
+  /* Wider footprint so the 16:9 preview stage has comfortable room. */
+  max-width: min(var(--wf-size-1320, 1320px), 94vw);
+  width: 100%;
+  height: calc(100vh - var(--ou-space-7) * 2);
+  max-height: var(--wf-size-900, 900px);
+}
+.tpl-preview-modal .ou-modal__body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+/* The editor's preview rail is FLAT: every row is a screen, so rows keep the
+   group indent (--ou-space-6) instead of the admin rail's top-level alignment,
+   where a `--top` row deliberately lines up with the group headers around it.
+   Without this the list sat against the rail's left edge. */
+.tpl-preview-modal .tpl-check-rail__var--top {
+  padding-left: var(--ou-space-6);
+}
+.tpl-preview-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.tpl-preview-iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--ou-bg-page);
+  display: block;
+}
+
+.tpl-preview-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: var(--ou-space-3);
+}
+.tpl-preview-foot__info {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* ─── PRD-15 block D — вкладка «Оценка» редактора теста ──────────────────────
+   Wireframe: docs/wireframes/approved/prd15-test-scoring.html (s-tab).
+   Признак «настроено в тесте» — ПОСТОЯННЫЙ и отличается от маркера
+   несохранённых изменений: полоска слева у строки с переопределением +
+   мягкая акцентная заливка каждой настроенной ячейки (tooltip на ячейке). */
+.tb-qscoring { display: flex; flex-direction: column; gap: var(--ou-space-4); padding: var(--ou-space-1) 0; }
+.tb-qscoring__default-row { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+/* Шапка конструктора цены ответа: подпись слева, максимальный балл справа. */
+.tb-qscoring__price { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-4); }
+.tb-qscoring__price-lbl { font: var(--ou-text-heading-s); }
+.tb-qscoring__default-lbl { font: var(--ou-text-body-m); font-weight: 600; }
+.tb-qscoring__default-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-qscoring__num { width: var(--tb-input-w-sm); }
+.tb-qscoring__sec-default { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+.tb-qscoring__sec-default-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ─── Сворачиваемые секции списков (Оценка / Вклады вопросов) ──────────────────
+   Общий примитив: триггер-заголовок (шеврон + название), глобальные
+   «Свернуть все / Развернуть все», и обёртка-секция для «Вкладов». */
+/* Две кнопки одной группы («Развернуть все» / «Свернуть все») — родственная пара, 1x.
+   Эскиз `editor-settings-target.html` объявляет этот примитив сам и ставит 4px; продукт
+   держал 8px. Гейт этого не поймал: у правила эскиза нет комментария-перебивки, а ловит он
+   пока только правила с ним — см. раздел «чего гейт не покрывает» в отчёте приёмки. */
+.tb-fold-actions { margin-left: auto; display: inline-flex; gap: var(--ou-space-1); }
+.tb-fold-trigger {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tb-fold-chev { flex: none; color: var(--ou-fg-muted); }
+/* Панель не дробит ряд кнопок добавления: не помещаясь, «Развернуть все / Свернуть все»
+   уходят строкой ниже целиком — у роутера со сценариями кнопок добавления три. */
+.tb-fold-toolbar { display: flex; align-items: center; flex-wrap: wrap; row-gap: var(--ou-space-2); }
+
+/* Пиктограмма вида пункта в заголовке строки состава (сценарий, lucide monitor-play): сброс
+   делает svg блочным, и без этого правила знак вставал строкой над названием. */
+.tb-acc-title-ico { display: inline-block; vertical-align: text-bottom; margin-right: var(--ou-space-1); }
+.tb-fold-sec {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  background: var(--ou-bg-surface);
+}
+.tb-fold-sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+.tb-fold-sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
+.tb-fold-sec__body { display: flex; flex-direction: column; gap: var(--ou-space-4); margin-top: var(--ou-space-4); }
+
+/* Шапка карточки ответа в разборе попытки — тот же триггер сворачивания, но с текстом
+   задания в две-три строки: шеврон держится верхней строки, а не середины абзаца.
+   Колонка собрана на строчных элементах — блочное содержимое в `button` недопустимо. */
+.tb-ansfold__head { align-items: flex-start; }
+.tb-ansfold__title { display: flex; flex-direction: column; gap: var(--ou-space-1); min-width: 0; }
+.tb-ansfold__meta { display: flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
+
+/* Disabled state for a Drawer rail item (DS has none): e.g. «Вклады вопросов»
+   stays inert until a scale exists. */
+.ou-drawer__rail-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.ou-drawer__rail-item:disabled:hover { background: transparent; }
+
+/* Прозрачная рамка у всех строк сохраняет выравнивание; у переопределённых
+   она акцентная (быстрый скан «в этой строке что-то настроено»). */
+.tb-qscoring .tb-table tbody td:first-child { border-left: var(--ou-space-1) solid transparent; }
+.tb-qscoring .tb-table tbody tr.tb-qscoring__row--override > td:first-child { border-left-color: var(--ou-accent-default); }
+/* Переопределённое ЗНАЧЕНИЕ — мягкая акцентная заливка ячейки. */
+.tb-qscoring .tb-table tbody td.tb-qscoring__cell--override { background: var(--ou-accent-soft); }
+.tb-qscoring__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
+/* Пиктограмма типа вопроса — инлайново перед текстом, на той же строке. */
+.tb-qscoring__qtype { display: inline-flex; vertical-align: -0.15em; margin-right: var(--ou-space-2); color: var(--ou-fg-muted); }
+/* Recap вопроса в модале переопределения (read-only контекст). */
+.tb-qscoring__recap {
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-page);
+  margin-bottom: var(--ou-space-4);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tb-qscoring__recap b { color: var(--ou-fg-default); }
+.tb-qscoring__modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-3) var(--ou-space-4); margin-bottom: var(--ou-space-4); }
+/* Футер модала переопределения: «Сбросить настройку» прижата влево
+   (эскиз prd15-test-scoring, ou-modal__foot--between). */
+.ou-modal__foot .tb-qscoring__foot-left { margin-right: auto; }
+
+/* Tailwind-removal (stage 5) helpers: uppercase eyebrow label + row separator. */
+.tb-caps { text-transform: uppercase; letter-spacing: 0.025em; }
+.tb-row-sep { border-bottom: 1px solid var(--ou-border-soft); }
+.tb-row-sep:last-child { border-bottom: 0; }
+/* Fixed field widths for the scoring condition row (was Tailwind w-20/24/36). */
+.tb-fw-sm { width: 88px; }
+.tb-fw-md { width: 6rem; }
+.tb-fw-lg { width: 152px; }
+/* The DS Select trigger carries min-width:180px; on the compact operator /
+   counter selects that floor overrides the width above, so the trigger stays
+   ~180px and the count field wraps under it. Relax the floor when one of these
+   width utilities is applied to a Select so the intended width takes effect. */
+.tb-fw-sm.ou-select .ou-select__trigger,
+.tb-fw-md.ou-select .ou-select__trigger,
+.tb-fw-lg.ou-select .ou-select__trigger { min-width: 0; }
+
+/* PRD-16: drag handle for the answer-option / ranking reorder rows in the
+   question editor (mirrors the wireframe `.qd-grip` affordance). */
+.tb-drag-handle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+  touch-action: none;
+  color: var(--ou-fg-muted);
+}
+.tb-drag-handle:active { cursor: grabbing; }
+
+/* Per-option feedback (single choice): the switch «Переопределить обратную связь» and its
+   text field sit under the option row, aligned with the option's input — past the drag
+   handle (16px icon) and the correct-answer radio (20px ring) and the two row gaps.
+   Approved wireframe: docs/wireframes/approved/option-feedback.html. */
+.tb-option-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-2);
+  padding-left: calc(16px + 20px + var(--ou-space-2) * 2);
+}
+
+/* PRD-16: folder picker as a combobox that opens a DS Tree in a popover. */
+.tb-foldercombo { position: relative; }
+.tb-foldercombo__trigger {
+  display: flex; align-items: center; gap: var(--ou-space-2); width: 100%;
+  min-height: var(--ou-size-control-m, 2.5rem); padding: 0 var(--ou-space-3);
+  background: var(--ou-bg-default); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); color: var(--ou-fg-default); cursor: pointer;
+  font: var(--ou-text-body-m); text-align: left;
+}
+.tb-foldercombo__trigger:hover { border-color: var(--ou-border-strong, var(--ou-accent-default)); }
+.tb-foldercombo.is-open .tb-foldercombo__trigger { border-color: var(--ou-accent-default); }
+.tb-foldercombo__ico { flex: none; color: var(--ou-fg-muted); }
+.tb-foldercombo__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-foldercombo__chev { flex: none; color: var(--ou-fg-muted); transition: transform .15s; }
+.tb-foldercombo.is-open .tb-foldercombo__chev { transform: rotate(180deg); }
+/* Portaled to <body> (top/left/width set inline) so it is never clipped by a
+   modal/drawer; z-index sits above the DS modal layer. */
+.tb-foldercombo__pop {
+  position: fixed; z-index: 2000;
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg); padding: var(--ou-space-1);
+}
+/* The tree inside the popover scrolls if tall (the popover itself frames it). */
+.tb-foldercombo__pop .tb-foldertree { max-height: 16rem; overflow-y: auto; }
+
+/* PRD-27: сетка полей выбранного вида отчёта в блоке обратной связи «Настроек».
+   Только раскладка — контролы внутри дизайн-системные. */
+.tb-report-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--ou-space-4);
+}
+.tb-report-fields > .ou-formfield { margin: 0; }
+
+/* PRD-27: сцена предпросмотра отчёта. Страница отчёта — это A4 в точках (595 в ширину),
+   в модальное окно она целиком не помещается, поэтому показывается В МАСШТАБЕ (FR-21).
+
+   Масштаб через `zoom`, а не `transform: scale()`: transform не меняет ПОТОК, из-за чего
+   коробку сцены пришлось бы задавать по высоте вручную — а высота страницы не постоянна
+   (тест на два раздела и тест на двадцать четыре дают разный рост), и страницу зажимало
+   с обрезкой. `zoom` пересчитывает саму раскладку, поэтому сцена сама вырастает под
+   содержимое, а прокрутка появляется только когда она и правда нужна.
+
+   `align-items: flex-start` обязателен: без него страница как flex-элемент растягивается
+   на высоту сцены и содержимое обрезается. */
+.tb-report-preview__stage {
+  --tb-report-preview-zoom: 0.72;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
+  margin-top: var(--ou-space-4);
+  /* Окно высотой в ОДНУ страницу A4 в масштабе: короткий отчёт виден целиком, а
+     многостраничный листается — окно показывает те же листы, что уйдут в PDF (PRD-27
+     §6.5), по одному за раз. И не выше 60 % экрана, чтобы на невысоком мониторе окно не
+     выходило за границы. */
+  max-height: min(calc(842px * var(--tb-report-preview-zoom)), 60vh);
+}
+.tb-report-preview__stage > [data-template-screen] {
+  flex: 0 0 auto;
+  width: 595px;
+  zoom: var(--tb-report-preview-zoom);
+}
+
 /* ─── PRD-45: tone dot inside the level's SegmentedControl ──────────────────── */
 .tb-tone-dot {
   width: 9px; height: 9px; border-radius: 50%;
@@ -670,11 +2817,11 @@
 /* One width for the two boundary columns: the threshold field MUST line up under
    «Начало», and the whole layout is that alignment. Two literals could drift apart
    in separate edits; one token cannot. */
-.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); --tb-levels-bound-w: 88px; }
+.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-4); --tb-levels-bound-w: 88px; }
 
 .tb-levels__cover {
   display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w);
-  column-gap: var(--ou-space-2); align-items: center;
+  column-gap: var(--ou-space-4); align-items: center;
   margin-bottom: var(--ou-space-3);
 }
 .tb-levels__caplbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
@@ -750,7 +2897,7 @@
 .tb-levels__spacer { flex: 1; }
 .tb-levels__range { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
 
-.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-3); }
+.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-4); }
 
 /* The tone row is a DS SegmentedControl: inline-flex, nowrap by design, natural
    width ~540px with all five labels. The drawer is `--xl` (1040px) minus a 240px
@@ -759,7 +2906,7 @@
    the row would push out of the card. Scrolling the row inside its own strip keeps
    the card intact and keeps every label readable, which is the whole point of
    leaving the Select behind. */
-.tb-levels__tone { margin-top: var(--ou-space-3); overflow-x: auto; }
+.tb-levels__tone { margin-top: var(--ou-space-4); overflow-x: auto; }
 .tb-levels__tonelbl { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
 .tb-levels__tonehint { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
 
@@ -792,3 +2939,213 @@
   padding: var(--ou-space-6); text-align: center; color: var(--ou-fg-muted);
 }
 .tb-levels__empty-act { margin-top: var(--ou-space-3); }
+
+/* ── PRD-46: оформление шкал в настройках варианта «Итоги теста» ─────────
+   Эскиз: docs/wireframes/approved/prd46-scale-visual.html.
+
+   Список и превью стоят РЯДОМ: цвета выбираются набором, и следствие выбора
+   должно быть видно, пока выбор идёт, а не после прохождения теста. */
+.tb-appearance-field { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+
+.tb-appearance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-preview-w);
+  gap: var(--ou-space-6);
+  align-items: start;
+}
+.tb-appearance__list { display: flex; flex-direction: column; }
+/* Колонки фиксированной ширины, содержимое прижато влево. Во flex-строке чипы
+   уезжали к правому краю и вставали на разной высоте по горизонтали: ширина
+   чипа зависит от текста («#8F6AE6» против «По схеме уровней»), и колонка
+   переставала читаться колонкой. Ширина рассчитана на самый длинный вариант. */
+.tb-appearance__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-color-w) var(--tb-appearance-icon-w);
+  align-items: center;
+  justify-items: start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-3) 0;
+  border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-appearance__row:last-child { border-block-end: 0; }
+.tb-appearance__name { min-width: 0; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+.tb-appearance__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: var(--ou-space-2) 0 0; }
+
+.tb-appearance__preview { width: 100%; height: auto; }
+
+/* Превью строится ядром розы, поэтому классы фигуры — те же, что в макетах
+   пакета: расхождение классов означало бы, что автор сверяет НЕ ту картинку,
+   которую получит. Стили ДС-шаблона в авторскую оболочку не попадают, отсюда
+   эта короткая копия правил заливки и сетки. */
+.tb-appearance__preview .tb-rose__sector {
+  fill: hsl(var(--tb-hue));
+  /* Обводка цветом ФОНА: зазор между соседними заливками, а не линия. */
+  stroke: var(--ou-bg-surface-1);
+  stroke-width: 2;
+}
+.tb-appearance__preview .tb-rose__sector--overflow { stroke: var(--ou-fg-default); stroke-dasharray: 3 3; }
+.tb-appearance__preview .tb-chart__ring,
+.tb-appearance__preview .tb-chart__axis {
+  fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w);
+}
+
+/* Контуры lucide: обводка без заливки и скруглённые концы — иначе штрихи
+   выглядят обрубленными на мелком размере. Те же правила, что у `.tb-rose__icon`
+   в теме шаблона: пиктограмма в редакторе и на диаграмме — одна и та же фигура. */
+.tb-icon,
+.tb-appearance__preview .tb-rose__icon {
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-appearance__preview .tb-rose__icon { color: var(--ou-fg-muted); }
+
+/* Триггер пиктограммы повторяет геометрию ou-color-trigger: два соседних
+   контрола одной строки не должны различаться высотой и радиусом. */
+.tb-icon-trigger {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  height: var(--tb-icon-trigger-h); padding: var(--tb-space-half) var(--ou-space-3) var(--tb-space-half) var(--tb-space-half);
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  cursor: pointer; font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  max-width: 100%; min-width: 0;
+}
+.tb-icon-trigger:hover { border-color: var(--ou-fg-muted); }
+.tb-icon-trigger:disabled { cursor: default; opacity: 0.6; }
+.tb-icon-trigger > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-icon-trigger__box {
+  width: var(--tb-icon-trigger-box); height: var(--tb-icon-trigger-box);
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: calc(var(--ou-radius-m) - var(--tb-space-half));
+  background: var(--ou-bg-surface-3); color: var(--ou-fg-default); flex-shrink: 0;
+}
+/* Пустая ячейка — пунктиром, а не пустым квадратом: пиктограмма НЕОБЯЗАТЕЛЬНА,
+   и «не выбрана» должно читаться как состояние, а не как не догрузившийся глиф. */
+.tb-icon-trigger__box--empty {
+  background: transparent;
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+}
+
+.tb-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tb-icon-cell), 1fr));
+  gap: var(--ou-space-2);
+  max-height: var(--tb-icon-grid-h); overflow-y: auto;
+  padding-top: var(--ou-space-3);
+}
+.tb-icon-cell {
+  aspect-ratio: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--wf-border-w) solid transparent;
+  border-radius: var(--ou-radius-m);
+  background: transparent; color: var(--ou-fg-muted); cursor: pointer;
+}
+.tb-icon-cell:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.tb-icon-cell.is-selected {
+  border-color: var(--ou-accent-default);
+  background: var(--ou-accent-soft);
+  color: var(--ou-fg-default);
+}
+
+/* ── Разделитель «или» между двумя способами задать список (PRD-28 раздел 16) ──
+   Верхняя половина вкладки «Списком» — набранные адреса, нижняя — книга; они
+   альтернативы, и жёлоб с подписью говорит об этом до того, как оператор
+   заполнит одну из них. */
+.tb-orsep { display: flex; align-items: center; gap: var(--ou-space-3); }
+.tb-orsep::before,
+.tb-orsep::after {
+  content: "";
+  flex: 1;
+  height: var(--wf-border-w, 1px);
+  background: var(--ou-border-soft);
+}
+.tb-orsep__word { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Набор правил проверки ответа (PRD-57 §6.1, §6.3) ─────────────────────────
+   Три класса раскладки, согласованные эскизом `prd57-answer-rule.html`; они
+   добавляют только раскладку, вид берут у примитивов ДС. */
+
+/* Связка между правилами. Стоит отдельной строкой внутри списка, чтобы
+   набор читался сверху вниз как одна фраза, а не как набор карточек.
+   Отступ по горизонтали — как у строки правила, по вертикали — шаг
+   родственных элементов: связка принадлежит обеим соседним строкам. */
+.tb-rules__join {
+  padding: var(--ou-space-1) var(--ou-space-5);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* Строка пробы: поле ответа тянется, вердикт занимает ровно свою ширину. */
+.tb-probe {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--ou-space-4);
+  align-items: center;
+}
+
+/* Состояние вопроса и возврат правок — одной группой в подвале ящика.
+   Правило для `hidden` обязательно: собственный `display` сильнее
+   браузерного правила для атрибута, и скрытая группа осталась бы видимой. */
+.tb-dirty {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-4);
+}
+.tb-dirty[hidden] { display: none; }
+
+/* Панель вставки кусков выражения. Кнопки — родственные, шаг между ними
+   наименьший; переносится по ширине поля. */
+.tb-rxbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ou-space-1);
+}
+
+/* Выражение и куски выражения — моноширинными: в них значим каждый знак,
+   а пропорциональный шрифт склеивает точку с запятой и путает I с l. */
+.tb-mono { font-family: var(--ou-font-family-mono); }
+
+/* ─── PRD-57 §4.3: визуальный ввод текста задания ─────────────────────────────
+   Поле повторяет вид обычного поля ДС — рамка, фон и отступы взяты у него же, —
+   чтобы режим отличался способом набора, а не оформлением формы. Атом виден как
+   единый объект: своя подложка и запрет выделения внутри, потому что правится он
+   целиком (FR-09b). */
+.tb-rich-area {
+  min-height: 120px;
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface);
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  overflow-wrap: anywhere;
+}
+.tb-rich-area:focus-visible {
+  outline: 2px solid var(--ou-accent-default);
+  outline-offset: 1px;
+}
+.tb-atom {
+  display: inline-block;
+  padding: 0 var(--ou-space-1);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-2);
+  border: 1px dashed var(--ou-border-soft);
+  user-select: none;
+}
+.tb-atom--code { display: block; margin: var(--ou-space-2) 0; padding: var(--ou-space-2); }
+.tb-atom--code pre { margin: 0; }
+.tb-atom--formula,
+.tb-atom--blank { font-family: var(--ou-font-mono, monospace); font-size: 0.95em; }
+
+/* ─── Таблица с выпадающими меню в ячейках ──────────────────────────────────
+   `.ou-tbl` держит `overflow: hidden` ради скруглённых углов, и меню `Select`
+   (оно позиционируется абсолютно, без портала) обрезалось краем таблицы:
+   в форме импорта теста у темы виднелся один пункт «Что делать» из трёх.
+   Модификатор снимает обрезку, а скругление переносит на угловые ячейки —
+   фон шапки иначе вылез бы за углы. */
+.ou-tbl.tb-tbl--menus { overflow: visible; }
+.ou-tbl.tb-tbl--menus thead th:first-child { border-top-left-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus thead th:last-child { border-top-right-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus tbody tr:last-child td:first-child { border-bottom-left-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus tbody tr:last-child td:last-child { border-bottom-right-radius: var(--ou-radius-l); }

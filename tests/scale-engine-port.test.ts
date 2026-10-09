@@ -118,6 +118,16 @@ const scenarios: Scenario[] = [
     questionTypes: { q1: "single", q2: "single", q3: "single" },
   },
   {
+    // The start of a run: the variant is generated but no question is answered yet, so
+    // there is nothing to normalize. BOTH engines must stay silent — a twin that still
+    // reported «диапазон нулевой» would light the debug player's badge on a healthy test.
+    name: "percent — ни один вопрос ещё не выдан",
+    scales: [{ key: "ee", aggregation: "sum", normalization: "percent", direction: "positive" }],
+    measurements: [...likert("q1", "ee"), ...likert("q2", "ee")],
+    answers: {},
+    questionTypes: { q1: "single", q2: "single" },
+  },
+  {
     name: "percent inverse + bands",
     scales: [
       {

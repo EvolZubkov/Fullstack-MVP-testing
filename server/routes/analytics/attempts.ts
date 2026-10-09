@@ -4,12 +4,13 @@ import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { canReadTestAnalytics } from "../../services/test-access";
-import { checkAnswer } from "../../utils/check-answer";
+import { outcomeFor } from "../../services/analytics/answer-outcome";
 import { loadTestScoringContext } from "../../services/effective-scoring";
 import { loadScoringConfig } from "../../services/scoring-config";
 import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
 import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
 import { isSingleIndexChoice, distributesBudget } from "@shared/questions/question-type";
+import { renderBlanksText } from "@shared/questions/blanks-render";
 import { stripMarkdown } from "@shared/text";
 import {
   buildIndicatorViews,
@@ -19,6 +20,8 @@ import {
   type MeasureCatalogue,
 } from "./helpers";
 import { isMeasurementOnly } from "@shared/questions/question-type";
+import { plainPromptOf } from "@shared/questions/prompt-format";
+import { sendAttemptProtocol } from "../../services/analytics/attempt-protocol";
 
 /**
  * The measurements of ONE run, as they were STORED at finish.
@@ -41,124 +44,38 @@ function storedMeasures(result: unknown): {
 
 const router = Router();
 
-// GET /api/analytics/tests/:testId/attempts - Список попыток теста
-router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
-  try {
-    const testId = req.params.testId;
-    const test = await storage.getTest(testId);
+/*
+ * PRD-56 FR-23: список попыток теста снят вместе с его вкладкой. Один список прохождений на
+ * продукт — реестр (`registry.ts`), который умеет фильтровать, догружать порциями и вести в
+ * разбор; два списка означали бы два ответа на вопрос «кто проходил этот тест».
+ *
+ * Разбор ОДНОГО прохождения (ниже) остался: в него ведут и реестр, и очередь дел.
+ */
 
-    if (!test) {
-      return res.status(404).json({ error: "Test not found" });
-    }
+/** Разбор прохождения либо причина, по которой его не отдать. */
+export type AttemptDetailOutcome =
+  | { detail: Record<string, any> }
+  | { status: number; error: string };
 
-    const allAttempts = await storage.getAllAttempts();
-    const testAttempts = allAttempts.filter(a => a.testId === testId);
-
-    const userIds = Array.from(new Set(testAttempts.map(a => a.userId)));
-    const users = await Promise.all(userIds.map(id => storage.getUser(id)));
-    const userMap = new Map<string, string>();
-    for (const u of users) {
-      if (u) userMap.set(u.id, u.name || u.email || "Unknown");
-    }
-
-    // PRD-15 T-20 (FR-15): resolve each attempt's publication version. Attempts
-    // pinned to a snapshot carry its monotonic version; legacy/transitional
-    // attempts (no snapshot) report null.
-    const snapshots = await storage.getSnapshotsForTest(testId);
-    const versionBySnapshot = new Map(snapshots.map(s => [s.id, s.version]));
-
-    // PRD-5/PRD-2: what this test MEASURES, so the attempts table can carry a column
-    // per scale/indicator instead of registering a questionnaire run as «0.0 % / Сдан».
-    const measures: MeasureCatalogue = await loadMeasureCatalogue(testId);
-    const thresholdDeclared = declaresPassThreshold(test);
-
-    const attemptsList = testAttempts.map(attempt => {
-      const result = attempt.resultJson as any;
-      const duration = attempt.startedAt && attempt.finishedAt
-        ? (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000
-        : null;
-
-      let achievedLevels: Array<{ topicName: string; levelName: string | null }> | undefined;
-      if (test.mode === "adaptive" && result?.topicResults) {
-        achievedLevels = result.topicResults.map((tr: any) => ({
-          topicName: tr.topicName,
-          levelName: tr.achievedLevelName || null,
-        }));
-      }
-
-      return {
-        attemptId: attempt.id,
-        userId: attempt.userId,
-        username: userMap.get(attempt.userId) || "Unknown",
-        startedAt: attempt.startedAt?.toISOString() || null,
-        finishedAt: attempt.finishedAt?.toISOString() || null,
-        duration,
-        overallPercent: result?.overallPercent || 0,
-        earnedPoints: result?.totalEarnedPoints || 0,
-        possiblePoints: result?.totalPossiblePoints || 0,
-        passed: result?.overallPassed || false,
-        // PRD-29 §6.7 reaches the AUTHOR too: without these two the table printed a
-        // green «Сдан» over «0.0 %» for every questionnaire run — the default 70%
-        // threshold every test is born with, applied to a run that grades nothing.
-        // `passed` itself is left as stored so no existing reader loses its field.
-        ...gradingOf(result, thresholdDeclared),
-        completed: result !== null,
-        // What the run actually measured (absent for a control test).
-        ...storedMeasures(result),
-        achievedLevels,
-        // PRD-15 T-20: which published edition this attempt was taken on.
-        snapshotVersion: attempt.snapshotId ? versionBySnapshot.get(attempt.snapshotId) ?? null : null,
-      };
-    }).sort((a, b) => {
-      if (a.completed !== b.completed) return b.completed ? 1 : -1;
-      const dateA = a.finishedAt || a.startedAt || "";
-      const dateB = b.finishedAt || b.startedAt || "";
-      return dateB.localeCompare(dateA);
-    });
-
-    // PRD-15 T-20: distribution of attempts across publication versions, so the
-    // author sees which edition learners took (sorted newest version first;
-    // `null` = legacy/pre-snapshot attempts).
-    const versionCounts = new Map<number | null, number>();
-    for (const a of attemptsList) {
-      versionCounts.set(a.snapshotVersion, (versionCounts.get(a.snapshotVersion) ?? 0) + 1);
-    }
-    const versions = [...versionCounts.entries()]
-      .map(([snapshotVersion, attemptCount]) => ({ snapshotVersion, attemptCount }))
-      .sort((a, b) => (b.snapshotVersion ?? -1) - (a.snapshotVersion ?? -1));
-
-    res.json({
-      testId: test.id,
-      testTitle: test.title,
-      testMode: test.mode,
-      // Whether the TEST declares an overall threshold at all — the half of the
-      // PRD-29 §6.7 rule that belongs to the test rather than to a single run.
-      hasPassThreshold: thresholdDeclared,
-      measures,
-      currentVersion: snapshots[0]?.version ?? null,
-      versions,
-      attempts: attemptsList,
-    });
-
-  } catch (error) {
-    logger.error("Test attempts list error: " + (error as Error).message);
-    res.status(500).json({ error: "Failed to fetch attempts list" });
-  }
-});
-
-// GET /api/analytics/attempts/:attemptId - Детали попытки
-router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
-  try {
-    const attemptId = req.params.attemptId;
+/**
+ * Разбор ОДНОЙ веб-попытки — то, что видит окно «Детали попытки».
+ *
+ * Вынесен из обработчика, потому что тот же разбор выгружается протоколом (`attempt-protocol`):
+ * второй сбор разошёлся бы с окном, и в файле стояло бы не то, что автор видел на экране.
+ *
+ * @param req запрос: роли и пользователь решают, доступна ли попытка (область видимости теста)
+ * @param attemptId попытка
+ */
+export async function loadWebAttemptDetail(req: Request, attemptId: string): Promise<AttemptDetailOutcome> {
     const attempt = await storage.getAttempt(attemptId);
 
     if (!attempt) {
-      return res.status(404).json({ error: "Attempt not found" });
+      return { status: 404, error: "Attempt not found" };
     }
 
     const test = await storage.getTest(attempt.testId);
     if (!test) {
-      return res.status(404).json({ error: "Test not found" });
+      return { status: 404, error: "Test not found" };
     }
 
     // PRD-15 FR-08 (audit F-5): a single attempt is readable only within the
@@ -169,7 +86,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       test,
     );
     if (!allowed) {
-      return res.status(403).json({ error: "Forbidden" });
+      return { status: 403, error: "Forbidden" };
     }
 
     const user = await storage.getUser(attempt.userId);
@@ -223,11 +140,13 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       if (!question) continue;
 
       const effective = scoring.resolve(question);
-      // PRD-18: use the GRADED ratio (not a binary === 1 collapse) so weighted/tiered
-      // partial answers earn partial points and the per-row totals reconcile with the
-      // stored attempt aggregate. `isCorrect` stays boolean only for the UI verdict label.
-      const ratio = checkAnswer(question, userAnswer, effective.scoring);
-      const isCorrect = ratio === 1;
+      // PRD-18: строки сверяются с сохранённым итогом попытки, поэтому нужна ДОЛЯ, а не
+      // двузначное «верно»: взвешенный и ступенчатый ответы приносят часть цены.
+      // PRD-57 (#43): сама цена берётся из попытки, а считается только у старых попыток,
+      // где её не сохранили, — иначе разбор разошёлся бы с её же итогом.
+      const outcome = outcomeFor(attempt.resultJson, qId, question, userAnswer, effective);
+      const ratio = outcome === null || outcome.possible <= 0 ? 0 : outcome.earned / outcome.possible;
+      const isCorrect = outcome?.result === "correct";
 
       rawAnswers[qId] = userAnswer as Answer;
       questionTypes[qId] = question.type as QuestionType;
@@ -290,7 +209,10 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
 
       detailedAnswers.push({
         questionId: qId,
-        questionPrompt: stripMarkdown(question.prompt),
+        questionPrompt: plainPromptOf({
+          ...question,
+          prompt: renderBlanksText(question.prompt, { mode: "dash" }),
+        }),
         questionType: question.type,
         topicId: question.topicId,
         topicName: topicMap.get(question.topicId) || "Unknown",
@@ -307,7 +229,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
         measurementOnly: isMeasurementOnly(question),
         earnedPoints: ratio * effective.points,
         possiblePoints: effective.points,
-        difficulty: scoring.difficultyOf(question) || 50,
+        difficulty: scoring.difficultyOf(question),
         contribs,
         levelName,
         levelIndex,
@@ -391,9 +313,10 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       ? (await storage.getSnapshot(attempt.snapshotId))?.version ?? null
       : null;
 
-    res.json({
+    return { detail: {
       attemptId: attempt.id,
       userId: attempt.userId,
+      userEmail: user?.email ?? null,
       username: user?.name || user?.email || "Unknown",
       testId: test.id,
       testTitle: test.title,
@@ -426,12 +349,35 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       indicatorViews: buildIndicatorViews(rvRows, graded.resultVariables),
       trajectory,
       achievedLevels,
-    });
+    } };
+}
 
+// GET /api/analytics/attempts/:attemptId - Детали попытки
+router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const outcome = await loadWebAttemptDetail(req, req.params.attemptId);
+    if ("error" in outcome) return res.status(outcome.status).json({ error: outcome.error });
+    res.json(outcome.detail);
   } catch (error) {
     logger.error("Attempt detail error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch attempt details" });
   }
 });
+
+// GET /api/analytics/attempts/:attemptId/export/excel — протокол попытки книгой (дефект D3)
+router.get(
+  "/attempts/:attemptId/export/excel",
+  requirePermission("analytics.export"),
+  async (req: Request, res: Response) => {
+    try {
+      const outcome = await loadWebAttemptDetail(req, req.params.attemptId);
+      if ("error" in outcome) return res.status(outcome.status).json({ error: outcome.error });
+      await sendAttemptProtocol(res, outcome.detail, "web");
+    } catch (error) {
+      logger.error("Attempt protocol export error: " + (error as Error).message);
+      res.status(500).json({ error: "Failed to export attempt" });
+    }
+  },
+);
 
 export default router;

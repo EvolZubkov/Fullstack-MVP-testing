@@ -1,0 +1,1732 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-53 — Профиль по группе шкал (форма шаблона в «Показателях»)
+    Спека: docs/specs/prd-53/scale-group-profile.md §5.
+    Голова и хвост взяты ДОСЛОВНО из approved/prd2-prd5-scoring-tabs.html — карточка
+    показателя, селект шаблона и блок «Вывод» те же; дельта только в форме шаблона,
+    генераторе матрицы и предупреждениях.
+    Состояния:
+      s-profile-form      — конструктор · профиль по группе шкал, исходы не заданы
+      s-profile-outcomes   — та же карточка после «Собрать наборы»: пятнадцать исходов
+      s-profile-warnings  — предупреждения формы
+      s-profile-errors    — ошибки формы: настройка не сохранится
+    СОГЛАСОВАН 2026-09-06.
+  -->
+    <title>PRD-53 — Показатели: профиль по группе шкал</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты и DS-override на токенах. */
+      .wf-sprite {
+        display: none;
+      }
+      /* DS sets ou-drawer__head align-items: flex-start; центрируем заголовок. */
+      .ou-drawer__head {
+        align-items: center;
+      }
+      /* Override legacy .ou-select fallback из wf-utils.css (двойная рамка). */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      /* Меню селекта закрыто по умолчанию (открывается классом is-open из prd7-shared.js). */
+      .ou-select:not(.is-open) .ou-select__menu {
+        display: none;
+      }
+      .wf-sep {
+        border: none;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+        /* 4x по модульной сетке. В каркасе эскизов стоит --ou-space-5 (20px), что не на сетке. */
+        margin: var(--ou-space-4) 0;
+      }
+      .wf-skel-textarea {
+        height: var(--wf-size-72);
+      }
+      /* Контейнер сопроводительных таблиц (Пояснения + DS Mapping) под состояниями. */
+      .wf-doc {
+        padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10);
+      }
+      /* Заголовок списка с действием справа (кнопка «Добавить …» — наверх). */
+      .wf-list-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ou-space-3);
+        margin-bottom: var(--ou-space-1);
+      }
+      .wf-list-head .tb-section-label {
+        margin-bottom: 0;
+      }
+      /* Muted scale chip: a scale this question does NOT contribute to. */
+      .wf-chip-muted {
+        opacity: 0.45;
+      }
+      /* Narrow number inputs in the «вариант × шкала» grid. */
+      .wf-num-grid td .ou-field {
+        width: var(--ou-space-12);
+      }
+      /* Bands editor grid: keep min/max/level inputs compact, let «Метка» fill. */
+      .wf-bands-grid td .ou-field {
+        width: 100%;
+      }
+      .wf-bands-grid td:nth-child(1) .ou-field,
+      .wf-bands-grid td:nth-child(2) .ou-field {
+        width: var(--wf-size-72);
+      }
+      .wf-bands-grid td:nth-child(4) .ou-field {
+        width: var(--wf-size-110);
+      }
+      /* Read-only highlight of the correct variant row (edited in «Вопросы»). */
+      .wf-row-correct td {
+        background: var(--ou-bg-hover);
+      }
+      .wf-correct-mark {
+        color: var(--ou-accent-default);
+        font-weight: 600;
+        margin-left: var(--ou-space-2);
+      }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* WIREFRAME.html contract: meta-навигация и state-контейнеры. */
+      .wf-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs);
+        color: var(--ou-fg-default);
+        flex-wrap: wrap;
+      }
+      .wf-nav-title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin-right: var(--ou-space-2);
+        white-space: nowrap;
+      }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s);
+        background: transparent;
+        color: var(--ou-fg-default);
+        font: var(--ou-text-body-s);
+        cursor: pointer;
+      }
+      .wf-nav button:hover {
+        background: var(--ou-bg-hover);
+      }
+      .wf-nav button.active {
+        background: var(--ou-accent-default);
+        color: var(--ou-fg-on-accent);
+        border-color: var(--ou-accent-default);
+      }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-nav-sep {
+        width: var(--wf-border-w);
+        height: var(--ou-space-5);
+        background: var(--ou-border-soft);
+        margin: 0 var(--ou-space-2);
+      }
+      .wf-state {
+        display: none;
+        padding-top: var(--wf-nav-offset, var(--wf-size-52));
+      }
+      .wf-state.active {
+        display: block;
+      }
+      .wf-state > .ou-drawer-root {
+        top: var(--wf-nav-offset, var(--wf-size-52));
+        bottom: 0;
+        height: auto;
+      }
+      .wf-state > .ou-drawer-root > .ou-drawer {
+        height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+        max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      }
+      /* Локальные эскизные помощники (на токенах) */
+      .wf-scope-toggle {
+        margin-bottom: var(--ou-space-3);
+      }
+      .wf-row-actions {
+        display: flex;
+        gap: var(--ou-space-1);
+        margin-top: var(--ou-space-4);
+      }
+      .wf-grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--ou-space-3) var(--ou-space-4);
+      }
+      .wf-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-3);
+      }
+      /* Список переключателей: строки тонкие, и шаг .wf-rows (12px) сравнялся бы с
+         расстоянием МЕЖДУ группами полей. По модульной сетке родственные — 1x. */
+      .wf-switch-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-1);
+      }
+      /* Модульная сетка 4px: между РАЗНЫМИ группами полей — 4x, то есть 16px.
+         Сейчас в карточке уровня выходит 12: margin-bottom 8 (--ou-space-2) плюс gap 4
+         родительского поля. Источник — .tb-level-card .ou-card__body .ou-formfield
+         в tb-components.css, ОДИНАКОВО в приложении и в копии для эскизов. Эскиз
+         показывает целевое значение; правка самого tb-components.css — отдельный шаг. */
+      .tb-level-card .ou-card__body .ou-formfield {
+        margin-bottom: var(--ou-space-3);
+      }
+      /* Подпись секции. Два отличия от источника (.tb-section-label в tb-components.css),
+         эскиз показывает целевые значения:
+         1. отбита от содержимого на 8px, тогда как подпись ПОЛЯ — на 4px; обе связи
+            родственные, значит обе 1x;
+         2. inline-flex, и строка добавляет вокруг неё выносной пробел, из-за чего
+            разделитель отбивается не на 16, а на 18. Блочный бокс этого не делает,
+            а gap для хвостовой метки сохраняется. */
+      .tb-level-card .ou-card__body .tb-section-label {
+        margin-bottom: var(--ou-space-1);
+        display: flex;
+      }
+      /* Карточки исходов — родственные элементы одного списка, по модульной сетке 1x.
+         Сейчас они стоят вплотную: форма PRD-45 задаёт зазор на контейнере .tb-levels,
+         а он тут не используется. Эскиз показывает целевое значение. */
+      .wf-outcome-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-1);
+      }
+      /* Блоки карточки исхода — разные группы, значит 4x. Источник — .tb-levels__tone
+         и .tb-levels__fold в tb-components.css, там 12. */
+      .tb-level-card .tb-levels__tone,
+      .tb-level-card .tb-levels__fold {
+        margin-top: var(--ou-space-4);
+      }
+      /* Соседи верхнего уровня в теле карточки: margin-bottom поля даёт 12, нужно 4x.
+         Соседние margin-ы схлопываются, поэтому целевое число задаёт следующий элемент,
+         а не добавка к предыдущему. */
+      .tb-level-card .ou-card__body > .ou-formfield + .ou-formfield,
+      .tb-level-card .ou-card__body > .ou-formfield + .ou-banner {
+        margin-top: var(--ou-space-4);
+      }
+      /* Строки «По профилям»: между строками 4x даёт сама ДС (.ou-formsection__body),
+         а вот margin поля 16 к нему прибавляется, и подпись от предпросмотра отбита на 8.
+         Цель — 4x между строками, 1x внутри строки. Источник — .tb-settings-content
+         .ou-formfield, проектный слой; эскиз показывает целевое значение. */
+      .tb-profile-feedback .ou-formsection__body .ou-formfield {
+        margin-bottom: 0;
+        gap: var(--ou-space-1);
+      }
+      /* Тумблер и поле под ним — РАЗНЫЕ компоненты, значит 4x. Своего отступа у
+         .ou-switch-field нет вовсе: те 4px под ним — выносной пробел строки, а не
+         решение об интервале. Блочный бокс с шириной по содержимому сохраняет область
+         нажатия и даёт точный отступ (у строчного вертикальные margin-ы на высоту
+         строки не влияют). */
+      .tb-level-card .ou-card__body > .ou-switch-field {
+        display: flex;
+        width: fit-content;
+        margin-bottom: var(--ou-space-4);
+      }
+      .wf-cond-row {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--ou-space-1);
+      }
+      .wf-cond-sep {
+        font: var(--ou-text-body-s);
+        color: var(--ou-fg-muted);
+        white-space: nowrap;
+      }
+      .wf-fn-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: var(--ou-space-2);
+      }
+      .wf-fn-group {
+        margin-bottom: var(--ou-space-5);
+      }
+      .wf-fn-group__title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin: 0 0 var(--ou-space-2);
+      }
+      .wf-fn-row {
+        display: grid;
+        grid-template-columns: max-content 1fr auto;
+        align-items: center;
+        gap: var(--ou-space-3);
+        padding: var(--ou-space-2) 0;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+      }
+      .wf-fn-desc {
+        color: var(--ou-fg-muted);
+        font: var(--ou-text-body-s);
+      }
+      .wf-opt-group {
+        padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-1);
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      </symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9" />
+      </symbol>
+      <symbol id="i-chevrons-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" />
+      </symbol>
+      <symbol id="i-chevrons-down-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m7 20 5-5 5 5" /><path d="m7 4 5 5 5-5" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="20 6 9 17 4 12" />
+      </symbol>
+      <symbol id="i-rotate-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" />
+        <circle cx="15" cy="6" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </symbol>
+    </svg>
+
+﻿    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></symbol>
+    </svg>
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Профиль по группе шкал:</span>
+      <button type="button" class="active" onclick="showState(this, 'profile-form')">форма шаблона</button>
+      <button type="button" onclick="showState(this, 'profile-outcomes')">исходы заполнены</button>
+      <button type="button" onclick="showState(this, 'profile-warnings')">предупреждения</button>
+      <button type="button" onclick="showState(this, 'profile-errors')">ошибки</button>
+      <button type="button" onclick="showState(this, 'profile-feedback')">обратная связь</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd2-prd5-scoring-tabs.html">&larr; Шкалы / Показатели</a>
+    </nav>
+
+    <!-- ════════════════ s-profile-form: конструктор — профиль по группе шкал ════════════════ -->
+    <div id="wf-profile-form" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Определение ведущего стиля</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Основное</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Оценка результата</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Показатели</button>
+              </nav>
+              <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">lead_style — Описание ваших результатов</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · порядок 2</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bp-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bp-name" type="text" value="lead_style" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bp-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bp-label" type="text" value="Описание ваших результатов" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">Конструктор</button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false">DSL</button>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шаблон</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Порог|Категория по уровням шкалы|Взвешенная сумма|Сертификация / вердикт|Профиль по группе шкал">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Профиль по группе шкал</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шкалы группы <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="wf-switch-rows">
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Целеустремленный в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Целеустремленный <span class="wf-cond-sep">cel</span></span></span>
+                        </label>
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Вдохновляющий в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Вдохновляющий <span class="wf-cond-sep">vdo</span></span></span>
+                        </label>
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Командный в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Командный <span class="wf-cond-sep">kom</span></span></span>
+                        </label>
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Процессный в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Процессный <span class="wf-cond-sep">pro</span></span></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bp-delta">Порог верхней зоны</label>
+                      <div class="wf-cond-row">
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" id="bp-delta" type="text" value="5" /></div></div>
+                        <div class="ou-seg" role="group" aria-label="Единица порога">
+                          <button type="button" class="ou-seg__item is-active" aria-pressed="true">баллы</button>
+                          <button type="button" class="ou-seg__item" aria-pressed="false">% от максимума</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                      <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                      <div class="ou-banner__body"><div class="ou-banner__desc">Шкала входит в профиль, если отстала от максимума по группе не больше чем на порог. Граница включается: отставание ровно на 5 — ещё профиль.</div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <label class="ou-formfield__lbl">Толкование результата</label>
+                  <div class="wf-row-actions">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Собрать наборы</button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Заготовки по размеру набора</button>
+                  </div>
+                  <div class="tb-levels__empty">Исходы не заданы</div>
+                  <div class="wf-row-actions">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить исход</button>
+                  </div>
+                  <!-- F3: пояснитель кодов — общий для строковых показателей, был в продукте
+                       до PRD-53 и печатается у любого из них. -->
+                  <div class="ou-banner ou-banner--info ou-banner--subtle">
+                    <span class="ou-banner__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-info" /></svg></span>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Формула возвращает код исхода. Перечислите коды, которые она может вернуть, и что каждый из них означает для обучающегося.</div></div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <label class="ou-switch-field">
+                    <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                    <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать шкалы вне профиля</span></span>
+                  </label>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="bp-rest">Заголовок блока</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bp-rest" type="text" value="Ознакомьтесь с другими стилями" /></div></div>
+                  </div>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Блок печатает шкалы группы, не вошедшие в профиль, по убыванию балла. Текст берётся из описания самой шкалы — правка описания правит и этот блок.</div></div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="bp-target">Передавать в LMS</label>
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                      <button type="button" class="ou-select__trigger" id="bp-target"><span class="ou-select__value">И то, и другое</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-profile-outcomes: та же карточка, исходы заполнены ════════════════ -->
+    <div id="wf-profile-outcomes" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Определение ведущего стиля</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Основное</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Оценка результата</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Показатели</button>
+              </nav>
+              <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">lead_style — Описание ваших результатов</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · порядок 2</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bp-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bp-name" type="text" value="lead_style" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bp-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bp-label" type="text" value="Описание ваших результатов" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">Конструктор</button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false">DSL</button>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шаблон</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Порог|Категория по уровням шкалы|Взвешенная сумма|Сертификация / вердикт|Профиль по группе шкал">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Профиль по группе шкал</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шкалы группы <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="wf-switch-rows">
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Целеустремленный в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Целеустремленный <span class="wf-cond-sep">cel</span></span></span>
+                        </label>
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Вдохновляющий в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Вдохновляющий <span class="wf-cond-sep">vdo</span></span></span>
+                        </label>
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Командный в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Командный <span class="wf-cond-sep">kom</span></span></span>
+                        </label>
+                        <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Процессный в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Процессный <span class="wf-cond-sep">pro</span></span></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bp-delta">Порог верхней зоны</label>
+                      <div class="wf-cond-row">
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" id="bp-delta" type="text" value="5" /></div></div>
+                        <div class="ou-seg" role="group" aria-label="Единица порога">
+                          <button type="button" class="ou-seg__item is-active" aria-pressed="true">баллы</button>
+                          <button type="button" class="ou-seg__item" aria-pressed="false">% от максимума</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                      <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                      <div class="ou-banner__body"><div class="ou-banner__desc">Шкала входит в профиль, если отстала от максимума по группе не больше чем на порог. Граница включается: отставание ровно на 5 — ещё профиль.</div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="wf-list-head">
+                    <label class="ou-formfield__lbl">Толкование результата</label>
+                    <span class="tb-fold-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                    </span>
+                  </div>
+                  <div class="wf-outcome-list">
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Сфокусированный: Целеустремленный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel · толкование задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 1"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Свернуть исход 1" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-0-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-0-label" type="text" value="Сфокусированный: Целеустремленный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-0-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-0-code" type="text" value="cel" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 1"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold" data-state="open">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">задано</span>
+                      </button>
+                      <div class="ou-textarea ou-textarea--s ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="3" aria-label="Толкование исхода 1">Стиль ориентирован на результат и создание ценности для клиентов. В модели человекоцентричности ему соответствует вектор «Стратегия».</textarea></div></div>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Сфокусированный: Вдохновляющий</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">vdo · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 2"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 2" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-1-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-1-label" type="text" value="Сфокусированный: Вдохновляющий" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-1-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-1-code" type="text" value="vdo" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 2"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Сфокусированный: Командный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">kom · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 3"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 3" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-2-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-2-label" type="text" value="Сфокусированный: Командный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-2-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-2-code" type="text" value="kom" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 3"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Сфокусированный: Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 4"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 4" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-3-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-3-label" type="text" value="Сфокусированный: Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-3-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-3-code" type="text" value="pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 4"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Двухвекторный: Целеустремленный и Вдохновляющий</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+vdo · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 5"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 5" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-4-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-4-label" type="text" value="Двухвекторный: Целеустремленный и Вдохновляющий" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-4-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-4-code" type="text" value="cel+vdo" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 5"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Двухвекторный: Целеустремленный и Командный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+kom · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 6"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 6" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-5-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-5-label" type="text" value="Двухвекторный: Целеустремленный и Командный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-5-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-5-code" type="text" value="cel+kom" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 6"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Двухвекторный: Вдохновляющий и Командный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">vdo+kom · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 7"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 7" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-6-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-6-label" type="text" value="Двухвекторный: Вдохновляющий и Командный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-6-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-6-code" type="text" value="vdo+kom" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 7"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Двухвекторный: Целеустремленный и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 8"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 8" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-7-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-7-label" type="text" value="Двухвекторный: Целеустремленный и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-7-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-7-code" type="text" value="cel+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 8"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Двухвекторный: Вдохновляющий и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">vdo+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 9"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 9" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-8-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-8-label" type="text" value="Двухвекторный: Вдохновляющий и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-8-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-8-code" type="text" value="vdo+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 9"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Двухвекторный: Командный и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">kom+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 10"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 10" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-9-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-9-label" type="text" value="Двухвекторный: Командный и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-9-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-9-code" type="text" value="kom+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 10"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Широкий: Целеустремленный, Вдохновляющий и Командный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+vdo+kom · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 11"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 11" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-10-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-10-label" type="text" value="Широкий: Целеустремленный, Вдохновляющий и Командный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-10-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-10-code" type="text" value="cel+vdo+kom" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 11"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Широкий: Целеустремленный, Вдохновляющий и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+vdo+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 12"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 12" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-11-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-11-label" type="text" value="Широкий: Целеустремленный, Вдохновляющий и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-11-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-11-code" type="text" value="cel+vdo+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 12"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Широкий: Целеустремленный, Командный и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+kom+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 13"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 13" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-12-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-12-label" type="text" value="Широкий: Целеустремленный, Командный и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-12-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-12-code" type="text" value="cel+kom+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 13"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Широкий: Вдохновляющий, Командный и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">vdo+kom+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 14"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 14" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-13-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-13-label" type="text" value="Широкий: Вдохновляющий, Командный и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-13-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-13-code" type="text" value="vdo+kom+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 14"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                    <header class="ou-card__header tb-level-card__head">
+                      <div class="ou-card__heading tb-level-card__heading">
+                        <h5 class="ou-card__title tb-level-card__title">Сбалансированный: Целеустремленный, Вдохновляющий, Командный и Процессный</h5>
+                        <p class="ou-card__subtitle tb-level-card__summary">cel+vdo+kom+pro · толкование не задано</p>
+                      </div>
+                      <div class="ou-card__trail tb-level-card__trail">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить исход 15"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        <button type="button" class="tb-level-card__chev" aria-label="Развернуть исход 15" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </header>
+                    <div class="ou-card__body tb-level-card__body">
+                      <div class="tb-levels__grid">
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-14-label">Название для обучающегося</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-14-label" type="text" value="Сбалансированный: Целеустремленный, Вдохновляющий, Командный и Процессный" /></div></div>
+                        </div>
+                        <div class="ou-formfield">
+                          <label class="ou-formfield__lbl" for="oc-14-code">Код набора</label>
+                          <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="oc-14-code" type="text" value="cel+vdo+kom+pro" /></div></div>
+                          <div class="ou-formfield__msg">Ключи шкал через «+»; порядок не важен</div>
+                        </div>
+                      </div>
+                      <div class="tb-levels__tone">
+                        <span class="tb-levels__tonelbl">Как трактовать</span>
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Оценка исхода 15"><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-muted)" aria-hidden="true"></span>Авто</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-success)" aria-hidden="true"></span>Благоприятный</button><button type="button" class="ou-seg__item is-active" aria-pressed="true"><span class="tb-tone-dot" style="background:var(--ou-fg-info)" aria-hidden="true"></span>Нейтральный</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-warning)" aria-hidden="true"></span>Внимание</button><button type="button" class="ou-seg__item" aria-pressed="false"><span class="tb-tone-dot" style="background:var(--ou-fg-error)" aria-hidden="true"></span>Критический</button></div>
+                        <span class="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
+                      </div>
+                      <button type="button" class="tb-levels__fold">
+                        <svg class="tb-levels__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+                        Толкование для обучающегося
+                        <span class="tb-levels__spacer"></span>
+                        <span class="tb-levels__badge">не задано</span>
+                      </button>
+                    </div>
+                  </section>
+                  </div>
+
+                  <div class="wf-row-actions">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Собрать наборы</button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Заготовки по размеру набора</button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить исход</button>
+                  </div>
+                  <hr class="wf-sep" />
+                  <label class="ou-switch-field">
+                    <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                    <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать шкалы вне профиля</span></span>
+                  </label>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="bp-rest">Заголовок блока</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bp-rest" type="text" value="Ознакомьтесь с другими стилями" /></div></div>
+                  </div>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Блок печатает шкалы группы, не вошедшие в профиль, по убыванию балла. Текст берётся из описания самой шкалы — правка описания правит и этот блок.</div></div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="bp-target">Передавать в LMS</label>
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                      <button type="button" class="ou-select__trigger" id="bp-target"><span class="ou-select__value">И то, и другое</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-profile-warnings: предупреждения формы ════════════════ -->
+    <div id="wf-profile-warnings" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Основное</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Оценка результата</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Показатели</button>
+              </nav>
+              <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">profile — Профиль компетенций</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · порядок 2</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Шкалы группы <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="wf-switch-rows">
+                      <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Аналитика в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Аналитика <span class="wf-cond-sep">ana</span></span></span>
+                        </label>
+                      <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Коммуникация в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Коммуникация <span class="wf-cond-sep">com</span></span></span>
+                        </label>
+                      <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Организация в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Организация <span class="wf-cond-sep">org</span></span></span>
+                        </label>
+                      <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Развитие в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Развитие <span class="wf-cond-sep">dev</span></span></span>
+                        </label>
+                      <label class="ou-switch-field">
+                          <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Клиентоориентированность в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                          <span class="ou-switch-field__text"><span class="ou-switch-field__label">Клиентоориентированность <span class="wf-cond-sep">cli</span></span></span>
+                        </label>
+                    </div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Пять шкал дают 31 набор — столько текстов пишут редко. Можно обойтись заготовками по размеру набора: пять текстов вместо тридцати одного.</div></div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Не для всех наборов есть текст</div>
+                      <div class="ou-banner__desc">Ни точного исхода, ни запасного по размеру набора нет для: ana+com+org, ana+com+dev, ana+org+dev, com+org+dev, ana+com+cli и ещё 12. Ученик с таким результатом увидит карточку без толкования.</div>
+                    </div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Блок «вне профиля» напечатает голые названия</div>
+                      <div class="ou-banner__desc">У шкал «Организация» и «Развитие» пустое описание. Блок собирает текст из описаний шкал — заполните их на вкладке «Шкалы».</div>
+                    </div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Шкалы группы нормализованы по-разному</div>
+                      <div class="ou-banner__desc">Порог в баллах сравнивает несопоставимые величины: у «Аналитики» это сырой балл, у «Клиентоориентированности» — процент. Задайте порог долей от максимума.</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-profile-errors: ошибки формы ════════════════ -->
+    <div id="wf-profile-errors" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Основное</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Оценка результата</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Показатели</button>
+              </nav>
+              <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--err" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">profile — Профиль компетенций</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · порядок 2</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Шкалы группы <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="wf-switch-rows">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Аналитика в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Аналитика <span class="wf-cond-sep">ana</span></span></span>
+                      </label>
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Коммуникация в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Коммуникация <span class="wf-cond-sep">com</span></span></span>
+                      </label>
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Организация в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Организация <span class="wf-cond-sep">org</span></span></span>
+                      </label>
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Развитие в группе" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Развитие <span class="wf-cond-sep">dev</span></span></span>
+                      </label>
+                      <label class="ou-switch-field is-disabled">
+                        <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" disabled aria-label="Удалённая шкала eng" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">eng <span class="wf-cond-sep">шкала удалена из теста</span></span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield__msg ou-formfield__msg--error">В группе профиля нужны хотя бы две шкалы</div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="err-delta">Порог верхней зоны</label>
+                    <div class="wf-cond-row">
+                      <div class="ou-field ou-field--s ou-field--error"><div class="ou-field__box"><input class="ou-field__input" id="err-delta" type="text" value="-1" /></div></div>
+                      <div class="ou-seg" role="group" aria-label="Единица порога">
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true">баллы</button>
+                        <button type="button" class="ou-seg__item" aria-pressed="false">% от максимума</button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield__msg ou-formfield__msg--error">Порог верхней зоны — неотрицательное число или строка вида «10%»</div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Неизвестная шкала «eng»</div>
+                      <div class="ou-banner__desc">Шкала группы удалена из теста. Пока она в группе, показатель не сохранится: снимите её или верните шкалу на вкладке «Шкалы».</div>
+                    </div>
+                  </div>
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Блок «вне профиля» напечатает голые названия</div>
+                      <div class="ou-banner__desc">У шкал «Организация» и «Развитие» пустое описание. Блок собирает текст из описаний шкал — заполните их на вкладке «Шкалы».</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-profile-feedback: обратная связь профилей ════════════════ -->
+    <div id="wf-profile-feedback" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Определение ведущего стиля</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Основное</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оценка результата</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Обратная связь и итоги</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы обратной связи и итогов">
+                <button type="button" class="ou-drawer__rail-item">Во время теста</button>
+                <button type="button" class="ou-drawer__rail-item">Состав итогов</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Обратная связь</button>
+                <button type="button" class="ou-drawer__rail-item">Отчёт</button>
+              </nav>
+              <div class="tb-settings-content">
+                <section class="ou-card ou-card--outlined ou-card--sm">
+                  <header class="ou-card__header">
+                    <div class="ou-card__heading">
+                      <h5 class="ou-card__title">Общая обратная связь теста</h5>
+                    </div>
+                  </header>
+                </section>
+
+                <hr class="wf-sep" />
+                <section class="ou-card ou-card--outlined ou-card--sm">
+                  <header class="ou-card__header">
+                    <div class="ou-card__heading">
+                      <h5 class="ou-card__title">По темам</h5>
+                      <p class="ou-card__subtitle">Участник получает ОДИН текст на тему: заданный в этом тесте, а если он не задан — текст самой темы.</p>
+                    </div>
+                  </header>
+                </section>
+
+                <hr class="wf-sep" />
+                <section class="ou-card ou-card--outlined ou-card--sm tb-profile-feedback" data-wf-new>
+                  <header class="ou-card__header">
+                    <div class="ou-card__heading">
+                      <h5 class="ou-card__title">По профилям</h5>
+                      <p class="ou-card__subtitle">Текст выдаётся, когда профиль участника совпал с этим набором ведущих шкал. Набор определяет показатель «Описание ваших результатов».</p>
+                    </div>
+                  </header>
+                  <div class="ou-card__body">
+                    <div class="ou-formsection ou-formsection--stacked">
+                      <div class="ou-formsection__intro">
+                        <h6 class="ou-formsection__title">Описание ваших результатов</h6>
+                      </div>
+                      <div class="ou-formsection__body">
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Сфокусированный: Целеустремленный</label>
+                        <div class="tb-feedback-preview">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Попробуйте расширить набор инструментов лидера: сохранить фокус на результате, но усилить…</span>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь профиля «Сфокусированный: Целеустремленный»"><svg width="13" height="13"><use href="#i-pencil" /></svg></button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Сфокусированный: Вдохновляющий</label>
+                        <div class="tb-feedback-preview">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Попробуйте расширить набор инструментов лидера: сохранить фокус на результате, но усилить…</span>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь профиля «Сфокусированный: Вдохновляющий»"><svg width="13" height="13"><use href="#i-pencil" /></svg></button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Сфокусированный: Командный</label>
+                        <div class="tb-feedback-preview">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Попробуйте расширить набор инструментов лидера: сохранить фокус на результате, но усилить…</span>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь профиля «Сфокусированный: Командный»"><svg width="13" height="13"><use href="#i-pencil" /></svg></button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Сфокусированный: Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Сфокусированный: Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Двухвекторный: Целеустремленный и Вдохновляющий</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Двухвекторный: Целеустремленный и Вдохновляющий»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Двухвекторный: Целеустремленный и Командный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Двухвекторный: Целеустремленный и Командный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Двухвекторный: Вдохновляющий и Командный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Двухвекторный: Вдохновляющий и Командный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Двухвекторный: Целеустремленный и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Двухвекторный: Целеустремленный и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Двухвекторный: Вдохновляющий и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Двухвекторный: Вдохновляющий и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Двухвекторный: Командный и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Двухвекторный: Командный и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Широкий: Целеустремленный, Вдохновляющий и Командный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Широкий: Целеустремленный, Вдохновляющий и Командный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Широкий: Целеустремленный, Вдохновляющий и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Широкий: Целеустремленный, Вдохновляющий и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Широкий: Целеустремленный, Командный и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Широкий: Целеустремленный, Командный и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Широкий: Вдохновляющий, Командный и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Широкий: Вдохновляющий, Командный и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl">Сбалансированный: Целеустремленный, Вдохновляющий, Командный и Процессный</label>
+                        <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Редактировать обратную связь профиля «Сбалансированный: Целеустремленный, Вдохновляющий, Командный и Процессный»">
+                          <div class="tb-feedback-preview__head">
+                            <span class="tb-feedback-preview__snippet">Не задано — нажмите для редактирования</span>
+                            <span class="tb-feedback-preview__edit-hint" aria-hidden="true"><svg width="14" height="14"><use href="#i-pencil" /></svg></span>
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <hr class="wf-sep" />
+                <section class="ou-card ou-card--outlined ou-card--sm">
+                  <header class="ou-card__header">
+                    <div class="ou-card__heading">
+                      <h5 class="ou-card__title">По подтемам (тегам)</h5>
+                      <p class="ou-card__subtitle">Текст выдаётся, когда результат по подтеме ниже общего проходного порога теста, — независимо от того, сдан тест или нет.</p>
+                    </div>
+                  </header>
+                </section>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-docs: пояснения ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table class="tb-table wf-notes">
+          <thead><tr><th>Элемент</th><th>Что показано</th><th>Почему так</th></tr></thead>
+          <tbody>
+            <tr><td>Карточка показателя</td><td>Та же, что у остальных шаблонов: «Имя · Метка» → «Формула» → «Вывод»</td><td>Дельта только внутри блока «Формула» и в блоке исходов; каркас карточки, селект шаблона и «Передавать в LMS» взяты 1:1 из approved/prd2-prd5-scoring-tabs</td></tr>
+            <tr><td>Шаблон · пятый пункт</td><td>«Профиль по группе шкал» рядом с четырьмя прежними</td><td>Тип результата выставляется под шаблон (строка), как и у остальных — рассинхрона тип↔формула не возникает</td></tr>
+            <tr><td>Шкалы группы</td><td>Строка на шкалу с переключателем, ключ шкалы справа</td><td>Отдельного мультиселекта в системе нет, а строка-с-переключателем уже используется для «Обязательная» у тем и для квот. Ключ показан потому, что он попадает в КОД набора, и автор должен его видеть</td></tr>
+            <tr><td>Порог верхней зоны</td><td>Число плюс переключатель «баллы / % от максимума»</td><td>Доля нужна, когда шкалы группы нормализованы по-разному или домена нет вовсе. Строкой «10%» она и уходит в формулу</td></tr>
+            <tr><td>«Собрать наборы»</td><td>Заводит все непустые сочетания: у четырёх шкал — пятнадцать</td><td>Заполнять руками нельзя: при пяти шкалах наборов 31, при шести — 63. Кнопка ДОБАВЛЯЕТ недостающие коды и не трогает заполненные</td></tr>
+            <tr><td>«Заготовки по размеру набора»</td><td>Заводит четыре кода count:1 … count:4</td><td>Запасной текст по размеру набора — то, что делает выразимым опросник из шести шкал: четыре текста вместо шестидесяти трёх</td></tr>
+            <tr><td>Исходы · порядок</td><td>Сначала одиночные, затем пары, тройки, вся группа</td><td>Карточки в состоянии «исходы заполнены» сгенерированы НАСТОЯЩЕЙ функцией продукта (<code>profileMatrix</code>), а не набраны руками — эскиз показывает ровно то, что автор увидит</td></tr>
+            <tr><td>Исход · карточка вместо строки таблицы</td><td>Подписанные «Название для обучающегося» и «Код набора», ряд «Как трактовать», две складки — «Толкование» и «Рекомендации», у каждой признак «задано / не задано»</td><td>Прежняя таблица <code>tb-bands-table</code> подписывала только ПЕРВУЮ строку пары: у поля толкования во второй строке подписи не было вовсе, и что это за поле, приходилось угадывать. Ровно это PRD-45 записал в обоснование, когда уводил на карточки числового близнеца: «заголовок — единственный носитель подписей — уплывает при прокрутке». Форма карточки взята у него 1:1</td></tr>
+            <tr><td>Складка «Толкование»</td><td>Открыта у исхода, где текст уже есть; у пустых свёрнута</td><td>Так же ведёт себя редактор уровней. Заодно снимает часть высоты: свёрнутая карточка вдвое ниже открытой</td></tr>
+            <tr><td>Метка набора</td><td>«Двухвекторный: Целеустремленный и Процессный»</td><td>Предложенная, автор правит. Название по размеру набора — предложение продукта, а не термин методики</td></tr>
+            <tr><td>Шкалы вне профиля</td><td>Переключатель и заголовок блока</td><td>Текст собирается из ОПИСАНИЙ шкал по убыванию балла. Это снимает рукописные копии: у ЧИЛ их было пятнадцать при четырёх описаниях</td></tr>
+            <tr><td>Предупреждения</td><td>Четыре: много наборов, непокрытые коды, пустые описания, разная нормализация</td><td>Первые три — предупреждения (работать можно), четвёртое — ошибка формы: абсолютный порог на разной нормализации даёт неверную зону молча</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="wf-notes-title">Открытый вопрос к согласованию</h3>
+        <table class="tb-table wf-notes">
+          <thead><tr><th>Вопрос</th><th>Что видно на эскизе</th><th>Варианты</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Высота блока исходов</td>
+              <td>Пятнадцать наборов — пятнадцать карточек. Свёрнутые складки сняли часть высоты, но список всё равно длинный: это видно в состоянии «исходы заполнены»</td>
+              <td>Оставить как есть; сворачивать карточку целиком до заголовка, пока толкование не задано; вынести матрицу в отдельное окно. Решение за владельцем — сам PRD-53 этого не требует</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <table class="tb-table wf-notes">
+          <thead><tr><th>Элемент эскиза</th><th>Примитив</th></tr></thead>
+          <tbody>
+            <tr><td>Карточка показателя</td><td><code>ou-card--outlined</code> + <code>tb-level-card</code></td></tr>
+            <tr><td>Шаблон, «Передавать в LMS»</td><td><code>ou-select</code></td></tr>
+            <tr><td>Шкала в группе, «вне профиля»</td><td><code>ou-switch</code> в <code>wf-cond-row</code></td></tr>
+            <tr><td>Единица порога, режим формулы</td><td><code>ou-seg</code></td></tr>
+            <tr><td>Порог, имя, метка, заголовок блока</td><td><code>ou-field</code></td></tr>
+            <tr><td>Таблица исходов</td><td><code>tb-table</code> + <code>tb-bands-table</code></td></tr>
+            <tr><td>Толкование исхода</td><td><code>ou-field--textarea</code></td></tr>
+            <tr><td>Подсказки и предупреждения</td><td><code>ou-banner--info</code> / <code>--warning</code> / <code>--error</code></td></tr>
+            <tr><td>Кнопки под таблицей</td><td><code>ou-btn--ghost ou-btn--s</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      // Wireframe state switcher (как в approved/prd7-*). prd7-shared.js затем
+      // дооборачивает window.showState, чтобы пере-инициализировать ou-select.
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el === target);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) {
+          button.classList.toggle('active', button === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>
+

@@ -7,17 +7,42 @@
  * 6.2 and 6.3. Any change here must be reflected in decisions.md first.
  */
 
-import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
-import type { ReportSettings, TestIntro } from "@shared/schema";
+import type { DrawBlueprint, FormSet, RetakePolicy, SectionGroup, SimScoringSettings } from "@shared/schema";
+import type { DraftBlock } from "./use-report-document";
+import type { ReportSettings, TestIntro, BreakdownDisplaySetting } from "@shared/schema";
 import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
 import type { TestQuestionOrder } from "@shared/draw/assemble-delivery";
+import type { RichTextFormat } from "@shared/template/rich-text";
+import type { TestTheme, ThemeId } from "@shared/template/themes";
+import type { LabelValues } from "@shared/template/labels";
+import type { ResultsBlockKey } from "@shared/template/results-order";
 import type { QuestionScoringOverride } from "./scoring-api";
 import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
 
-export type TestMode = "standard" | "adaptive";
+/** `scenario` — «Сценарий в ИС»: один пункт-сценарий вместо тем (docs/specs/sim-scenario/plan-tests.md). */
+export type TestMode = "standard" | "adaptive" | "scenario";
+
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста — тема-банк и способ выдачи. `questionId` пуст —
+ * случайный сценарий темы с поправкой на экспозицию; задан — фиксированный.
+ */
+export type ScenarioItemDraft = {
+  /** Идентификатор строки `test_scenarios`; у пункта, добавленного в этом черновике, нет. */
+  id?: string;
+  topicId: string;
+  topicName: string;
+  questionId: string | null;
+  /** Название в меню участника (роутер); пусто — название темы. */
+  title?: string | null;
+  required?: boolean;
+  /** Группа тем, в которой стоит пункт роутера (как `EditorSection.groupKey`); нет — вне групп. */
+  groupKey?: string | null;
+  /** Балл по умолчанию для сценариев пункта (вкладка «Оценка ответа»); нет — по тесту. */
+  defaultPoints?: number | null;
+};
 
 export type TestStatus = "draft" | "published" | "archived";
 
@@ -49,6 +74,37 @@ export type SectionUnlockMode =
   | "after_sections_completed"
   | "after_sections_passed";
 
+// ─── Оформление ───────────────────────────────────────────────────────────────
+
+/**
+ * Настройки оформления теста: выбранный шаблон и всё, что автор задал поверх его
+ * умолчаний. Форма совпадает с телом `PUT /api/tests/:id/design` и с колонкой
+ * `tests.design_settings_json`.
+ *
+ * Объявлено ЗДЕСЬ, а не в хуке, потому что у черновика НОВОГО теста этот срез —
+ * часть модели редактора ({@link TestEditorModel.design}); хук
+ * (`useDesignSettings`) переиспользует тип под именем `DesignSettings`.
+ */
+export type TestDesignDraft = {
+  templateId: string;
+  /** Штампуются сервером при сохранении; в черновике нового теста их нет. */
+  templateVersion?: string;
+  templateApiVersion?: string;
+  params?: Record<string, unknown>;
+  /** PRD-23: палитра, закреплённая автором; отсутствие читается как «Авто». */
+  theme?: TestTheme;
+  /** PRD-23: цвета по палитрам. Только у шаблона, объявившего темы. */
+  paramsByTheme?: Partial<Record<ThemeId, Record<string, unknown>>>;
+  /**
+   * PRD-49 §4.2: собственные формулировки надписей — только ОТСТУПЛЕНИЯ. Отсутствие
+   * ключа означает «текст шаблона в силе», поэтому настройки теста, которому надписи
+   * не переписывали, сохраняют ту же форму, что была до PRD.
+   */
+  labels?: LabelValues;
+  /** PRD-49 §3: авторский порядок четырёх подблоков под итогами. */
+  resultsBlockOrder?: ResultsBlockKey[];
+};
+
 // ─── Feedback ─────────────────────────────────────────────────────────────────
 
 /**
@@ -56,6 +112,34 @@ export type SectionUnlockMode =
  * Default `format` for legacy string feedback is `"plain"` (decisions §4.3).
  */
 export type FeedbackContent = {
+  format: FeedbackFormat;
+  text: string;
+};
+
+/**
+ * PRD-50 FR-50: обратная связь ОДНОЙ подтемы — целый блок, а не только текст.
+ *
+ * У теста и темы материалы лежат отдельными полями рядом с текстом (`feedbackLinks` и
+ * прочие): так сложилось исторически. Подтем в разделе много, и четыре параллельные карты
+ * пришлось бы держать в согласии между собой — поэтому здесь один блок на подтему, ровно
+ * той формы, в какой его хранит база (`feedbackContentSchema`).
+ */
+export type BreakdownFeedbackEntry = FeedbackContent & {
+  links: FeedbackLink[];
+  assets: FeedbackAsset[];
+  events: FeedbackEvent[];
+};
+
+/**
+ * Толкование — текст и его формат, и БОЛЬШЕ НИЧЕГО.
+ *
+ * Ни курсов, ни материалов, ни мероприятий: толкование объясняет результат, а не
+ * советует, что с ним делать. Тип отдельный от {@link BreakdownFeedbackEntry} именно
+ * поэтому — совпадение с {@link FeedbackContent} по форме здесь случайно, и заводить
+ * одно имя на две разные сущности значило бы стереть различие, ради которого они и
+ * разделены.
+ */
+export type InterpretationEntry = {
   format: FeedbackFormat;
   text: string;
 };
@@ -132,6 +216,11 @@ export type RouterUnlockRule =
 export type FlowRouterSettings = {
   completionPolicy: RouterCompletionPolicy;
   sectionUnlockRules: Record<string, RouterUnlockRule>;
+  /**
+   * «Сценарий в ИС»: общий порядок тем и пунктов-сценариев, ключами `topic:<id>` /
+   * `scenario:<id>` (`shared/test-items`). Нет — темы в порядке разделов, затем сценарии.
+   */
+  itemOrder?: string[];
 };
 
 export type FlowSettings = {
@@ -161,6 +250,16 @@ export type PassRules = {
   decisionPolicy: PassDecisionPolicy;
   overall: OverallPassRule;
   byTopic: Record<string, TopicPassRule>;
+  /**
+   * PRD-50 §16 (FR-53): учитывать ли подтемы (теги) в вердикте темы. Один флаг на весь
+   * тест, а не на тему: порог подтемы производный от порога её темы (FR-52), отдельных
+   * порогов у подтем нет.
+   *
+   * Необязательное, как и прочие поздние поля модели: черновик, собранный локально, и
+   * ответ API старше колонки просто не несут значения, а каждое чтение вырождает его в
+   * «выключено» — тема судится ровно как до §16.
+   */
+  breakdownGateEnabled?: boolean;
 };
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
@@ -211,6 +310,27 @@ export type EditorSection = {
    */
   formSet?: FormSet | null;
   /**
+   * PRD-50 FR-50: обратная связь ПОДТЕМ этого раздела — ключ подтемы -> её текст с
+   * рекомендациями в том же формате, что у темы.
+   *
+   * Своя колонка, отдельно от выдачи: квота — про доставку, текст — про содержание.
+   */
+  breakdownFeedback?: Record<string, BreakdownFeedbackEntry> | null;
+  /**
+   * Толкование темы, заданное ЭТИМ тестом (`test_sections.interpretation_json`).
+   *
+   * Заменяет текст самой темы целиком; `null`/отсутствие = тест не переопределял, и
+   * участник читает текст темы. Отдельно от {@link feedback}: толкование объясняет
+   * результат и печатается при любом вердикте, обратная связь советует и выдаётся по
+   * правилу — свести их в одно поле значило бы потерять это различие.
+   */
+  interpretation?: InterpretationEntry | null;
+  /**
+   * Толкования ПОДТЕМ этого раздела (`test_sections.breakdown_interpretation_json`) —
+   * ключ подтемы -> её текст. Печатаются под своей полосой, когда включён их показ.
+   */
+  breakdownInterpretation?: Record<string, InterpretationEntry> | null;
+  /**
    * PRD-30 FR-02/FR-18: this topic's OVERRIDE of the test-wide delivery order.
    * `null`/absent = «как в тесте» (the default), `random` = today's shuffle,
    * `fixed` = by the author's «Индекс в теме», or by the variant's own list
@@ -223,6 +343,14 @@ export type EditorSection = {
    * section row.
    */
   defaultPoints: number | null;
+  /**
+   * PRD-50 FR-11/FR-12: `key` of the test's block (`TestEditorModel.sectionGroups`)
+   * this section belongs to. `null`/absent = no block; the section prints after all
+   * blocks, in its own order (FR-25). A key no block declares means the same thing —
+   * deleting a block from the editor also clears it here so the UI never shows a
+   * dangling reference.
+   */
+  groupKey?: string | null;
 };
 
 /**
@@ -299,6 +427,14 @@ export type ResultVariableModel = {
   showName?: boolean;
   /** PRD-49 §6: show the card's LEVEL slot (the outcome label). */
   showLevel?: boolean;
+  /**
+   * PRD-53 §4.4: the «scales outside the profile» card. Absent = no card, which is
+   * why it is optional rather than a filled default — an indicator nobody touched
+   * must round-trip byte-identical. `keys` repeats the profile group instead of
+   * being derived from the formula: the card is a PRESENTATION choice, and an
+   * author may later want it over a subset without re-parsing the DSL to find out.
+   */
+  restScales?: { show: boolean; label: string; keys: string[] };
   sortOrder: number;
 };
 
@@ -367,6 +503,13 @@ export type ScaleModel = {
   clientKey?: string;
   key: string;
   label: string;
+  /**
+   * PRD-53 §4.4: what the scale measures, in the author's words. Печатается
+   * обучающемуся в блоке «шкалы вне профиля» на экране итогов и возится книгой
+   * Excel (лист «Шкалы», колонка «Описание»). Всегда строка: пустая означает
+   * «не задано» и сохраняется как `null`.
+   */
+  description: string;
   type: ScaleType;
   aggregation: ScaleAggregation;
   normalization: ScaleNormalization;
@@ -439,6 +582,17 @@ export type QuestionMeasurementModel = {
   weight: number;
 };
 
+// ─── Breakdown display (PRD-50 FR-13) ──────────────────────────────────────────
+
+export type { BreakdownDisplaySetting };
+
+/** Default when the test carries no `breakdownDisplayJson` yet — same as an
+ *  absent DB column: subtotal rows stay hidden, «Доля вопросов» pre-selected. */
+export const DEFAULT_BREAKDOWN_DISPLAY: BreakdownDisplaySetting = {
+  visibility: "hidden",
+  basis: "units",
+};
+
 // ─── Editor model ─────────────────────────────────────────────────────────────
 
 /**
@@ -453,6 +607,12 @@ export type TestEditorModel = {
   id?: string;
   version: number;
   mode: TestMode;
+  /**
+   * «Сценарий в ИС»: пункты-сценарии теста в порядке автора. Тест «Сценарий» использует первый,
+   * роутер — все. Список хранится и сохраняется целиком в ЛЮБОМ режиме: смена режима его не
+   * стирает, как и темы (FR-40). Необязательное: черновик, сохранённый до этой работы, его не несёт.
+   */
+  scenarioItems?: ScenarioItemDraft[];
   flowMode: FlowMode;
   /**
    * PRD-30 FR-16: the test-wide delivery order and the default every topic
@@ -467,9 +627,27 @@ export type TestEditorModel = {
   flowSettings: FlowSettings;
   /** Parent folder; `null` means root (no folder). */
   folderId: string | null;
+  /**
+   * Оформление, набранное ДО первого сохранения. Живёт в модели ТОЛЬКО в режиме
+   * создания: у существующего теста оформление правится своим ресурсом
+   * (`PUT /api/tests/:id/design`) со своим черновиком, и второе место хранения
+   * означало бы два источника истины.
+   *
+   * Поэтому {@link apiToEditorModel} срез НЕ заполняет: у открытого на правку теста
+   * поля нет, и `editorModelToPayload` ничего об оформлении в PUT не кладёт.
+   *
+   * Сохраняется в ДВА приёма (см. правило 9 в
+   * `docs/architecture/test-editor-contracts.md`): `templateId` уезжает телом
+   * создания, потому что системные страницы связывает с шаблоном та же транзакция,
+   * а остальное дописывается сразу после INSERT тем же `PUT /:id/design` — по образцу
+   * показателей, шкал и измерений, которые редактор буферизует так же.
+   */
+  design?: TestDesignDraft;
   basic: {
     title: string;
     description: string;
+    /** PRD-59 FR-06: режим ввода описания; сохраняется вместе с тестом. */
+    descriptionFormat: RichTextFormat;
     status: TestStatus;
     feedback: FeedbackContent;
     feedbackLinks: FeedbackLink[];
@@ -484,12 +662,30 @@ export type TestEditorModel = {
     showCorrectAnswers: boolean;
     // PRD-19 (Блок A): правила навигации/завершения.
     allowReturnToUnanswered: boolean; // FR-01
+    allowFreeSectionNavigation: boolean; // FR-11a (зависит от возврата, FR-11c)
     allowAnswerChange: boolean; // FR-04a (зависит от возврата; взаимоискл. с showCorrectAnswers)
     // PRD-43: НЕЗАВИСИМ от allowReturnToUnanswered; взаимоискл. с showCorrectAnswers (гасится в UI).
     quickAdvance: boolean;
     showSectionResults: boolean; // FR-05a (секционные)
     // Обзор при полностью отвеченном объёме — авторское решение (см. `review-gate`).
     skipReviewWhenComplete: boolean;
+    /**
+     * PRD-67: leaving a started section with a time limit (its own or the test's) closes
+     * it; in a test without sections leaving ends the attempt. Default off.
+     */
+    closeSectionOnLeave: boolean;
+    /**
+     * Что SCORM-пакет отдаёт в LMS при нескольких попытках: лучшую по проценту или только
+     * что завершённую. В вебе не применяется — внешней системы там нет. Умолчание `best`:
+     * так ведут себя уже выданные пакеты.
+     */
+    lmsAttemptResult: "best" | "last";
+    /**
+     * PRD-50 FR-13: subtotal-by-key display on the topic card (section results, test
+     * results, report). Absent = a draft built before this PRD — every reader falls
+     * back to {@link DEFAULT_BREAKDOWN_DISPLAY} («Не показывать»).
+     */
+    breakdownDisplay?: BreakdownDisplaySetting;
     // PRD-34: защита текста задания. Три НЕЗАВИСИМЫХ переключателя (FR-02).
     copyProtection: boolean; // FR-01, умолчание ВКЛ
     protectionWatermark: boolean; // FR-16, умолчание ВЫКЛ
@@ -497,6 +693,14 @@ export type TestEditorModel = {
   };
   passRules: PassRules;
   sections: EditorSection[];
+  /**
+   * PRD-50 FR-11: named blocks of sections (`tests.section_groups_json`), in author
+   * order — a section joins one via `EditorSection.groupKey`. Absent/empty = no
+   * blocks, i.e. exactly today's flat list of topic cards every test has printed so
+   * far (FR-27). Edited next to the section list itself (`topics-structure-section`),
+   * since a block is a property of the test's STRUCTURE, not its scoring or display.
+   */
+  sectionGroups?: SectionGroup[];
   adaptive: {
     showDifficultyLevel: boolean;
     testSettings: AdaptiveTestSettings;
@@ -519,6 +723,25 @@ export type TestEditorModel = {
    * до блока D. Потребители обязаны читать через `?? {}`.
    */
   report?: ReportSettings;
+  /**
+   * PRD-51: ДОКУМЕНТ ОТЧЁТА — состав и порядок блоков, по ветви режима. Ветви две и
+   * живут одновременно, как и у {@link report}: смена режима не должна стирать
+   * собранный документ другого.
+   *
+   * ОТСУТСТВУЕТ у теста, который документа не собирал, и это не то же самое, что пустой
+   * список: без строк печатается документ по умолчанию шаблона, а пустой список —
+   * осознанное «печатать нечего». Потребители обязаны различать эти два случая.
+   */
+  reportDocument?: {
+    /**
+     * Строки, ПРИШЕДШИЕ ИЗ БАЗЫ. Правкой не меняются: из них один раз разрешается
+     * начальный вид документа (правила §5.1 — дописать новое, пропустить неизвестное), и
+     * применять эти правила к каждому нажатию значило бы спорить с автором.
+     */
+    saved?: { standard?: DraftBlock[]; adaptive?: DraftBlock[] };
+    /** Черновик автора; появляется с ПЕРВОЙ правкой и только тогда уходит на сервер. */
+    draft?: { standard?: DraftBlock[]; adaptive?: DraftBlock[] };
+  };
   /** Вводные блоки экрана итогов и отчёта (`tests.intro_json`, PRD-27 §7.1). */
   intro?: TestIntro;
   /**
@@ -532,7 +755,18 @@ export type TestEditorModel = {
   scoring: {
     defaultQuestionPoints: number | null;
     questionOverrides: QuestionScoringOverride[];
+    /**
+     * «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию и «засчитывать частичное
+     * выполнение» (`tests.sim_scoring_json`). Отсутствие или `null` — системные умолчания.
+     */
+    simDefaults?: SimScoringSettings | null;
   };
+  /**
+   * PRD-56: вопросы, исключённые из выдачи в этом тесте. Только для чтения: признак
+   * ставит аналитика, редактор его лишь показывает («Вопросы теста») и в сохранение не
+   * отдаёт. Необязателен: черновик, собранный локально, среза не несёт.
+   */
+  deliveryExcludedQuestionIds?: string[];
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────
@@ -559,6 +793,8 @@ export type FeedbackPayload = {
 export type TestSettingsPayload = {
   title: string;
   description: string | null;
+  /** PRD-59 FR-02: формат, в котором написано описание. */
+  descriptionFormat: RichTextFormat;
   status: TestStatus;
   mode: TestMode;
   flowMode: FlowMode;
@@ -567,16 +803,22 @@ export type TestSettingsPayload = {
   flowPolicyJson?: FlowPolicyPayload;
   overallPassRuleJson: OverallPassRule;
   passDecisionPolicy: PassDecisionPolicy;
+  /** PRD-50 §16 (FR-53): `tests.breakdown_gate_enabled` — учитывать подтемы в вердикте темы. */
+  breakdownGateEnabled: boolean;
   timeLimitMinutes: number | null;
   maxAttempts: number | null;
   showCorrectAnswers: boolean;
   // PRD-19 (Блок A): правила навигации/завершения теста.
   allowReturnToUnanswered: boolean;
+  allowFreeSectionNavigation: boolean;
   allowAnswerChange: boolean;
   // PRD-43: независим от allowReturnToUnanswered.
   quickAdvance: boolean;
   showSectionResults: boolean;
   skipReviewWhenComplete: boolean;
+  // PRD-67: leaving a started section with a time limit closes it.
+  closeSectionOnLeave: boolean;
+  lmsAttemptResult: "best" | "last";
   // PRD-34: настройки защиты текста задания.
   copyProtection: boolean;
   protectionWatermark: boolean;
@@ -595,12 +837,46 @@ export type TestSettingsPayload = {
   reportSettingsJson?: ReportSettings | null;
   /** Вводные блоки экрана итогов и отчёта; `null` — ни одного не задано. */
   introJson?: TestIntro | null;
+  /** PRD-50 FR-13: subtotal-by-key display setting. Always sent — the editor resolves
+   *  the missing-model case to {@link DEFAULT_BREAKDOWN_DISPLAY} before building the payload. */
+  breakdownDisplayJson: BreakdownDisplaySetting;
+  /**
+   * PRD-50 FR-11: named blocks of sections, in author order. `null`/absent = no
+   * blocks (FR-27).
+   */
+  sectionGroupsJson?: SectionGroup[] | null;
   /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
   defaultQuestionPoints: number | null;
+  /** «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию; `null` — системные. */
+  simScoringJson?: SimScoringSettings | null;
+  /**
+   * PRD-51: документ отчёта ветви ТЕКУЩЕГО режима, в порядке печати. ОТСУТСТВИЕ поля =
+   * «не трогать»: сохранение с другой вкладки не должно стирать документ. Пустой массив —
+   * осознанное «печатать нечего», и он документ действительно стирает.
+   *
+   * Имена полей — КОНТРАКТ МАРШРУТА (`values`/`settings`), а не имена колонок базы:
+   * `sortOrder` тело запроса не несёт вовсе, его выводит сервер из позиции. Тип описан
+   * здесь целиком, а не переиспользован от разрешения документа, именно поэтому: у
+   * запроса и у строки таблицы разные наборы полей, и подмена одного другим уже стоила
+   * молча потерянного текста страниц — zod выбрасывает незаявленные ключи без единого слова.
+   */
+  reportBlocks?: Array<{
+    block: string;
+    templateKey: string | null;
+    enabled: boolean;
+    values: Record<string, unknown>;
+    settings: Record<string, unknown>;
+  }>;
   expectedVersion: number;
   /** Only sent on create (FAB folder-pick). PUT path leaves it undefined and
    *  uses the dedicated `/api/test-folders/move/:id` endpoint instead. */
   folderId?: string | null;
+  /**
+   * Выбранный шаблон оформления. Уходит ТОЛЬКО при создании — маршрут создания
+   * принимает один идентификатор и сам штампует версии. На пути PUT поле остаётся
+   * пустым: там оформление сохраняет `PUT /api/tests/:id/design`.
+   */
+  designSettingsJson?: { templateId: string };
 };
 
 export type TestSectionPayload = {
@@ -616,6 +892,14 @@ export type TestSectionPayload = {
   drawBlueprintJson: DrawBlueprint | null;
   /** PRD-17 (BR-12): fixed-variant set; `null` = legacy draw. */
   formSetJson: FormSet | null;
+  /** PRD-50 FR-50: тексты подтем; `null` = автор их не писал. */
+  breakdownFeedbackJson: { axis: "tag"; keys: Record<string, BreakdownFeedbackEntry> } | null;
+  /** Толкование темы, заданное этим тестом; `null` = тест не переопределял. */
+  interpretationJson: InterpretationEntry | null;
+  /** Толкования подтем; `null` = автор их не писал. */
+  breakdownInterpretationJson: { axis: "tag"; keys: Record<string, InterpretationEntry> } | null;
+  /** PRD-50 FR-11/FR-12: the test's block this section belongs to; `null` = no block. */
+  groupKey: string | null;
   /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
   defaultPoints: number | null;
   /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */

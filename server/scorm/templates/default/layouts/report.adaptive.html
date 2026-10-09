@@ -47,6 +47,26 @@
   </section>
   {{/if}}
 
+  <!-- PRD-50 (FR-28/FR-33): СВОДНЫЙ РАЗРЕЗ по всему тесту — та же карточка, что в обычном
+       отчёте, и единственный разрез адаптивного документа: карточка темы здесь говорит
+       подтверждённым уровнем. §5.2 — документ не вправе показать иное, чем экран, с
+       которого его скачали, поэтому блок стоит там же и гейтится теми же данными. -->
+  {{#if result.breakdown}}
+  <section class="tb-report__card">
+    {{#if labels.results.breakdown}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.breakdown }}</div>{{/if}}
+    <div class="tb-report__breakdown tb-report__breakdown--block">
+      {{#each result.breakdown}}
+      <div class="tb-report__breakdown-row {{ passClass }}" data-item="{{ key }}">
+        <div class="tb-report__breakdown-name">{{ key }}</div>
+        <div class="tb-report__breakdown-bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+        {{#if showValue}}<div class="tb-report__breakdown-val">{{ valueLabel }}</div>{{/if}}
+        {{#if requiredLabel}}<div class="tb-report__breakdown-req">{{ requiredLabel }}</div>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   <!-- ШКАЛЫ идут ПЕРЕД показателями — тот же порядок, что на экране итогов и в обычном
        отчёте: шкала — измерение, показатель — вывод из измерений. -->
   {{#if result.scales}}

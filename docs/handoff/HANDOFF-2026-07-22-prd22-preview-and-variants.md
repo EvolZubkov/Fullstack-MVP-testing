@@ -57,7 +57,7 @@
   изображения, режимы ввода — [client/src/features/tests/editor/use-content-pages.ts](../../client/src/features/tests/editor/use-content-pages.ts),
   [client/src/features/tests/editor/sections/start-pages-section.tsx](../../client/src/features/tests/editor/sections/start-pages-section.tsx).
 - Новый компонент дизайн-системы `RichTextEditor`: [vendor/ui-kit/src/components/RichTextEditor.tsx](../../vendor/ui-kit/src/components/RichTextEditor.tsx),
-  стили добавлены в ОБЕ копии `university-rt.css`.
+  стили добавлены в ОБЕ копии `skillum-ds.css`.
 - Шаблоны: вариант галереи в `server/scorm/templates/default` и `templates/certification`,
   макеты на `data-placeholder` и `page.*`.
 
@@ -191,7 +191,7 @@ node --import tsx scripts/generate-template-scorm.ts uploads/templates/<id>
 - Локальный SCORM-плеер залипает на состоянии попытки: «Сброс попытки», очистка localStorage
   и новый `object_id` не помогают. Надёжно помогает только загрузка пакета под НОВЫМ именем
   файла.
-- `university-rt.css` существует в двух копиях: `vendor/ui-kit/css/` — источник,
+- `skillum-ds.css` существует в двух копиях: `vendor/ui-kit/css/` — источник,
   `client/src/styles/vendor/` — то, что реально грузится. Править обе.
 - Предпросмотр шаблона в реестре собирается ОТДЕЛЬНЫМ маршрутом `smoke-bundle`
   ([server/routes/admin-templates.ts](../../server/routes/admin-templates.ts)), а не

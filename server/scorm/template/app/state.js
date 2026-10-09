@@ -8,6 +8,12 @@ var state = {
   answers: {},
   variant: null,
   flatQuestions: [],
+  // PRD-36: address of each delivered question in TEST_DATA ({ s, q } per delivery slot)
+  // and the delivered PRD-17 variant per topic. Both are what suspend_data stores INSTEAD
+  // of the question objects themselves — the package already ships the content, and a
+  // second copy of it is exactly what used to overflow the 64000-character limit.
+  deliveryPositions: [],
+  deliveredForms: {},
   pageSequence: [],
   templateManifest: null,
   templateShell: null,
@@ -48,6 +54,11 @@ var state = {
   // same shape topicResults entries carry in `calculateResults()` output.
   // Templates bind via `TEST_DATA.section.current.result.*`.
   sectionResults: {},
+
+  // Техдолг №8: пройден ли пункт роутера — фиксируется при каждом возврате в хаб (routerFlow
+  // `freezeSectionPass`), независимо от экрана итогов раздела. Его читает хаб: «Открывается после
+  // успешного прохождения» и политика «все обязательные пройдены». `null` — у пункта нет порога.
+  sectionPassed: {},
 
   // PRD-4 v1.1 §4.7 router_by_topics: state machine for router navigation.
   // - routerTopicStates: per-topic completion status. 'notStarted' before

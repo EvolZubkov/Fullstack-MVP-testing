@@ -1,0 +1,28 @@
+/**
+ * PRD-52: слой панели комментариев. Только раскладка ленты — цвета, типографика и
+ * сами элементы приходят из дизайн-системы.
+ */
+.rvp__bar { flex-wrap: wrap; }
+.rvp__spacer { flex: 1; }
+.rvp__toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); cursor: pointer; }
+.rvp__toggle-lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.rvp__thread { display: block; }
+/* Ветка, раскрытая по ссылке `?review=<id>`: её надо найти глазами сразу. */
+.rvp__thread.is-focused { border-color: var(--ou-accent-default); }
+.rvp__head { flex-wrap: wrap; }
+.rvp__who { font: var(--ou-text-body-s); font-weight: 600; }
+.rvp__when { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.rvp__ctx { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+.rvp__text { font: var(--ou-text-body-s); margin: var(--ou-space-2) 0 0; }
+.rvp__replies {
+  margin-top: var(--ou-space-3);
+  padding-left: var(--ou-space-4);
+  border-left: 1px solid var(--ou-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+}
+.rvp__actions { margin-top: var(--ou-space-3); flex-wrap: wrap; }
+.rvp__resolve { margin-top: var(--ou-space-3); }
+.rvp__form { margin-top: var(--ou-space-2); }
+.rvp__sum { margin-top: var(--ou-space-2); }

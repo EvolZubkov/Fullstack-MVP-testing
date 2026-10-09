@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-50 §16 (FR-52 - FR-57) — производный порог подтемы и гейт вердикта темы.
+    План: docs/plans/2026-09-04-prd50-subtopic-threshold-gate.md, задача 7, шаг 1.
+    Спека: docs/specs/prd-50/result-breakdowns.md §16.
+
+    Два состояния холста:
+      s-verdict — карточка «Тест пройден, если:» и НОВЫЙ переключатель под ней
+                  «Учитывать подтемы в вердикте темы» (по умолчанию выключен).
+      s-quotas  — блок квот темы ПОСЛЕ чистки: переключатель «Квоты по подтемам (тегам)»
+                  остался, переключателя «Пороги по подтемам (тегам)» больше нет,
+                  в таблице квот нет столбца «Порог».
+      s-docs    — пояснения и DS Mapping (вне холста).
+
+    Разметка холста снята с живого кода, а не придумана:
+      client/src/features/tests/editor/test-editor.tsx:506-562,738-813 (каркас ящика, вкладки),
+      client/src/features/tests/editor/sections/tab-rail.tsx:57-80 (рейл вкладки),
+      client/src/features/tests/editor/sections/basic-settings-section.tsx:1362-1500 (VerdictPane),
+      client/src/features/tests/editor/sections/topics-structure-section.tsx:406-533,657-920 (строка
+        темы и таблица ключей KeysTable).
+
+    ВНИМАНИЕ (расхождение с формулировкой плана): план адресует новый переключатель в подраздел
+    «Правила прохождения». В коде после перестройки ящика (закрыта 2026-09-03) карточка
+    «Тест пройден, если:» живёт во вкладке «Оценка результата», подраздел «Вердикт»
+    (editor-tabs.tsx:222-287; комментарий basic-settings-section.tsx:1358-1361 прямо говорит, что
+    карточка уехала из хвоста «Правил прохождения»). Эскиз рисует переключатель ТАМ, ГДЕ СТОИТ
+    БЛОК, — требование «под блоком “Тест пройден, если”» выполнимо только так.
+
+    Пояснения и DS Mapping — ВНЕ холста, в состоянии s-docs, как в соседних эскизах.
+    DRAFT — не перенесён в approved/ до согласования.
+    -->
+    <title>PRD-50 §16 — гейт подтем и квоты без порогов</title>
+    <!-- Порядок подключения повторяет prd28-bulk-invite-upload.html: wf-utils.css несёт каркас
+         эскиза, но тащит устаревшие shim'ы для ou-tag / ou-banner / ou-input, поэтому
+         дизайн-система подключается ПОСЛЕ него. prd7-shared.css идёт первым — он даёт токены
+         --wf-*. Сама ДС берётся из редактируемой зависимости (vendor/ui-kit), а не из копии
+         docs/wireframes/ds: копия отстала и врала бы про облик компонентов
+         (см. шапку editor-settings-target.html). -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* Ящик — фиксированный оверлей, и полоса переключения состояний держится НАД ним.
+         Опускать ящик под полосу здесь НЕЛЬЗЯ: `wf-utils.css` уже сдвигает `.ou-drawer-root`
+         на `--wf-nav-offset` и ровно на столько же урезает высоту самого ящика. Своё
+         правило `top` внутри уже сдвинутого корня давало сдвиг ДВАЖДЫ, и подвал с кнопками
+         уходил под нижнюю границу окна. */
+      .wf-nav { z-index: 10000; }
+
+      /* Гашение легаси-shim'а `.ou-select` из wf-utils.css: он рисует полю вторую рамку
+         с собственной отбивкой, которой у настоящего DS-Select нет. Правка дословно из
+         approved/prd11-draw-quotas.html. */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+
+      /* Каркас ТОЛЬКО эскиза. В продукте «Доступно» и «В вариантах» вместе не
+         встречаются (см. пояснения), поэтому шесть столбцов сразу в ящик не влезают.
+         Счётчику задана ширина, чтобы в эскизе был виден ПОЛНЫЙ набор заголовков после
+         чистки; в продукте этой ширины нет (тот же приём — в approved/prd11-draw-quotas.html). */
+      .wf-state .tb-quota-block .ou-number__box { width: var(--wf-size-110); }
+      .wf-state .tb-quota-block .tb-table th,
+      .wf-state .tb-quota-block .tb-table td { padding-left: var(--ou-space-2); padding-right: var(--ou-space-2); }
+
+      /* Блок пояснений: та же ширина и отбивка, что в соседних эскизах. */
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+
+      /* Аннотационные бейджи «что нового» — каркас ТОЛЬКО эскиза (как в prd11-draw-quotas). */
+      .wf-annot { display: none; }
+      body.wf-annots-on .wf-annot {
+        display: inline-block;
+        margin: var(--ou-space-1) 0 0;
+        padding: 0 var(--ou-space-2);
+        border-radius: var(--ou-radius-xs);
+        background: var(--ou-accent-soft);
+        color: var(--ou-accent-default);
+        font: var(--ou-text-caption);
+        font-weight: 600;
+      }
+      /* Зачёркнутая строка «было» показывается только с аннотациями: это не интерфейс,
+         а напоминание, что именно вычищено. */
+      .wf-removed { display: none; }
+      body.wf-annots-on .wf-removed {
+        display: block;
+        font: var(--ou-text-body-s);
+        color: var(--ou-fg-muted);
+        text-decoration: line-through;
+        margin: var(--ou-space-2) 0 0;
+      }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+      <symbol id="i-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">PRD-50 §16:</span>
+      <button type="button" class="active" onclick="showState(this, 'verdict')">1 · Вердикт: гейт подтем</button>
+      <button type="button" onclick="showState(this, 'quotas')">2 · Квоты без порогов</button>
+      <button type="button" onclick="showState(this, 'both')">3 · Ошибки и предупреждения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd11-draw-quotas.html">&harr; Квоты выдачи (PRD-11)</a>
+      <a class="wf-nav-link" href="prd7-editor-settings-tab.html">&harr; Ящик редактора</a>
+    </nav>
+
+    <!-- ════════════ 1 · «Оценка результата» → «Вердикт»: гейт подтем ════════════ -->
+    <div id="wf-verdict" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-label="Редактор теста">
+        <div class="ou-drawer__backdrop" aria-hidden="true"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v4</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор">
+              <span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></span>
+            </button>
+          </header>
+
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </div>
+
+          <div class="ou-drawer__body ou-drawer__body--flush" role="tabpanel" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item">Показатели</button>
+              </nav>
+
+              <div class="tb-settings-content">
+                <!-- ── Существующая карточка «Тест пройден, если:» — без изменений ── -->
+                <section class="ou-card ou-card--outlined ou-card--sm tb-pass-card">
+                  <div class="ou-card__header">
+                    <div class="ou-card__heading">
+                      <h3 class="ou-card__title">Тест пройден, если:</h3>
+                    </div>
+                  </div>
+                  <div class="ou-card__body">
+                    <fieldset class="ou-radio-group ou-radio-group--vertical">
+                      <div class="ou-radio-group__items">
+                        <label class="ou-radio-field">
+                          <span class="ou-radio ou-radio--m">
+                            <input type="radio" class="ou-radio__input" name="pass-decision-policy" />
+                            <span class="ou-radio__ring"><span class="ou-radio__dot"></span></span>
+                          </span>
+                          <span class="ou-radio-field__text"><span class="ou-radio-field__label">достигнут общий проходной порог теста</span></span>
+                        </label>
+                        <label class="ou-radio-field">
+                          <span class="ou-radio ou-radio--m is-on">
+                            <input type="radio" class="ou-radio__input" name="pass-decision-policy" checked />
+                            <span class="ou-radio__ring"><span class="ou-radio__dot"></span></span>
+                          </span>
+                          <span class="ou-radio-field__text"><span class="ou-radio-field__label">достигнут общий проходной порог и пройдены все обязательные темы</span></span>
+                        </label>
+                        <label class="ou-radio-field">
+                          <span class="ou-radio ou-radio--m">
+                            <input type="radio" class="ou-radio__input" name="pass-decision-policy" />
+                            <span class="ou-radio__ring"><span class="ou-radio__dot"></span></span>
+                          </span>
+                          <span class="ou-radio-field__text"><span class="ou-radio-field__label">пройдены все обязательные темы</span></span>
+                        </label>
+                        <label class="ou-radio-field">
+                          <span class="ou-radio ou-radio--m">
+                            <input type="radio" class="ou-radio__input" name="pass-decision-policy" />
+                            <span class="ou-radio__ring"><span class="ou-radio__dot"></span></span>
+                          </span>
+                          <span class="ou-radio-field__text"><span class="ou-radio-field__label">пройдена каждая выбранная тема</span></span>
+                        </label>
+                      </div>
+                    </fieldset>
+
+                    <hr class="wf-sep" />
+
+                    <div class="tb-pass-overall">
+                      <div class="ou-formfield">
+                        <div class="ou-select ou-field--m ou-field--full" data-ou-options="Процент правильных ответов|Сумма баллов|Не задано">
+                          <label class="ou-field__lbl" for="v-overall-type">Тип общего правила</label>
+                          <button type="button" class="ou-field__box ou-select__trigger" id="v-overall-type" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="ou-select__value">Процент правильных ответов</span>
+                            <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <div class="ou-number ou-number--m ou-number--split">
+                          <label class="ou-number__lbl" for="v-overall-value">Порог (%)</label>
+                          <div class="ou-number__box">
+                            <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                            <input class="ou-number__input" id="v-overall-value" type="text" inputmode="numeric" value="70" />
+                            <span class="ou-number__suffix">%</span>
+                            <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- ── НОВОЕ (FR-53): один переключатель гейта подтем, по умолчанию ВЫКЛ ── -->
+                <div class="ou-formfield">
+                  <label class="tb-quota-toggle">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m" role="switch" aria-checked="false">
+                        <input type="checkbox" class="ou-switch__input" aria-label="Учитывать подтемы в вердикте темы" />
+                        <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                      </span>
+                    </label>
+                    <span class="tb-section-label">Учитывать подтемы в вердикте темы</span>
+                  </label>
+                  <div class="tb-card-desc">
+                    Тема не пройдена, если хотя бы одна её подтема (тег) набрала меньше порога темы.
+                    Отдельных порогов у подтем нет: подтема живёт по правилу своей темы, а тема с
+                    «Не проверять отдельно» не судит и свои подтемы.
+                  </div>
+                  <span class="wf-annot">новое · FR-53 · по умолчанию выключен</span>
+                </div>
+
+                <!-- ── Существующая таблица правил тем — без изменений ── -->
+                <h3 class="tb-topics-title">Правила оценки тем</h3>
+                <table class="tb-table tb-pass-table" aria-label="Правила оценки тем">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="tb-pass-table__topic-col">Тема</th>
+                      <th scope="col">Правило оценки темы</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Основы ИБ</td>
+                      <td>
+                        <div class="ou-select ou-field--s ou-field--full" data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно">
+                          <button type="button" class="ou-field__box ou-select__trigger" id="v-rule-1" aria-label="Правило оценки темы Основы ИБ" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="ou-select__value">Как у теста</span>
+                            <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Работа с инцидентами</td>
+                      <td>
+                        <div class="ou-select ou-field--s ou-field--full" data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно">
+                          <button type="button" class="ou-field__box ou-select__trigger" id="v-rule-2" aria-label="Правило оценки темы Работа с инцидентами" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="ou-select__value">Индивидуальное правило</span>
+                            <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- Раскрытая ветка «Индивидуальное правило»: существующая строка-деталь
+                         продукта (`tb-pass-table__detail`), гейт подтем её не меняет. -->
+                    <tr class="tb-pass-table__detail">
+                      <td></td>
+                      <td>
+                        <div class="tb-pass-table__detail-inner">
+                          <div class="ou-formfield">
+                            <label class="ou-field__lbl" for="v-custom-type-2">Тип</label>
+                            <div class="ou-select ou-field--s" data-ou-options="Процент|Сумма баллов">
+                              <button type="button" class="ou-field__box ou-select__trigger" id="v-custom-type-2" aria-label="Тип индивидуального правила темы Работа с инцидентами" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="ou-select__value">Процент</span>
+                                <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div class="ou-formfield">
+                            <div class="ou-number ou-number--s ou-number--split">
+                              <label class="ou-number__lbl" for="v-custom-value-2">Порог</label>
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                <input class="ou-number__input" id="v-custom-value-2" type="text" inputmode="numeric" value="75" aria-label="Значение порога темы Работа с инцидентами" />
+                                <span class="ou-number__suffix">%</span>
+                                <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Правовые основы</td>
+                      <td>
+                        <div class="ou-select ou-field--s ou-field--full" data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно">
+                          <button type="button" class="ou-field__box ou-select__trigger" id="v-rule-3" aria-label="Правило оценки темы Правовые основы" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="ou-select__value">Не проверять отдельно</span>
+                            <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- Тема в режиме вариантов (PRD-17/PRD-24): у неё в списке появляется
+                         четвёртый источник «По вариантам», а под строкой — порог на каждый
+                         вариант. Гейт подтем этой ветки не меняет: порог подтемы берётся из
+                         правила, разрешённого для ДОСТАВЛЕННОГО варианта. -->
+                    <tr>
+                      <td>Оценка инцидентов</td>
+                      <td>
+                        <div class="ou-select ou-field--s ou-field--full" data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно|По вариантам">
+                          <button type="button" class="ou-field__box ou-select__trigger" id="v-rule-4" aria-label="Правило оценки темы Оценка инцидентов" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="ou-select__value">По вариантам</span>
+                            <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr class="tb-pass-table__detail">
+                      <td></td>
+                      <td>
+                        <div class="tb-pass-table__variants">
+                          <span class="tb-pass-table__variant-label">Вариант A</span>
+                          <div class="ou-formfield">
+                            <label class="ou-field__lbl" for="v-var-type-a">Тип</label>
+                            <div class="ou-select ou-field--s" data-ou-options="Процент|Сумма баллов">
+                              <button type="button" class="ou-field__box ou-select__trigger" id="v-var-type-a" aria-label="Тип порога варианта «Вариант A» темы Оценка инцидентов" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="ou-select__value">Процент</span>
+                                <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div class="ou-formfield">
+                            <div class="ou-number ou-number--s ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                <input class="ou-number__input" type="text" inputmode="numeric" value="70" aria-label="Порог варианта «Вариант A» темы Оценка инцидентов" />
+                                <span class="ou-number__suffix">%</span>
+                                <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                              </div>
+                            </div>
+                          </div>
+                          <span class="tb-pass-table__variant-label">Вариант B</span>
+                          <div class="ou-formfield">
+                            <label class="ou-field__lbl" for="v-var-type-b">Тип</label>
+                            <div class="ou-select ou-field--s" data-ou-options="Процент|Сумма баллов">
+                              <button type="button" class="ou-field__box ou-select__trigger" id="v-var-type-b" aria-label="Тип порога варианта «Вариант B» темы Оценка инцидентов" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="ou-select__value">Сумма баллов</span>
+                                <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div class="ou-formfield">
+                            <div class="ou-number ou-number--s ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                <input class="ou-number__input" type="text" inputmode="numeric" value="18" aria-label="Порог варианта «Вариант B» темы Оценка инцидентов" />
+                                <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                              </div>
+                            </div>
+                          </div>
+                          <span class="tb-pass-table__variant-hint">макс. 24 баллов</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-drawer__foot" data-state="default">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════ 2 · «Состав и сценарий» → «Состав»: квоты без порогов ════════════ -->
+    <div id="wf-quotas" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-label="Редактор теста">
+        <div class="ou-drawer__backdrop" aria-hidden="true"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v4</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор">
+              <span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></span>
+            </button>
+          </header>
+
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Состав и сценарий</span><span class="status-dot warn" aria-label="есть предупреждения"></span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </div>
+
+          <div class="ou-drawer__body ou-drawer__body--flush" role="tabpanel" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы состава и сценария">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Состав<span class="status-dot warn" aria-label="есть предупреждения"></span></button>
+                <button type="button" class="ou-drawer__rail-item">Сценарий</button>
+              </nav>
+
+              <div class="tb-settings-content">
+                <!-- Правило индикации (контракт редактора, раздел «Индикация проблем»): сводный
+                     баннер стоит ВВЕРХУ ФОРМЫ, а не в карточке, к которой относится, — карточка
+                     бывает ниже сгиба. Действие переводит фокус на элемент с проблемой. -->
+                <div class="ou-banner ou-banner--warning ou-banner--subtle" role="status">
+                  <span class="ou-banner__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-alert-triangle" /></svg></span>
+                  <div class="ou-banner__body">
+                    <div class="ou-banner__title">Предупреждений: 1</div>
+                    <div class="ou-banner__desc">Для подтемы «incident_triage» вопросов меньше, чем запрошено квотой. Выдастся сколько есть.</div>
+                  </div>
+                  <div class="ou-banner__actions">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти к предупреждениям</button>
+                  </div>
+                </div>
+
+                <div class="tb-topic-row">
+                  <div class="tb-topic-row__header">
+                    <span class="tb-topic-row__name">Работа с инцидентами</span>
+                    <span class="tb-topic-row__count">30 вопросов</span>
+                    <label class="tb-topic-row__required">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true">
+                          <input type="checkbox" class="ou-switch__input" checked aria-label="Тема обязательная: Работа с инцидентами" />
+                          <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                        </span>
+                      </label>
+                      <span class="tb-topic-row__required-lbl">Обязательная</span>
+                    </label>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Работа с инцидентами»">
+                      <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></span>
+                    </button>
+                  </div>
+
+                  <div class="tb-topic-row__body">
+                    <label class="tb-draw-all-row">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m" role="switch" aria-checked="false">
+                          <input type="checkbox" class="ou-switch__input" aria-label="Все вопросы темы: Работа с инцидентами" />
+                          <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                        </span>
+                      </label>
+                      <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                    </label>
+
+                    <div class="tb-draw-count-row">
+                      <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                      <div class="ou-number ou-number--s ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                          <input class="ou-number__input" id="q-drawcount" type="text" inputmode="numeric" value="6" aria-label="Количество вопросов из темы Работа с инцидентами" />
+                          <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                        </div>
+                      </div>
+                      <span class="tb-draw-count-row__max">из 30</span>
+                    </div>
+
+                    <div class="tb-question-order-row">
+                      <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                      <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Случайный|Фиксированный">
+                        <button type="button" class="ou-field__box ou-select__trigger" id="q-order" aria-label="Порядок вопросов: Работа с инцидентами" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="ou-select__value">Случайный</span>
+                          <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                        </button>
+                      </div>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: Работа с инцидентами" title="Как в тесте">
+                        <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span>
+                      </button>
+                      <span class="tb-question-order-row__hint">переопределяет порядок теста</span>
+                    </div>
+
+                    <!-- ── Переключатель квот ОСТАЁТСЯ ── -->
+                    <label class="tb-quota-toggle">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true">
+                          <input type="checkbox" class="ou-switch__input" checked aria-label="Квоты по подтемам: Работа с инцидентами" />
+                          <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                        </span>
+                      </label>
+                      <span class="tb-section-label">
+                        <svg width="14" height="14" aria-hidden="true"><use href="#i-layers" /></svg>
+                        Квоты по подтемам (тегам)
+                      </span>
+                    </label>
+
+                    <!-- Второго переключателя «Пороги по подтемам (тегам)» здесь БОЛЬШЕ НЕТ (FR-56).
+                         Строка ниже видна только при включённых аннотациях — это напоминание,
+                         а не элемент интерфейса. -->
+                    <div class="wf-removed">Пороги по подтемам (тегам) — убрано, FR-56</div>
+
+                    <div class="tb-quota-block">
+                      <!-- Баннера здесь больше нет: по правилу индикации сводный текст стоит
+                           вверху формы, а в самой карточке говорит знак у значения строки. -->
+                      <table class="tb-table">
+                        <thead>
+                          <tr>
+                            <th>Подтема (тег вопроса)</th>
+                            <th>Сколько</th>
+                            <th>Режим</th>
+                            <th>Доступно</th>
+                            <th>В вариантах</th>
+                            <th aria-label="Действия"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>
+                              <div class="ou-select ou-field--m ou-field--full" data-ou-options="incident_intake|incident_triage|incident_report">
+                                <button type="button" class="ou-field__box ou-select__trigger" id="q-tag-1" aria-label="Подтема для квоты 1" aria-haspopup="listbox" aria-expanded="false">
+                                  <span class="ou-select__value">incident_intake</span>
+                                  <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-number ou-number--s ou-number--split">
+                                <div class="ou-number__box">
+                                  <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                  <input class="ou-number__input" id="q-count-1" type="text" inputmode="numeric" value="2" aria-label="Сколько вопросов для подтемы «incident_intake»" />
+                                  <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим квоты для подтемы «incident_intake»">
+                                <button type="button" class="ou-seg__item is-active"><span>Ровно</span></button>
+                                <button type="button" class="ou-seg__item"><span>Не менее</span></button>
+                              </div>
+                            </td>
+                            <td><span class="tb-quota-block__avail">5</span></td>
+                            <td><span class="tb-quota-block__avail">A: 2 · </span><span class="tb-quota-block__avail">B: 2</span></td>
+                            <td>
+                              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «incident_intake»">
+                                <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span>
+                              </button>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>
+                              <div class="ou-select ou-field--m ou-field--full" data-ou-options="incident_intake|incident_triage|incident_report">
+                                <button type="button" class="ou-field__box ou-select__trigger" id="q-tag-2" aria-label="Подтема для квоты 2" aria-haspopup="listbox" aria-expanded="false">
+                                  <span class="ou-select__value">incident_triage</span>
+                                  <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-number ou-number--s ou-number--split">
+                                <div class="ou-number__box">
+                                  <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                  <input class="ou-number__input" id="q-count-2" type="text" inputmode="numeric" value="3" aria-label="Сколько вопросов для подтемы «incident_triage»" />
+                                  <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим квоты для подтемы «incident_triage»">
+                                <button type="button" class="ou-seg__item"><span>Ровно</span></button>
+                                <button type="button" class="ou-seg__item is-active"><span>Не менее</span></button>
+                              </div>
+                            </td>
+                            <td>
+                              <span class="tb-quota-block__availrow">
+                              <span class="tb-quota-block__avail">2</span>
+                              <span class="ou-tip" data-placement="top" tabindex="0">
+                                <span class="tb-quota-block__alarm" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert-triangle" /></svg></span>
+                                <span class="ou-sr-only">Нехватка вопросов по подтеме «incident_triage»</span>
+                                <span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">Вопросов с этой подтемой меньше, чем запрошено: доступно 2 из 3. Выдастся сколько есть.</span>
+                              </span>
+                              </span>
+                            </td>
+                            <td><span class="tb-quota-block__avail">A: 3 · </span><span class="tb-quota-block__avail">B: 2</span></td>
+                            <td>
+                              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «incident_triage»">
+                                <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span>
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <div class="tb-quota-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">
+                          <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+                          <span>Добавить квоту</span>
+                        </button>
+                      </div>
+
+                      <div class="tb-quota-sum">
+                        <span>Σ квот: 5 из 6 · остаток 1</span>
+                      </div>
+
+                      <!-- Пояснения «Порог сравнивается с долей БАЛЛОВ…» здесь тоже больше нет:
+                           порогов у подтем не осталось (FR-56). -->
+                      <span class="wf-annot">убрано · FR-56 · столбец «Порог» и его пояснение</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-drawer__foot" data-state="default">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════ Пояснения и DS Mapping (вне холста) ════════════ -->
+    <!-- ════════════ 3 · Ошибки и предупреждения вместе ════════════
+         Правило индикации: уровни НЕ сливаются — два баннера, ошибки выше, у каждого своё
+         действие перехода. Точка на вкладке и в рейле показывает ХУДШИЙ уровень, поэтому
+         здесь она красная, хотя предупреждение никуда не делось. -->
+
+    <div id="wf-both" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-label="Редактор теста">
+        <div class="ou-drawer__backdrop" aria-hidden="true"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v4</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор">
+              <span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></span>
+            </button>
+          </header>
+
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Состав и сценарий</span><span class="status-dot error" aria-label="есть блокирующие ошибки"></span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </div>
+
+          <div class="ou-drawer__body ou-drawer__body--flush" role="tabpanel" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы состава и сценария">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Состав<span class="status-dot error" aria-label="есть блокирующие ошибки"></span></button>
+                <button type="button" class="ou-drawer__rail-item">Сценарий</button>
+              </nav>
+
+              <div class="tb-settings-content">
+                <!-- Правило индикации (контракт редактора, раздел «Индикация проблем»): сводный
+                     баннер стоит ВВЕРХУ ФОРМЫ, а не в карточке, к которой относится, — карточка
+                     бывает ниже сгиба. Действие переводит фокус на элемент с проблемой. -->
+                <div class="tb-alerts">
+                  <div class="ou-banner ou-banner--error ou-banner--subtle" role="alert">
+                  <span class="ou-banner__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-alert-triangle" /></svg></span>
+                  <div class="ou-banner__body">
+                    <div class="ou-banner__title">Ошибок: 1</div>
+                    <div class="ou-banner__desc">Сумма квот (7) превышает «Вопросов в тест» (6). Пока это так, тест не сохранить.</div>
+                  </div>
+                  <div class="ou-banner__actions">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти к ошибкам</button>
+                  </div>
+                </div>
+
+                <div class="ou-banner ou-banner--warning ou-banner--subtle" role="status">
+                  <span class="ou-banner__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-alert-triangle" /></svg></span>
+                  <div class="ou-banner__body">
+                    <div class="ou-banner__title">Предупреждений: 1</div>
+                    <div class="ou-banner__desc">Для подтемы «incident_triage» вопросов меньше, чем запрошено квотой. Выдастся сколько есть.</div>
+                  </div>
+                  <div class="ou-banner__actions">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти к предупреждениям</button>
+                  </div>
+                </div>
+                </div>
+
+                <div class="tb-topic-row">
+                  <div class="tb-topic-row__header">
+                    <span class="tb-topic-row__name">Работа с инцидентами</span>
+                    <span class="tb-topic-row__count">30 вопросов</span>
+                    <label class="tb-topic-row__required">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true">
+                          <input type="checkbox" class="ou-switch__input" checked aria-label="Тема обязательная: Работа с инцидентами" />
+                          <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                        </span>
+                      </label>
+                      <span class="tb-topic-row__required-lbl">Обязательная</span>
+                    </label>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Работа с инцидентами»">
+                      <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></span>
+                    </button>
+                  </div>
+
+                  <div class="tb-topic-row__body">
+                    <label class="tb-draw-all-row">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m" role="switch" aria-checked="false">
+                          <input type="checkbox" class="ou-switch__input" aria-label="Все вопросы темы: Работа с инцидентами" />
+                          <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                        </span>
+                      </label>
+                      <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                    </label>
+
+                    <div class="tb-draw-count-row">
+                      <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                      <div class="ou-number ou-number--s ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                          <input class="ou-number__input" id="q-drawcount-e" type="text" inputmode="numeric" value="6" aria-label="Количество вопросов из темы Работа с инцидентами" />
+                          <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                        </div>
+                      </div>
+                      <span class="tb-draw-count-row__max">из 30</span>
+                    </div>
+
+                    <div class="tb-question-order-row">
+                      <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                      <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Случайный|Фиксированный">
+                        <button type="button" class="ou-field__box ou-select__trigger" id="q-order-e" aria-label="Порядок вопросов: Работа с инцидентами" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="ou-select__value">Случайный</span>
+                          <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                        </button>
+                      </div>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: Работа с инцидентами" title="Как в тесте">
+                        <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span>
+                      </button>
+                      <span class="tb-question-order-row__hint">переопределяет порядок теста</span>
+                    </div>
+
+                    <!-- ── Переключатель квот ОСТАЁТСЯ ── -->
+                    <label class="tb-quota-toggle">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true">
+                          <input type="checkbox" class="ou-switch__input" checked aria-label="Квоты по подтемам: Работа с инцидентами" />
+                          <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+                        </span>
+                      </label>
+                      <span class="tb-section-label">
+                        <svg width="14" height="14" aria-hidden="true"><use href="#i-layers" /></svg>
+                        Квоты по подтемам (тегам)
+                      </span>
+                    </label>
+
+                    <!-- Второго переключателя «Пороги по подтемам (тегам)» здесь БОЛЬШЕ НЕТ (FR-56).
+                         Строка ниже видна только при включённых аннотациях — это напоминание,
+                         а не элемент интерфейса. -->
+                    <div class="wf-removed">Пороги по подтемам (тегам) — убрано, FR-56</div>
+
+                    <div class="tb-quota-block">
+                      <!-- Баннера здесь больше нет: по правилу индикации сводный текст стоит
+                           вверху формы, а в самой карточке говорит знак у значения строки. -->
+                      <table class="tb-table">
+                        <thead>
+                          <tr>
+                            <th>Подтема (тег вопроса)</th>
+                            <th>Сколько</th>
+                            <th>Режим</th>
+                            <th>Доступно</th>
+                            <th>В вариантах</th>
+                            <th aria-label="Действия"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>
+                              <div class="ou-select ou-field--m ou-field--full" data-ou-options="incident_intake|incident_triage|incident_report">
+                                <button type="button" class="ou-field__box ou-select__trigger" id="q-tag-1-e" aria-label="Подтема для квоты 1" aria-haspopup="listbox" aria-expanded="false">
+                                  <span class="ou-select__value">incident_intake</span>
+                                  <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-number ou-number--s ou-number--split is-invalid">
+                                <div class="ou-number__box">
+                                  <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                  <input class="ou-number__input" id="q-count-1-e" type="text" inputmode="numeric" value="4" aria-label="Сколько вопросов для подтемы «incident_intake»" />
+                                  <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим квоты для подтемы «incident_intake»">
+                                <button type="button" class="ou-seg__item is-active"><span>Ровно</span></button>
+                                <button type="button" class="ou-seg__item"><span>Не менее</span></button>
+                              </div>
+                            </td>
+                            <td><span class="tb-quota-block__avail">5</span></td>
+                            <td><span class="tb-quota-block__avail">A: 2 · </span><span class="tb-quota-block__avail">B: 2</span></td>
+                            <td>
+                              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «incident_intake»">
+                                <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span>
+                              </button>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>
+                              <div class="ou-select ou-field--m ou-field--full" data-ou-options="incident_intake|incident_triage|incident_report">
+                                <button type="button" class="ou-field__box ou-select__trigger" id="q-tag-2-e" aria-label="Подтема для квоты 2" aria-haspopup="listbox" aria-expanded="false">
+                                  <span class="ou-select__value">incident_triage</span>
+                                  <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-number ou-number--s ou-number--split is-invalid">
+                                <div class="ou-number__box">
+                                  <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></button>
+                                  <input class="ou-number__input" id="q-count-2-e" type="text" inputmode="numeric" value="3" aria-label="Сколько вопросов для подтемы «incident_triage»" />
+                                  <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="ou-seg ou-seg--s" role="group" aria-label="Режим квоты для подтемы «incident_triage»">
+                                <button type="button" class="ou-seg__item"><span>Ровно</span></button>
+                                <button type="button" class="ou-seg__item is-active"><span>Не менее</span></button>
+                              </div>
+                            </td>
+                            <td>
+                              <span class="tb-quota-block__availrow">
+                              <span class="tb-quota-block__avail">2</span>
+                              <span class="ou-tip" data-placement="top" tabindex="0">
+                                <span class="tb-quota-block__alarm" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert-triangle" /></svg></span>
+                                <span class="ou-sr-only">Нехватка вопросов по подтеме «incident_triage»</span>
+                                <span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">Вопросов с этой подтемой меньше, чем запрошено: доступно 2 из 3. Выдастся сколько есть.</span>
+                              </span>
+                              </span>
+                            </td>
+                            <td><span class="tb-quota-block__avail">A: 3 · </span><span class="tb-quota-block__avail">B: 2</span></td>
+                            <td>
+                              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «incident_triage»">
+                                <span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span>
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <div class="tb-quota-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">
+                          <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+                          <span>Добавить квоту</span>
+                        </button>
+                      </div>
+
+                      <div class="tb-quota-sum">
+                        <span>Σ квот: 7 из 6 · превышение 1</span>
+                      </div>
+
+                      <!-- Пояснения «Порог сравнивается с долей БАЛЛОВ…» здесь тоже больше нет:
+                           порогов у подтем не осталось (FR-56). -->
+                      <span class="wf-annot">убрано · FR-56 · столбец «Порог» и его пояснение</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-drawer__foot" data-state="default">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════ Пояснения и DS Mapping (вне холста) ════════════ -->
+
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — состояние 1 «Вердикт: гейт подтем»</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Адрес экрана</td><td>подтверждено 2026-09-05</td><td>План называл подраздел «Правила прохождения», но карточка «Тест пройден, если:» после перестройки ящика живёт во вкладке «Оценка результата», подраздел «Вердикт» (<code>editor-tabs.tsx:222-287</code>, <code>VerdictPane</code>). Переключатель стоит под блоком, к которому относится; план исправлен</td></tr>
+              <tr><td>Карточка «Тест пройден, если:»</td><td>—</td><td>Показана как есть: <code>RadioGroup</code> из четырёх политик + тип общего правила и порог. Ничего не меняется</td></tr>
+              <tr><td>«Учитывать подтемы в вердикте темы»</td><td>FR-53</td><td>Новый переключатель, ВЫКЛЮЧЕН по умолчанию. Поле модели — <code>tests.breakdown_gate_enabled</code>. Один на весь тест, не на тему</td></tr>
+              <tr><td>Подпись переключателя</td><td>FR-52, FR-53, FR-55</td><td>Текст дословно из плана: порог подтемы производный от порога темы, отдельных порогов у подтем нет, тема с «Не проверять отдельно» свои подтемы не судит</td></tr>
+              <tr><td>Место в потоке</td><td>решение эскиза</td><td>Между карточкой вердикта и таблицей «Правила оценки тем»: гейт уточняет вердикт ТЕМЫ, поэтому стоит перед правилами тем, а не после них</td></tr>
+              <tr><td>Таблица «Правила оценки тем»</td><td>—</td><td>Без изменений. Третья строка показана со значением «Не проверять отдельно» — именно этот случай назван в подписи переключателя</td></tr>
+              <tr><td>«Индивидуальное правило»</td><td>существующее поведение</td><td>Строка раскрыта: под ней «Тип» и «Порог» (<code>tb-pass-table__detail</code>). Гейт подтем её не трогает — показана, чтобы реализация не потеряла раскрытие</td></tr>
+              <tr><td>«По вариантам»</td><td>PRD-17 / PRD-24</td><td>Четвёртый источник, доступный теме с вариантами: порог на КАЖДЫЙ вариант, у суммы баллов — подпись потолка «макс. N баллов». Порог подтемы в такой теме берётся из правила ДОСТАВЛЕННОГО варианта (FR-52 через <code>resolveTopicRule</code>)</td></tr>
+              <tr><td>Не показано</td><td>FR-57</td><td>Предупреждение публикации «гейт включён при скрытых подытогах» — оно живёт не здесь, а в реестре предупреждений публикации. Редактор вариантов (<code>VariantsEditor</code>) в карточке темы тоже не рисуется: гейт его не меняет</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — состояние 2 «Квоты без порогов»</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Поверхность</td><td>—</td><td>Строка темы (<code>tb-topic-row</code>) во вкладке «Состав и сценарий», подраздел «Состав». Шапка, «Все вопросы темы», «Вопросов в тест» и «Порядок вопросов» — существующие, не трогаются</td></tr>
+              <tr><td>«Квоты по подтемам (тегам)»</td><td>PRD-11 FR-02</td><td>Переключатель ОСТАЁТСЯ без изменений: квота — про выдачу, и она никуда не девается</td></tr>
+              <tr><td>«Пороги по подтемам (тегам)»</td><td>FR-56</td><td>Переключателя больше НЕТ. Уходят вместе с ним <code>test_sections.breakdown_rules_json</code>, проп <code>onChangeBreakdownRules</code> и добор строк «под пороги»: строки таблицы снова только ключи квот</td></tr>
+              <tr><td>Столбец «Порог»</td><td>FR-56</td><td>Удалён вместе с <code>Select</code> «Не проверять / Не менее, %» и полем процентов (<code>key-threshold-mode-*</code>, <code>key-threshold-value-*</code>). Порог подтемы теперь вычисляется из правила темы и нигде не хранится</td></tr>
+              <tr><td>Состав столбцов</td><td>FR-56</td><td>Подтема (тег вопроса) · Сколько · Режим · Доступно · В вариантах · действия</td></tr>
+              <tr><td>«Доступно» и «В вариантах»</td><td>—</td><td>Оба столбца УСЛОВНЫЕ и в текущем коде вместе не встречаются: «Доступно» показывается только при нехватке и живых квотах (<code>showAvail = quotasLive &amp;&amp; anyShortfall</code>), «В вариантах» — только в режиме вариантов, где квоты как раз гаснут. В эскизе показаны рядом, чтобы был виден полный набор заголовков после чистки; вместе шесть столбцов в ящик не влезают, поэтому счётчику «Сколько» в эскизе (и только в нём) задана ширина</td></tr>
+              <tr><td>«В вариантах»</td><td>решение владельца 2026-09-05</td><td>Столбец ОСТАЁТСЯ. Он появился одним коммитом с порогами (<code>483dbbf7</code>) и жил за счёт того, что пороги раскрывали таблицу в вариантном режиме; после чистки блок раскрывается там СПРАВКОЙ — теги темы и их раскладка по вариантам видны, поля квот неактивны, как и сейчас</td></tr>
+              <tr><td>Пояснение под таблицей</td><td>FR-56</td><td>Строка «Порог сравнивается с долей БАЛЛОВ…» уходит вместе с порогами. Остаются «Добавить квоту» и Σ квот</td></tr>
+              <tr><td>Раскрытие блока</td><td>FR-56</td><td><code>expanded = quotasLive || вариантный режим</code>: живые квоты либо справка о раскладке тегов по вариантам</td></tr>
+              <tr><td>Точка на вкладке</td><td>контракт редактора, «Индикация проблем»</td><td>Жёлтая точка у «Состав и сценарий»: внутри есть предупреждение. Только точка, без числа; красная — если внутри есть ошибка. Механика для ошибок уже в коде (<code>StatusBadge</code>, <code>status-dot</code>)</td></tr>
+              <tr><td>Точка в рейле</td><td>контракт редактора, «Индикация проблем»</td><td>Та же точка у пункта «Состав» — чтобы автор видел, в каком ПОДРАЗДЕЛЕ проблема, а не только в какой вкладке. В коде этого пока нет вовсе, задача 13 плана</td></tr>
+              <tr><td>Сводный баннер</td><td>контракт редактора, «Индикация проблем»</td><td>Стоит ВВЕРХУ ФОРМЫ, а не в карточке: карточка бывает ниже сгиба. Липкий, во всю ширину контента — существующий паттерн верхних баннеров ящика (<code>tb-components.css:145-157</code>)</td></tr>
+              <tr><td>Ошибки и предупреждения вместе</td><td>контракт редактора, «Индикация проблем»</td><td>Баннеры НЕ сливаются: есть и то и другое — стоят ДВА баннера, ошибки выше. У них разные последствия и разные адресаты, и автор должен видеть, что именно держит сохранение. У каждого своё действие перехода. В этом состоянии эскиза ошибок нет, поэтому баннер один</td></tr>
+              <tr><td>«Перейти к предупреждениям»</td><td>контракт редактора, «Индикация проблем»</td><td>Действие баннера переключает вкладку и подраздел, прокручивает к элементу и СТАВИТ НА НЕГО ФОКУС ввода — тот же <code>goToError</code> с якорями <code>data-field</code>, что работает сегодня для ошибок</td></tr>
+              <tr><td>Знак тревоги у значения</td><td>контракт редактора, «Индикация проблем»</td><td>ЖЁЛТЫЙ треугольник (тон = уровень проблемы; у ошибки был бы красный) рядом со значением «Доступно» в строке-нарушителе, подсказка по наведению и по фокусу с клавиатуры. В подсказке только то, что нужно автору: сколько доступно из запрошенного и что выдастся сколько есть</td></tr>
+              <tr><td>Чип в подвале карточки</td><td>контракт редактора, «Индикация проблем»</td><td>УБРАН. Чип говорил о карточке целиком и не показывал, какая строка виновата; его роль поделили точка, баннер и знак у значения</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — состояние 3 «Ошибки и предупреждения вместе»</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Зачем состояние</td><td>решение владельца 2026-09-05</td><td>Баннеры уровней НЕ сливаются. Здесь показан случай, когда в форме одновременно блокирующая ошибка и предупреждение</td></tr>
+              <tr><td>Порядок баннеров</td><td>контракт редактора, «Индикация проблем»</td><td>Ошибки ВЫШЕ предупреждений: сначала то, что держит сохранение. У каждого баннера своё действие — «Перейти к ошибкам» и «Перейти к предупреждениям», оба переводят фокус на свой элемент</td></tr>
+              <tr><td>Точка на вкладке и в рейле</td><td>контракт редактора, «Индикация проблем»</td><td>Показывает ХУДШИЙ уровень, поэтому здесь она красная, хотя предупреждение никуда не делось. Числа по-прежнему нет — счёт печатают баннеры</td></tr>
+              <tr><td>Ошибка</td><td>существующая проверка</td><td>«Сумма квот (7) превышает „Вопросов в тест“ (6)». Продуктовое поведение не меняется: помечаются невалидными ПОЛЯ КВОТ, а не «Вопросов в тест», текст живёт в баннере (<code>invalid={quotasLive &amp;&amp; overflow}</code>)</td></tr>
+              <tr><td>Вторая ошибка того же блока</td><td>существующая проверка</td><td>«Не выбран тег для квоты» — тот же рисунок: невалиден <code>Select</code> подтемы, счёт и текст в баннере ошибок. Отдельным состоянием не рисуется</td></tr>
+              <tr><td>Предупреждение</td><td>FR-56 + правило индикации</td><td>Нехватка вопросов под квоту. Знак тревоги остаётся у значения строки-нарушителя — он показывает, ГДЕ проблема, когда баннер говорит только сколько их</td></tr>
+              <tr><td>Σ квот</td><td>—</td><td>«7 из 6 · превышение 1» — существующая строка итога, она сообщает о переборе, но сама по себе не индикатор уровня</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping</h2>
+          <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>) и существующих классов проектного слоя (<code>tb-*</code>). Классы <code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+          <table>
+            <thead><tr><th>Элемент эскиза</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+            <tbody>
+              <tr><td>Ящик редактора</td><td><code>ou-drawer-root</code> / <code>ou-drawer--xl --right</code></td><td>существующий каркас (<code>test-editor.tsx</code>)</td></tr>
+              <tr><td>Вкладки</td><td><code>Tabs</code> (<code>ou-tabs--underline</code>)</td><td>существующие 7 вкладок</td></tr>
+              <tr><td>Рейл подразделов</td><td><code>ou-drawer__split</code> + <code>ou-drawer__rail-item</code></td><td>существующий <code>TabRail</code></td></tr>
+              <tr><td>Карточка вердикта</td><td><code>Card</code> (<code>ou-card--outlined ou-card--sm</code>) + <code>tb-pass-card</code></td><td>существующая карточка</td></tr>
+              <tr><td>Политики вердикта</td><td><code>RadioGroup</code> (<code>ou-radio-group</code>)</td><td>существующий компонент</td></tr>
+              <tr><td>Переключатель гейта</td><td><code>Switch</code> (<code>ou-switch</code>) в <code>tb-quota-toggle</code></td><td>существующая пара «свич + <code>tb-section-label</code>»</td></tr>
+              <tr><td>Подпись переключателя</td><td><code>tb-card-desc</code></td><td>существующий класс подписи</td></tr>
+              <tr><td>Строка темы</td><td><code>tb-topic-row</code></td><td>существующий составной блок</td></tr>
+              <tr><td>Таблица квот</td><td><code>tb-table</code></td><td>существующая таблица ключей</td></tr>
+              <tr><td>Подтема / Сколько / Режим</td><td><code>Select</code>, <code>NumberInput</code>, <code>SegmentedControl</code></td><td>существующие компоненты</td></tr>
+              <tr><td>Нехватка по тегу</td><td><code>Banner</code> (<code>ou-banner--warning</code>), <code>Tag</code></td><td>существующие сообщения</td></tr>
+              <tr><td><code>wf-annot</code>, <code>wf-removed</code></td><td>—</td><td>каркас эскиза: пометки «новое» и «убрано»; в продукте их нет</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>

@@ -14,9 +14,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Banner, Button, ModalDialog, SegmentedControl, Tag } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog, SegmentedControl, Tag } from "@skillum/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
-import { buildTemplateCssVars } from "@shared/template/params-css";
+import { buildTemplateCssVars, buildTemplateDataAttrs, withParamDefaults } from "@shared/template/params-css";
+import { barFillFromParams } from "@shared/template/bar-fill";
 import { buildAdaptiveReportContext, buildReportContext } from "@shared/report/report-context";
 import { buildReportMeasures } from "@shared/report/report-measures";
 import {
@@ -24,12 +25,16 @@ import {
   buildReportPreviewInput,
   type ReportPreviewOutcome,
   type ReportPreviewSection,
+  type ReportPreviewTest,
 } from "@shared/report/report-preview";
 import { reportKindForMode } from "@shared/report/report-variants";
+import { resolveReportDocument } from "@shared/report/report-document";
+import type { ReportBlockToRender } from "@shared/report/render-report";
 import { buildReportPages, PAGE_WIDTH_PX } from "@shared/report/paginate-dom";
 import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
 import { useTemplateBundle } from "./use-template-bundle";
 import type { ReportVariantOption } from "../use-report-variants";
+import { toRowInputs, type DraftBlock } from "../use-report-document";
 
 /** Что окно знает о редактируемом тесте (FR-18: структура реальная). */
 export interface ReportPreviewModalProps {
@@ -46,8 +51,22 @@ export interface ReportPreviewModalProps {
   values: Record<string, unknown>;
   testName: string;
   sections: ReportPreviewSection[];
+  /** Заголовки итога теста — свойства узла «Итоги теста» (см. `ReportPreviewTest`). */
+  headings?: ReportPreviewTest["headings"];
+  /** Настройка показа подытогов теста — оттуда же, откуда её берёт выдача. */
+  breakdownDisplay?: ReportPreviewTest["breakdownDisplay"];
+  /** Вводные блоки теста (PRD-61 FR-23): окно печатает их, как печатает выдача. */
+  intro?: ReportPreviewTest["intro"];
+  /** Группы тем теста — блок со счётчиком в предпросмотре. */
+  sectionGroups?: ReportPreviewTest["sectionGroups"];
   /** Лестница уровней адаптивного теста. */
   levelNames?: string[];
+  /**
+   * PRD-51 FR-18: ДОКУМЕНТ, собранный автором, — черновик, а не сохранённое. Отсутствует
+   * (или пуст) — показывается документ по умолчанию шаблона: ровно его сегодня и получит
+   * слушатель у теста, документа не собиравшего.
+   */
+  document?: DraftBlock[];
 }
 
 /** Склонение слова «страница» для подписи «N страниц A4». */
@@ -70,7 +89,12 @@ export function ReportPreviewModal({
   values,
   testName,
   sections,
+  headings,
+  breakdownDisplay,
+  sectionGroups,
+  intro,
   levelNames,
+  document,
 }: ReportPreviewModalProps) {
   const [outcome, setOutcome] = useState<ReportPreviewOutcome>("failed");
   const bundleQuery = useTemplateBundle(templateId, open);
@@ -85,6 +109,32 @@ export function ReportPreviewModal({
     const byFile = variant?.layoutFile ? bundle.layouts[variant.layoutFile] : undefined;
     return byFile ?? bundle.layouts[reportKindForMode(mode)];
   }, [bundle, variant, mode]);
+
+  /**
+   * PRD-51: блоки ДОКУМЕНТА и их раскладки.
+   *
+   * Состав считает та же функция, что и обе выдачи, а раскладки берутся из бандла
+   * шаблона по объявленному пути. Строки — ЧЕРНОВИК автора: предпросмотр обязан
+   * показывать несохранённое, иначе он отвечает не на тот вопрос, ради которого его
+   * открывают. Пустой черновик даёт документ по умолчанию шаблона — ровно его и получит
+   * слушатель у теста, документа не собиравшего.
+   *
+   * Шаблон без блоков даёт пустой список, и окно рисует прежнюю цельную раскладку.
+   */
+  const blocks = useMemo<ReportBlockToRender[]>(() => {
+    if (!bundle) return [];
+    const doc = resolveReportDocument(
+      bundle.manifest,
+      reportKindForMode(mode),
+      toRowInputs(document ?? []),
+    );
+    if (!doc || doc.monolithic) return [];
+    return doc.blocks
+      .map((b) => ({ ...b, layout: b.layoutFile ? (bundle.layouts[b.layoutFile] ?? "") : "" }))
+      // Блок, чьей раскладки в бандле нет, молча пропускается: показать вместо него
+      // пустоту честнее, чем уронить всё окно из-за одного отсутствующего файла.
+      .filter((b) => b.nature === "page-break" || b.layout.length > 0);
+  }, [bundle, mode, document]);
 
   // Картинки вида объявлены путями внутри шаблона (FR-05), а браузер видит файлы
   // шаблона только через роут ассетов. Без этого автор смотрел бы предпросмотр без
@@ -102,7 +152,24 @@ export function ReportPreviewModal({
   );
 
   const context = useMemo(() => {
-    const test = { testName, sections, levelNames };
+    // Окраска полос подтем — из НЕсохранённых параметров оформления с умолчаниями манифеста,
+    // тем же правилом, что в выдаче: автор видит документ, который уйдёт слушателю.
+    const barFill = barFillFromParams(
+      withParamDefaults(params as Record<string, unknown>, bundle?.manifest.params),
+    );
+    const test = {
+      testName,
+      sections,
+      levelNames,
+      ...(headings ? { headings } : {}),
+      ...(breakdownDisplay ? { breakdownDisplay } : {}),
+      ...(barFill ? { barFill } : {}),
+      ...(sectionGroups?.length ? { sectionGroups } : {}),
+      // PRD-61 FR-23: вводный текст едет из РЕАЛЬНОГО теста — автор пишет его прямо перед
+      // тем, как открыть это окно, и не увидеть его здесь значит проверять вёрстку вместо
+      // содержания.
+      ...(intro ? { intro } : {}),
+    };
     const design = params as Record<string, unknown>;
     // `isPreview` — тот же флаг, что и у выдачи: макет вправе пометить страницу образцом.
     // PRD-47 §5.4: у предпросмотра нет прогона, поэтому измерения ему даёт демо-набор
@@ -119,10 +186,16 @@ export function ReportPreviewModal({
     return adaptive
       ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, outcome), opts)
       : buildReportContext(buildReportPreviewInput(test, outcome), opts);
-  }, [adaptive, testName, sections, levelNames, outcome, previewValues, params, bundle]);
+  }, [adaptive, testName, sections, levelNames, headings, breakdownDisplay, sectionGroups, intro, outcome, previewValues, params, bundle]);
 
   const cssVars = useMemo(
     () => buildTemplateCssVars(params, bundle?.manifest.params),
+    [params, bundle],
+  );
+  // Той же парой едет выбор, объявленный атрибутом (`dataAttr`): предпросмотр должен
+  // показывать выбранный вариант ДО сохранения, а по атрибуту шаблон выбирает правило.
+  const dataAttrs = useMemo(
+    () => buildTemplateDataAttrs(params, bundle?.manifest.params),
     [params, bundle],
   );
 
@@ -239,9 +312,11 @@ export function ReportPreviewModal({
                   гасится, и автор оценивает не те пропорции, что уйдут в PDF. */}
               <TemplateScreen
                 layout={layout}
+                blocks={blocks}
                 context={context}
                 css={bundle.css}
                 cssVars={cssVars}
+              dataAttrs={dataAttrs}
                 fill={false}
                 onShadowReady={onShadowReady}
               />

@@ -19,16 +19,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Banner,
   Button,
-  Cluster,
   EmptyState,
+  FormActions,
+  FormSection,
   Grid,
   IconButton,
   Input,
   ModalDialog,
   Select,
   SegmentedControl,
+  Switch,
   Textarea,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { ChevronDown, GripVertical, Info, Plus, Trash2 } from "lucide-react";
 import {
   DndContext,
@@ -45,11 +47,21 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { collectStringLiterals, findUnknownOutcomes } from "@shared/formula/outcome-literals";
+import {
+  collectStringLiterals,
+  findUnknownOutcomes,
+  readScaleGroup,
+  resolveScaleGroup,
+} from "@shared/formula/outcome-literals";
+import { parseGroupThreshold } from "@shared/formula/scale-group";
+import { outcomeMatchKey } from "@shared/scales/interpretation";
+import { profileMatrix, type ProfileMatrixRow } from "../profile-matrix";
+import { PROFILE_THRESHOLD_MESSAGE, profileFindings, profileSetCountHint } from "../profile-diagnostics";
 
 import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 
 import type {
+  OutcomeModel,
   ResultVariableControlsStatus,
   ResultVariableModel,
   ResultVariableScormTarget,
@@ -61,6 +73,7 @@ import {
   validateResultVariableFormula,
   type ResultVariableFormulaValidation,
 } from "../result-variables-api";
+import { FoldAllButtons, useSectionFold } from "./section-fold";
 import {
   TEMPLATE_OPTIONS,
   TEMPLATE_TYPE,
@@ -71,6 +84,7 @@ import {
   verdictDsl,
   categoryDsl,
   weightedDsl,
+  buildProfileFormula,
   defaultCondition,
   elementOptions,
   propertyOptions,
@@ -89,13 +103,14 @@ import {
   VALENCE_OPTIONS,
   VISIBILITY_OPTIONS,
 } from "./scales-section";
+import { reachesLmsReport } from "@shared/lms-export/meta";
 import { LevelsEditor } from "./levels-editor";
 import { OutcomesEditor } from "./outcomes-editor";
 
 const STATUS_OPTIONS: Array<{ value: ResultVariableControlsStatus; label: string }> = [
-  { value: "none", label: "Нет" },
-  { value: "success", label: "Успех (success_status)" },
-  { value: "completion", label: "Завершение (completion_status)" },
+  { value: "none", label: "Не управляет" },
+  { value: "success", label: "Ставит «Пройден», когда истина" },
+  { value: "completion", label: "Ставит «Завершён», когда истина" },
 ];
 
 const TARGET_OPTIONS: Array<{ value: ResultVariableScormTarget; label: string }> = [
@@ -160,7 +175,25 @@ export function ResultVariablesSection({
   fieldErrors = EMPTY_FIELD_ERRORS,
 }: ResultVariablesSectionProps) {
   const vars = model.resultVariables;
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  /**
+   * Свёртка карточек показателя. Прежде это был аккордеон на одну открытую карточку:
+   * раскрыть второй показатель значило закрыть первый, и сравнить два рядом было нельзя,
+   * а «развернуть все» такой моделью не выражается вовсе. Теперь — та же свёртка, что у
+   * остальных списков ящика: открыто может быть сколько угодно, и есть пара кнопок.
+   * `startCollapsed`, потому что список открывается свёрнутым, как и раньше; новый
+   * показатель в набор свёрнутых не попадает и появляется раскрытым.
+   */
+  const fold = useSectionFold(
+    vars.map((v, i) => rowKey(v, i)),
+    true,
+  );
+
+  /** Формула соседа по имени: карточке нужно пройти по `var()` (см. `carriedProfile`). */
+  const formulaOf = useCallback(
+    (name: string) => vars.find((x) => x.name === name)?.formula,
+    [vars],
+  );
 
   // Topics feed the «Элемент» picker (topicById(...)) — by name for the author,
   // by id in the generated DSL.
@@ -176,6 +209,8 @@ export function ResultVariablesSection({
       model.scales.map((s) => ({
         key: s.key,
         label: s.label,
+        description: s.description,
+        normalization: s.normalization,
         levels: Array.from(
           new Set(s.bands.map((b) => b.level.trim()).filter((l) => l !== "")),
         ),
@@ -203,10 +238,7 @@ export function ResultVariablesSection({
   );
 
   const addVariable = useCallback(() => {
-    const created = emptyVariable(vars.length);
-    const key = rowKey(created, vars.length);
-    setVars([...vars, created]);
-    setExpandedKey(key);
+    setVars([...vars, emptyVariable(vars.length)]);
   }, [vars, setVars]);
 
   const removeVariable = useCallback(
@@ -268,22 +300,27 @@ export function ResultVariablesSection({
 
   return (
     <div className="tb-settings-content" data-testid="metrics-section">
-      <Cluster justify="between" gap={0} wrap={false} style={{ marginBottom: "var(--ou-space-3)" }}>
-        <div className="tb-section-label">
-          Показатели результата{vars.length > 1 ? " · порядок вычисления" : ""}
-        </div>
-        {!readOnly && (
-          <Button
-            variant="ghost"
-            size="s"
-            leadingIcon={<Plus size={16} aria-hidden="true" />}
-            onClick={addVariable}
-            data-testid="metrics-add"
-          >
-            Добавить показатель
-          </Button>
+      <FormSection stacked title="Показатели">
+        {/* Строка действий рисуется и в режиме чтения: свёртка — это навигация по
+            списку, а не правка, и читателю она нужна не меньше. */}
+        {(!readOnly || vars.length > 1) && (
+          <FormActions align="between">
+            {!readOnly ? (
+              <Button
+                variant="ghost"
+                size="s"
+                leadingIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={addVariable}
+                data-testid="metrics-add"
+              >
+                Добавить показатель
+              </Button>
+            ) : (
+              <span />
+            )}
+            {vars.length > 1 && <FoldAllButtons fold={fold} testIdPrefix="metrics" />}
+          </FormActions>
         )}
-      </Cluster>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -300,8 +337,9 @@ export function ResultVariablesSection({
                 testId={testId}
                 readOnly={readOnly}
                 fieldErrors={fieldErrors}
-                expanded={expandedKey === key}
-                onToggle={() => setExpandedKey((cur) => (cur === key ? null : key))}
+                formulaOf={formulaOf}
+                expanded={fold.isOpen(key)}
+                onToggle={() => fold.toggle(key)}
                 onChange={(patch) => updateVar(index, patch)}
                 onRemove={() => removeVariable(index)}
               />
@@ -309,6 +347,7 @@ export function ResultVariablesSection({
           })}
         </SortableContext>
       </DndContext>
+      </FormSection>
     </div>
   );
 }
@@ -324,6 +363,7 @@ type CardProps = {
   testId?: string;
   readOnly: boolean;
   fieldErrors: FieldErrorIndex;
+  formulaOf: (name: string) => string | undefined;
   expanded: boolean;
   onToggle: () => void;
   onChange: (patch: Partial<ResultVariableModel>) => void;
@@ -349,6 +389,15 @@ function SortableVariableCard(props: CardProps) {
 
   const heading = `${v.name || "новый показатель"}${v.label ? ` — ${v.label}` : ""}`;
 
+  // Контракт «Индикация проблем»: свёрнутая карточка сама говорит об ошибке внутри
+  // себя — точкой в шапке. Тело живёт только развёрнутым, и без точки карточка
+  // молчала бы о проблеме, которую сводный баннер уже посчитал. `has` матчит и
+  // потомков: точка загорается от любой ошибки внутри показателя.
+  const hasIssue = props.fieldErrors.has(`resultVariables[${props.index}]`);
+  // Находки самого показателя (PRD-53, профиль) адресованы КАРТОЧКЕ целиком —
+  // отдельного поля у них нет.
+  const cardError = props.fieldErrors.get(`resultVariables[${props.index}]`);
+
   return (
     <section
       ref={sortable.setNodeRef}
@@ -358,6 +407,13 @@ function SortableVariableCard(props: CardProps) {
       data-field={`resultVariables[${props.index}]`}
     >
       <header className="ou-card__header tb-level-card__head">
+        {hasIssue && (
+          <span
+            className="tb-status-dot tb-status-dot--err"
+            aria-label="Есть ошибки"
+            data-testid={`metrics-card-dot-${props.index}`}
+          />
+        )}
         {!readOnly && (
           <button
             type="button"
@@ -398,6 +454,14 @@ function SortableVariableCard(props: CardProps) {
 
       {expanded && (
         <div className="ou-card__body tb-level-card__body">
+          {cardError && (
+            <Banner
+              tone="error"
+              size="sm"
+              description={cardError}
+              data-testid={`metrics-card-error-${props.index}`}
+            />
+          )}
           <VariableForm
             variable={v}
             index={props.index}
@@ -406,6 +470,7 @@ function SortableVariableCard(props: CardProps) {
             testId={props.testId}
             readOnly={readOnly}
             fieldErrors={props.fieldErrors}
+            formulaOf={props.formulaOf}
             onChange={props.onChange}
           />
         </div>
@@ -424,16 +489,23 @@ type FormProps = {
   testId?: string;
   readOnly: boolean;
   fieldErrors: FieldErrorIndex;
+  /** Формула показателя по имени — чтобы пройти по `var()` (см. `carriedProfile`). */
+  formulaOf: (name: string) => string | undefined;
   onChange: (patch: Partial<ResultVariableModel>) => void;
 };
 
-function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fieldErrors, onChange }: FormProps) {
-  const validation = useFormulaValidation(testId, v, index);
+function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fieldErrors, formulaOf, onChange }: FormProps) {
   // New (empty) variables open in the constructor; existing ones open in DSL so
   // the real stored formula is shown verbatim (the builder does not round-trip).
+  //
+  // Исключение — профиль (PRD-53): его форма ЧИТАЕТСЯ обратно из источника, группа и
+  // порог восстанавливаются точно. Показывать вместо неё сырой DSL значило бы прятать
+  // единственный экран, где эту механику настраивают, — и спорить с кнопками матрицы
+  // и предупреждениями, которые карточка печатает по той же формуле ниже.
   const [formulaMode, setFormulaMode] = useState<"builder" | "dsl">(
-    v.formula.trim() === "" ? "builder" : "dsl",
+    v.formula.trim() === "" || readScaleGroup(v.formula) ? "builder" : "dsl",
   );
+  const validation = useFormulaValidation(testId, v, index, formulaMode === "builder");
 
   // In DSL mode the validator's inferred return type becomes the variable type —
   // there is no manual «Тип» field. The builder sets the type per template.
@@ -475,6 +547,27 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
     [v.formula, declaredCodes],
   );
 
+  /**
+   * PRD-53: the profile group the SAVED formula declares. Read from the source rather
+   * than from the builder's form state, so the matrix generator and the warnings hold
+   * for an indicator opened fresh — and for one whose source the author wrote by hand.
+   */
+  const profile = useMemo(() => readScaleGroup(v.formula), [v.formula]);
+
+  /**
+   * Профиль, который показатель НЕСЁТ, — свой или взятый по `var()` у соседа.
+   *
+   * Отличается от `profile` ровно в одном месте — карточке «шкалы вне профиля»: её поля
+   * правятся там, где она печатается, а печатается она у владельца, который не обязан
+   * быть вычислителем (см. `resolveScaleGroup`). Всё остальное — форма шаблона, генератор
+   * матрицы, диагностика порога — остаётся у того, кто СЧИТАЕТ: у читателя ни порога, ни
+   * группы нет, и предлагать их правку значило бы предлагать править чужое.
+   */
+  const carriedProfile = useMemo(
+    () => resolveScaleGroup(v.formula, formulaOf),
+    [v.formula, formulaOf],
+  );
+
   // DSL «Функции» reference + insert-at-cursor.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [fnOpen, setFnOpen] = useState(false);
@@ -498,6 +591,12 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
     [v.formula, onChange],
   );
 
+  // Контракт «Индикация проблем»: у каждой ошибки — своя пометка НА МЕСТЕ. Адреса
+  // читаются один раз: ниже они нужны и полю, и баннеру-заместителю там, где поля
+  // на экране может не быть (конструктор формулы; управление статусом у небулева).
+  const formulaError = fieldErrors.get(`resultVariables[${index}].formula`);
+  const controlsStatusError = fieldErrors.get(`resultVariables[${index}].controlsStatus`);
+
   return (
     <>
       <Grid cols={2} gap={3}>
@@ -505,7 +604,7 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
           <Input
             size="m"
             fullWidth
-            label="Имя"
+            label="Имя показателя"
             required
             value={v.name}
             disabled={readOnly}
@@ -527,12 +626,10 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
         />
       </Grid>
 
-      <hr className="wf-sep" />
-
       <div className="ou-formfield" data-field={`resultVariables[${index}].formula`}>
         <label className="ou-formfield__lbl">Формула</label>
         <SegmentedControl<"builder" | "dsl">
-          size="m"
+          size="s"
           value={formulaMode}
           aria-label="Режим редактора формулы"
           items={[
@@ -559,9 +656,10 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
               ref={textareaRef}
               size="m"
               fullWidth
-              rows={5}
+              rows={4}
               value={v.formula}
               disabled={readOnly}
+              error={formulaError}
               placeholder='напр. IF(percent >= 75, "Зачёт", "Незачёт")'
               aria-label="Формула DSL"
               onChange={(e) => onChange({ formula: e.target.value })}
@@ -569,7 +667,19 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
             />
           </>
         ) : (
-          <FormulaBuilder variable={v} topics={topics} scales={scales} readOnly={readOnly} onChange={onChange} />
+          <>
+            <FormulaBuilder variable={v} topics={topics} scales={scales} readOnly={readOnly} onChange={onChange} />
+            {/* В конструкторе поля «формула» нет — её собирают из частей, — поэтому
+                ошибку показывает баннер на месте, а не `error` у поля. */}
+            {formulaError && (
+              <Banner
+                tone="error"
+                size="sm"
+                description={formulaError}
+                data-testid={`metrics-formula-error-${index}`}
+              />
+            )}
+          </>
         )}
       </div>
       {fnOpen && <FunctionReferenceModal onClose={() => setFnOpen(false)} onInsert={insertAtCursor} />}
@@ -577,18 +687,51 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
         <Banner tone={validation.banner.tone} size="sm" description={validation.banner.text} />
       )}
 
-      <hr className="wf-sep" />
-
       {/* PRD-29: the indicator's interpretation. A numeric result is interpreted by
           INTERVAL (the same editor the scales tab uses); a string or boolean one has
           no intervals — the formula returns a CODE, so the author enumerates them. */}
-      <div className="tb-section-label">Толкование результата</div>
+      {profile && (
+        <ProfileDiagnostics variable={v} scales={scales} index={index} />
+      )}
+      {/* Заголовок блока — из ствола (`ou-formfield__lbl`): приёмка ящика по эскизам
+          привела к нему ВСЕ подписи блоков, и своя разметка тут разошлась бы с ними. */}
+      <label className="ou-formfield__lbl">Толкование результата</label>
+      {profile && !readOnly && (
+        <div className="tb-rows-actions" data-testid={`metrics-profile-matrix-${index}`}>
+          <Button
+            variant="ghost"
+            size="s"
+            leadingIcon={<Plus size={16} aria-hidden="true" />}
+            disabled={profile.keys.length < 2}
+            onClick={() => onChange({ outcomes: addMissingOutcomes(v.outcomes, profileMatrix(profile.keys, scales)) })}
+            data-testid={`metrics-profile-build-${index}`}
+          >
+            Собрать наборы
+          </Button>
+          <Button
+            variant="ghost"
+            size="s"
+            leadingIcon={<Plus size={16} aria-hidden="true" />}
+            disabled={profile.keys.length < 2}
+            onClick={() =>
+              onChange({
+                outcomes: addMissingOutcomes(v.outcomes, profileMatrix(profile.keys, scales, { byCountOnly: true })),
+              })
+            }
+            data-testid={`metrics-profile-build-counts-${index}`}
+          >
+            Заготовки по размеру набора
+          </Button>
+        </div>
+      )}
       {v.type === "number" ? (
         <>
           <LevelsEditor
             bands={v.bands}
             index={index}
             readOnly={readOnly}
+            // У показателя шкалы нет — лента показывает покрытие ЕГО значений.
+            coverLabel="Покрытие"
             valence={v.valence}
             testIdPrefix="metrics"
             domain={v.domainMin !== null && v.domainMax !== null
@@ -602,6 +745,7 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
               second copy. No «Рассчитать по вкладам»: an indicator's value comes
               from a formula, not enumerated question contributions, so there is
               nothing to suggest a range from. */}
+          <span className="ou-formfield__lbl">Границы показателя</span>
           <DomainFields
             domainMin={v.domainMin}
             domainMax={v.domainMax}
@@ -610,12 +754,15 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
             index={index}
             seed={bandSpan(v) ?? { min: 0, max: 0 }}
             switchLabel="Задать границы вручную"
-            switchDescription="Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано»."
+            switchDescription="Выключено — границы берутся из охвата уровней."
             minLabel="Минимум"
             maxLabel="Максимум"
             onChange={onChange}
           />
-          <div className="ou-formfield">
+          {/* Направление и видимость — пара в одной строке: оба отвечают на вопрос «как
+              этот показатель прочитают», и разносить их по разным разделам значило бы
+              заставлять автора решать половину вопроса дважды. */}
+          <Grid cols={2} gap={3}>
             <Select<Valence>
               size="m"
               fullWidth
@@ -626,7 +773,17 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
               onChange={(value) => onChange({ valence: value })}
               data-testid={`metrics-valence-${index}`}
             />
-          </div>
+            <Select<LearnerVisibility>
+              size="m"
+              fullWidth
+              label="Показывать обучающемуся"
+              value={v.learnerVisibility}
+              disabled={readOnly}
+              options={VISIBILITY_OPTIONS}
+              onChange={(value) => onChange({ learnerVisibility: value })}
+              data-testid={`metrics-visibility-${index}`}
+            />
+          </Grid>
         </>
       ) : (
         <OutcomesEditor
@@ -645,59 +802,85 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
           data-testid={`metrics-unknown-outcomes-${index}`}
         />
       )}
-      <Banner
-        tone="info"
-        size="sm"
-        description={
-          v.type === "number"
-            ? "Толкование привязано к интервалу значения. «Оценка» — методологическое состояние уровня; как оно выглядит, решает шаблон."
-            : "Формула возвращает код исхода. Перечислите коды, которые она может вернуть, и что каждый из них означает для обучающегося."
-        }
-      />
-
-      <hr className="wf-sep" />
-
-      <div className="tb-section-label">Вывод</div>
-      <Grid cols={2} gap={3}>
-        {/*
-          PRD-29 (defect D-1): without this control `learnerVisibility` stays
-          `hidden` forever and the methodology verdict — the very result a
-          measurement test exists for — can never reach the learner. Same option
-          list as the scales tab, deliberately imported rather than duplicated.
-        */}
-        <Select<LearnerVisibility>
-          size="m"
-          fullWidth
-          label="Показывать обучающемуся"
-          value={v.learnerVisibility}
-          disabled={readOnly}
-          options={VISIBILITY_OPTIONS}
-          onChange={(value) => onChange({ learnerVisibility: value })}
-          data-testid={`metrics-visibility-${index}`}
-        />
-        {isBoolean && (
-          <Select<ResultVariableControlsStatus>
-            size="m"
-            fullWidth
-            label="Управление статусом курса"
-            value={v.controlsStatus}
-            disabled={readOnly}
-            options={STATUS_OPTIONS}
-            onChange={(value) => onChange({ controlsStatus: value })}
-            data-testid={`metrics-status-${index}`}
+      {/* Блок «вне профиля» стоит ЗА толкованием и ПЕРЕД «Выводом»: он про то, что
+          участник прочитает, а не про то, куда показатель уедет. Порядок из эскиза
+          `prd53-profile-indicator.html`. */}
+      {carriedProfile && (
+        <>
+          <hr className="wf-sep" />
+          <RestScalesFields
+            value={v.restScales}
+            groupKeys={carriedProfile.keys}
+            readOnly={readOnly}
+            index={index}
+            onChange={onChange}
           />
-        )}
-        <Select<ResultVariableScormTarget>
-          size="m"
-          fullWidth
-          label="Передавать в LMS"
-          value={v.scormTarget}
-          disabled={readOnly}
-          options={TARGET_OPTIONS}
-          onChange={(value) => onChange({ scormTarget: value })}
-          data-testid={`metrics-target-${index}`}
-        />
-      </Grid>
+        </>
+      )}
+      {/* PRD-29 (дефект D-1): без управления видимостью `learnerVisibility` навсегда
+          остаётся `hidden`, и вердикт методики — то, ради чего измерительный тест и
+          существует, — до обучающегося не доходит. У числового показателя это поле стоит
+          парой к направлению, выше; здесь — для остальных типов. */}
+      {v.type !== "number" && (
+        <>
+          <label className="ou-formfield__lbl">Вывод</label>
+          <Grid cols={2} gap={3}>
+            <Select<LearnerVisibility>
+              size="m"
+              fullWidth
+              label="Показывать обучающемуся"
+              value={v.learnerVisibility}
+              disabled={readOnly}
+              options={VISIBILITY_OPTIONS}
+              onChange={(value) => onChange({ learnerVisibility: value })}
+              data-testid={`metrics-visibility-${index}`}
+            />
+            {isBoolean && (
+              <div data-field={`resultVariables[${index}].controlsStatus`}>
+                <Select<ResultVariableControlsStatus>
+                  size="m"
+                  fullWidth
+                  label="Управление статусом курса"
+                  hint="Доступно только для показателей типа «да/нет»."
+                  value={v.controlsStatus}
+                  disabled={readOnly}
+                  error={controlsStatusError}
+                  options={STATUS_OPTIONS}
+                  onChange={(value) => onChange({ controlsStatus: value })}
+                  data-testid={`metrics-status-${index}`}
+                />
+              </div>
+            )}
+          </Grid>
+        </>
+      )}
+      {/* «Тип не булев, а управление статусом задано» — ошибка поля, которого в этом
+          случае на экране НЕТ: селектор показывается только булеву. Без этой строки
+          сообщение жило бы только в сводном баннере, а пометить было бы нечего. */}
+      {!isBoolean && controlsStatusError && (
+        <div data-field={`resultVariables[${index}].controlsStatus`}>
+          <Banner
+            tone="error"
+            size="sm"
+            description={controlsStatusError}
+            data-testid={`metrics-status-error-${index}`}
+          />
+        </div>
+      )}
+      {/* D-48: выдача в LMS — не пара к видимости, а отдельное решение о другом
+          адресате: одно про экран обучающегося, другое про запись в систему. */}
+      <Select<ResultVariableScormTarget>
+        size="m"
+        fullWidth
+        label="Передавать в LMS"
+        value={v.scormTarget}
+        disabled={readOnly}
+        options={TARGET_OPTIONS}
+        // PRD-54, решение 13: показатель вне отчёта LMS выпадает из аналитики по его выгрузке.
+        hint={reachesLmsReport(v.scormTarget) ? undefined : "Аналитика по выгрузке отчёта LMS этот показатель не увидит"}
+        onChange={(value) => onChange({ scormTarget: value })}
+        data-testid={`metrics-target-${index}`}
+      />
 
       {/* PRD-49 §6: the card's other slots. «Показывать обучающемуся» above governs the
           VALUE slot only, so without these two an author who needs a card with just an
@@ -729,13 +912,29 @@ function FormulaBuilder({
   readOnly: boolean;
   onChange: (patch: Partial<ResultVariableModel>) => void;
 }) {
-  const [template, setTemplate] = useState<BuilderTemplate>("threshold");
+  // Открывая показатель-профиль, конструктор показывает ЕГО шаблон, а не «Порог»:
+  // ниже уже стоят кнопки матрицы и предупреждения, прочитанные из той же формулы,
+  // и селект, говорящий «Порог», спорил бы с ними на одном экране. Для остальных
+  // шаблонов начальное значение прежнее — их формулу обратно не разобрать.
+  const [template, setTemplate] = useState<BuilderTemplate>(() =>
+    readScaleGroup(v.formula) ? "profile" : "threshold",
+  );
   const [conditions, setConditions] = useState<Condition[]>(() => [defaultCondition(scales)]);
   const [catScale, setCatScale] = useState<string>(() => scales[0]?.key ?? "");
   const [catRows, setCatRows] = useState<Array<{ level: string; label: string }>>(() => [{ level: "", label: "" }]);
   const [catElse, setCatElse] = useState("Недостаточно");
   const [wRows, setWRows] = useState<Array<{ scaleKey: string; weight: string }>>(
     () => [{ scaleKey: scales[0]?.key ?? "", weight: "1" }],
+  );
+  // PRD-53 §5.1. Seeded from the formula when the card already holds a profile, so
+  // reopening an indicator shows the group it was saved with instead of an empty form.
+  const savedGroup = useMemo(() => readScaleGroup(v.formula), [v.formula]);
+  const [pKeys, setPKeys] = useState<string[]>(() => savedGroup?.keys ?? []);
+  const [pThreshold, setPThreshold] = useState(() =>
+    String(savedGroup ? parseGroupThreshold(savedGroup.threshold)?.value ?? 0 : 0),
+  );
+  const [pUnit, setPUnit] = useState<"abs" | "pct">(() =>
+    savedGroup && parseGroupThreshold(savedGroup.threshold)?.kind === "pct" ? "pct" : "abs",
   );
 
   const generated = useMemo(() => {
@@ -748,10 +947,14 @@ function FormulaBuilder({
         return categoryDsl(catScale, catRows, catElse);
       case "weighted":
         return weightedDsl(wRows);
+      case "profile":
+        // A blank threshold is a half-typed number, not a zero: keeping the last valid
+        // value out of the formula would rewrite the indicator on every keystroke.
+        return buildProfileFormula({ keys: pKeys, threshold: Number(pThreshold) || 0, unit: pUnit });
       default:
         return "";
     }
-  }, [template, conditions, catScale, catRows, catElse, wRows, scales, topics]);
+  }, [template, conditions, catScale, catRows, catElse, wRows, pKeys, pThreshold, pUnit, scales, topics]);
 
   // Write the canonical DSL (and derived type) into the model immediately — on
   // mount for a fresh variable and on every builder change — so the formula is
@@ -773,6 +976,17 @@ function FormulaBuilder({
     const type = TEMPLATE_TYPE[template];
     onChange({ formula: generated, type, ...(type !== "boolean" ? { controlsStatus: "none" as const } : {}) });
   }, [generated, template, readOnly, onChange, v.formula]);
+
+  // Ошибки по ТЕКУЩЕМУ состоянию формы: тот же расчёт, что кладёт находки в общий контур,
+  // но спрошенный о ещё не записанной формуле — иначе сообщение отставало бы на такт.
+  const formErrors = useMemo(() => {
+    const map = new Map<string, string>();
+    if (template !== "profile") return map;
+    for (const f of profileFindings({ ...v, formula: generated }, scales)) {
+      if (f.severity === "error" && !map.has(f.code)) map.set(f.code, f.message);
+    }
+    return map;
+  }, [template, v, generated, scales]);
 
   const scaleOpts = scales.map((s) => ({ value: s.key, label: s.label || s.key }));
   const noScales = scaleOpts.length === 0;
@@ -804,7 +1018,7 @@ function FormulaBuilder({
 
       {template === "verdict" && (
         <div className="ou-formfield">
-          <label className="ou-formfield__lbl">Все условия должны выполняться (И)</label>
+          <label className="ou-formfield__lbl">Условия</label>
           <div className="tb-rows">
             {conditions.map((c, i) => (
               <ConditionRow
@@ -969,7 +1183,302 @@ function FormulaBuilder({
           )}
         </div>
       )}
+
+      {template === "profile" && (
+        <ProfileTemplateFields
+          scales={scales}
+          errors={formErrors}
+          keys={pKeys}
+          threshold={pThreshold}
+          unit={pUnit}
+          readOnly={readOnly}
+          onKeys={setPKeys}
+          onThreshold={setPThreshold}
+          onUnit={setPUnit}
+        />
+      )}
+      {/* Что получится: собранное выражение показывается ДО того, как автор переключится
+          на ручной режим. Конструктор пишет ту же строку в модель, и увидеть её здесь —
+          единственный способ понять, что именно посчитает движок. */}
+      <div className="ou-formfield">
+        <label className="ou-formfield__lbl">Что получится</label>
+        <div className="tb-formula-preview" data-testid="metrics-formula-generated">
+          {generated || "—"}
+        </div>
+        <span className="ou-formfield__desc">
+          Выражение собирается конструктором; переключение на «Выражение» оставляет его как есть.
+        </span>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Блок «шкалы вне профиля» (PRD-53 §4.4).
+ *
+ * `keys` пишутся ВСЕГДА из группы формулы, а не накапливаются: блок печатает шкалы
+ * группы, не вошедшие в профиль, и группа, разошедшаяся с формулой, дала бы карточку
+ * про шкалы, которые в профиле не участвуют.
+ */
+function RestScalesFields({
+  value,
+  groupKeys,
+  readOnly,
+  index,
+  onChange,
+}: {
+  value: ResultVariableModel["restScales"];
+  groupKeys: string[];
+  readOnly: boolean;
+  index: number;
+  onChange: (patch: Partial<ResultVariableModel>) => void;
+}) {
+  const show = value?.show === true;
+  return (
+    <>
+      <Switch
+        size="m"
+        label="Показывать шкалы вне профиля"
+        checked={show}
+        disabled={readOnly}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          onChange({ restScales: { show: e.target.checked, label: value?.label ?? "", keys: groupKeys } })
+        }
+        data-testid={`metrics-rest-show-${index}`}
+      />
+      {show && (
+        <div className="ou-formfield">
+          <Input
+            size="m"
+            fullWidth
+            label="Заголовок блока"
+            value={value?.label ?? ""}
+            disabled={readOnly}
+            onChange={(e) => onChange({ restScales: { show: true, label: e.target.value, keys: groupKeys } })}
+            data-testid={`metrics-rest-label-${index}`}
+          />
+        </div>
+      )}
+      {show && (
+        <Banner
+          tone="info"
+          size="sm"
+          description="Блок печатает шкалы группы, не вошедшие в профиль, по убыванию балла. Текст берётся из описания самой шкалы."
+        />
+      )}
+    </>
+  );
+}
+
+// ─── «Профиль по группе шкал» (PRD-53 §5.2, §5.3.2) ───────────────────────────
+
+/**
+ * Добавить недостающие заготовки, не тронув заполненные.
+ *
+ * Сравнение — по НАБОРУ, тем же ключом, что и в рантайме: иначе исход `pro+cel`,
+ * набранный автором вручную, считался бы отсутствующим и генератор завёл бы дубль
+ * `cel+pro`, который никогда не сработает — первым в списке стоял бы чужой.
+ */
+function addMissingOutcomes(existing: OutcomeModel[], rows: ProfileMatrixRow[]): OutcomeModel[] {
+  const known = new Set(existing.map((o) => outcomeMatchKey(o.code.trim())).filter((c) => c !== ""));
+  const added: OutcomeModel[] = [];
+  for (const row of rows) {
+    if (known.has(outcomeMatchKey(row.code))) continue;
+    known.add(outcomeMatchKey(row.code));
+    localKeyCounter += 1;
+    added.push({ clientKey: `oc-${localKeyCounter}`, code: row.code, label: row.label, text: "", tone: "" });
+  }
+  return added.length === 0 ? existing : [...existing, ...added];
+}
+
+/**
+ * Находки формы: то, чего валидатор формулы увидеть не может (PRD-53 §5.3.2).
+ *
+ * Расчёт НЕ здесь: он один на всех в `profile-diagnostics` и оттуда же попадает в общий
+ * контур индикации через `validateTestEditor` — точка на вкладке, сводный баннер, переход
+ * по якорю (`docs/architecture/test-editor-contracts.md`). Секция только печатает то же
+ * самое у карточки: контракт требует пометки у самого элемента, а карточка может быть
+ * ниже сгиба, и один баннер вверху формы автора до неё не доведёт.
+ */
+function ProfileDiagnostics({
+  variable,
+  scales,
+  index,
+}: {
+  variable: ResultVariableModel;
+  scales: ScaleRef[];
+  index: number;
+}) {
+  const findings = useMemo(() => profileFindings(variable, scales), [variable, scales]);
+  const hint = useMemo(() => profileSetCountHint(variable), [variable]);
+
+  return (
+    <>
+      {findings
+        .filter((f) => f.severity === "warning")
+        .map((f) => (
+          <Banner
+            key={f.code}
+            tone="warning"
+            size="sm"
+            description={f.message}
+            data-testid={`metrics-${f.code.replace(/_/g, "-")}-${index}`}
+          />
+        ))}
+      {hint && (
+        <Banner tone="warning" size="sm" description={hint} data-testid={`metrics-profile-many-${index}`} />
+      )}
+    </>
+  );
+}
+
+// ─── «Профиль по группе шкал» (PRD-53 §5.1) ───────────────────────────────────
+
+const THRESHOLD_UNITS: Array<{ value: "abs" | "pct"; label: string }> = [
+  { value: "abs", label: "баллы" },
+  { value: "pct", label: "% от максимума" },
+];
+
+/**
+ * Форма пятого шаблона: группа шкал и порог верхней зоны.
+ *
+ * Шкалы перечислены ТУМБЛЕРАМИ, а не мультиселектом: группа почти всегда — это все
+ * шкалы методики или все, кроме одной-двух, и в таком списке важнее видеть невыбранные,
+ * чем экономить высоту. Порядок ключей — авторский порядок шкал теста, тот же, что даёт
+ * канонический код набора; поэтому группа собирается фильтром по `scales`, а не в порядке
+ * нажатий.
+ *
+ * Удалённая из теста шкала группы (PRD-53 §5.3.4, FR-33) остаётся в списке отдельной
+ * отключённой строкой: иначе автор видит ошибку про её ключ и не может её снять.
+ */
+function ProfileTemplateFields({
+  scales,
+  keys,
+  threshold,
+  unit,
+  errors,
+  readOnly,
+  onKeys,
+  onThreshold,
+  onUnit,
+}: {
+  scales: ScaleRef[];
+  keys: string[];
+  threshold: string;
+  unit: "abs" | "pct";
+  /** Сообщения общего расчёта по ТЕКУЩЕМУ состоянию формы, по коду находки. */
+  errors: Map<string, string>;
+  readOnly: boolean;
+  onKeys: (keys: string[]) => void;
+  onThreshold: (value: string) => void;
+  onUnit: (unit: "abs" | "pct") => void;
+}) {
+  const selected = useMemo(() => new Set(keys), [keys]);
+  const missing = useMemo(
+    () => keys.filter((k) => !scales.some((s) => s.key === k)),
+    [keys, scales],
+  );
+  // Порог проверяется по НАБРАННОМУ значению, а не по формуле: отрицательное число
+  // делает формулу неразбираемой, и находка по модели до автора не доходит вовсе.
+  // Правило при этом одно — тот же parseGroupThreshold и тот же текст.
+  const thresholdError =
+    parseGroupThreshold(unit === "pct" ? `${threshold}%` : Number(threshold)) === null
+      ? PROFILE_THRESHOLD_MESSAGE
+      : undefined;
+
+  const toggle = useCallback(
+    (key: string, on: boolean) => {
+      const next = new Set(selected);
+      if (on) next.add(key);
+      else next.delete(key);
+      // Авторский порядок, а не порядок нажатий: он же определяет код набора.
+      onKeys(scales.map((s) => s.key).filter((k) => next.has(k)));
+    },
+    [selected, scales, onKeys],
+  );
+
+
+  return (
+    <>
+      <div className="ou-formfield" data-testid="metrics-profile-group">
+        <label className="ou-formfield__lbl">
+          Шкалы группы <span className="ou-formfield__lbl-req" aria-hidden="true">*</span>
+        </label>
+        {scales.length === 0 ? (
+          <Banner
+            tone="warning"
+            size="sm"
+            description="У теста нет шкал. Профиль сравнивает шкалы между собой — заведите их на вкладке «Шкалы»."
+          />
+        ) : (
+          <div className="tb-profile-scales">
+            {scales.map((s) => (
+              <Switch
+                key={s.key}
+                size="m"
+                label={
+                  <>
+                    {s.label || s.key} <span className="tb-cond-sep">{s.key}</span>
+                  </>
+                }
+                checked={selected.has(s.key)}
+                disabled={readOnly}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => toggle(s.key, e.target.checked)}
+                data-testid={`metrics-profile-scale-${s.key}`}
+              />
+            ))}
+            {missing.map((key) => (
+              <Switch
+                key={key}
+                size="m"
+                label={
+                  <>
+                    {key} <span className="tb-cond-sep">шкала удалена из теста</span>
+                  </>
+                }
+                checked
+                disabled
+                data-testid={`metrics-profile-missing-${key}`}
+              />
+            ))}
+          </div>
+        )}
+        {errors.get("profile_group_small") && (
+          <div className="ou-formfield__msg ou-formfield__msg--error" data-testid="metrics-profile-group-error">
+            {errors.get("profile_group_small")}
+          </div>
+        )}
+      </div>
+
+      <div className="ou-formfield">
+        <label className="ou-formfield__lbl" htmlFor="metrics-profile-threshold">
+          Порог верхней зоны
+        </label>
+        <div className="tb-cond-row">
+          <Input
+            size="s"
+            id="metrics-profile-threshold"
+            value={threshold}
+            disabled={readOnly}
+            error={thresholdError}
+            onChange={(e) => onThreshold(e.target.value)}
+            data-testid="metrics-profile-threshold"
+          />
+          <SegmentedControl<"abs" | "pct">
+            size="s"
+            items={THRESHOLD_UNITS}
+            value={unit}
+            onChange={(value) => !readOnly && onUnit(value)}
+          />
+        </div>
+      </div>
+
+      <Banner
+        tone="info"
+        size="sm"
+        description={`Шкала входит в профиль, если отстала от максимума по группе не больше чем на порог. Граница включается: отставание ровно на ${threshold || 0} — ещё профиль.`}
+      />
+    </>
   );
 }
 
@@ -1111,10 +1620,35 @@ type FormulaBanner = { tone: "success" | "error" | "info"; text: string };
  * only checked server-side on the first save. Returns the raw validation result
  * too, so the form can adopt the inferred return type in DSL mode.
  */
+/**
+ * Памятки, адресованные тому, кто пишет ИСТОЧНИК руками (PRD-53 FR-27).
+ *
+ * Валидатор формулы видит только строку и потому вместо проверки печатает правило:
+ * «коды исходов должны быть наборами ключей шкал». В конструкторе коды заводит
+ * генератор матрицы, автор их не набирает — и памятка там не подсказка, а шум,
+ * который вдобавок навсегда занимает единственную строку баннера и не даёт автору
+ * профиля увидеть подтверждение «синтаксис корректен». В режиме DSL она остаётся.
+ */
+const BUILDER_SILENCED_CODES = new Set(["scale-group-code"]);
+
+/**
+ * Находки валидатора, которые форма профиля печатает САМА — и в обоих режимах.
+ *
+ * Условие «разная нормализация при абсолютном пороге» видят оба: валидатор через
+ * `refs.scaleNormalizations`, форма — по шкалам теста. Но находка формы не только
+ * печатается у карточки, она ещё и кормит общий контур индикации (точка на вкладке,
+ * сводный баннер, переход по якорю), куда ответ валидатора не идёт, — поэтому убирать
+ * надо копию ВАЛИДАТОРА, а не её. Приёмка 2026-09-07 застала оба баннера подряд:
+ * различались они одной точкой в конце.
+ */
+const CARD_DUPLICATED_CODES = new Set(["scale-group-normalization"]);
+
 function useFormulaValidation(
   testId: string | undefined,
   v: ResultVariableModel,
   index: number,
+  /** Открыт конструктор (а не DSL): часть памяток адресована не этому автору. */
+  inBuilder: boolean,
 ): { banner: FormulaBanner | null; result: ResultVariableFormulaValidation | null } {
   const [banner, setBanner] = useState<FormulaBanner | null>(null);
   const [result, setResult] = useState<ResultVariableFormulaValidation | null>(null);
@@ -1134,7 +1668,15 @@ function useFormulaValidation(
         sortOrder: index,
         excludeId: v.id,
       })
-        .then((res) => {
+        .then((raw) => {
+          const res = {
+            ...raw,
+            warnings: raw.warnings.filter(
+              (w) =>
+                !CARD_DUPLICATED_CODES.has(w.code ?? "") &&
+                !(inBuilder && BUILDER_SILENCED_CODES.has(w.code ?? "")),
+            ),
+          };
           setResult(res);
           setBanner(toBanner(res, v.type));
         })
@@ -1146,7 +1688,7 @@ function useFormulaValidation(
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [testId, v.formula, v.type, v.id, index]);
+  }, [testId, v.formula, v.type, v.id, index, inBuilder]);
 
   return { banner, result };
 }

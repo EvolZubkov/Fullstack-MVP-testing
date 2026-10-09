@@ -21,9 +21,17 @@
  * Several parameters write into one JSON column, so the sheet is applied not to the `tests`
  * row but to a DRAFT ({@link SettingsDraft}): the import merges its branches onto the test's
  * current state and only then calls the settings service.
+ *
+ * A parameter NAME is part of that contract, because the sheet matches a row by it. Renaming
+ * one therefore adds {@link SettingParam.aliases} rather than replacing the name: the export
+ * prints the new name, the import goes on accepting the old one, and a workbook downloaded
+ * before the rename keeps applying.
  */
 import type { Test } from "@shared/schema";
 import { ELIGIBILITY_PLUGINS } from "@shared/eligibility/registry";
+// Порядок и отбраковку блоков читает тот же нормализатор, что и оба хоста при печати итогов:
+// иначе книга показала бы автору не тот список, который увидит ученик.
+import { normalizeSectionGroups } from "@shared/scoring/section-groups";
 
 /** Sheet headers. The sheet is a «параметр — значение» list, not a table of columns. */
 export const SETTINGS_HEADERS = ["Параметр", "Значение"];
@@ -55,6 +63,26 @@ export interface SettingsDraft {
   introResults: Record<string, unknown>;
   introReport: Record<string, unknown>;
   introRoot: Record<string, unknown>;
+  /**
+   * PRD-61: тексты по исходу — своя корзина на каждую пару (выдача, исход), потому что каждая
+   * сливается в СВОЮ вложенную ветвь `intro_json.<выдача>.<исход>`.
+   */
+  introResultsPassed: Record<string, unknown>;
+  introResultsFailed: Record<string, unknown>;
+  introReportPassed: Record<string, unknown>;
+  introReportFailed: Record<string, unknown>;
+  /** Merged onto `breakdown_display_json` (PRD-50 FR-13/FR-44). */
+  breakdown: Record<string, unknown>;
+  /**
+   * Названия блоков итогов в порядке автора (`tests.section_groups_json`, PRD-50 FR-11).
+   *
+   * Именно НАЗВАНИЯ, а не ключи: книга всюду адресует сущности так, как их видит автор, а
+   * `key` — внутренний идентификатор, на который ссылается раздел. Импорт сам сопоставляет
+   * названия с ключами теста-приёмника и заводит ключ только новому блоку.
+   *
+   * `undefined` = книга о блоках промолчала, и список теста остаётся как был.
+   */
+  sectionGroupLabels?: string[];
   /** Folder path; the import turns it into `folderId` — it is the one with storage access. */
   folderPath?: string;
 }
@@ -71,20 +99,45 @@ export function emptySettingsDraft(): SettingsDraft {
     introResults: {},
     introReport: {},
     introRoot: {},
+    introResultsPassed: {},
+    introResultsFailed: {},
+    introReportPassed: {},
+    introReportFailed: {},
+    breakdown: {},
   };
 }
 
 /** Draft branches available to plain parameters (everything except the scalar fields). */
 type Bucket = "test" | "router" | "overall" | "retake" | "attemptInterval" | "plugin"
-  | "introResults" | "introReport" | "introRoot";
+  | "introResults" | "introReport" | "introRoot" | "breakdown"
+  | "introResultsPassed" | "introResultsFailed" | "introReportPassed" | "introReportFailed";
 
 export interface SettingParam {
   /** Text of the «Параметр» cell — the editor's label, verbatim. */
   name: string;
+  /**
+   * Names this parameter USED to be printed under. Accepted on import forever, never
+   * written: the sheet always exports {@link name}.
+   *
+   * A parameter name is a CONTRACT with workbooks already in the wild. The sheet matches a
+   * row by its name, and an author's copy lives on their own disk — there is no release
+   * after which every such copy has been reissued. So a rename adds an alias instead of
+   * replacing a name, and the alias stays: dropping it later breaks exactly the workbooks
+   * that were never re-downloaded.
+   */
+  aliases?: readonly string[];
   /** Value for the export; empty string when the test carries nothing. */
   read(src: SettingsSource): string;
   /** Apply a NON-EMPTY cell to the draft; return an error message or nothing. */
   write(raw: string, draft: SettingsDraft): string | undefined;
+}
+
+/** Options every parameter constructor accepts: the former names of this parameter. */
+type AliasOpts = { aliases?: readonly string[] };
+
+/** `aliases` as a spreadable fragment, so a parameter without them carries no key at all. */
+function aliasesOf({ aliases }: AliasOpts): Pick<SettingParam, "aliases"> {
+  return aliases && aliases.length > 0 ? { aliases } : {};
 }
 
 const YES = "Да";
@@ -189,9 +242,11 @@ function boolParam(
   get: (s: SettingsSource) => unknown,
   bucket: Bucket,
   key: string,
+  opts: AliasOpts = {},
 ): SettingParam {
   return {
     name,
+    ...aliasesOf(opts),
     read: (s) => {
       const v = get(s);
       return v === true ? YES : v === false ? NO : "";
@@ -223,11 +278,12 @@ function intParam(
   get: (s: SettingsSource) => unknown,
   bucket: Bucket,
   key: string,
-  opts: { min?: number; max?: number; zeroIsNull?: boolean } = {},
+  opts: { min?: number; max?: number; zeroIsNull?: boolean } & AliasOpts = {},
 ): SettingParam {
   const { min = 0, max = Number.MAX_SAFE_INTEGER, zeroIsNull = false } = opts;
   return {
     name,
+    ...aliasesOf(opts),
     read: (s) => {
       const v = get(s);
       if (v == null) return zeroIsNull ? "0" : "";
@@ -252,9 +308,11 @@ function textParam(
   get: (s: SettingsSource) => unknown,
   bucket: Bucket,
   key: string,
+  opts: AliasOpts = {},
 ): SettingParam {
   return {
     name,
+    ...aliasesOf(opts),
     read: (s) => String(get(s) ?? ""),
     // An empty cell never reaches here (parseSettingsSheet filters it out), so a text
     // parameter cannot be cleared by the workbook — a deliberate consequence of the
@@ -280,13 +338,14 @@ function enumParam(
   get: (s: SettingsSource) => unknown,
   bucket: Bucket,
   key: string,
-  opts: { open?: boolean } = {},
+  opts: { open?: boolean } & AliasOpts = {},
 ): SettingParam {
   const byLabel = new Map(
     Object.entries(labels).map(([value, label]) => [normalizeCell(label), value]),
   );
   return {
     name,
+    ...aliasesOf(opts),
     read: (s) => {
       const v = get(s);
       if (typeof v !== "string" || v === "") return "";
@@ -327,6 +386,13 @@ function branch(value: unknown, ...path: string[]): Record<string, unknown> {
  */
 export const MODE_LABELS = { standard: "Стандартный", adaptive: "Адаптивный" };
 
+/**
+ * Значения параметра «Режим теста». Отдельно от {@link MODE_LABELS}: тот же словарь называет
+ * ветви отчёта, а у режима «Сценарий» своей ветви нет. «Сценарий в ИС»: режим книга называет, но
+ * пункт-сценарий не переносит — он едет архивом сценария, а тест целиком — пакетом `.tbtest`.
+ */
+export const TEST_MODE_LABELS = { ...MODE_LABELS, scenario: "Сценарий" };
+
 const FLOW_LABELS = {
   linear_flat: "Линейный",
   linear_by_topics: "Линейный по темам",
@@ -343,6 +409,38 @@ const OVERALL_TYPE_LABELS = {
   percent: "Процент правильных ответов",
   absolute: "Сумма баллов",
   none: "Не задано",
+};
+
+/**
+ * «Тест пройден, если» — что ЗНАЧИТ пройденный тест (`tests.pass_decision_policy`).
+ *
+ * Подписи — продолжения фразы, как в радиогруппе редактора: ячейка книги читается вместе с
+ * именем параметра, и «достигнут общий проходной порог теста» в паре с ним складывается в то
+ * же предложение, что видит автор.
+ */
+const DECISION_POLICY_LABELS = {
+  overall_only: "достигнут общий проходной порог теста",
+  overall_and_required_topics: "достигнут общий проходной порог и пройдены все обязательные темы",
+  required_topics_only: "пройдены все обязательные темы",
+  all_topics_passed: "пройдена каждая выбранная тема",
+};
+
+/** Что SCORM-пакет отдаёт в LMS при нескольких попытках (`tests.lms_attempt_result`). */
+const LMS_ATTEMPT_LABELS = { best: "Лучшая попытка", last: "Последняя попытка" };
+
+/** PRD-50 FR-13/FR-44: показ подытогов по подтемам — вид, база и место. */
+const BREAKDOWN_VISIBILITY_LABELS = {
+  hidden: "Не показывать",
+  bar: "Полоса",
+  bar_and_value: "Полоса и число",
+};
+
+const BREAKDOWN_BASIS_LABELS = { units: "Доля вопросов", points: "Доля баллов" };
+
+const BREAKDOWN_PLACEMENT_LABELS = {
+  topics: "В карточках тем",
+  block: "Отдельным блоком в итогах",
+  both: "В карточках тем и отдельным блоком",
 };
 
 /** PRD-8 §3.2: the meaning of the policies cut down to a cell's length, terms from there. */
@@ -391,6 +489,41 @@ const PLUGIN_LABELS: Record<string, string> = Object.fromEntries(
   ELIGIBILITY_PLUGINS.map((p) => [p.key, p.name]),
 );
 
+/** Разделитель списка в одной ячейке — тот же, что у «Зависит от разделов». */
+const LIST_SEPARATOR = ";";
+
+/**
+ * «Блоки итогов» — именованные блоки разделов на экране итогов (PRD-50 FR-11).
+ *
+ * Единственный параметр листа, чьё значение — СПИСОК: блоков у теста несколько, а строка на
+ * листе одна. Поэтому у него собственные `read`/`write` вместо конструктора: значение — это
+ * названия блоков в порядке автора через «;», а членство разделов книга везёт колонкой
+ * «Блок итогов» листа «Структура» — одна строка на раздел там уже есть.
+ *
+ * Ключи блоков в книгу не попадают: `key` — внутренний идентификатор, на который ссылается
+ * раздел, и автору он не виден нигде. Импорт сопоставляет названия с ключами приёмника сам.
+ */
+const SECTION_GROUPS_PARAM: SettingParam = {
+  name: "Блоки итогов",
+  read: (s) => normalizeSectionGroups(s.sectionGroupsJson).map((g) => g.label).join(`${LIST_SEPARATOR} `),
+  write: (raw, draft) => {
+    const labels = String(raw)
+      .split(LIST_SEPARATOR)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const seen = new Set<string>();
+    for (const label of labels) {
+      const key = normalizeCell(label);
+      // Два блока с одним названием делают членство раздела неоднозначным: колонка
+      // «Структура» адресует блок именно названием, и выбирать за автора нельзя.
+      if (seen.has(key)) return `повторяющееся название блока: "${label}"`;
+      seen.add(key);
+    }
+    draft.sectionGroupLabels = labels;
+    return;
+  },
+};
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 /**
@@ -401,14 +534,22 @@ export const SETTING_PARAMS: SettingParam[] = [
   // ── Basics ──
   textParam("Название", (s) => s.title, "test", "title"),
   textParam("Описание", (s) => s.description, "test", "description"),
+  // PRD-59 FR-04: формат едет рядом с текстом. Отдельным параметром, а не разметкой
+  // внутри ячейки: ячейка книги — это ИСХОДНИК, и читать его надо тем же способом,
+  // каким его читает продукт.
+  enumParam("Формат описания", FORMAT_LABELS, (s) => s.descriptionFormat, "test", "descriptionFormat"),
   {
     name: "Папка",
     read: (s) => String(s.folderPath ?? ""),
     write: (raw, draft) => { draft.folderPath = raw; return; },
   },
-  enumParam("Режим теста", MODE_LABELS, (s) => s.mode, "test", "mode"),
+  enumParam("Режим теста", TEST_MODE_LABELS, (s) => s.mode, "test", "mode"),
   {
-    name: "Сценарий прохождения",
+    // The editor's field keeps the full «Сценарий прохождения» label (audit decision 26);
+    // outside its panel — the workbook, validation, the guides — the parameter is named by
+    // what it holds, «Тип сценария» (Э5.1).
+    name: "Тип сценария",
+    aliases: ["Сценарий прохождения"],
     read: (s) => {
       const mode = branch(s.flowPolicyJson).mode;
       const key = typeof mode === "string" && FLOW_LABELS[mode as keyof typeof FLOW_LABELS]
@@ -426,10 +567,24 @@ export const SETTING_PARAMS: SettingParam[] = [
     },
   },
   enumParam("Порядок выдачи вопросов", ORDER_LABELS, (s) => s.questionOrder, "test", "questionOrder"),
-  boolParam("Показывать правильные ответы после прохождения", (s) => s.showCorrectAnswers, "test", "showCorrectAnswers"),
+  // Ф-19: the highlight is printed right after the answer, not at the end of the test, so
+  // the old name promised the wrong moment (Э5.2).
+  boolParam("Показывать правильные ответы после ответа", (s) => s.showCorrectAnswers, "test", "showCorrectAnswers", {
+    aliases: ["Показывать правильные ответы после прохождения"],
+  }),
   boolParam("Показывать уровень сложности при прохождении", (s) => s.showDifficultyLevel, "test", "showDifficultyLevel"),
 
   // ── Pass rules ──
+  // Первым — то, что решает СМЫСЛ пройденного теста: общее правило ниже лишь одна из его
+  // составляющих, и книга, назвавшая порог без политики, читалась бы как полный ответ.
+  enumParam("Тест пройден, если", DECISION_POLICY_LABELS, (s) => s.passDecisionPolicy, "test", "passDecisionPolicy"),
+  // PRD-50 §16 (FR-53): гейт подтем стоит сразу за смыслом вердикта — он его уточняет.
+  boolParam(
+    "Учитывать подтемы в вердикте темы",
+    (s) => s.breakdownGateEnabled,
+    "test",
+    "breakdownGateEnabled",
+  ),
   enumParam("Тип общего правила", OVERALL_TYPE_LABELS, (s) => branch(s.overallPassRuleJson).type, "overall", "type"),
   intParam("Порог", (s) => branch(s.overallPassRuleJson).value, "overall", "value"),
   enumParam(
@@ -445,10 +600,12 @@ export const SETTING_PARAMS: SettingParam[] = [
   intParam("Лимит времени теста", (s) => s.timeLimitMinutes, "test", "timeLimitMinutes", { zeroIsNull: true }),
   intParam("Балл за вопрос по умолчанию", (s) => s.defaultQuestionPoints, "test", "defaultQuestionPoints"),
   boolParam("Разрешить возврат к неотвеченным вопросам", (s) => s.allowReturnToUnanswered, "test", "allowReturnToUnanswered"),
+  boolParam("Свободная навигация внутри раздела", (s) => s.allowFreeSectionNavigation, "test", "allowFreeSectionNavigation"),
   boolParam("Позволить изменять ответ до завершения", (s) => s.allowAnswerChange, "test", "allowAnswerChange"),
   boolParam("Не показывать обзор, если отвечены все вопросы", (s) => s.skipReviewWhenComplete, "test", "skipReviewWhenComplete"),
   boolParam("Переходить к следующему вопросу сразу после ответа", (s) => s.quickAdvance, "test", "quickAdvance"),
   boolParam("Показывать итоги раздела", (s) => s.showSectionResults, "test", "showSectionResults"),
+  boolParam("Закрывать раздел при выходе", (s) => s.closeSectionOnLeave, "test", "closeSectionOnLeave"),
   boolParam("Защищать текст задания от копирования", (s) => s.copyProtection, "test", "copyProtection"),
   boolParam("Показывать водяной знак", (s) => s.protectionWatermark, "test", "protectionWatermark"),
   boolParam("Скрывать задание при уходе из окна", (s) => s.protectionHideOnBlur, "test", "protectionHideOnBlur"),
@@ -465,8 +622,10 @@ export const SETTING_PARAMS: SettingParam[] = [
   intParam("Интервал, часов", (s) => branch(s.retakePolicyJson, "attemptInterval").hours, "attemptInterval", "hours", { min: 1, max: 8760 }),
 
   // ── Integration ──
-  textParam("Webhook URL", (s) => s.webhookUrl, "test", "webhookUrl"),
   boolParam("Отправлять телеметрию о прохождении", (s) => s.telemetryEnabled, "test", "telemetryEnabled"),
+  // Действует только в SCORM-пакете: в вебе внешней системы нет, и попытки показываются
+  // каждая сама по себе.
+  enumParam("Результат для LMS при нескольких попытках", LMS_ATTEMPT_LABELS, (s) => s.lmsAttemptResult, "test", "lmsAttemptResult"),
 
   // ── Intro blocks of the results screen and of the report ──
   textParam("Вводный текст на экране итогов", (s) => branch(s.introJson, "results").text, "introResults", "text"),
@@ -474,10 +633,53 @@ export const SETTING_PARAMS: SettingParam[] = [
   textParam("Вводный текст в отчёте", (s) => branch(s.introJson, "report").text, "introReport", "text"),
   enumParam("Формат вводного текста в отчёте", FORMAT_LABELS, (s) => branch(s.introJson, "report").format, "introReport", "format"),
   boolParam("В отчёте — тот же текст, что на экране итогов", (s) => branch(s.introJson).reportSameAsResults, "introRoot", "reportSameAsResults"),
+
+  // PRD-61: тексты по исходу. ОТДЕЛЬНЫЕ строки, а не один столбец с разделителем: книга
+  // правится руками, и склеенное поле автор порвёт первым же переносом строки. Имена
+  // полные — лист плоский, и другого способа сказать, чей это текст, у него нет.
+  textParam("Вводный текст на экране итогов, если тест пройден", (s) => branch(s.introJson, "results", "passed").text, "introResultsPassed", "text"),
+  enumParam("Формат вводного текста на экране итогов, если тест пройден", FORMAT_LABELS, (s) => branch(s.introJson, "results", "passed").format, "introResultsPassed", "format"),
+  textParam("Вводный текст на экране итогов, если тест не пройден", (s) => branch(s.introJson, "results", "failed").text, "introResultsFailed", "text"),
+  enumParam("Формат вводного текста на экране итогов, если тест не пройден", FORMAT_LABELS, (s) => branch(s.introJson, "results", "failed").format, "introResultsFailed", "format"),
+  textParam("Вводный текст в отчёте, если тест пройден", (s) => branch(s.introJson, "report", "passed").text, "introReportPassed", "text"),
+  enumParam("Формат вводного текста в отчёте, если тест пройден", FORMAT_LABELS, (s) => branch(s.introJson, "report", "passed").format, "introReportPassed", "format"),
+  textParam("Вводный текст в отчёте, если тест не пройден", (s) => branch(s.introJson, "report", "failed").text, "introReportFailed", "text"),
+  enumParam("Формат вводного текста в отчёте, если тест не пройден", FORMAT_LABELS, (s) => branch(s.introJson, "report", "failed").format, "introReportFailed", "format"),
+
+  // ── Состав итогов (PRD-50) ──
+  enumParam("Подытоги по подтемам (тегам)", BREAKDOWN_VISIBILITY_LABELS, (s) => branch(s.breakdownDisplayJson).visibility, "breakdown", "visibility"),
+  enumParam("База подытогов", BREAKDOWN_BASIS_LABELS, (s) => branch(s.breakdownDisplayJson).basis, "breakdown", "basis"),
+  enumParam("Где показывать подытоги", BREAKDOWN_PLACEMENT_LABELS, (s) => branch(s.breakdownDisplayJson).placement, "breakdown", "placement"),
+  // Показ ТОЛКОВАНИЙ подтем. Живёт в той же настройке, что и сами подытоги: без полосы
+  // толкованию не под чем печататься. Тексты при этом задаются на листе «Обратная связь».
+  boolParam("Показывать толкование подтем", (s) => branch(s.breakdownDisplayJson).showInterpretation, "breakdown", "showInterpretation"),
+  SECTION_GROUPS_PARAM,
 ];
 
-/** Parameter by cell name: compared case-insensitively and free of Excel's sticky spaces. */
+/**
+ * Parameter by cell name: compared case-insensitively and free of Excel's sticky spaces.
+ *
+ * Current names are indexed FIRST and an alias never overwrites one: if a rename ever hands
+ * one parameter the former name of another, the sheet keeps meaning what it prints today,
+ * and the older book loses one row instead of writing into the wrong column.
+ */
 const PARAM_BY_NAME = new Map(SETTING_PARAMS.map((p) => [normalizeCell(p.name), p]));
+for (const param of SETTING_PARAMS) {
+  for (const alias of param.aliases ?? []) {
+    const key = normalizeCell(alias);
+    if (!PARAM_BY_NAME.has(key)) PARAM_BY_NAME.set(key, param);
+  }
+}
+
+/**
+ * Параметры, снятые с листа. Книга, выгруженная до снятия, несёт их строкой, и такая строка
+ * пропускается молча: ошибка «неизвестный параметр» на каждой старой книге была бы шумом о
+ * том, что автор ничего не сделал не так.
+ *
+ * «Webhook URL» снят 2026-09-30: рантайм пакета его никогда не читал, а адрес, куда пакет
+ * шлёт данные, — адрес телеметрии из конфигурации установки, а не настройка теста.
+ */
+const RETIRED_PARAM_NAMES = new Set(["Webhook URL"].map(normalizeCell));
 
 /** Export: one row per registry parameter, always all of them. */
 export function serializeSettingsRows(src: SettingsSource): Record<string, unknown>[] {
@@ -506,6 +708,7 @@ export function parseSettingsSheet(rows: Record<string, unknown>[]): {
       errors.push(`${where}: не указан «${PARAM_COL}»`);
       return;
     }
+    if (RETIRED_PARAM_NAMES.has(normalizeCell(name))) return;
     const param = PARAM_BY_NAME.get(normalizeCell(name));
     if (!param) {
       errors.push(`${where}: неизвестный параметр: "${name}"`);

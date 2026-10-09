@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
+import { templateManifest } from "./helpers/template-roots";
 import {
   DEFAULT_REPORT_FIELD_SCOPE,
   fieldsOfScope,
@@ -53,8 +53,8 @@ describe("назначение поля", () => {
 
 describe("поставляемые шаблоны", () => {
   const manifests: Array<[string, string]> = [
-    ["default", path.resolve(process.cwd(), "server", "scorm", "templates", "default", "manifest.json")],
-    ["certification", path.resolve(process.cwd(), "templates", "certification", "manifest.json")],
+    ["default", templateManifest("default")],
+    ["certification", templateManifest("certification")],
   ];
 
   for (const [name, file] of manifests) {
@@ -62,7 +62,13 @@ describe("поставляемые шаблоны", () => {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8")) as {
         contentTemplates?: Array<{ kind?: string; settings?: Array<Record<string, unknown>> }>;
       };
-      const variants = (manifest.contentTemplates ?? []).filter((c) => String(c.kind ?? "").startsWith("report"));
+      // ОБОЛОЧКИ отчёта, а не всё семейство: с PRD-51 к нему относится ещё и
+      // `report.block` — вариант раскладки ОДНОГО раздела документа. Полей выдачи он не
+      // объявляет и объявлять не должен: диаграмма и картинки — свойства документа
+      // целиком, и требовать их у каждого блока значило бы просить объявить их
+      // одиннадцать раз.
+      const SHELL_KINDS = new Set(["report", "report.adaptive"]);
+      const variants = (manifest.contentTemplates ?? []).filter((c) => SHELL_KINDS.has(String(c.kind ?? "")));
       expect(variants.length, "виды отчёта объявлены").toBeGreaterThan(0);
       for (const variant of variants) {
         const byKey = new Map((variant.settings ?? []).map((f) => [String(f.key), f]));

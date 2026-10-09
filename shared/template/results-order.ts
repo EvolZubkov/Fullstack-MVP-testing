@@ -10,10 +10,24 @@
  * Pure — no DOM, no Node.
  */
 
-export type ResultsBlockKey = "summary" | "scales" | "indicators" | "topics";
+export type ResultsBlockKey = "summary" | "scales" | "indicators" | "topics" | "breakdown";
 
-/** Shipped order: the one the screen printed before this PRD, so nothing moves by itself. */
-export const DEFAULT_BLOCK_ORDER: readonly ResultsBlockKey[] = ["summary", "scales", "indicators", "topics"];
+/**
+ * Shipped order: the one the screen printed before this PRD, so nothing moves by itself.
+ *
+ * `breakdown` (PRD-50 FR-28) comes LAST, and that placement is load-bearing rather than
+ * decorative: {@link resolveBlockOrder} appends whatever the author's saved order never
+ * mentioned, so every test built before Э4 gets the summary block in exactly this spot
+ * anyway. Putting it anywhere else would make the shipped constant disagree with what a
+ * live test actually renders.
+ */
+export const DEFAULT_BLOCK_ORDER: readonly ResultsBlockKey[] = [
+  "summary",
+  "scales",
+  "indicators",
+  "topics",
+  "breakdown",
+];
 
 /**
  * Per-screen declaration of which sub-blocks a template prints, and in what order
@@ -30,7 +44,13 @@ export interface TemplateBlockOrder {
 
 /** Is this a key the product knows? A manifest is data, so it may carry anything. */
 function isBlockKey(value: unknown): value is ResultsBlockKey {
-  return value === "summary" || value === "scales" || value === "indicators" || value === "topics";
+  return (
+    value === "summary" ||
+    value === "scales" ||
+    value === "indicators" ||
+    value === "topics" ||
+    value === "breakdown"
+  );
 }
 
 /** The declared list for one screen, cleaned; `null` when the declaration says nothing. */

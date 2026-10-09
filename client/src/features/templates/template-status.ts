@@ -5,7 +5,7 @@
  * (PRD-3 DS Mapping gate 3.5: status indicator = Tag with tone). Tones come from
  * the ui-kit `Tone` union (neutral/success/warning/error/...).
  */
-import type { Tone } from "@universityrt/ui-kit";
+import type { Tone } from "@skillum/ui-kit";
 import type { AdminTemplate, TemplateStatus, ValidationReport } from "./use-admin-templates";
 import type { SmokeReport } from "@shared/template/smoke-runner";
 

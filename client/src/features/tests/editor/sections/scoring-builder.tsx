@@ -5,7 +5,7 @@
  * (questions.tsx); relocated UNCHANGED into the test editor — scoring is a
  * property of the test, the config is serialized into the per-(test, question)
  * override (`test_question_scoring.scoring_json`, scoring-model §11). Built
- * with the design-system `@universityrt/ui-kit` components (the approved DS
+ * with the design-system `@skillum/ui-kit` components (the approved DS
  * wireframe is the layout/behaviour spec, not a literal render).
  *
  * Modes by type (engine support, scoring-model §11.3-11.5):
@@ -25,13 +25,12 @@ import {
   Grid,
   IconButton,
   Input,
-  Label,
   SegmentedControl,
   Select,
   Stack,
   Tag,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 
 export type ScoringMode = "exact" | "weighted" | "tiered";
 export type CondLhs = "c" | "x";
@@ -47,7 +46,7 @@ export interface TierDraft {
   score: string;
 }
 
-import { isSingleIndexChoice, type QuestionType } from "@shared/questions/question-type";
+import { isSingleIndexChoice, isTextEntry, type QuestionType } from "@shared/questions/question-type";
 
 const OPS: { value: CondOp; label: string }[] = [
   { value: "==", label: "=" },
@@ -61,7 +60,19 @@ const OPS: { value: CondOp; label: string }[] = [
 function totalToken(type: QuestionType): string {
   if (type === "matching") return "P";
   if (type === "ranking") return "N";
+  // PRD-57 FR-28aa4: у написанного ответа единица счёта — ПРАВИЛО, а не вариант.
+  if (isTextEntry(type)) return "R";
   return "T";
+}
+
+/** What ONE unit of this type is, in the words the author sees. */
+function counterWords(type: QuestionType): { c: string; x: string; total: string } {
+  if (isTextEntry(type)) {
+    return { c: "сколько правил выполнено", x: "ни одного не выполнено", total: "всего правил" };
+  }
+  const total =
+    type === "matching" ? "всего пар" : type === "ranking" ? "всего элементов" : "всего верных";
+  return { c: "верных выбрано", x: "лишних", total };
 }
 
 /** Numeric value of a draft (NaN-safe). */
@@ -100,6 +111,7 @@ export function ScoringBuilder({
   setTiers,
 }: ScoringBuilderProps) {
   const token = totalToken(type);
+  const words = counterWords(type);
   const modes: { value: ScoringMode; label: string }[] = [
     { value: "exact", label: "Точное совпадение" },
     ...(isSingleIndexChoice(type)
@@ -140,12 +152,12 @@ export function ScoringBuilder({
 
   return (
     <Stack gap={4} data-testid="scoring-builder">
-      <Cluster justify="between" gap={2} wrap={false}>
-        <Label>Цена ответа</Label>
-        <Tag variant="outline" data-testid="scoring-smax">
+      <div className="tb-qscoring__price">
+        <span className="tb-qscoring__price-lbl">Цена ответа</span>
+        <Tag tone="neutral" variant="outline" data-testid="scoring-smax">
           Макс. балл sMax = {sMax}
         </Tag>
-      </Cluster>
+      </div>
 
       {/* Mode selector (segmented). */}
       <SegmentedControl
@@ -167,24 +179,40 @@ export function ScoringBuilder({
       {/* weighted (single) — option weights. */}
       {mode === "weighted" && isSingleIndexChoice(type) && (
         <Stack gap={2} data-testid="scoring-weights">
-          <Grid template="label-control" gap={2} style={{ fontSize: "12px", fontWeight: 500, color: "var(--ou-fg-muted)" }}>
-            <div>Вариант ответа</div>
-            <div>Балл</div>
-          </Grid>
-          {options.map((opt, i) => (
-            <Grid key={i} template="label-control" gap={2}>
-              <div>{opt.trim() || `Вариант ${i + 1}`}</div>
-              <Input
-                type="number"
-                min={0}
-                fullWidth
-                value={weights[i] ?? ""}
-                onChange={(e) => setWeight(i, e.target.value)}
-                placeholder="0"
-                data-testid={`scoring-weight-${i}`}
-              />
-            </Grid>
-          ))}
+          {/* Эскиз рисует здесь таблицу: две колонки со своими заголовками — это перечень
+              строк с одинаковым устройством, а не пара «подпись — поле». Прежняя сетка
+              подписывала колонки инлайновым шрифтом мимо типографики ДС. */}
+          <table className="tb-table tb-weights">
+            <thead>
+              <tr>
+                <th>Вариант ответа</th>
+                <th>Балл</th>
+              </tr>
+            </thead>
+            <tbody>
+              {options.map((opt, i) => {
+                const label = opt.trim() || `Вариант ${i + 1}`;
+                return (
+                  <tr key={i}>
+                    <td>{label}</td>
+                    <td>
+                      <Input
+                        size="s"
+                        type="number"
+                        min={0}
+                        fullWidth
+                        value={weights[i] ?? ""}
+                        onChange={(e) => setWeight(i, e.target.value)}
+                        placeholder="0"
+                        aria-label={`Балл варианта «${label}»`}
+                        data-testid={`scoring-weight-${i}`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           <Text as="p" variant="body-s" tone="muted">Балл = вес выбранного варианта; sMax = наибольший вес.</Text>
         </Stack>
       )}
@@ -193,8 +221,8 @@ export function ScoringBuilder({
       {mode === "tiered" && !isSingleIndexChoice(type) && (
         <Stack gap={3} data-testid="scoring-tiers">
           <Text as="p" variant="body-s" tone="muted">
-            Ступени проверяются сверху вниз, засчитывается первая подходящая. Счётчики: <b>c</b> — верных
-            выбрано, <b>x</b> — лишних; <b>{token}</b> — всего {type === "matching" ? "пар" : type === "ranking" ? "элементов" : "верных"}.
+            Ступени проверяются сверху вниз, засчитывается первая подходящая. Счётчики: <b>c</b> —{" "}
+            {words.c}, <b>x</b> — {words.x}; <b>{token}</b> — {words.total}.
           </Text>
 
           {tiers.map((tier, ti) => (
@@ -207,10 +235,17 @@ export function ScoringBuilder({
                         className="tb-fw-lg"
                         value={cond.lhs}
                         onChange={(v) => setCond(ti, ci, { lhs: v as CondLhs })}
-                        options={[
-                          { value: "c", label: "Верных (c)" },
-                          { value: "x", label: "Лишних (x)" },
-                        ]}
+                        options={
+                          isTextEntry(type)
+                            ? [
+                                { value: "c", label: "Выполнено правил (c)" },
+                                { value: "x", label: "Ни одного (x)" },
+                              ]
+                            : [
+                                { value: "c", label: "Верных (c)" },
+                                { value: "x", label: "Лишних (x)" },
+                              ]
+                        }
                         data-testid={`scoring-cond-lhs-${ti}-${ci}`}
                       />
                       <Select

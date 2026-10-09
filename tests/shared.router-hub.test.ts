@@ -10,6 +10,7 @@ import {
   buildRouterHubHtml,
   isRouterReadyToFinish,
   isSectionUnlocked,
+  isSectionUnreachable,
   pluralQuestions,
   statusLabel,
   type RouterHubState,
@@ -130,20 +131,8 @@ describe("router-hub — markup", () => {
   });
 });
 
-describe("router-hub — completed card outcome (PRD-19 show_section_results)", () => {
+describe("router-hub — completed card says only THAT the section is closed", () => {
   const completed = { t1: "completed" as const };
-
-  it("keeps a completed card NEUTRAL «Завершена» when section results are hidden", () => {
-    // Even with a frozen fail result, a test that hides section results must not
-    // leak it on the hub — the card stays neutral, never red.
-    const html = buildRouterHubHtml(
-      SECTIONS,
-      base({ topicStates: completed, sectionResults: { t1: { passed: false } }, showSectionResults: false }),
-    );
-    expect(html).toContain("Завершена");
-    expect(html).not.toContain("router-topic-card--failed");
-    expect(html).not.toContain("router-topic-card--passed");
-  });
 
   it("marks a completed card with a ✓ so it reads as clearly finished", () => {
     const html = buildRouterHubHtml(SECTIONS, base({ topicStates: completed }));
@@ -154,35 +143,22 @@ describe("router-hub — completed card outcome (PRD-19 show_section_results)", 
     expect(freshCard).not.toContain("router-topic-card__ico");
   });
 
-  it("colours a passed section green «Пройдена» when results are shown", () => {
-    const html = buildRouterHubHtml(
-      SECTIONS,
-      base({ topicStates: completed, sectionResults: { t1: { passed: true } }, showSectionResults: true }),
-    );
-    expect(html).toContain("router-topic-card--passed");
-    expect(html).toContain("Пройдена");
-    expect(html).not.toContain("router-topic-card--failed");
-  });
-
-  it("colours a failed section red «Не пройдена» when results are shown", () => {
-    const html = buildRouterHubHtml(
-      SECTIONS,
-      base({ topicStates: completed, sectionResults: { t1: { passed: false } }, showSectionResults: true }),
-    );
-    expect(html).toContain("router-topic-card--failed");
-    expect(html).toContain("Не пройдена");
-  });
-
-  it("stays neutral for a section with no pass rule (passed == null) even when results are shown", () => {
-    // A section that cannot be failed must not read as a graded pass/fail.
-    const html = buildRouterHubHtml(
-      SECTIONS,
-      base({ topicStates: completed, sectionResults: { t1: { passed: null } }, showSectionResults: true }),
-    );
-    expect(html).toContain("Завершена");
-    expect(html).not.toContain("router-topic-card--passed");
-    expect(html).not.toContain("router-topic-card--failed");
-  });
+  // The hub is a MENU. Whatever the frozen result says, the card may say only that the
+  // learner closed the section — never how they closed it.
+  for (const passed of [true, false, null] as const) {
+    it(`keeps the card neutral «Завершена» for a frozen result passed=${passed}`, () => {
+      const html = buildRouterHubHtml(
+        SECTIONS,
+        base({ topicStates: completed, sectionResults: { t1: { passed } } }),
+      );
+      expect(html).toContain("Завершена");
+      expect(html).not.toContain("Пройдена");
+      expect(html).not.toContain("router-topic-card--passed");
+      expect(html).not.toContain("router-topic-card--failed");
+      // The cross is the mark that reads as «failed»; a closed section gets the check.
+      expect(html).not.toContain("M18 6 6 18M6 6l12 12");
+    });
+  }
 });
 
 describe("router-hub — labels", () => {
@@ -196,6 +172,61 @@ describe("router-hub — labels", () => {
   it("labels each status", () => {
     expect(statusLabel("notStarted")).toBe("Не начата");
     expect(statusLabel("inProgress")).toBe("В процессе");
-    expect(statusLabel("completed")).toBe("Пройдена");
+    expect(statusLabel("completed")).toBe("Завершена");
+  });
+});
+
+// ─── Техдолг №8: недостижимое не ждут (решение владельца 2026-10-08) ───────────
+
+describe("недостижимый пункт не держит «Завершить»", () => {
+  const sections = [
+    { topicId: "t1", required: true },
+    { topicId: "scenario:s", required: true },
+  ];
+  const unlockRules = { "scenario:s": { mode: "after_sections_passed", sectionIds: ["t1"] } };
+
+  it("пункт ждёт успеха проваленной темы — не откроется, но и завершить не мешает", () => {
+    const state = { topicStates: { t1: "completed" as const }, sectionResults: { t1: { passed: false } }, unlockRules };
+    expect(isSectionUnlocked({ topicId: "scenario:s" }, state)).toBe(false);
+    expect(isSectionUnreachable("scenario:s", state)).toBe(true);
+    expect(isRouterReadyToFinish(sections, state)).toBe(true);
+  });
+
+  it("цепочка: пункт ждёт недостижимый пункт — тоже недостижим", () => {
+    const state = {
+      topicStates: { t1: "completed" as const },
+      sectionResults: { t1: { passed: false } },
+      unlockRules: { ...unlockRules, t3: { mode: "after_sections_completed", sectionIds: ["scenario:s"] } },
+    };
+    expect(isSectionUnreachable("t3", state)).toBe(true);
+    expect(isRouterReadyToFinish([...sections, { topicId: "t3", required: true }], state)).toBe(true);
+  });
+
+  it("тема ещё не пройдена или оценка в пути — пункт достижим и ждётся", () => {
+    expect(isRouterReadyToFinish(sections, { topicStates: {}, unlockRules })).toBe(false);
+    const pending = { topicStates: { t1: "completed" as const }, sectionResults: { t1: { passed: false, pending: true } }, unlockRules };
+    expect(isSectionUnlocked({ topicId: "scenario:s" }, pending)).toBe(false);
+    expect(isRouterReadyToFinish(sections, pending)).toBe(false);
+  });
+
+  it("проваленный сценарий, который можно пройти заново, — провал не окончателен", () => {
+    const state = {
+      topicStates: { "scenario:s": "completed" as const },
+      sectionResults: { "scenario:s": { passed: false } },
+      unlockRules: { t1: { mode: "after_sections_passed", sectionIds: ["scenario:s"] } },
+      rerunScenarios: true,
+    };
+    expect(isSectionUnreachable("t1", state)).toBe(false);
+    expect(isSectionUnreachable("t1", { ...state, rerunScenarios: false })).toBe(true);
+  });
+
+  it("«все обязательные пройдены»: окончательно проваленный пункт не держит, повторяемый — держит", () => {
+    const base = {
+      topicStates: { t1: "completed" as const, "scenario:s": "completed" as const },
+      sectionResults: { t1: { passed: true }, "scenario:s": { passed: false } },
+      completionPolicy: "all_required_passed",
+    };
+    expect(isRouterReadyToFinish(sections, base)).toBe(true);
+    expect(isRouterReadyToFinish(sections, { ...base, rerunScenarios: true })).toBe(false);
   });
 });

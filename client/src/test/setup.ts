@@ -2,7 +2,7 @@
  * @module test/setup
  * @description Vitest setup file for React Testing Library configuration.
  * Adds the jsdom polyfills (matchMedia / ResizeObserver / IntersectionObserver /
- * scrollIntoView) that some `@universityrt/ui-kit` components expect but jsdom
+ * scrollIntoView) that some `@skillum/ui-kit` components expect but jsdom
  * does not provide, so DS-based components can be rendered in unit tests. The
  * DOM polyfills are guarded by a `window` check so this file stays safe in the
  * node-environment test files that also load it.

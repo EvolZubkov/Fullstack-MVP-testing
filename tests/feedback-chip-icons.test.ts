@@ -10,21 +10,18 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { TEMPLATE_IDS, templateFile } from "./helpers/template-roots";
 
-const LAYOUTS = [
-  "server/scorm/templates/default/layouts/results.html",
-  "server/scorm/templates/default/layouts/results.adaptive.html",
-  "templates/certification/layouts/results.html",
-  "templates/certification/layouts/results.adaptive.html",
-];
+// Экраны итогов и стили ВСЕХ шаблонов: встроенного и двух вынесенных.
+const LAYOUTS = TEMPLATE_IDS.flatMap((id) => [
+  templateFile(id, "layouts/results.html"),
+  templateFile(id, "layouts/results.adaptive.html"),
+]);
 
-const THEMES = [
-  "server/scorm/templates/default/styles/theme.css",
-  "templates/certification/styles/theme.css",
-];
+const THEMES = TEMPLATE_IDS.map((id) => templateFile(id, "styles/theme.css"));
 
-/** Читает файл репозитория. */
-const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, "..", rel), "utf8");
+/** Читает файл по абсолютному пути. */
+const read = (abs: string) => fs.readFileSync(abs, "utf8");
 
 /**
  * Содержимое чипов заданного вида: `a` — курс, `span` — мероприятие.

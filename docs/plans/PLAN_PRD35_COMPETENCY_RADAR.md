@@ -15,7 +15,7 @@
 `results` он живёт в `content_pages.settings_json` (рядом с `scoreSummary`/`indicators`/`scales`),
 у видов отчёта — в `tests.report_settings_json`.
 
-**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@universityrt/ui-kit`,
+**Tech Stack:** TypeScript (Node/Express, Drizzle, Zod), React 19 + `@skillum/ui-kit`,
 Vitest (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm/**`), SVG без библиотек.
 Спецификация: [docs/specs/prd-35/competency-radar.md](../specs/prd-35/competency-radar.md).
 
@@ -161,7 +161,7 @@ python -m http.server 8765 --directory . &
 
 - [ ] **Step 4: Сверить скриншот с DS и показать владельцу**
 
-Проверить по каждой детали: используются только существующие классы `university-rt.css`
+Проверить по каждой детали: используются только существующие классы `skillum-ds.css`
 (несуществующий `ou-*` контролёр НЕ ловит), подписи не наезжают, на узком фрейме радар не
 раздавлен. Дождаться согласования — без него следующие задачи не начинать.
 

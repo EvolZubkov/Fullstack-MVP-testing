@@ -45,6 +45,7 @@
 import {
   buildResultContext,
   buildAdaptiveResultContext,
+  headingText,
   topicHasContent,
   type MeasuresInput,
   type ResultRenderContext,
@@ -164,6 +165,17 @@ export interface ReportContextOptions {
  * «надписи объявлены, но все погашены», а отсутствие ключа — «шаблон надписей не знает»;
  * макет различает эти случаи гейтами, и подменять одно другим нельзя.
  */
+/**
+ * Блоки разделов теста из материала итогов; `null`, когда блоков нет.
+ *
+ * Отдельный помощник, а не чтение по месту: его зовут ОБА построителя — обычный и
+ * адаптивный, — и разойдись они, документ печатал бы блоки только у одного вида.
+ */
+function groupsOf(opts: ReportContextOptions): unknown {
+  const raw = (opts.measures as { sectionGroupsJson?: unknown } | undefined)?.sectionGroupsJson;
+  return Array.isArray(raw) && raw.length ? raw : null;
+}
+
 function labelsOption(opts: ReportContextOptions): { labels?: ResolvedLabels } {
   const labels = opts.labels;
   return labels && Object.keys(labels).length > 0 ? { labels } : {};
@@ -258,9 +270,17 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   // а не экран, и досчитать её потом читателю нечем. `topicPointsIgnoreScoreSummary`
   // держит её и тогда, когда автор выключил сводку по баллам (issue #30 гасит эту
   // строку только на ЭКРАНЕ — там у ученика есть настройка, у скачанного PDF её нет).
-  const base = buildResultContext(input.result, input.testName || "", {
+  // PRD-50 FR-11: блоки разделов приезжают МАТЕРИАЛОМ итогов (`measures`), а не результатом
+  // попытки: у отчёта, который строит браузер, другого пути к устройству теста нет. Без
+  // этой перекладки документ печатал плоский список тем там, где экран печатал блоки со
+  // счётчиком, — §5.2 запрещает отчёту показывать иное, чем экран, с которого его скачали.
+  const resultInput = groupsOf(opts) ? { ...input.result, sectionGroups: groupsOf(opts) } : input.result;
+  const base = buildResultContext(resultInput, input.testName || "", {
     withTopicPoints: true,
     topicPointsIgnoreScoreSummary: true,
+    // Заголовки итога — тем же приёмом, что настройки ниже: документ печатает ту же
+    // шапку, что экран, с которого его скачали (§5.2).
+    ...(input.headings ? { headings: input.headings } : {}),
     // Источники консолидированного блока обратной связи, которых нет в результате
     // попытки: обратная связь самого теста и признак «тест выносит вердикт». Уходят в
     // ТОТ ЖЕ построитель, что собирает блок для экрана, — второго правила консолидации
@@ -272,6 +292,19 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
     ...(opts.measures ? { measures: opts.measures } : {}),
     // Вводный блок ОТЧЁТА: у экрана свой текст, и подменять один другим нельзя.
     ...(input.intro ? { intro: input.intro } : {}),
+    // PRD-50 FR-13: разрез по ключам — то же свойство теста, что и {@link input.feedback}
+    // и {@link input.hasPassThreshold} выше, и передаётся тем же приёмом. Без него
+    // построитель темы (`topicView`) держит строки полос погашенными: у темы ЕСТЬ сырые
+    // записи разреза (`breakdown` в `topicResults` — они приходят как есть, см. ниже), но
+    // печатать их можно только с этим переключателем, который раньше сюда не доезжал.
+    ...(input.breakdownDisplay ? { breakdownDisplay: input.breakdownDisplay } : {}),
+    // Окраска полос подтем — тем же приёмом: документ красит их так же, как экран.
+    ...(input.barFill ? { barFill: input.barFill } : {}),
+    // PRD-50 FR-50: порог, по которому общий построитель решает, какие тексты подтем
+    // читает слушатель. Передаётся ТЕМ ЖЕ приёмом, что настройки выше, и по той же
+    // причине: без него правило теряет предмет сравнения и печатает всё написанное — то
+    // есть документ выдавал рекомендации по подтемам, которые экран признал освоенными.
+    ...(input.overallPassRule ? { overallPassRule: input.overallPassRule } : {}),
     // PRD-49. Надписи уходят в ТО ЖЕ ядро, что строит контекст экрана: дерево `labels.*`
     // собирается там и только там. Порядок подблоков (`blockOrder`) сюда НЕ передаётся
     // намеренно — документ печатает свою фиксированную последовательность карточек, см.
@@ -303,7 +336,14 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   // Шапка не пустеет: у документа над ней нет заголовка теста, который есть у экрана.
   // Формулировка не новая — её уже печатает адаптивный отчёт, где вердикта нет по природе
   // режима, поэтому два вида документа сходятся на одном слове.
-  report.verdictHeadline = !hasVerdict ? "Результаты теста" : passed ? "Тест пройден" : "Тест не пройден";
+  // Шапка исхода: авторская, если задана. Умолчание у документа СВОЁ («Тест пройден»
+  // против «Пройден» на экране): у экрана над пилюлей стоит название теста, у документа —
+  // нет, и одним словом шапка документа не держится. Тест без вердикта не переименовывается
+  // вовсе: заголовок исхода утверждал бы то, чего экран о слушателе не утверждает.
+  const headingFor = passed ? headingText(input.headings?.passed) : headingText(input.headings?.failed);
+  report.verdictHeadline = !hasVerdict
+    ? "Результаты теста"
+    : headingFor ?? (passed ? "Тест пройден" : "Тест не пройден");
   // Бейдж и класс гасятся ПОЛНОСТЬЮ, а не заменяются нейтральным значением: плашка несёт
   // цвет вердикта, и любой из двух цветов был бы утверждением. Макет гейтит их на пустоте.
   report.verdictBadge = !hasVerdict ? "" : passed ? "пройден" : "не пройден";
@@ -342,8 +382,23 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
       // экран не утверждает ничего: у неё нет ни порога, ни оцениваемых вопросов.
       // Пустая метка гасится макетом — плашка несёт фон и отступы, поэтому пустой
       // строки мало, нужен именно пропуск узла.
+      // Своя формулировка у документа только ПОКА автор молчит. Как только он назвал
+      // вердикт темы сам (PRD-50 FR-34, ключи `topic.verdict.*`), карточка обязана
+      // повторить это слово: строка разреза внутри той же карточки уже печатает его
+      // (`statusLabel` идёт через словарь), и жёсткий «Не пройден» над «Не зачтено»
+      // заставлял одну карточку говорить на двух языках. Различие «Пройден»/«Пройдено»
+      // задумывалось для двух зашитых строк и на авторские не распространяется.
+      const verdictKey =
+        src.passed === true ? "topic.verdict.passed" : src.passed === false ? "topic.verdict.failed" : null;
+      const authored = verdictKey ? opts.labels?.[verdictKey] : undefined;
       target.verdictLabel =
-        src.passed === true ? "Пройден" : src.passed === false ? "Не пройден" : "";
+        authored !== undefined
+          ? authored
+          : src.passed === true
+            ? "Пройден"
+            : src.passed === false
+              ? "Не пройден"
+              : "";
       target.barPercent = topicPercent;
       target.countsLabel = `${src.correct} из ${src.total} (${topicPercent}%)`;
       target.pointsFixedLabel = `${fixed1(src.earnedPoints)}/${fixed1(src.possiblePoints)}`;
@@ -376,7 +431,11 @@ export function buildAdaptiveReportContext(
   // адаптивный построитель ровно так же, как в обычный. Порога здесь нет: адаптивный
   // вердикт выносится по подтверждённым уровням, и `hasPassThreshold` этому режиму
   // нечего сказать.
-  const base = buildAdaptiveResultContext(input.result, input.testName || "", {
+  // PRD-50 FR-11: блоки разделов — тем же приёмом, что у обычного отчёта (см. `groupsOf`).
+  const adaptiveInput = groupsOf(opts)
+    ? { ...input.result, sectionGroups: groupsOf(opts) }
+    : input.result;
+  const base = buildAdaptiveResultContext(adaptiveInput, input.testName || "", {
     ...(input.feedback ? { testFeedback: input.feedback } : {}),
     ...(input.intro ? { intro: input.intro } : {}),
     // issue #33: измерения печатаются и в адаптивном отчёте — тем же блоком и из того же
@@ -384,6 +443,15 @@ export function buildAdaptiveReportContext(
     // переключатель (поле варианта отчёта), и он уже подмешан в `opts.measures` хостом,
     // как в обычном режиме.
     ...(opts.measures ? { measures: opts.measures } : {}),
+    // PRD-50 FR-28: переключатель сводного блока — тем же приёмом и по той же причине, что
+    // у обычного отчёта (§5.2: документ не вправе показать иное, чем экран, с которого его
+    // скачали). Сами записи лежат в `input.result.breakdowns` и уходят построителю вместе
+    // с результатом.
+    ...(input.breakdownDisplay ? { breakdownDisplay: input.breakdownDisplay } : {}),
+    ...(input.barFill ? { barFill: input.barFill } : {}),
+    // PRD-50 FR-50: порог отбора текстов подтем — по той же причине, что и в обычном
+    // отчёте выше. Адаптивный экран его получает, и документ обязан отобрать то же самое.
+    ...(input.overallPassRule ? { overallPassRule: input.overallPassRule } : {}),
     // PRD-49: тот же слой надписей, что у обычного отчёта — формулировка принадлежит тесту,
     // а не режиму выдачи.
     ...labelsOption(opts),

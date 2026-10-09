@@ -63,3 +63,126 @@ describe("sanitizeValuesWithDiagnostics", () => {
     expect(twice.diagnostics.body).toBeUndefined();
   });
 });
+
+/**
+ * Обезвреживание `javascript:` — до этого набора не покрытое ничем, отчего дефект и
+ * прожил незамеченным: замена съедала открывающую кавычку, но не закрывающую, и на
+ * выходе оставалось `href="#""`. Для браузера это лишний безымянный атрибут, а для
+ * автора — испорченная разметка, которую он не писал.
+ */
+describe("sanitizeHtml обезвреживает javascript:", () => {
+  it("не оставляет лишней кавычки у двойных кавычек", () => {
+    expect(sanitizeHtml('<a href="javascript:alert(1)">клик</a>')).toBe(
+      '<a href="#">клик</a>',
+    );
+  });
+
+  it("не оставляет лишней кавычки у одинарных", () => {
+    expect(sanitizeHtml("<a href='javascript:alert(1)'>клик</a>")).toBe(
+      '<a href="#">клик</a>',
+    );
+  });
+
+  it("обезвреживает адрес без кавычек", () => {
+    expect(sanitizeHtml("<a href=javascript:alert(1)>клик</a>")).toBe('<a href="#">клик</a>');
+  });
+
+  it("не путается в регистре и пробелах", () => {
+    expect(sanitizeHtml('<a HREF = " JavaScript:alert(1) ">клик</a>')).toBe(
+      '<a HREF="#">клик</a>',
+    );
+  });
+
+  it("то же у src", () => {
+    expect(sanitizeHtml('<img src="javascript:alert(1)">')).toBe('<img src="#">');
+  });
+
+  it("не трогает обычную ссылку", () => {
+    expect(sanitizeHtml('<a href="/learner/tests">клик</a>')).toBe(
+      '<a href="/learner/tests">клик</a>',
+    );
+  });
+
+  it("сообщает о срабатывании правила одной записью", () => {
+    const { removed } = sanitizeHtmlWithDiagnostics('<a href="javascript:alert(1)">к</a>');
+    expect(removed).toEqual([{ kind: "uri", label: "javascript:", count: 1 }]);
+  });
+});
+
+/**
+ * Внешний адрес: `src` — это РЕСУРС, который страница грузит сама (ломает автономность
+ * пакета и выдаёт адрес учащегося третьей стороне), а `href` у ссылки — НАПРАВЛЕНИЕ,
+ * по которому учащийся идёт сам, и ничего не грузится. Прежнее правило не различало
+ * их и снимало атрибут у обоих: панель форматирования предлагала кнопку «Ссылка»
+ * (PRD-22 FR-33), а сохранялся `<a>` без адреса — от простого текста не отличить.
+ * Ровно такую ссылку разметочный конвейер вопроса (`shared/text/markdown`) уже
+ * выпускает сам, вместе с `target="_blank"`.
+ */
+describe("sanitizeHtml и внешние адреса", () => {
+  it("сохраняет адрес внешней ссылки", () => {
+    const out = sanitizeHtml('<a href="https://example.com/cards">карточки</a>');
+    expect(out).toContain('href="https://example.com/cards"');
+  });
+
+  it("открывает внешнюю ссылку в новом окне, чтобы не увести кадр с попытки", () => {
+    const out = sanitizeHtml('<a href="https://example.com">к</a>');
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain('rel="noopener noreferrer"');
+  });
+
+  it("не трогает уже заданные автором target и rel", () => {
+    const src = '<a href="https://example.com" target="_self" rel="nofollow">к</a>';
+    expect(sanitizeHtml(src)).toBe(src);
+  });
+
+  it("повторная санитизация не добавляет второй target", () => {
+    const once = sanitizeHtml('<a href="https://example.com">к</a>');
+    expect(sanitizeHtml(once)).toBe(once);
+  });
+
+  it("сохраняет адрес без кавычек", () => {
+    expect(sanitizeHtml("<a href=https://example.com>к</a>")).toContain("href=https://example.com");
+  });
+
+  it("сохраняет адрес у области карты-изображения", () => {
+    expect(sanitizeHtml('<area href="https://example.com" shape="rect">')).toContain(
+      'href="https://example.com"',
+    );
+  });
+
+  it("по-прежнему снимает внешний src у картинки", () => {
+    expect(sanitizeHtml('<img src="https://example.com/a.png" alt="a">')).toBe('<img alt="a">');
+  });
+
+  it("по-прежнему снимает внешний href у не-ссылки", () => {
+    expect(sanitizeHtml('<base href="https://evil.example/">')).toBe("<base>");
+  });
+
+  it("не наделяет target внутреннюю ссылку", () => {
+    expect(sanitizeHtml('<a href="/uploads/media/a.pdf">к</a>')).toBe(
+      '<a href="/uploads/media/a.pdf">к</a>',
+    );
+  });
+
+  it("не наделяет target почтовую ссылку", () => {
+    expect(sanitizeHtml('<a href="mailto:a@b.ru">к</a>')).toBe('<a href="mailto:a@b.ru">к</a>');
+  });
+
+  it("обезвреженный javascript: не считается внешним адресом", () => {
+    expect(sanitizeHtml('<a href="javascript:alert(1)">к</a>')).toBe('<a href="#">к</a>');
+  });
+
+  it("сообщает о снятом внешнем src, но не о сохранённой ссылке", () => {
+    const { removed } = sanitizeHtmlWithDiagnostics(
+      '<a href="https://example.com">к</a><img src="https://example.com/a.png">',
+    );
+    expect(removed).toEqual([{ kind: "uri", label: "external src/href", count: 1 }]);
+  });
+
+  it("считает снятый href не-ссылки тем же правилом", () => {
+    const { removed } = sanitizeHtmlWithDiagnostics(
+      '<base href="https://evil.example/"><img src="https://example.com/a.png">',
+    );
+    expect(removed).toEqual([{ kind: "uri", label: "external src/href", count: 2 }]);
+  });
+});

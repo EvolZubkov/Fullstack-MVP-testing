@@ -11,7 +11,9 @@
  * snapshot, so hashing a value that the write path is about to rewrite would
  * produce a hash no stored row can ever match again.
  */
-import { normalizeAuthorText, looksLikeHtml, htmlToMarkdown } from "@shared/text";
+import { normalizeAuthorText, looksLikeHtml, htmlToMarkdown, normalizeAuthorHtml } from "@shared/text";
+import { sanitizeHtmlWithDiagnostics, type SanitizeRemoval } from "@shared/security/html-sanitize";
+import { isMarkupFormat, type PromptFormat } from "@shared/questions/prompt-format";
 
 /** Answer collections whose elements are author text, by question type. */
 const TEXT_COLLECTIONS = ["options", "items", "left", "right"] as const;
@@ -66,4 +68,29 @@ export function normalizeQuestionData<T>(dataJson: T, options?: TextNormalizeOpt
     );
   }
   return result as T;
+}
+
+/**
+ * Привести текст задания к хранимой форме ПО ЕГО ФОРМАТУ (PRD-57 §4.3).
+ *
+ * У разметки это прежний проход: канонические пробелы и типографика по строке. У текста,
+ * написанного разметкой (`richText`, `html`), — сначала санитайзер, потом тот же проход, но
+ * ПО ТЕКСТОВЫМ УЗЛАМ: типографика не должна заходить внутрь тега, значения атрибута,
+ * `<pre>` и `<code>`, где каждый символ значим (FR-09d, тем же правилом, что бережёт
+ * листинг и имя пропуска).
+ *
+ * Второй реализации ни санитайзера, ни типографики здесь не появляется: обе взяты у полей
+ * страницы, которые ходят той же дорогой (`content-page-fields`).
+ *
+ * @param prompt Текст как его прислал редактор.
+ * @param format Формат задания; отсутствие читается как разметка.
+ * @returns Хранимая форма текста и то, что вырезал санитайзер (пусто у разметки).
+ */
+export function normalizePromptByFormat(
+  prompt: string,
+  format: PromptFormat,
+): { prompt: string; removed: SanitizeRemoval[] } {
+  if (!isMarkupFormat(format)) return { prompt: normalizeAuthorText(prompt), removed: [] };
+  const { value, removed } = sanitizeHtmlWithDiagnostics(prompt);
+  return { prompt: normalizeAuthorHtml(value), removed };
 }

@@ -54,10 +54,10 @@ function Host({
 describe("LevelsEditor", () => {
   it("shows one start, one end and N-1 cuts — not a min/max pair per level", () => {
     render(<Host initial={THREE} />);
-    expect((screen.getByLabelText("Начало") as HTMLInputElement).value).toBe("0");
-    expect((screen.getByLabelText("Конец") as HTMLInputElement).value).toBe("98");
-    expect((screen.getByLabelText("Порог между уровнями 1 и 2") as HTMLInputElement).value).toBe("15");
-    expect((screen.getByLabelText("Порог между уровнями 2 и 3") as HTMLInputElement).value).toBe("29");
+    expect((screen.getByLabelText("Начало покрытия") as HTMLInputElement).value).toBe("0");
+    expect((screen.getByLabelText("Конец покрытия") as HTMLInputElement).value).toBe("98");
+    expect((screen.getByLabelText("Порог между уровнями «low» и «mid»") as HTMLInputElement).value).toBe("15");
+    expect((screen.getByLabelText("Порог между уровнями «mid» и «high»") as HTMLInputElement).value).toBe("29");
     expect(screen.queryByLabelText(/^min /)).toBeNull();
     expect(screen.queryByLabelText(/^max /)).toBeNull();
   });
@@ -65,7 +65,7 @@ describe("LevelsEditor", () => {
   it("writes an edited cut into both neighbouring bands", () => {
     const onBands = vi.fn();
     render(<Host initial={THREE} onBands={onBands} />);
-    fireEvent.change(screen.getByLabelText("Порог между уровнями 1 и 2"), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText("Порог между уровнями «low» и «mid»"), { target: { value: "20" } });
     const emitted = onBands.mock.calls[0][0] as ScaleBandModel[];
     expect([emitted[0].max, emitted[1].min]).toEqual(["20", "20"]);
   });
@@ -144,7 +144,7 @@ describe("LevelsEditor", () => {
   it("removes a level and closes the gap it left", () => {
     const onBands = vi.fn();
     render(<Host initial={THREE} onBands={onBands} />);
-    fireEvent.click(screen.getByLabelText("Удалить уровень 2"));
+    fireEvent.click(screen.getByLabelText("Удалить уровень «mid»"));
     const emitted = onBands.mock.calls[0][0] as ScaleBandModel[];
     expect(emitted.map((b) => [b.min, b.max])).toEqual([["0", "29"], ["29", "98"]]);
   });
@@ -194,15 +194,15 @@ describe("LevelsEditor", () => {
 
   it("shows the coverage status under the ribbon", () => {
     render(<Host initial={THREE} />);
-    expect(screen.getByText("Шкала разобрана целиком, 3 уровня")).toBeInTheDocument();
+    expect(screen.getByText("Разобрано целиком, 3 уровня")).toBeInTheDocument();
   });
 
   it("keeps focus and caret in the field being typed into", () => {
     render(<Host initial={THREE} />);
-    const cut = screen.getByLabelText("Порог между уровнями 1 и 2") as HTMLInputElement;
+    const cut = screen.getByLabelText("Порог между уровнями «low» и «mid»") as HTMLInputElement;
     cut.focus();
     fireEvent.change(cut, { target: { value: "1," } });
-    const after = screen.getByLabelText("Порог между уровнями 1 и 2") as HTMLInputElement;
+    const after = screen.getByLabelText("Порог между уровнями «low» и «mid»") as HTMLInputElement;
     expect(document.activeElement).toBe(after);
     expect(after.value).toBe("1,");
   });
@@ -252,7 +252,7 @@ describe("LevelsEditor", () => {
   it("hides every control in read-only mode", () => {
     render(<LevelsEditor bands={THREE} index={0} readOnly valence="none" domain={null} onChange={vi.fn()} />);
     expect(screen.queryByTestId("scales-level-add-0")).toBeNull();
-    expect(screen.queryByLabelText("Удалить уровень 1")).toBeNull();
-    expect((screen.getByLabelText("Начало") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.queryByLabelText("Удалить уровень «low»")).toBeNull();
+    expect((screen.getByLabelText("Начало покрытия") as HTMLInputElement).disabled).toBe(true);
   });
 });

@@ -17,7 +17,7 @@
 измерительный режим: он не приносит баллов и не влияет на процент, но даёт вклад в шкалы.
 
 **Tech Stack:** TypeScript, Express, Drizzle ORM (PostgreSQL), React 19 + Wouter,
-`@universityrt/ui-kit`, ExcelJS, Vitest, esbuild (сборка рантайма пакета).
+`@skillum/ui-kit`, ExcelJS, Vitest, esbuild (сборка рантайма пакета).
 
 ---
 
@@ -58,7 +58,7 @@
 
 - `vendor/ui-kit/src/components/Stepper.tsx` — пропс `choice`, статус `success`.
 - `vendor/ui-kit/src/components/Stepper.stories.tsx` — стори режима выбора.
-- `vendor/ui-kit/css/university-rt.css` и `client/src/styles/vendor/university-rt.css` —
+- `vendor/ui-kit/css/skillum-ds.css` и `client/src/styles/vendor/skillum-ds.css` —
   правила `ou-stepper--choice`, `is-success`, `ou-stepper--review` (обе копии, иначе
   правило не доедет до приложения).
 
@@ -152,8 +152,8 @@ git commit -m "docs(prd-26): спецификация и эскиз типа в�
 
 - Modify: `vendor/ui-kit/src/components/Stepper.tsx`
 - Modify: `vendor/ui-kit/src/components/Stepper.stories.tsx`
-- Modify: `vendor/ui-kit/css/university-rt.css`
-- Modify: `client/src/styles/vendor/university-rt.css`
+- Modify: `vendor/ui-kit/css/skillum-ds.css`
+- Modify: `client/src/styles/vendor/skillum-ds.css`
 
 - [ ] **Step 1: Добавить статус `success` и пропс `choice`**
 
@@ -171,11 +171,11 @@ DS-код) и положить в секцию `Stepper.css` бандла: ра�
 
 - [ ] **Step 3: Продублировать правила во вторую копию бандла**
 
-`client/src/styles/vendor/university-rt.css` — та же вставка. Проверить, что копии
+`client/src/styles/vendor/skillum-ds.css` — та же вставка. Проверить, что копии
 совпадают по этому блоку:
 
 ```bash
-node -e "const a=require('fs').readFileSync('vendor/ui-kit/css/university-rt.css','utf8'),b=require('fs').readFileSync('client/src/styles/vendor/university-rt.css','utf8');const re=/ou-stepper--choice[\s\S]*?ou-stepper--review[^}]*}/;console.log(String(a.match(re))===String(b.match(re))?'копии совпадают':'РАСХОЖДЕНИЕ')"
+node -e "const a=require('fs').readFileSync('vendor/ui-kit/css/skillum-ds.css','utf8'),b=require('fs').readFileSync('client/src/styles/vendor/skillum-ds.css','utf8');const re=/ou-stepper--choice[\s\S]*?ou-stepper--review[^}]*}/;console.log(String(a.match(re))===String(b.match(re))?'копии совпадают':'РАСХОЖДЕНИЕ')"
 ```
 
 - [ ] **Step 4: Стори режима выбора**
@@ -192,7 +192,7 @@ npm run check
 - [ ] **Step 6: Commit**
 
 ```bash
-git add vendor/ui-kit client/src/styles/vendor/university-rt.css
+git add vendor/ui-kit client/src/styles/vendor/skillum-ds.css
 git commit -m "feat(ui-kit): режим выбора и статус success у Stepper"
 ```
 

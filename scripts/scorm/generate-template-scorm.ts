@@ -16,7 +16,7 @@
  *   npm run scorm:template -- corporate    # built-in id
  *   npm run scorm:template -- ./path/to/template-folder
  *   npm run scorm:template -- ./path/to/manifest.json
- *   npm run scorm:template -- ./templates/certification --theme dark --theme-colors
+ *   npm run scorm:template -- "C:/Repositories/skill'um/templates/skillum-template-certification/template" --theme dark --theme-colors
  *
  * PRD-23 options:
  *   --theme <light|dark|auto>  pin the palette the package opens in
@@ -118,7 +118,10 @@ function mockPlaceholderValue(ph: any): unknown {
       return `[${ph.label}] демо-текст`;
     case "textarea":
     case "richText":
-      return `<p><strong>${ph.label}</strong>: демонстрационный контент для приёмки шаблона. <em>Курсив</em>, <a href="#">ссылка</a>.</p><ul><li>Пункт списка 1</li><li>Пункт списка 2</li></ul>`;
+      // The external address is deliberate: `href="#"` was never stripped by the
+      // sanitiser, so the harness could not show whether a REAL link survives it and
+      // whether the template styles one at all.
+      return `<p><strong>${ph.label}</strong>: демонстрационный контент для приёмки шаблона. <em>Курсив</em>, <a href="https://example.com/материалы">внешняя ссылка</a>.</p><ul><li>Пункт списка 1</li><li>Пункт списка 2</li></ul>`;
     case "html":
       return `<div><h3>${ph.label}</h3><p>Произвольный HTML-блок для проверки санитизации и верстки.</p></div>`;
     case "image":
@@ -346,7 +349,10 @@ async function main() {
       overallPassRuleJson: { type: "percent", value: 70 },
       webhookUrl: null,
       feedback: null,
-      timeLimitMinutes: null,
+      // A budget of DAYS on purpose: the start screen prints a label the core formats,
+      // and a limit of a few minutes would look the same either way. Two weeks is the
+      // case that used to reach the learner as «20160 мин».
+      timeLimitMinutes: 20160,
       maxAttempts: null,
       showCorrectAnswers: true,
       startPageContent: "Демонстрационный пакет для отладки и приёмки шаблона.",

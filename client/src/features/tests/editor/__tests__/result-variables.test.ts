@@ -130,12 +130,14 @@ describe("validateTestEditor — result variables", () => {
     expect(errors).toEqual([]);
   });
 
-  it("rejects two variables controlling the same status", () => {
+  it("allows several variables controlling the same status (they combine with OR)", () => {
     const errors = rvErrors([
       rv({ name: "a", type: "boolean", formula: "percent >= 50", controlsStatus: "success" }),
       rv({ name: "b", type: "boolean", formula: "percent >= 90", controlsStatus: "success", sortOrder: 1 }),
+      rv({ name: "c", type: "boolean", formula: "percent >= 10", controlsStatus: "completion", sortOrder: 2 }),
+      rv({ name: "d", type: "boolean", formula: "percent >= 20", controlsStatus: "completion", sortOrder: 3 }),
     ]);
-    expect(errors.filter((e) => e.code === "duplicate_controller")).toHaveLength(2);
+    expect(errors).toEqual([]);
   });
 });
 
@@ -260,5 +262,61 @@ describe("validateResultVariableFormula", () => {
     await expect(
       validateResultVariableFormula("t1", { formula: "x", type: "number" }),
     ).rejects.toThrow(/500/);
+  });
+});
+
+// ─── PRD-53 §4.4: «шкалы вне профиля» round trip ──────────────────────────────
+
+describe("restScales — круг «API → редактор → API»", () => {
+  const apiVar = (configJson: Record<string, unknown>) => ({
+    resultVariables: [
+      { id: "v1", name: "profile", label: "Профиль", type: "string", formula: 'topGroup(["a","b"], 5).code', configJson },
+    ],
+  });
+
+  it("читает блок из config_json", () => {
+    const model = apiToEditorModel(
+      apiVar({ restScales: { show: true, label: "Другие стили", keys: ["a", "b"] } }) as never,
+    );
+    expect(model.resultVariables[0].restScales).toEqual({ show: true, label: "Другие стили", keys: ["a", "b"] });
+  });
+
+  // Показатель, у которого блока не было, обязан вернуться из редактора БЕЗ него:
+  // проверка изменений сравнивает через JSON.stringify, и пустой объект прочитался бы
+  // как правка теста, которой автор не делал.
+  it("без блока не заводит пустой объект", () => {
+    const model = apiToEditorModel(apiVar({}) as never);
+    expect("restScales" in model.resultVariables[0]).toBe(false);
+  });
+
+  it("блок без ключей — не блок", () => {
+    const model = apiToEditorModel(apiVar({ restScales: { show: true, label: "x", keys: [] } }) as never);
+    expect(model.resultVariables[0].restScales).toBeUndefined();
+  });
+
+  it("сохраняется в config_json, когда включён и есть ключи", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: "new" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    await saveResultVariables(
+      "t1",
+      [rv({ name: "profile", type: "string", restScales: { show: true, label: " Другие ", keys: ["a"] } })],
+      [],
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.configJson.restScales).toEqual({ show: true, label: "Другие", keys: ["a"] });
+    vi.unstubAllGlobals();
+  });
+
+  it("выключенный блок в config_json не пишется", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: "new" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    await saveResultVariables(
+      "t1",
+      [rv({ name: "profile", restScales: { show: false, label: "x", keys: ["a"] } })],
+      [],
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.configJson.restScales).toBeUndefined();
+    vi.unstubAllGlobals();
   });
 });

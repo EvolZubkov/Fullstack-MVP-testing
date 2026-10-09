@@ -21,6 +21,7 @@ export type FeasibilityIssue =
   | { kind: "measurement_loss"; questionIds: string[] }
   | { kind: "variant_incomplete"; questionIds: string[] }
   | { kind: "content_pages_loss"; pageCount: number }
+  | { kind: "scenario_item_empty"; itemTitle: string }
   | { kind: "formula_loss"; variableNames: string[] }
   | { kind: "draw_all_shrink"; removed: number; remaining: number; advisory: true };
 
@@ -62,3 +63,18 @@ export interface PublishInfeasibleError {
   message: string;
   findings: PublishCheckFinding[];
 }
+
+/**
+ * PRD-50 FR-45 - FR-47: one delivery trap reported AFTER a successful publication.
+ * A warning, never a block — the mirror image of {@link PublishInfeasibleError},
+ * which is a 409.
+ *
+ * The shape is RE-EXPORTED from the engine that produces it, not copied: the local
+ * copy drifted once already — it still listed `key_thresholds_no_longer_gate`, dropped
+ * in PRD-50 §16, and knew nothing of `gate_without_display`, which replaced it, nor of
+ * the test-level warning's `topicId: null`.
+ */
+export type {
+  BreakdownWarning,
+  BreakdownWarningCode,
+} from "@shared/breakdown/publish-warnings";

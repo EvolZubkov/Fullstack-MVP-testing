@@ -20,10 +20,11 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 // Capture toast calls so success/error branches are observable without a
-// mounted <ToastProvider> (the real hook is a silent no-op in that case).
+// mounted <ToastProvider> (the real ui-kit hook throws outside one).
 const { toastSpy } = vi.hoisted(() => ({ toastSpy: vi.fn() }));
-vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: toastSpy, dismiss: vi.fn() }),
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
 }));
 
 import UsersPage from "../users";
@@ -188,7 +189,7 @@ describe("<UsersPage /> — invite", () => {
     await invitePendingUser();
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "warning", title: "Письмо не отправлено" }),
+        expect.objectContaining({ tone: "warning", title: "Письмо не отправлено" }),
       ),
     );
   });
@@ -204,7 +205,7 @@ describe("<UsersPage /> — invite", () => {
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          variant: "destructive",
+          tone: "error",
           description: "Не удалось отправить приглашение.",
         }),
       ),
@@ -233,7 +234,7 @@ describe("<UsersPage /> — create/update onError", () => {
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          variant: "destructive",
+          tone: "error",
           description: "Пользователь с таким email уже существует",
         }),
       ),
@@ -259,7 +260,7 @@ describe("<UsersPage /> — create/update onError", () => {
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "warning", title: "Письмо не отправлено" }),
+        expect.objectContaining({ tone: "warning", title: "Письмо не отправлено" }),
       ),
     );
   });
@@ -307,7 +308,7 @@ describe("<UsersPage /> — create/update onError", () => {
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось создать пользователя." }),
+        expect.objectContaining({ tone: "error", description: "Не удалось создать пользователя." }),
       ),
     );
   });
@@ -325,7 +326,7 @@ describe("<UsersPage /> — create/update onError", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Сохранить" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось обновить пользователя." }),
+        expect.objectContaining({ tone: "error", description: "Не удалось обновить пользователя." }),
       ),
     );
   });
@@ -349,7 +350,7 @@ describe("<UsersPage /> — create/update onError", () => {
     );
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось обновить пользователя." }),
+        expect.objectContaining({ tone: "error", description: "Не удалось обновить пользователя." }),
       ),
     );
   });
@@ -369,7 +370,7 @@ describe("<UsersPage /> — lifecycle onError", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Заблокировать" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось заблокировать пользователя." }),
+        expect.objectContaining({ tone: "error", description: "Не удалось заблокировать пользователя." }),
       ),
     );
   });
@@ -386,7 +387,7 @@ describe("<UsersPage /> — lifecycle onError", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Активировать" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось активировать пользователя." }),
+        expect.objectContaining({ tone: "error", description: "Не удалось активировать пользователя." }),
       ),
     );
   });
@@ -404,7 +405,7 @@ describe("<UsersPage /> — lifecycle onError", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Сбросить пароль" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось сбросить пароль." }),
+        expect.objectContaining({ tone: "error", description: "Не удалось сбросить пароль." }),
       ),
     );
   });
@@ -433,10 +434,10 @@ describe("<UsersPage /> — bulk import wizard", () => {
     expect(screen.getByText("Создать")).toBeInTheDocument();
 
     // Dialog title reflects the preview row count.
-    expect(screen.getByRole("heading", { name: "Предпросмотр: 3 строк" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Предпросмотр: 3 строки" })).toBeInTheDocument();
 
     // Confirm import (2 non-error rows) -> done step.
-    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строк)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строки)" }));
     await screen.findByRole("heading", { name: "Импорт завершён" });
     expect(screen.getByText("Создано")).toBeInTheDocument();
     expect(screen.getByText("Писем отправлено")).toBeInTheDocument();
@@ -462,7 +463,7 @@ describe("<UsersPage /> — bulk import wizard", () => {
     bulkImportResult = { created: 0, updated: 0, skipped: 1, invitesSent: 0, errors: ["Строка 2: дубль"] };
     renderPage();
     await openBulkPreview();
-    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строк)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строки)" }));
     await screen.findByRole("heading", { name: "Импорт завершён" });
     expect(screen.getByText("Ошибки:")).toBeInTheDocument();
     expect(screen.getByText("Строка 2: дубль")).toBeInTheDocument();
@@ -489,7 +490,7 @@ describe("<UsersPage /> — bulk import wizard", () => {
     fireEvent.change(input, { target: { files: [new File(["x"], "bad.csv", { type: "text/csv" })] } });
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", title: "Ошибка", description: "Не тот формат" }),
+        expect.objectContaining({ tone: "error", title: "Ошибка", description: "Не тот формат" }),
       ),
     );
   });
@@ -502,10 +503,10 @@ describe("<UsersPage /> — bulk import wizard", () => {
     );
     renderPage();
     await openBulkPreview();
-    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строк)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строки)" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", title: "Ошибка импорта", description: "БД недоступна" }),
+        expect.objectContaining({ tone: "error", title: "Ошибка импорта", description: "БД недоступна" }),
       ),
     );
   });
@@ -618,7 +619,7 @@ describe("<UsersPage /> — reset attempts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Сбросить" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "destructive", description: "Не удалось сбросить попытки" }),
+        expect.objectContaining({ tone: "error", description: "Не удалось сбросить попытки" }),
       ),
     );
   });

@@ -7,18 +7,24 @@
  * so a non-UI client (curl/scripts/bypass) cannot persist an invalid test.
  *
  * The full client-side validator covers many other FR rules; this module
- * intentionally narrows to the two PRD-4 v1.1 contract additions:
+ * intentionally narrows to the PRD-4 v1.1 contract additions:
  *   - `(adaptive, linear_flat)` is blocked (deferred to a future PRD).
  *   - Strict gating: in adaptive mode every section in `sections[]` must
  *     have a matching adaptive topic with at least one configured level.
+ * and to one rule of the router («Сценарий в ИС», техдолг №8):
+ *   - the router's unlock rules must not form a ring — none of its items would
+ *     ever open. The editor does not offer such a choice, but the rules also
+ *     arrive through the API and the Excel workbook.
  */
 
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
+import { findUnlockCycle } from "@shared/flow/unlock-rules";
 import type { FlowMode } from "./content-pages-lifecycle";
 import type { AdaptiveTopicPayload, SectionPayload, TestPayload } from "./test-settings";
 
 /** A single validation violation, mirrors client `ValidationIssue` shape. */
 export type FlowPolicyViolation = {
-  code: "adaptive_flat_unsupported" | "adaptive_section_no_levels";
+  code: "adaptive_flat_unsupported" | "adaptive_section_no_levels" | "unlock_cycle";
   field: string;
   message: string;
 };
@@ -87,6 +93,21 @@ export function validateFlowPolicy(
             `adaptive level in adaptive mode (PRD-4 v1.1 strict gating).`,
         });
       }
+    }
+  }
+
+  // Rule 3: the router's unlock rules must not wait on each other in a ring.
+  if (flowMode === "router_by_topics") {
+    const rules = resolveFlowPolicy(test.flowPolicyJson).sectionUnlockRules ?? {};
+    const cycle = findUnlockCycle(rules);
+    if (cycle) {
+      violations.push({
+        code: "unlock_cycle",
+        field: "flowPolicyJson.router.sectionUnlockRules",
+        message:
+          `Пункты ждут друг друга по кругу (${cycle.join(" → ")} → ${cycle[0]}): ` +
+          "ни один из них не откроется. Уберите одно из условий открытия.",
+      });
     }
   }
 

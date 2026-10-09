@@ -123,7 +123,7 @@ let cpSeq = 0;
 function cp(args: {
   topicId: string | null;
   position: "before" | "after" | "before_topic" | "after_topic";
-  kind: "intro" | "info" | "summary" | "questions";
+  kind: "intro" | "info" | "summary" | "questions" | "results";
   type: "intro" | "info" | "summary" | "html";
   templateKey: string | null;
   sortOrder: number;
@@ -168,9 +168,12 @@ const contentPages = [
   // (4) info — test-scope «После теста», before summary
   cp({ topicId: null, position: "after", kind: "info", type: "info", templateKey: "info.text", sortOrder: 0,
     values: { title: "Перед подведением итогов", body: "<p>Сейчас вы увидите свой результат.</p>" } }),
-  // (5) summary — results
-  cp({ topicId: null, position: "after", kind: "summary", type: "summary", templateKey: "summary.result", sortOrder: 1,
-    values: { title: "Ваш результат" } }),
+  // (5) «Итоги теста» — системная строка `results`, ровно такая, какую создаёт редактор
+  // (`positionForKind` / `legacyTypeForKind`). Раньше образец нёс устаревший `kind: summary`,
+  // для которого граница «до итогов / после итогов» находилась, — поэтому приёмка не видела,
+  // что для настоящей строки `results` она не находится и страница (6) уходит ПЕРЕД итогами.
+  cp({ topicId: null, position: "after", kind: "results", type: "summary", templateKey: null, sortOrder: 1,
+    values: {} }),
   // (6) info — test-scope «После теста», after summary
   cp({ topicId: null, position: "after", kind: "info", type: "info", templateKey: "info.text", sortOrder: 2,
     values: { title: "Что дальше", body: "<p>Спасибо за прохождение! Рекомендуем повторить материал по слабым темам.</p>" } }),

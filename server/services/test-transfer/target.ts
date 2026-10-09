@@ -28,6 +28,7 @@ export async function buildTargetSnapshot(
 
   const [
     sections,
+    scenarios,
     scales,
     measurements,
     resultVariables,
@@ -39,6 +40,7 @@ export async function buildTargetSnapshot(
   ] = test
     ? await Promise.all([
         storage.getTestSections(testId),
+        storage.getTestScenarios(testId),
         storage.getScales(testId),
         storage.getQuestionMeasurements(testId),
         storage.getResultVariables(testId),
@@ -48,7 +50,7 @@ export async function buildTargetSnapshot(
         storage.getAdaptiveLevelsByTest(testId),
         storage.getAnsweredQuestionIds(testId),
       ])
-    : [[], [], [], [], [], [], [], [], []];
+    : [[], [], [], [], [], [], [], [], [], []];
 
   const adaptiveLevelLinks: Array<{ id: string }> = [];
   for (const level of adaptiveLevels) {
@@ -76,6 +78,7 @@ export async function buildTargetSnapshot(
   return {
     test: test ? { id: test.id } : null,
     sections: sections.map((s) => ({ id: s.id, topicId: s.topicId })),
+    scenarios: scenarios.map((s) => ({ id: s.id, topicId: s.topicId })),
     topics,
     scales: scales.map((s) => ({ id: s.id, key: s.key, label: s.label })),
     measurements: measurements.map((m) => ({

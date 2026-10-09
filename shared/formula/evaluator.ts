@@ -9,6 +9,7 @@
  * completion (NFR).
  */
 
+import { parseGroupThreshold, resolveTopGroup } from "./scale-group";
 import { scaleAtRank } from "./scale-rank";
 import {
   type Ast,
@@ -134,6 +135,21 @@ export function evaluate(node: Ast, ctx: EvalContext): FormulaValue {
       // then behaves as with any other absent value instead of naming a phantom scale.
       if (!entry) return null;
       return (entry as unknown as Record<string, FormulaValue>)[node.prop] ?? null;
+    }
+
+    case "scaleGroup": {
+      // Тот же порядок-разрешитель, что у `scaleRank`: авторский порядок шкал теста, а при его
+      // отсутствии — порядок ключей пространства имён, который `computeScales` наполняет по
+      // `sort_order`.
+      const order = ctx.scaleOrder ?? Object.keys(ctx.scales);
+      const threshold = parseGroupThreshold(node.threshold);
+      // Непонятный порог — неопределённое значение, а не исключение: ошибка формулы не должна
+      // ломать завершение попытки.
+      if (!threshold) return null;
+      const group = resolveTopGroup(node.keys, ctx.scales, order, threshold);
+      const value = (group as unknown as Record<string, FormulaValue>)[node.prop];
+      // `??`, а не `||`: пустой код и нулевой размер — законные значения пустой группы.
+      return value ?? null;
     }
 
     case "if":

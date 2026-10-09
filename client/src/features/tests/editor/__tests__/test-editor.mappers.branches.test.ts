@@ -50,7 +50,7 @@ function makeModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       allowReturnToUnanswered: true,
       allowAnswerChange: false,
       showSectionResults: true,
-      skipReviewWhenComplete: false,
+      skipReviewWhenComplete: false, closeSectionOnLeave: false,
       quickAdvance: false,
     },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
@@ -521,7 +521,7 @@ describe("apiToEditorModel — runtime and scalar defaults", () => {
       allowReturnToUnanswered: true,
       allowAnswerChange: true,
       showSectionResults: false,
-      skipReviewWhenComplete: false,
+      skipReviewWhenComplete: false, closeSectionOnLeave: false,
       quickAdvance: false,
       showDifficultyLevel: false,
     });
@@ -821,6 +821,20 @@ describe("apiToEditorModel — question scoring overrides", () => {
     }).scoring.questionOverrides;
     expect(o.scoringJson).toBeNull();
   });
+
+  it("collects questions excluded from delivery apart from the scoring overrides", () => {
+    const model = apiToEditorModel({
+      questionScoring: [
+        { questionId: "q1", excludedFromDelivery: true },
+        { questionId: "q2", points: 2, excludedFromDelivery: false },
+        { questionId: "q3", excludedFromDelivery: "yes" },
+      ],
+    });
+    expect(model.deliveryExcludedQuestionIds).toEqual(["q1"]);
+    // The flag never leaks into the override rows: saving them must not carry it.
+    expect(model.scoring.questionOverrides[0]).not.toHaveProperty("excludedFromDelivery");
+    expect(apiToEditorModel({}).deliveryExcludedQuestionIds).toEqual([]);
+  });
 });
 
 // ─── readRetakePolicyFromApi ──────────────────────────────────────────────────
@@ -844,6 +858,15 @@ describe("apiToEditorModel — retake policy", () => {
     expect(p.cooldownPeriodDays).toBe(40);
     expect(p).toMatchObject({ blockedPageId: "page-9" });
     expect(p.eligibilityPlugin).toEqual({ key: "wt", configId: "cfg-1", failPolicy: "failClosed" });
+  });
+
+  it("keeps the WebTutor course name and drops a non-string one", () => {
+    const named = apiToEditorModel({
+      retakePolicyJson: { enabled: true, lmsCourseName: "Курс (предфинальный тест)" },
+    }).retakePolicy;
+    expect(named.lmsCourseName).toBe("Курс (предфинальный тест)");
+    const junk = apiToEditorModel({ retakePolicyJson: { enabled: true, lmsCourseName: 5 } }).retakePolicy;
+    expect(junk).not.toHaveProperty("lmsCourseName");
   });
 
   it("defaults failPolicy to failOpen and omits configId when it is not a string", () => {

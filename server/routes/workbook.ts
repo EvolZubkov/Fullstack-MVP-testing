@@ -5,10 +5,13 @@
  * routes ({@link module:server/routes/tests-workbook}) with the two operations
  * the section page needs before a target test is known:
  *
- * - POST /inspect — read an uploaded .xlsx and report which role sheets it holds
- *   («Вопросы»/«Шкалы»/«Показатели»/«Вклады вопросов»/«Оценка»/«Структура»/
- *   «Квоты») WITHOUT a testId, so the client can decide whether a «Целевой
- *   тест» is required (only test-scoped sheets need one). No writes.
+ * - POST /inspect — read an uploaded .xlsx (or a users-list .csv) and report
+ *   its kind: an LMS report export (PRD-54), a users list, or a workbook with
+ *   its role sheets («Вопросы»/«Шкалы»/«Показатели»/«Вклады вопросов»/«Оценка»/
+ *   «Структура»/«Квоты») WITHOUT a testId, so the client can decide whether a
+ *   «Целевой тест» is required (only test-scoped sheets need one). Open to any
+ *   import right; a kind the caller may not import is refused with 403 (Э6).
+ *   No writes.
  * - POST /import-new?dryRun= — create a NEW (sectionless, draft) test from a
  *   title and import the workbook into it. `dryRun` validates and counts the plan
  *   against an empty target without creating anything. The title comes from the
@@ -28,15 +31,26 @@ import ExcelJS from "exceljs";
 import { logger } from "../logger";
 import {
   addAoaSheet,
+  readTableFromBuffer,
   readWorkbookFromBuffer,
   sheetToObjects,
   workbookToBuffer,
 } from "../utils/excel";
+import { detectUsersList, isZipUpload } from "../utils/users-list";
 import { storage } from "../storage";
-import { requirePermission } from "../middleware/auth";
+import { requireAnyPermission, requirePermission } from "../middleware/auth";
+import { canReadTestAnalytics } from "../services/test-access";
+import {
+  hasPermission,
+  IMPORT_CAPABILITIES,
+  IMPORT_KIND_CAPABILITY,
+  type ImportKind,
+} from "@shared/access";
 import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
 import { DOC_NOT_BUILT_ERROR, findDoc, resolveDocPath, sendDocDownload } from "../services/doc-downloads";
 import { importWorkbook } from "../services/workbook-import";
+import { looksLikeLmsExport, parseLmsExport, type LmsExportBook } from "@shared/lms-export/parse";
+import { rankCandidates, resolveTestByQuestionIds } from "../services/lms-test-resolver";
 import { testSettingsService } from "../services/test-settings";
 // The role-sheet names and the template itself live in one module, so /inspect
 // and the download can never disagree about what a role sheet is called.
@@ -67,18 +81,146 @@ function rowCount(sheet: ExcelJS.Worksheet | undefined): number {
   return sheet ? sheetToObjects(sheet).length : 0;
 }
 
+/**
+ * Лист как массив строк: `parseLmsExport` намеренно не знает про exceljs (PRD-54 раздел 10).
+ *
+ * ГОЧА ДАТ, найденная при прогоне на реальной выгрузке. Ячейки дат exceljs отдаёт объектами `Date`,
+ * и голый `String(date)` даёт ЛОКАЛИЗОВАННУЮ строку вида
+ * «Wed Sep 09 2026 16:39:00 GMT+0300 (Москва, стандартное время)». На машине разработчика она
+ * разбирается обратно, на хосте с другой локалью — может и не разобраться, и тогда дата
+ * прохождения молча станет Invalid Date. Поэтому дата приводится к ISO явно.
+ *
+ * @param sheet лист книги
+ * @returns строки листа, значения приведены к строкам
+ */
+function sheetToMatrix(sheet: ExcelJS.Worksheet): string[][] {
+  const out: string[][] = [];
+  sheet.eachRow({ includeEmpty: true }, (row) => {
+    const values = (row.values as unknown[]).slice(1);
+    out.push(values.map((v) => {
+      if (v === null || v === undefined) return "";
+      if (v instanceof Date) return v.toISOString();
+      return String(v);
+    }));
+  });
+  return out;
+}
+
+/** Тест-кандидат выгрузки LMS в ответе разбора: то, по чему человек отличит его от соседнего. */
+export interface LmsTestCandidate {
+  testId: string;
+  title: string;
+  status: string;
+  createdAt: Date | null;
+  /** Сколько вопросов файла стоят в разделах теста. */
+  matched: number;
+}
+
+/**
+ * Опознать выгрузку отчёта LMS (PRD-54 раздел 6.1).
+ *
+ * Отпечаток однозначен и ни с одним книжным форматом не пересекается: четвёрка подписей
+ * «Тип / Продолжительность (сек.) / Результат / Полученный ответ» во второй строке шапки плюс
+ * хотя бы один блок с нашим префиксом (`q_`, `scale_`, `var_`) в первой.
+ *
+ * @param sheet лист-кандидат
+ * @returns разобранная книга или `null`, если лист выгрузкой не является
+ */
+export function detectLmsExport(sheet: ExcelJS.Worksheet): LmsExportBook | null {
+  const matrix = sheetToMatrix(sheet);
+  return looksLikeLmsExport(matrix) ? parseLmsExport(matrix) : null;
+}
+
+/**
+ * Отказ разбора по виду файла, на который у пользователя нет права (Э6, решение владельца
+ * 2026-10-02: «без пояснений — просто отсутствие прав на выполнение операции»). `kind` в ответе
+ * остаётся: клиенту он нужен, чтобы не предлагать форму этого вида, а пользователю не
+ * показывается.
+ */
+export const IMPORT_DENIED_ERROR = "Недостаточно прав для выполнения операции";
+
+/**
+ * Разрешён ли пользователю вид файла; при отказе отвечает 403 сам.
+ *
+ * @returns `true`, если разбор можно продолжать
+ */
+function allowKind(req: Request, res: Response, kind: ImportKind): boolean {
+  if (hasPermission(req.effectiveRoles ?? [], IMPORT_KIND_CAPABILITY[kind])) return true;
+  res.status(403).json({ kind, error: IMPORT_DENIED_ERROR });
+  return false;
+}
+
 // ─── POST /api/workbook/inspect ──────────────────────────────────────────────
-// Report which role sheets the file holds so the client can decide whether a
-// target test is required. No testId, no writes — the lightweight nav-level gate.
+// Report what the file is so the «Импорт» section can show the form of its kind. No testId, no
+// writes. Open to ANY import right (Э6: «единая точка импорта»); a kind the caller has no right
+// to is refused only after it is recognised, because the right depends on what the file is.
 router.post(
   "/inspect",
-  requirePermission("questions.importExport"),
+  requireAnyPermission(IMPORT_CAPABILITIES),
   workbookUploadSingle("file"),
   async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "File required" });
 
-      const workbook = await readWorkbookFromBuffer(req.file.buffer);
+      // .csv is a users list only — the other kinds are books, so a text file is read as one
+      // sheet and must pass the users-list fingerprint below.
+      const workbook = await readTableFromBuffer(req.file.buffer);
+
+      // PRD-54: выгрузка отчёта LMS проверяется ПЕРВОЙ. Её отпечаток с ролевыми листами книги не
+      // пересекается, но и искать в ней листы «Вопросы»/«Шкалы» бессмысленно — это другой формат,
+      // и ответ у него другой формы.
+      const lms = workbook.worksheets.map(detectLmsExport).find(Boolean) ?? null;
+      if (lms) {
+        if (!allowKind(req, res, "lmsExport")) return;
+        const resolved = await resolveTestByQuestionIds(lms.questionIds, storage);
+        // Тест берётся из файла, поэтому и область проверяется здесь: менеджер, которому тест
+        // не виден в аналитике, не узнаёт даже его названия. Из нескольких кандидатов
+        // называются только видимые; не видно ни одного — тот же отказ, что и у одного.
+        const visible: LmsTestCandidate[] = [];
+        for (const c of resolved.candidates) {
+          const t = await storage.getTest(c.testId);
+          if (t && (await canReadTestAnalytics(req.effectiveRoles!, req.currentUser!.id, t))) {
+            visible.push({
+              testId: t.id,
+              title: t.title,
+              status: t.status,
+              createdAt: t.createdAt,
+              matched: c.matched,
+            });
+          }
+        }
+        if (resolved.candidates.length > 0 && visible.length === 0) {
+          return res.status(403).json({ kind: "lmsExport", error: IMPORT_DENIED_ERROR });
+        }
+        const test = resolved.testId ? visible[0] : null;
+        // Кандидаты нужны только для выбора: при однозначном тесте выбирать нечего.
+        const { ranked, recommendedTestId } = rankCandidates(resolved.testId ? [] : visible);
+        return res.json({
+          kind: "lmsExport",
+          sheets: workbook.worksheets.map((w) => w.name),
+          testId: test?.testId ?? null,
+          testTitle: test?.title ?? null,
+          candidates: ranked,
+          recommendedTestId,
+          foreignQuestionIds: resolved.foreign,
+          rows: lms.rows.length,
+          questionIds: lms.questionIds.length,
+          scaleKeys: lms.scaleKeys,
+          variableNames: lms.variableNames,
+          unknownColumns: lms.unknownColumns,
+        });
+      }
+
+      const usersRows = detectUsersList(workbook);
+      if (usersRows !== null) {
+        if (!allowKind(req, res, "users")) return;
+        return res.json({
+          kind: "users",
+          sheets: workbook.worksheets.map((w) => w.name),
+          rows: usersRows,
+        });
+      }
+
       const questions = findSheet(workbook, SHEET_QUESTIONS);
       const scales = findSheet(workbook, SHEET_SCALES);
       const resultVars = findSheet(workbook, SHEET_RESULT_VARS);
@@ -98,7 +240,16 @@ router.post(
       const requiresTest =
         hasScales || hasResultVariables || hasMeasurements || hasStructure || hasQuotas || hasScoring;
 
+      // A CSV that is not a users list is not a book either: keep the "not an .xlsx" answer the
+      // section has always given for it, rather than call it an empty book.
+      if (!hasQuestions && !requiresTest && !isZipUpload(req.file.buffer)) {
+        return res.status(400).json({ error: "Failed to read file", code: "not_a_zip" });
+      }
+      if (!allowKind(req, res, "workbook")) return;
+
       res.json({
+        // PRD-54: клиент ветвится по ОДНОМУ полю, а не по набору признаков.
+        kind: "workbook",
         sheets: workbook.worksheets.map((w) => w.name),
         hasQuestions,
         hasScales,

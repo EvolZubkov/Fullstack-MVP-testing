@@ -1,11 +1,15 @@
 /**
  * @module server/scorm/builders/ds-styles
  *
- * Vendors the UniversityRT design system and its brand font INTO the SCORM package
+ * Vendors the Skillum design system and its base font INTO the SCORM package
  * (revision «Стандартный» on ui-kit). The learner screens render from `.ou-*` markup;
  * for the package to look identical to the web host OFFLINE inside the LMS, the DS
- * stylesheet and the `RostelecomBasis` woff2 must travel in the zip — a CDN/font the
+ * stylesheet and the `Roboto` woff2 subsets must travel in the zip — a CDN/font the
  * LMS cannot reach would drop the scene to system fonts and unstyled markup.
+ *
+ * A template may override the typeface with its own `@font-face` + `--ou-font-family-base`
+ * in `styles/theme.css` (its whole directory is copied into the zip), which is how the
+ * branded variants ship a corporate face without the DS carrying it.
  *
  * The package `styles.css` sits at the zip ROOT, so the DS `@font-face`
  * `url('../fonts/…')` (authored relative to the ui-kit `css/` dir) is rewritten to the
@@ -29,8 +33,8 @@ import { buildPaletteBridge } from "@shared/template/palette-bridge";
 export const PACKAGE_FONT_DIR = "assets/fonts";
 
 /** DS stylesheet: source path in the repo, and the path the build writes into `dist`. */
-const DS_CSS_SOURCE = path.join("vendor", "ui-kit", "css", "university-rt.css");
-const DS_CSS_DIST = path.join("dist", "scorm", "assets", "ds", "university-rt.css");
+const DS_CSS_SOURCE = path.join("vendor", "ui-kit", "css", "skillum-ds.css");
+const DS_CSS_DIST = path.join("dist", "scorm", "assets", "ds", "skillum-ds.css");
 /** Brand-font directories: repo source, and the one the build writes into `dist`. */
 const FONT_SOURCE_DIR = path.join("client", "public", "fonts");
 const FONT_DIST_DIR = path.join("dist", "scorm", "assets", "fonts");
@@ -47,12 +51,18 @@ function resolveFromCwd(...relatives: string[]): string | null {
   return null;
 }
 
-/** Brand-font weights vendored into the package (woff2 only). */
+/**
+ * Base-font files vendored into the package. Roboto ships as a VARIABLE woff2 — one
+ * file per unicode subset, each covering the whole 100-900 weight scale — so the list
+ * is keyed by subset, not by weight. `Roboto-OFL.txt` travels with them: the SIL Open
+ * Font License requires its notice to accompany every copy of the font.
+ */
 export const PACKAGE_FONT_FILES = [
-  "RostelecomBasis-Light.woff2",
-  "RostelecomBasis-Regular.woff2",
-  "RostelecomBasis-Medium.woff2",
-  "RostelecomBasis-Bold.woff2",
+  "Roboto-latin.woff2",
+  "Roboto-latin-ext.woff2",
+  "Roboto-cyrillic.woff2",
+  "Roboto-cyrillic-ext.woff2",
+  "Roboto-OFL.txt",
 ];
 
 /**
@@ -101,7 +111,7 @@ export function readPackageFontFiles(): Record<string, Buffer> {
  * @param distDir Build output directory (the repo's `dist`, or a temp dir in tests).
  */
 export function copyDsAssetsInto(distDir: string): void {
-  const cssTarget = path.join(distDir, "scorm", "assets", "ds", "university-rt.css");
+  const cssTarget = path.join(distDir, "scorm", "assets", "ds", "skillum-ds.css");
   fs.mkdirSync(path.dirname(cssTarget), { recursive: true });
   fs.copyFileSync(path.resolve(process.cwd(), DS_CSS_SOURCE), cssTarget);
 

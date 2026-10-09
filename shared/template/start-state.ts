@@ -19,11 +19,20 @@
 
 import type { CtxCourse, CtxState, CtxStartCooldown } from "./context";
 import { buildCourseSubtitle } from "./course-subtitle";
+import { formatMinutesHuman } from "./duration";
+import { richTextToHtml, type RichTextFormat } from "./rich-text";
+import { buildCoursePassCondition, type PassConditionSection } from "./pass-condition";
 
 /** Test info shown on the start screen (maps to `course.*`). */
 export interface StartInfo {
   title: string;
   description?: string;
+  /**
+   * PRD-59: the format `description` is written in. Absent = `plain`, which is how
+   * a host that has not been taught about the field behaves — and how every test
+   * created before the track behaves.
+   */
+  descriptionFormat?: RichTextFormat | null;
   questionCount?: number;
   passPercent?: number | null;
   /**
@@ -40,9 +49,28 @@ export interface StartInfo {
    * correct answers is that same nonsense, printed before the learner even starts.
    */
   hasGradedContent?: boolean;
+  /**
+   * «Тест пройден, если» (`tests.pass_decision_policy`). Under «only required topics» and
+   * «every topic» the overall threshold does not decide the outcome — it is informational
+   * (a non-zero one is set only for the LMS), so the cover must not present it as THE
+   * condition. Absent — a host or a test that predates the policy: shown as before.
+   */
+  passDecisionPolicy?: string | null;
+  /**
+   * `tests.overall_pass_rule_json` and the sections — what the topic part of the pass
+   * condition (`course.passCondition`) is counted from. Absent — no topic tile.
+   */
+  overallPassRule?: unknown;
+  sections?: PassConditionSection[] | null;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   startPageContent?: string;
+  /**
+   * PRD-67: leaving a started section closes it (a test without sections: ends the
+   * attempt). The host resolves it with `testClosesOnLeave` — the setting is on AND some
+   * limit exists. Absent = false, how every host behaved before the setting.
+   */
+  closesOnLeave?: boolean;
 }
 
 /** Normalized start-screen facts (host adapts its own state into this). */
@@ -86,6 +114,14 @@ export interface StartRenderContext {
 }
 
 /**
+ * Whether the overall threshold takes part in the verdict under this «Тест пройден, если»
+ * policy. Unknown or absent — the pre-policy behaviour, where it always did.
+ */
+function overallThresholdDecides(policy: string | null | undefined): boolean {
+  return policy !== "required_topics_only" && policy !== "all_topics_passed";
+}
+
+/**
  * Assemble the start-screen action state. Mirrors the four cases of the bespoke
  * SCORM chrome, now shared so the web produces the identical model:
  *   1. no attempts + nothing to review        → exhausted note
@@ -98,8 +134,10 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
   const noAttempts = input.maxAttempts != null && input.completedAttempts >= input.maxAttempts;
   const hasCompleted = input.hasCompletedResults;
   // FR-20: a cooldown block any new attempt — it overrides resume/start (the
-  // learner cannot proceed), so resume is suppressed while blocked.
-  const blocked = !!input.cooldown;
+  // learner cannot proceed), so resume is suppressed while blocked. With the attempts
+  // spent there is no next attempt to wait for: «Повторный запуск будет доступен с …»
+  // would promise a start that never unlocks, so the exhausted state wins.
+  const blocked = !!input.cooldown && !noAttempts;
   const canResume = !!input.resume && !blocked;
 
   const state: CtxState = {
@@ -161,24 +199,44 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
   }
 
   const i = input.info;
+  // The topic tile of the cover: a measurement method has no condition to state at all.
+  const passCondition =
+    i.hasGradedContent === false ? null : buildCoursePassCondition(i.passDecisionPolicy, i.overallPassRule, i.sections);
   const course: CtxCourse = {
     title: i.title,
     // Header subtitle "Попытка N из M": the upcoming attempt is one past those
     // already completed. Same builder both hosts use on the question/обзор screens.
+    // With the limit spent there is no upcoming attempt — the last one is named
+    // instead, never «Попытка 2 из 1».
     subtitle: buildCourseSubtitle({
-      attemptNumber: input.completedAttempts + 1,
+      attemptNumber: noAttempts ? (input.maxAttempts as number) : input.completedAttempts + 1,
       maxAttempts: input.maxAttempts,
     }),
     description: i.description || "",
+    // PRD-59 FR-11: разметка едет ПАРНЫМ полем рядом со строкой, а не подменой её.
+    // Шаблон, связывающий только строку, продолжает работать и просто показывает
+    // текст без оформления.
+    descriptionHtml: richTextToHtml(i.description, i.descriptionFormat),
     questionCount: i.questionCount,
     // A measurement test has no pass threshold to speak of — the fact is dropped
     // here rather than in each layout, so every design template (and every future
     // one) inherits the rule from the ONE builder both hosts call. `null` is what
     // the layouts' `{{#if course.passPercent}}` already gates on.
-    passPercent: i.hasGradedContent === false ? null : i.passPercent,
+    // Nor is it shown when the topics, not the overall result, decide the outcome: the
+    // cover would name a condition the test does not have.
+    passPercent: i.hasGradedContent === false || !overallThresholdDecides(i.passDecisionPolicy) ? null : i.passPercent,
     timeLimitMinutes: i.timeLimitMinutes,
+    // The unit is decided by the ONE formatter both hosts share, not by each
+    // layout: a layout can only print the raw number, which reads «20160 мин»
+    // for a two-week budget.
+    timeLimitLabel: formatMinutesHuman(i.timeLimitMinutes),
     maxAttempts: i.maxAttempts,
     startPageContent: i.startPageContent || "",
+    // Only when true: a test without the setting keeps exactly the context it had.
+    ...(i.closesOnLeave === true ? { closesOnLeave: true } : {}),
+    // Only when the topics decide: a test under «Только общий результат» keeps exactly
+    // the context it had.
+    ...(passCondition ? { passCondition } : {}),
   };
 
   return { course, state };

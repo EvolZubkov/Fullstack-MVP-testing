@@ -76,9 +76,12 @@ describe("OutcomesEditor", () => {
     expect(screen.queryByText(/В формуле встречаются коды/i)).toBeNull();
   });
 
+  // PRD-53: толкование лежит в складке и у пустого исхода она закрыта — карточка,
+  // показывающая одну метку «не задано», прячет то, ради чего её открывают.
   it("правит толкование и оценку строки", () => {
     const onChange = vi.fn();
     render(<OutcomesEditor outcomes={OUTCOMES} index={0} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByText("Толкование для обучающегося"));
     fireEvent.change(screen.getByLabelText("толкование исхода 1"), {
       target: { value: "Ресурс восстанавливается" },
     });
@@ -92,6 +95,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
   return {
     key: "ee",
     label: "Истощение",
+    description: "",
     type: "number",
     aggregation: "sum",
     normalization: "none",
@@ -178,7 +182,7 @@ describe("круговой обход толкований через config_jso
     const reloaded = apiToEditorModel({
       id: "t1",
       title: "T",
-      scales: [{ id: "s1", key: "ee", label: "Истощение", type: "number", configJson, sortOrder: 0 }],
+      scales: [{ id: "s1", key: "ee", label: "Истощение", description: "", type: "number", configJson, sortOrder: 0 }],
     });
     expect(reloaded.scales[0].bands).toEqual([RICH_BAND]);
   });

@@ -19,6 +19,9 @@ import {
   unitOf,
   firstProperty,
   defaultCondition,
+  buildProfileFormula,
+  TEMPLATE_OPTIONS,
+  TEMPLATE_TYPE,
   type Condition,
   type ScaleRef,
   type TopicRef,
@@ -160,8 +163,8 @@ describe("result-variables-builder · topic addressing (PRD-2 §4.2)", () => {
 describe("result-variables-builder · pickers", () => {
   it("element options are grouped: overall, then Темы, then Шкалы", () => {
     const opts = elementOptions(TOPICS, SCALES);
-    expect(opts[0]).toEqual({ value: "overall", label: "Общий результат" });
-    expect(opts.find((o) => o.value === "topic:t-ethics")).toMatchObject({ label: "Этика", group: "Темы" });
+    expect(opts[0]).toEqual({ value: "overall", label: "Тест целиком" });
+    expect(opts.find((o) => o.value === "topic:t-ethics")).toMatchObject({ label: "Тема «Этика»", group: "Темы" });
     expect(opts.find((o) => o.value === "scale:fin")).toMatchObject({ label: "Финансы", group: "Шкалы" });
   });
 
@@ -184,5 +187,32 @@ describe("result-variables-builder · pickers", () => {
     expect(firstProperty("topic:t-ethics")).toBe("percent");
     expect(defaultCondition(SCALES)).toEqual({ element: "scale:fin", property: "percent", op: ">=", value: "70" });
     expect(defaultCondition([])).toEqual({ element: "overall", property: "percent", op: ">=", value: "70" });
+  });
+});
+
+describe("result-variables-builder · шаблон «Профиль по группе шкал» (PRD-53)", () => {
+  it("порождает каноничный DSL с абсолютным порогом", () => {
+    expect(buildProfileFormula({ keys: ["cel", "vdo", "kom", "pro"], threshold: 5, unit: "abs" })).toBe(
+      'topGroup(["cel","vdo","kom","pro"], 5).code',
+    );
+  });
+
+  it("порождает долевой порог строкой", () => {
+    expect(buildProfileFormula({ keys: ["cel", "pro"], threshold: 10, unit: "pct" })).toBe(
+      'topGroup(["cel","pro"], "10%").code',
+    );
+  });
+
+  it("порождённая формула проходит валидатор продукта", () => {
+    const formula = buildProfileFormula({ keys: ["fin", "law"], threshold: 5, unit: "abs" });
+    expect(validate(formula, "string", refs).errors).toEqual([]);
+  });
+
+  it("тип результата шаблона — строка", () => {
+    expect(TEMPLATE_TYPE.profile).toBe("string");
+  });
+
+  it("шаблон значится в списке", () => {
+    expect(TEMPLATE_OPTIONS.map((o) => o.value)).toContain("profile");
   });
 });

@@ -288,6 +288,50 @@
     {
       "formula": "IF(topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).tiedCount > 1, \"ничья\", \"лидер один\")",
       "expected": "ничья"
+    },
+    {
+      "formula": "topGroup([\"cel\",\"vdo\",\"kom\",\"pro\"], 5).code",
+      "expected": "cel+pro"
+    },
+    {
+      "formula": "topGroup([\"pro\",\"cel\",\"vdo\",\"kom\"], 5).code",
+      "expected": "cel+pro"
+    },
+    {
+      "formula": "topGroup([\"cel\",\"vdo\",\"kom\",\"pro\"], 5).count",
+      "expected": 2
+    },
+    {
+      "formula": "topGroup([\"cel\",\"vdo\",\"kom\",\"pro\"], 5).max",
+      "expected": 34
+    },
+    {
+      "formula": "topGroup([\"cel\",\"vdo\",\"kom\",\"pro\"], 20).code",
+      "expected": "cel+vdo+kom+pro"
+    },
+    {
+      "formula": "topGroup([\"cel\",\"vdo\",\"kom\",\"pro\"], \"10%\").code",
+      "expected": "cel+pro"
+    },
+    {
+      "formula": "topGroup([\"cel\",\"empty\"], 5).code",
+      "expected": "cel"
+    },
+    {
+      "formula": "topGroup([\"empty\"], 5).code",
+      "expected": ""
+    },
+    {
+      "formula": "topGroup([\"empty\"], 5).count",
+      "expected": 0
+    },
+    {
+      "formula": "topGroup([\"cel\",\"pro\"], \"десять\").code",
+      "expected": null
+    },
+    {
+      "formula": "IF(topGroup([\"cel\",\"vdo\",\"kom\",\"pro\"], 5).count > 1, \"набор\", \"один\")",
+      "expected": "набор"
     }
   ]
 }

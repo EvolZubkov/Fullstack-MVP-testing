@@ -1,16 +1,20 @@
 /**
  * @module tests/draw-blueprint
  * @description Unit tests for the PRD-11 stratified-draw engine
- * (shared/draw/blueprint.ts). A deterministic identity "shuffle" keeps the
+ * (shared/draw/blueprint.ts). A deterministic head-of-pool pick keeps the
  * selection order = input order so every scenario is exactly asserted
  * (PRD-11 §3a, §5; FR-02/03/03a/03b/04/06). The blueprint is a bare list of
  * per-tag strata (mode per-tag, default "exact").
+ *
+ * PRD-55 (FR-24): the engine takes a `pick(pool, k)` rather than a shuffle, so the
+ * deterministic stand-in below honours `k` itself — a stand-in that ignored it would
+ * hand the whole pool back and quietly stop testing the per-stratum counts.
  */
 import { describe, it, expect } from "vitest";
 import { drawSection, type DrawableQuestion } from "../shared/draw/blueprint";
 import type { DrawBlueprint } from "../shared/schema";
 
-const identity = <T,>(a: T[]): T[] => a;
+const identity = <T,>(a: T[], k: number): T[] => a.slice(0, k);
 const ids = (qs: DrawableQuestion[]) => qs.map((q) => q.id);
 
 function q(id: string, ...tags: string[]): DrawableQuestion {

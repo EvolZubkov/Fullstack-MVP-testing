@@ -17,7 +17,7 @@ import {
   Cluster,
   Grid,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 
 /**
  * The «Люди и назначения» section.

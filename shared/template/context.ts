@@ -20,7 +20,9 @@
 
 import type { CtxMeasureView } from "./measure-view";
 import type { CtxScalesChart } from "./scales-chart";
+import type { CtxScaleBars } from "./scale-bars";
 import type { CtxRecommendations } from "./recommendations";
+import type { CtxCoursePassCondition } from "./pass-condition";
 
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
@@ -32,12 +34,46 @@ export interface CtxCourse {
    */
   subtitle?: string;
   description?: string;
+  /**
+   * PRD-59 FR-11: the description as MARKUP, built by the core from the text and its
+   * format. Paired with `description` rather than replacing it — a template that
+   * binds the plain string keeps working and simply shows the text unformatted.
+   *
+   * Printed through the controlled-HTML channel (`{{& course.descriptionHtml }}`);
+   * the block is gated on the STRING, so an empty description prints nothing.
+   */
+  descriptionHtml?: string;
   questionCount?: number;
   passPercent?: number | null;
   timeLimitMinutes?: number | null;
+  /**
+   * The same limit as a learner-readable phrase, decomposed into days / hours /
+   * minutes by {@link module:shared/template/duration} — «14 дней», «2 ч 30 мин»,
+   * «45 мин». Paired with `timeLimitMinutes` rather than replacing it, so a
+   * template that binds the number keeps working.
+   *
+   * The unit belongs HERE and not in the layout: the DSL has no helpers, so a
+   * layout printing `{{ course.timeLimitMinutes }} мин` could only ever say
+   * «20160 мин» for a two-week budget. Empty string when the test has no limit.
+   */
+  timeLimitLabel?: string;
   maxAttempts?: number | null;
   /** Legacy intro text; migrated to a content page, normally empty (PRD-7 S10). */
   startPageContent?: string;
+  /**
+   * PRD-67 «Закрывать раздел при выходе»: true when leaving a started section closes it
+   * for good (in a test without sections — ends the attempt). Set on the start screen,
+   * so a layout can warn BEFORE the learner begins: `{{#if course.closesOnLeave}}`.
+   * The hosts already warn with their own notices; the shipped layouts do not print it.
+   */
+  closesOnLeave?: boolean;
+  /**
+   * The topic part of the pass condition when the «Тест пройден, если» policy makes the
+   * topics decide: `{ count, total, kind, countLabel, label }` — the cover tile «8 из 8 /
+   * обязательных тем для прохождения». Absent under «Только общий результат», for a
+   * measurement method and when no topic carries a threshold. Contract 3.14.0.
+   */
+  passCondition?: CtxCoursePassCondition;
 }
 
 /** A recommended course/event link for failed-topic guidance (SCORM-extra). */
@@ -79,6 +115,145 @@ export interface CtxTopicResultView extends CtxTopicFeedback {
   pointsLabel?: string;
   /** SCORM-extra: per-topic pass threshold, e.g. "Требуется: 70%". */
   requiredLabel?: string;
+  /**
+   * PRD-50: breakdown rows of this topic, Core-prepared. Absent when the author never
+   * turned them on, or when the topic carries no key at all — an empty array is falsy in
+   * the DSL, so the whole block (including its heading) disappears from the layout with it.
+   */
+  breakdown?: CtxBreakdownRow[];
+  /**
+   * ТОЛКОВАНИЕ темы — готовая разметка текста, объясняющего результат.
+   *
+   * Печатается ВСЕГДА, когда автор его написал: и у взятой темы, и у невзятой, и у темы без
+   * вердикта. Этим оно и отличается от обратной связи, которая выдаётся по своему правилу и
+   * уходит в сводный блок «Рекомендации» — здесь текста этого блока нет и быть не должно,
+   * иначе одна и та же мысль напечатается на экране дважды.
+   *
+   * Отсутствует, когда толкования нет ни у темы, ни у теста: пустая строка заставила бы
+   * макет печатать пустой блок.
+   */
+  interpretationHtml?: string;
+  /**
+   * Несёт ли хоть одна полоса разреза своё толкование.
+   *
+   * Признак РАСКЛАДКИ, а не данных: включённое толкование подтем разворачивает сетку
+   * колонок в список во всю ширину, и модификатор стоит на всей сетке — построчно этого не
+   * решить. Считает ядро, потому что макет (подмножество mustache) перебрать строки и
+   * свести ответ не умеет.
+   *
+   * Отсутствует, когда текстов нет: раскладка тогда остаётся сеткой, как была.
+   */
+  hasBreakdownNotes?: boolean;
+  /**
+   * Есть ли у темы что показать СПРАВА — толкование либо полосы подтем.
+   *
+   * Признак РАСКЛАДКИ, как и {@link hasBreakdownNotes}: строка темы разворачивается в две
+   * колонки только тогда, когда правой колонке есть что нести. Тема, у которой нет ни того,
+   * ни другого, печатается ровно так, как печаталась, — одной колонкой со сводкой и полосой.
+   *
+   * Считает ядро: макет умеет спросить о каждом поле по отдельности, но не умеет сложить
+   * два вопроса в один ответ, а модификатор стоит на всей карточке.
+   */
+  hasAside?: boolean;
+}
+
+/**
+ * PRD-50 FR-24 - FR-27 (§8.1): ONE named group of topic cards, with the counter the core
+ * has already counted and phrased.
+ *
+ * Named `topicGroups` on the result and not `blocks`: `result.blocks` is taken by the list
+ * of the results umbrella's sub-blocks (PRD-49), a different thing at a different level —
+ * FR-29 makes the choice explicit precisely because the two would be easy to confuse.
+ *
+ * The nesting is exactly ONE level deep (FR-24): a test holds groups, a group holds
+ * sections, and there is no tree. A group that no section joined is not here at all
+ * (FR-12), and a test that declares no groups gets no field at all — the layout then
+ * prints `result.topicResults` exactly as it always has (FR-27).
+ */
+export interface CtxTopicGroup {
+  /** Author key of the group (`tests.section_groups_json[].key`). */
+  key: string;
+  /** Heading of the group; may be empty if the author left it so. */
+  label: string;
+  /** The group's topic cards, in delivery order — the SAME objects as in `topicResults`. */
+  topics: CtxTopicResultView[];
+  /** Sections of the group with a PASSED verdict. */
+  passedCount: number;
+  /** Sections with ANY pronounced verdict — a section without one is not counted (FR-26). */
+  totalCount: number;
+  /** Ready-made counter, e.g. «1 / 2». Core-prepared: the layout computes nothing. */
+  counterLabel: string;
+}
+
+/**
+ * One breakdown row, prepared by the core: the layout only prints it (PRD-50 §8.1).
+ *
+ * The counts and the points are here from the FIRST release, not from the release that
+ * first prints them. A third-party template из реестра PRD-3 cannot show «верно 4 из 7»
+ * out of a bar width, and adding a field later is a contract change that has to be
+ * carried across both hosts and every shipped package.
+ *
+ * Строка снова несёт исход (PRD-50 §16, FR-54): `passed`, `passClass` и `requiredLabel`.
+ * Словесной метки у неё нет и не будет — строка узкая, и слово рядом с процентом дублировало
+ * бы цвет; вердикт СЛОВОМ говорит карточка темы вокруг. Шаблон, ничего о новых полях не
+ * знающий, печатает ровно то, что печатал: класс подставляется в атрибут, надпись гейтится
+ * своим `{{#if}}`.
+ */
+export interface CtxBreakdownRow {
+  key: string;
+  /** Delivered questions carrying this key (FR-01). */
+  items: number;
+  /** How many of those the learner answered. */
+  answered: number;
+  /** Points earned on them, one decimal (as `pointsLabel` rounds). */
+  earned: number;
+  /** Points they could bring, one decimal. */
+  possible: number;
+  /**
+   * The value of the basis the AUTHOR chose (`units` / `points`), one decimal —
+   * the unrounded twin of {@link barPercent}. A layout that wants a number prints
+   * this one and does not have to know which basis is in force.
+   */
+  percent: number;
+  /** Normalized share — every question weighs 1 (решение 4), one decimal. */
+  percentUnits: number;
+  /** Points share, one decimal. The verdict currency (FR-21), whatever is displayed. */
+  percentPoints: number;
+  /** Bar width in percent, rounded. */
+  barPercent: number;
+  /** Whether to print the number alongside the bar. */
+  showValue: boolean;
+  /** Ready-made value label, e.g. "50 %". Empty when showValue is false. */
+  valueLabel: string;
+  /** Исход подтемы: `true` / `false` / `null` — порога не было (FR-52). */
+  passed?: boolean | null;
+  /**
+   * Готовый модификатор строки: `is-pass`, `is-fail` или пусто. Пуст и тогда, когда автор
+   * выбрал окраску полос «по доле» или «нейтральную» (`breakdownBarFill`): полоса там
+   * вердикт не несёт, а исход остаётся в {@link passed}.
+   */
+  passClass?: string;
+  /**
+   * Готовая заливка полосы — значение CSS `background` (`linear-gradient(...)`), когда автор
+   * выбрал окраску «по доле»: цвет кодирует долю по рампе уровней теста
+   * ({@link module:shared/template/bar-fill}). Макет печатает его в `style` заливки:
+   * `{{#if barFill}} background: {{ barFill }};{{/if}}`. Отсутствует в остальных режимах и
+   * у пустой полосы.
+   */
+  barFill?: string;
+  /**
+   * Надпись порога, например «Нужно 70 %». Печатается только там, где автор включил показ
+   * значения: цвет без причины читается как приговор. Отсутствует, когда порога нет.
+   */
+  requiredLabel?: string;
+  /**
+   * ТОЛКОВАНИЕ подтемы — готовая разметка текста под её полосой.
+   *
+   * Приходит только когда автор включил показ (`breakdown_display_json.showInterpretation`):
+   * референс сертификата толкований подтем не печатает, и ни один существующий тест не
+   * должен получить их молча. Отсутствует, если текста нет или показ выключен.
+   */
+  interpretationHtml?: string;
 }
 
 /** A per-topic row for the adaptive results layout (level-based, no score). */
@@ -133,7 +308,49 @@ export interface CtxResult {
   correct?: number;
   earnedPoints?: number;
   possiblePoints?: number;
+  /**
+   * PRD-57 FR-41: часть ответов ждёт проверки, и результат на экране — ПРЕДВАРИТЕЛЬНЫЙ.
+   *
+   * Поле заводится сейчас, хотя проверки ещё нет: добавить его в контракт позже значит
+   * поднять версию и обновить внешние шаблоны из реестра PRD-3. Контракт несёт ФАКТ;
+   * текст и место — за шаблоном.
+   */
+  pendingReview?: boolean;
   topicResults?: Array<CtxTopicResultView | CtxAdaptiveTopicView>;
+  /**
+   * PRD-50 FR-24 - FR-27: the topic cards grouped into the author's named blocks, each with
+   * its counter. Present ONLY when the test declares groups AND at least one section joined
+   * one; absent otherwise, so a test without groups keeps today's screen (FR-27) and a
+   * third-party template from the PRD-3 registry that knows nothing of groups keeps
+   * printing the flat {@link topicResults} (FR-30, same principle).
+   *
+   * `topicResults` stays COMPLETE next to it — grouped and ungrouped cards alike. A layout
+   * that prints groups therefore gates on this field and prints
+   * `topicGroups` + {@link ungroupedTopics} INSTEAD of the flat list, never both.
+   */
+  topicGroups?: CtxTopicGroup[];
+  /**
+   * PRD-50 FR-28: the breakdown in the scope of the WHOLE TEST — one row per key, printed
+   * as its own sub-block of the results umbrella above (or beside) the topic cards.
+   *
+   * These rows are the records the core stored WITH the attempt, printed as they are. A
+   * key delivered in two sections has ALREADY been folded into a single test-scope record
+   * by `computeBreakdowns` (FR-04, a separate pass over the delivered items), so summing
+   * the per-topic rows here would produce a different — and wrong — number. That is the
+   * whole reason the block exists: one honest row for a key that lives in two sections.
+   *
+   * Present only when the author turned the block on ({@link CtxResult} is built from
+   * `tests.breakdown_display_json`) AND the attempt actually produced test-scope records;
+   * absent otherwise, so a test that never touched the setting keeps today's screen.
+   */
+  breakdown?: CtxBreakdownRow[];
+  /**
+   * PRD-50 FR-25: the cards that belong to no group, in their own order — printed AFTER
+   * all groups, as they are printed today. Travels beside {@link topicGroups} because the
+   * DSL cannot filter a list: without it a group-aware layout has no way to tell which of
+   * `topicResults` are already inside a group. Absent when every card found a group.
+   */
+  ungroupedTopics?: CtxTopicResultView[];
   // Adaptive variant:
   adaptive?: boolean;
   // SCORM-extras (web omits → gated layout blocks render nothing):
@@ -165,6 +382,17 @@ export interface CtxResult {
    * each with a domain, and for the rose a whole to divide.
    */
   scalesChart?: CtxScalesChart;
+  /**
+   * Линейчатая диаграмма шкал (вид шкал «Линейчатая диаграмма»): столбики всех шкал на
+   * ОДНОЙ оси. Печатается ВМЕСТО списка карточек и уживается с розой или радаром рядом —
+   * в отличие от них, это не выбор фигуры, а способ показать сами шкалы.
+   *
+   * Присутствует, только когда автор выбрал этот вид и диаграмму есть из чего собрать
+   * (хотя бы одна видимая шкала с доменом). Карточки при этом остаются в контексте:
+   * шаблон, чей макет о диаграмме не знает, обязан продолжать печатать их, поэтому выбор
+   * между списком и диаграммой стоит В РАЗМЕТКЕ, а не здесь.
+   */
+  scaleBars?: CtxScaleBars;
   /**
    * Class of the scales block: `tb-measures`, plus the `--chart` modifier when the
    * radar is drawn. Core-prepared because the DSL cannot append a class
@@ -209,13 +437,15 @@ export interface CtxResult {
  * ask `{{#if key == "scales"}}`, only whether a path is truthy.
  */
 export interface CtxResultBlock {
-  key: "summary" | "scales" | "indicators" | "topics";
+  key: "summary" | "scales" | "indicators" | "topics" | "breakdown";
   /** Effective heading; an empty string means the author switched the heading off. */
   heading: string;
   isSummary?: boolean;
   isScales?: boolean;
   isIndicators?: boolean;
   isTopics?: boolean;
+  /** PRD-50 FR-28: the test-scope breakdown block (`result.breakdown`). */
+  isBreakdown?: boolean;
 }
 
 /** What the results layout binds its footer against (`result.nav`). */
@@ -457,6 +687,22 @@ export interface CtxSectionIntro {
   hasIllustration: boolean;
   /** «Далее» action label. */
   continueLabel: string;
+  /**
+   * The threshold of this topic, ready to print: «Для прохождения: 70 %» /
+   * «Для прохождения: 7 баллов из 10» (by the DELIVERED variant). Empty string when the
+   * topic is not gated — the layout gates the line on the string. Contract 3.14.0.
+   */
+  passCondition?: string;
+  /**
+   * The topic is one the test verdict depends on («Обязательная тема»): set only under the
+   * «…обязательные темы» policies and only for a gated topic. Contract 3.14.0.
+   */
+  isRequired?: boolean;
+  /**
+   * System warning when the section has its own time limit: the countdown starts on the
+   * continue button and cannot be paused. Empty string without a limit. Contract 3.14.0.
+   */
+  timerWarning?: string;
 }
 
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */

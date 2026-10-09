@@ -50,6 +50,7 @@ export type EntityKind =
   | "test"
   | "topic"
   | "section"
+  | "scenario"
   | "question"
   | "scale"
   | "measurement"
@@ -96,6 +97,8 @@ export interface TargetSnapshot {
   /** The test carrying the package's identifier, if it is here at all. */
   test: { id: string } | null;
   sections: Array<{ id: string; topicId: string }>;
+  /** «Сценарий в ИС»: пункты-сценарии теста здесь — по идентификатору, как разделы. */
+  scenarios: Array<{ id: string; topicId: string }>;
   /** The package's topics as they exist here, each with its FULL question pool. */
   topics: Array<{ id: string; name: string; questions: Array<{ id: string; prompt: string }> }>;
   scales: Array<{ id: string; key: string; label: string }>;
@@ -318,6 +321,23 @@ function diffStructure(
       deletes: true,
       deletable: (row) => options.topics[row.topicId] === "replace",
       deleteTitle: (s) => `Раздел ${s.topicId}`,
+    }),
+  );
+
+  // «Сценарий в ИС»: пункт-сценарий — строка теста, как раздел, и подчиняется тому же правилу.
+  // Сопоставление ТОЛЬКО по идентификатору: на нём держится ключ `scenario:<id>` в порядке и
+  // правилах роутера, а одна тема-банк законно стоит в тесте несколькими пунктами.
+  ops.push(
+    ...reconcile({
+      entity: "scenario",
+      sources: content.scenarios ?? [],
+      targets: target.scenarios,
+      sourceId: (s) => s.id,
+      title: (s) => `Сценарий ${s.title ?? s.topicId}`,
+      handle: () => null,
+      deletes: true,
+      deletable: (row) => options.topics[row.topicId] === "replace",
+      deleteTitle: (s) => `Сценарий ${s.topicId}`,
     }),
   );
 

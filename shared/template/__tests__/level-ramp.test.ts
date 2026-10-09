@@ -1,6 +1,6 @@
 // shared/template/__tests__/level-ramp.test.ts
 import { describe, it, expect } from "vitest";
-import { LEVEL_SCHEMES, parseHsl, rampColor, zoneColors } from "../level-ramp";
+import { LEVEL_SCHEMES, parseHsl, rampColor, rampFromParams, zoneColors } from "../level-ramp";
 
 const TRAFFIC = LEVEL_SCHEMES.traffic;
 
@@ -72,5 +72,39 @@ describe("zoneColors", () => {
 
   it("на нуле зон отдаёт пустой список", () => {
     expect(zoneColors(TRAFFIC, 0, "higher_is_better")).toEqual([]);
+  });
+});
+
+describe("rampFromParams (PRD-56 FR-21a)", () => {
+  it("именованная схема берётся целиком", () => {
+    expect(rampFromParams({ levelScheme: "neutral" })).toEqual(LEVEL_SCHEMES.neutral);
+  });
+
+  it("без настройки — светофор: та же рампа, что видит участник в итогах", () => {
+    expect(rampFromParams({})).toEqual(LEVEL_SCHEMES.traffic);
+  });
+
+  it("своя схема берёт авторские цвета", () => {
+    const ramp = rampFromParams({
+      levelScheme: "custom",
+      levelColorFavorable: "200 50% 50%",
+      levelColorMid: "100 50% 50%",
+      levelColorUnfavorable: "0 50% 50%",
+    });
+
+    expect(ramp).toEqual({
+      favorable: "200 50% 50%",
+      mid: "100 50% 50%",
+      unfavorable: "0 50% 50%",
+    });
+  });
+
+  it("недозаполненная своя схема падает на концы светофора, а не на пустоту", () => {
+    // Половина формы — обычное дело; рампа без конца не нарисует ни одной зоны.
+    const ramp = rampFromParams({ levelScheme: "custom" });
+
+    expect(ramp.favorable).toBe(LEVEL_SCHEMES.traffic.favorable);
+    expect(ramp.unfavorable).toBe(LEVEL_SCHEMES.traffic.unfavorable);
+    expect(ramp.mid).toBeNull();
   });
 });

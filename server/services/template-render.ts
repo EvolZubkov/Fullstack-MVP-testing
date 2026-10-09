@@ -18,7 +18,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildResultContext, buildAdaptiveResultContext, type MeasuresSource } from "./result-context";
-import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
+import {
+  buildTemplateCssVars,
+  buildTemplateDataAttrs,
+  withParamDefaults,
+  type TemplateParamDef,
+} from "@shared/template/params-css";
 import { buildPaletteBridge } from "@shared/template/palette-bridge";
 import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/template/theme-css";
 import { resolveThemeParams } from "@shared/template/theme-params";
@@ -34,6 +39,10 @@ import {
   type ReportKind,
   type ReportLabelLayers,
 } from "@shared/report/report-variants";
+import {
+  resolveReportDocument,
+  type ReportBlockRowInput,
+} from "@shared/report/report-document";
 import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
 
 /**
@@ -84,6 +93,15 @@ export interface ScreenRenderPayload {
    * `prefers-color-scheme` rules to decide.
    */
   dataTheme?: "light" | "dark";
+  /**
+   * Design-param values a template asked to receive as data attributes on the scene
+   * root (manifest `dataAttr`), built by the SHARED
+   * {@link module:shared/template/params-css buildTemplateDataAttrs} — the same map
+   * the SCORM runtime applies. A template CSS selects on them
+   * (`[data-brand-logo="b2b"] …`), which a CSS custom property cannot do. Omitted
+   * when no param declares one.
+   */
+  dataAttrs?: Record<string, string>;
   /**
    * PRD-23: whether the ACTIVE template declares a choice of palettes. Under «Авто»
    * the host needs it to pick the same palette the package picks (see the shared
@@ -183,8 +201,11 @@ function readFileSafe(p: string): string {
 /**
  * Read a template's manifest `params[]` (the CSS-var definitions) from its dir.
  * Empty on any read/parse failure — branding then simply falls back to theme.css.
+ *
+ * Exported for readers of the design params that render no screen (the scale analytics):
+ * they need the same manifest defaults the screen resolves its params with.
  */
-function readManifestParams(dir: string): TemplateParamDef[] {
+export function readManifestParams(dir: string): TemplateParamDef[] {
   return readBrandingManifest(dir).params ?? [];
 }
 
@@ -281,7 +302,13 @@ export function readReportLabelKeys(dir: string): string[] | null {
     if (variants.length === 0) return null;
     const declarations = readResultsDeclarations(dir).labels;
     if (declarations.length === 0) return [];
-    const layouts = variants
+    // PRD-51: искать надо и в раскладках БЛОКОВ документа, а не только в цельной оболочке.
+    // С разбором отчёта на блоки надписи переехали в них: зонтичный заголовок живёт теперь
+    // в `layouts/report/summary.html`, и сканер, читавший одну оболочку, переставал
+    // предлагать автору половину словаря — редактор надписей молча пустел.
+    const blockVariants = (manifest as { contentTemplates?: Array<{ kind?: string; layoutFile?: unknown }> })
+      ?.contentTemplates?.filter((v) => v?.kind === "report.block") ?? [];
+    const layouts = [...variants, ...blockVariants]
       .map((v) => (typeof v.layoutFile === "string" ? readFileSafe(path.join(dir, v.layoutFile)) : ""))
       .filter(Boolean);
     return declarations
@@ -392,6 +419,7 @@ export function readScreenTemplate(
     const resolved = resolveThemeParams(design, manifest);
     const base = resolved.base;
     const cssVars = buildTemplateCssVars(base, manifest.params);
+    const dataAttrs = buildTemplateDataAttrs(base, manifest.params);
     const themeCss = buildTemplateThemeCss(design, manifest, { rootSelector: ":host" });
     const dataTheme = sceneThemeAttribute(design, manifest);
     const logoUrl = resolveMediaUrl(base?.logoUrl);
@@ -412,12 +440,20 @@ export function readScreenTemplate(
     // come from THIS resolution, not from a second one. A pinned palette contributes
     // its colours; under «Авто» there is no server-side answer to which palette the
     // browser will paint, so only the palette-independent params travel.
-    const params = { ...base, ...(dataTheme ? resolved.byTheme[dataTheme] ?? {} : {}) };
+    //
+    // What the author left untouched is filled from the manifest's `default` — the same
+    // fallback the CSS vars and data attributes above have always taken. Without it Core
+    // painted its own hard-coded choice while the editor showed the template's.
+    const params = withParamDefaults(
+      { ...base, ...(dataTheme ? resolved.byTheme[dataTheme] ?? {} : {}) },
+      manifest.params,
+    );
     return {
       layout,
       css: bridge ? `${css}\n${bridge}` : css,
       theme: { background: cssVar(css, "background"), foreground: cssVar(css, "foreground") },
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
+      ...(Object.keys(dataAttrs).length > 0 ? { dataAttrs } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(dataTheme ? { dataTheme } : {}),
       ...(supportsThemes(manifest) ? { themed: true } : {}),
@@ -560,6 +596,11 @@ export function readReportRenderPayload(
   paramsDir?: string,
   assetTemplateId?: string,
   labelLayers?: ReportLabelLayers | null,
+  /**
+   * PRD-51: строки документа отчёта для ветви режима. Пусто — документ по умолчанию
+   * шаблона; шаблон без объявленных блоков печатает цельную раскладку (§5.4).
+   */
+  documentRows?: readonly ReportBlockRowInput[],
 ): {
   layout: string;
   css: string;
@@ -570,6 +611,19 @@ export function readReportRenderPayload(
   themeCss?: string;
   design?: Record<string, string>;
   labels?: ResolvedLabels;
+  /**
+   * Блоки документа с их раскладками. ОТСУТСТВУЮТ у шаблона, печатающего цельную
+   * раскладку: клиент различает эти два случая и во втором рисует `layout` как раньше.
+   */
+  blocks?: Array<{
+    block: string;
+    nature: string;
+    enabled: boolean;
+    layout: string;
+    placeholders: Array<{ key: string; type: string }>;
+    values: Record<string, unknown>;
+    settings: Record<string, unknown>;
+  }>;
 } | null {
   try {
     const raw = readFileSafe(path.join(dir, "manifest.json"));
@@ -606,6 +660,25 @@ export function readReportRenderPayload(
           screen: "report",
         })
       : {};
+    // PRD-51 §5.3: ДОКУМЕНТ для веб-выдачи. Состав считает та же функция, что и пакет, а
+    // раскладки читаются здесь: клиент файлов шаблона не видит. Блок, чьей раскладки в
+    // шаблоне нет, пропускается — показать вместо него пустоту честнее, чем уронить весь
+    // документ из-за одного отсутствующего файла (так же поступает предпросмотр).
+    const document = resolveReportDocument(manifest, kind, documentRows ?? []);
+    const blocks = document.monolithic
+      ? undefined
+      : document.blocks
+          .map((b) => ({
+            block: b.block,
+            nature: b.nature,
+            enabled: b.enabled,
+            layout: b.layoutFile ? readFileSafe(path.join(dir, b.layoutFile)) || "" : "",
+            placeholders: b.placeholders,
+            values: b.values,
+            settings: b.settings,
+          }))
+          .filter((b) => b.nature === "page-break" || b.layout.length > 0);
+
     return {
       layout,
       css,
@@ -618,6 +691,7 @@ export function readReportRenderPayload(
       ...(themeCss ? { themeCss } : {}),
       ...(logoUrl ? { design: { logoUrl } } : {}),
       ...(Object.keys(labels).length ? { labels } : {}),
+      ...(blocks ? { blocks } : {}),
     };
   } catch {
     return null;

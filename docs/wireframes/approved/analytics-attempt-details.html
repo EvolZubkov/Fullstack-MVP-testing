@@ -44,7 +44,7 @@
     -->
     <title>Аналитика — детализация попытки</title>
     <!--
-      ЖИВАЯ копия DS, а не снимок `docs/wireframes/ds/university-rt.css`: снимок отстал
+      ЖИВАЯ копия DS, а не снимок `docs/wireframes/ds/skillum-ds.css`: снимок отстал
       (342 КБ против 365 КБ) и НЕ СОДЕРЖИТ примитива `Box` (`.ou-box*`) — того самого,
       из которого собраны плитки этого окна в реальном коде. Рисовать эскиз по снимку
       значило бы либо самому написать `.ou-box`, либо подменить плитки чем-то другим:
@@ -58,11 +58,11 @@
       «Пройден» выходил бесцветным. Эскизные листы нужны только ради `wf-*` каркаса —
       за `ou-*` отвечает DS, и последнее слово должно быть за ним.
     -->
-    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
-    <script defer src="/docs/wireframes/prd7-shared.js"></script>
-    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
-    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
-    <link rel="stylesheet" href="/vendor/ui-kit/css/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css?v=2" />
+    <script defer src="/docs/wireframes/prd7-shared.js?v=2"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css?v=2" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css?v=2" />
+    <link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css?v=2" />
     <style>
       /* WIREFRAME-каркас: только эскизные утилиты на токенах. */
       .wf-sprite { display: none; }
@@ -79,16 +79,18 @@
 
       /* Ряд плиток шапки — это Grid minItem="sm" существующего окна. */
       .wf-tiles {
+        /* Плитки ряда — ОДНОРОДНЫЕ сущности: интервал 1x (4 px). */
         display: grid; gap: var(--ou-space-1);
         grid-template-columns: repeat(auto-fit, minmax(var(--wf-size-160, 10rem), 1fr));
-        margin-bottom: var(--ou-space-6);
+        margin-bottom: var(--ou-space-4);
       }
       .wf-tile-inner { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-1); }
       .wf-tile-val { font: var(--ou-text-display-s); font-weight: 700; }
       .wf-tile-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
       .wf-tile-center { justify-content: center; height: 100%; }
 
-      .wf-stack > * + * { margin-top: var(--ou-space-6); }
+      /* Карточки блоков — ОДНОРОДНЫЕ сущности: интервал 1x (4 px). */
+      .wf-stack > * + * { margin-top: var(--ou-space-1); }
       .wf-answers > * + * { margin-top: var(--ou-space-3); }
 
       /* Строка ответа — это Box border radius="l" существующего окна. */
@@ -110,6 +112,8 @@
 
       .wf-measure-grid { display: grid; gap: var(--ou-space-2); }
       .wf-sep { border: 0; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-4) 0; }
+      /* Заголовок окна и тег состояния попытки — одной строкой. */
+      .ou-modal__head-text { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
       .wf-muted { color: var(--ou-fg-muted); }
     </style>
   </head>
@@ -158,6 +162,7 @@
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h1 class="ou-modal__title" id="m-title">Детализация попытки <span class="wf-muted">— Приёмка</span></h1>
+              <span class="ou-tag ou-tag--neutral">Завершена</span>
             </div>
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
           </header>
@@ -182,11 +187,6 @@
                   <div class="wf-tile-inner">
                     <span class="wf-tile-val">1:18</span>
                     <span class="wf-tile-lbl">Время</span>
-                  </div>
-                </div>
-                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
-                  <div class="wf-tile-inner wf-tile-center">
-                    <span class="ou-tag ou-tag--neutral ou-tag--l">Завершена</span>
                   </div>
                 </div>
               </div>
@@ -351,6 +351,7 @@
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h1 class="ou-modal__title" id="c-title">Детализация попытки <span class="wf-muted">— Иванов Пётр</span></h1>
+              <span class="ou-tag ou-tag--success">Пройден</span>
             </div>
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
           </header>
@@ -367,9 +368,6 @@
                 </div>
                 <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
                   <div class="wf-tile-inner"><span class="wf-tile-val">14:07</span><span class="wf-tile-lbl">Время</span></div>
-                </div>
-                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
-                  <div class="wf-tile-inner wf-tile-center"><span class="ou-tag ou-tag--success ou-tag--l">Пройден</span></div>
                 </div>
               </div>
 
@@ -474,6 +472,7 @@
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h1 class="ou-modal__title" id="a-title">Детализация попытки <span class="wf-muted">— Смирнова Анна</span></h1>
+              <span class="ou-tag ou-tag--success">Пройден</span>
             </div>
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
           </header>
@@ -489,9 +488,6 @@
                 </div>
                 <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
                   <div class="wf-tile-inner"><span class="wf-tile-val">21:40</span><span class="wf-tile-lbl">Время</span></div>
-                </div>
-                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
-                  <div class="wf-tile-inner wf-tile-center"><span class="ou-tag ou-tag--success ou-tag--l">Пройден</span></div>
                 </div>
               </div>
 

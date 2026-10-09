@@ -10,11 +10,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Box, Stack, Cluster, Text } from "@universityrt/ui-kit";
+import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Box, Stack, Cluster, Text, useToast } from "@skillum/ui-kit";
 import { Trash2, KeyRound } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
-import { useToast } from "@/hooks/use-toast";
 
 type AccessLevel = "edit" | "assign";
 
@@ -63,7 +62,7 @@ export function TestAccessPanel({
   test: { id: string; title: string } | null;
   onClose: () => void;
 }) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const open = test !== null;
   const testId = test?.id ?? null;
@@ -149,10 +148,10 @@ export function TestAccessPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       if (testId) queryClient.invalidateQueries({ queryKey: ["/api/tests", testId, "access"] });
-      toast({ title: "Доступ сохранён" });
+      toast({ tone: "success", title: "Доступ сохранён" });
       onClose();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   const addGrant = () => {
@@ -225,7 +224,7 @@ export function TestAccessPanel({
               options={addableUsers.map((u) => ({
                 value: u.id,
                 label: displayName(u),
-                searchText: `${u.name ?? ""} ${u.email}`,
+                searchText: `${u.name ?? ""} ${u.email ?? ""}`,
                 meta: formatRoles(u.roles as Role[] | undefined) || undefined,
               }))}
             />
@@ -251,8 +250,8 @@ export function TestAccessPanel({
               // The per-row level Select renders its menu inline (position:
               // absolute), and the DS Table root (.ou-tbl) sets overflow:hidden
               // to clip its rounded corners — which also clips the open menu.
-              // Relax it here so the dropdown can extend past the table edge.
-              style={{ overflow: "visible" }}
+              // `tb-tbl--menus` relaxes it and keeps the corners rounded.
+              className="tb-tbl--menus"
               rowKey={(g) => g.userId}
               rows={grants}
               columns={[

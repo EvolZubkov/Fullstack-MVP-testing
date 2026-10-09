@@ -16,7 +16,12 @@ import { ReportPreviewModal } from "../report-preview-modal";
 import type { ReportVariantOption } from "../../use-report-variants";
 
 /** Захваченные вызовы рендерера: окно обязано ходить через него, а не верстать само. */
-const rendered: Array<{ layout: string; context: Record<string, unknown>; css?: string }> = [];
+const rendered: Array<{
+  layout: string;
+  context: Record<string, unknown>;
+  css?: string;
+  blocks?: Array<{ block: string; enabled: boolean; values: Record<string, unknown> }>;
+}> = [];
 
 vi.mock("@/components/template-screen", () => ({
   // Двойник рисует страницу в НАСТОЯЩИЙ теневой корень и зовёт `onShadowReady`: окно
@@ -26,12 +31,14 @@ vi.mock("@/components/template-screen", () => ({
     layout: string;
     context: unknown;
     css?: string;
+    blocks?: unknown;
     onShadowReady?: (shadow: ShadowRoot) => void;
   }) => {
     rendered.push({
       layout: props.layout,
       context: props.context as Record<string, unknown>,
       css: props.css,
+      blocks: props.blocks as Array<{ block: string; enabled: boolean; values: Record<string, unknown> }>,
     });
     // Сцена ставится ОДИН раз, как у настоящего компонента: он перестраивает теневое
     // дерево только при смене входов, а не на каждый ререндер родителя. Иначе счётчик
@@ -86,6 +93,7 @@ function renderModal(over: Partial<Parameters<typeof ReportPreviewModal>[0]> = {
         testName={over.testName ?? "Сертификация руководителей"}
         sections={over.sections ?? [{ topicId: "t1", topicName: "Управление", questionCount: 10 }]}
         levelNames={over.levelNames}
+        document={over.document}
       />
     </QueryClientProvider>,
   );
@@ -317,5 +325,79 @@ describe("блок измерений в предпросмотре (PRD-47 §5.
     await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
 
     expect((lastContext().result as { scales?: unknown[] }).scales).toBeUndefined();
+  });
+});
+
+// ─── PRD-51: предпросмотр показывает СОБРАННЫЙ АВТОРОМ документ (FR-18) ──────────
+
+describe("документ из блоков (PRD-51 FR-18)", () => {
+  /** Шаблон, объявивший блоки: только с ним предпросмотру есть что собирать. */
+  const BLOCK_BUNDLE = {
+    ...BUNDLE,
+    manifest: {
+      params: [],
+      reportDocument: { report: ["header", "summary", "topics"] },
+      contentTemplates: [
+        { key: "b.header", kind: "report.block", block: "header", label: "Шапка", isDefault: true, layoutFile: "layouts/report/header.html" },
+        { key: "b.summary", kind: "report.block", block: "summary", label: "Сводка", isDefault: true, layoutFile: "layouts/report/summary.html" },
+        { key: "b.topics", kind: "report.block", block: "topics", label: "Темы", isDefault: true, layoutFile: "layouts/report/topics.html" },
+        { key: "b.page", kind: "report.block", block: "page", label: "Текст", isDefault: true, layoutFile: "layouts/report/page.html", placeholders: [{ key: "body", type: "richText", label: "Текст" }] },
+      ],
+    },
+    layouts: {
+      ...BUNDLE.layouts,
+      "layouts/report/header.html": "<div>ШАПКА</div>",
+      "layouts/report/summary.html": "<div>СВОДКА</div>",
+      "layouts/report/topics.html": "<div>ТЕМЫ</div>",
+      "layouts/report/page.html": "<div>СТРАНИЦА</div>",
+    },
+  };
+
+  const lastBlocks = () => rendered[rendered.length - 1].blocks ?? [];
+
+  it("без черновика показывает документ ПО УМОЛЧАНИЮ шаблона", async () => {
+    mockFetch(BLOCK_BUNDLE);
+    renderModal({ variant: null });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastBlocks().map((b) => b.block)).toEqual(["header", "summary", "topics"]);
+  });
+
+  it("показывает ПОРЯДОК черновика, а не порядок шаблона", async () => {
+    mockFetch(BLOCK_BUNDLE);
+    renderModal({
+      variant: null,
+      document: [
+        { block: "topics", templateKey: null, enabled: true, values: {}, settings: {} },
+        { block: "header", templateKey: null, enabled: true, values: {}, settings: {} },
+      ],
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    // «Сводка» дописана в конец выключенной: шаблон её объявляет, а черновик — нет (§5.1).
+    expect(lastBlocks().map((b) => b.block)).toEqual(["topics", "header", "summary"]);
+  });
+
+  it("переносит выключение блока — автор смотрит то, что напечатается", async () => {
+    mockFetch(BLOCK_BUNDLE);
+    renderModal({
+      variant: null,
+      document: [
+        { block: "header", templateKey: null, enabled: true, values: {}, settings: {} },
+        { block: "summary", templateKey: null, enabled: false, values: {}, settings: {} },
+      ],
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastBlocks().find((b) => b.block === "summary")?.enabled).toBe(false);
+  });
+
+  it("показывает НЕСОХРАНЁННЫЙ текст авторской страницы", async () => {
+    mockFetch(BLOCK_BUNDLE);
+    renderModal({
+      variant: null,
+      document: [
+        { block: "page", templateKey: "b.page", enabled: true, values: { body: "Ещё не сохранено" }, settings: {} },
+      ],
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastBlocks().find((b) => b.block === "page")?.values.body).toBe("Ещё не сохранено");
   });
 });

@@ -22,7 +22,9 @@
  */
 
 import type { QuestionScoring, ScoringPredicate } from "../schema";
-import { isSingleIndexChoice } from "../questions/question-type";
+import { hasBlanks, isSimulation, isSingleIndexChoice, isTextEntry } from "../questions/question-type";
+import { DEFAULT_SIM_PENALTIES, simulationRatio, type GradedRun } from "../sim/scoring";
+import { checkRuleSet, type AnswerRuleSet, type RuleVerdicts } from "../answer-check/rules";
 
 /**
  * Re-exported from the type-trait module so the scoring engine and the rest of the
@@ -31,8 +33,24 @@ import { isSingleIndexChoice } from "../questions/question-type";
 export type { QuestionType } from "../questions/question-type";
 import type { QuestionType } from "../questions/question-type";
 
-/** Learner answer shapes by question type (runtime encoding). */
-export type Answer = number | number[] | Record<string, number> | null | undefined;
+/**
+ * Learner answer shapes by question type (runtime encoding).
+ *
+ * The dictionary comes in two flavours and they belong to different types: matching keys a
+ * left item to a right INDEX, blanks key a blank name to what the learner TYPED (PRD-57
+ * FR-24). One union rather than two aliases, because every consumer switches on the
+ * question type anyway.
+ */
+export type Answer =
+  | number
+  | number[]
+  | string
+  | Record<string, number>
+  | Record<string, string>
+  // «Сценарий в ИС»: результат прогона плеера (`SimResult` или его часть, которую читает оценка).
+  | GradedRun
+  | null
+  | undefined;
 
 /** correct_json fields by type (a permissive superset for easy access). */
 export interface CorrectData {
@@ -40,6 +58,15 @@ export interface CorrectData {
   correctIndices?: number[];
   pairs?: Array<{ left: number; right: number }>;
   correctOrder?: number[];
+  /**
+   * PRD-57 §6.1: the comparison rules of a typed answer. Read-only — the engine never
+   * mutates an answer key, and callers pass frozen literals.
+   */
+  answerKind?: "text" | "number";
+  join?: "any" | "all";
+  rules?: readonly unknown[];
+  /** PRD-57 FR-24: наборы правил по пропускам задания «Пропуски». */
+  blanks?: readonly unknown[];
 }
 
 export interface ScoreInput {
@@ -47,6 +74,12 @@ export interface ScoreInput {
   correct: CorrectData;
   answer: Answer;
   scoring?: QuestionScoring | null;
+  /**
+   * PRD-57 Э7: verdicts a host with a killable executor has already computed for the
+   * expression rules of THIS answer. Absent everywhere the budget cannot be enforced —
+   * the rules then run where they are checked, exactly as before.
+   */
+  verdicts?: RuleVerdicts;
 }
 
 export interface ScoreResult {
@@ -65,7 +98,7 @@ export interface ScoreResult {
  */
 export interface ScoreExplain extends ScoreResult {
   /** The scoring method that was applied. */
-  kind: "exact" | "weighted" | "tiered";
+  kind: "exact" | "weighted" | "tiered" | "simulation";
   /** Whether the learner gave a non-empty answer (an empty answer always scores 0). */
   answered: boolean;
   /** Correctly-selected units (`c`). */
@@ -74,6 +107,13 @@ export interface ScoreExplain extends ScoreResult {
   x: number;
   /** Per-type total (`T` options / `P` pairs / `N` items). */
   total: number;
+  /**
+   * Zero-based index of the tier that produced the score, or `null` when no tier
+   * applied — a non-tiered method, an unanswered question, or the implicit
+   * «иначе → 0» fall-through. The step table is ordered by priority, so «which
+   * row fired» is the answer to «why this score» (PRD-10 §7 preview).
+   */
+  tierIndex: number | null;
 }
 
 /** Answer tallies; `total` is the per-type T (options) / P (pairs) / N (items). */
@@ -91,8 +131,40 @@ function maxOf(nums: number[]): number {
   return nums.reduce((m, v) => (v > m ? v : m), 0);
 }
 
+
+/**
+ * Исходы пропусков задания «Пропуски» (PRD-57 FR-24c, FR-26).
+ *
+ * Пропуск БЕЗ правил в счёт не идёт вовсе — ни в числитель, ни в знаменатель: это
+ * несделанная работа автора, и участник за неё не отвечает. Незаполненный пропуск не
+ * «лишний»: `x` считает ошибки, а не пробелы.
+ */
+function blankTallies(correct: CorrectData, answer: Answer, verdicts?: RuleVerdicts): Counters {
+  const sets = Array.isArray(correct.blanks) ? (correct.blanks as Array<AnswerRuleSet & { id: string }>) : [];
+  const written = answer && typeof answer === "object" && !Array.isArray(answer)
+    ? (answer as Record<string, unknown>)
+    : {};
+  let c = 0;
+  let x = 0;
+  let total = 0;
+  for (const set of sets) {
+    if (!set || !Array.isArray(set.rules) || set.rules.length === 0) continue;
+    total += 1;
+    const value = written[set.id];
+    if (typeof value !== "string" || value.trim() === "") continue;
+    if (checkRuleSet(set, value, verdicts).passed) c += 1;
+    else x += 1;
+  }
+  return { c, x, total };
+}
+
 /** Exact correctness (0 or 1) — the pre-PRD-10 checkAnswer logic. */
-function exactCorrect(type: QuestionType, correct: CorrectData, answer: Answer): number {
+function exactCorrect(
+  type: QuestionType,
+  correct: CorrectData,
+  answer: Answer,
+  verdicts?: RuleVerdicts,
+): number {
   if (answer === null || answer === undefined) return 0;
 
   // Single choice and a scale are both answered by ONE option index, so correctness
@@ -101,6 +173,19 @@ function exactCorrect(type: QuestionType, correct: CorrectData, answer: Answer):
   // (PRD-26 FR-08).
   if (isSingleIndexChoice(type)) {
     return answer === correct.correctIndex ? 1 : 0;
+  }
+  // PRD-57 §6.5: a typed answer is checked by the rule set, not by an index. An empty
+  // set scores nothing — such a question is not graded at all (isMeasurementOnly).
+  if (isTextEntry(type)) {
+    if (typeof answer !== "string") return 0;
+    return checkRuleSet(correct as unknown as AnswerRuleSet, answer, verdicts).passed ? 1 : 0;
+  }
+  // PRD-57 FR-24: задание с пропусками верно, когда верны ВСЕ проверяемые пропуски.
+  // Задание без единого проверяемого пропуска сюда не доходит: оно неоцениваемо
+  // (`isMeasurementOnly`), и агрегат исключает его раньше.
+  if (hasBlanks(type)) {
+    const tallies = blankTallies(correct, answer, verdicts);
+    return tallies.total > 0 && tallies.c === tallies.total ? 1 : 0;
   }
   if (type === "multiple") {
     const want = Array.isArray(correct.correctIndices) ? correct.correctIndices.slice() : [];
@@ -130,7 +215,12 @@ function exactCorrect(type: QuestionType, correct: CorrectData, answer: Answer):
 }
 
 /** Compute the (c, x, total) tallies for a tiered question. */
-function countTallies(type: QuestionType, correct: CorrectData, answer: Answer): Counters {
+function countTallies(
+  type: QuestionType,
+  correct: CorrectData,
+  answer: Answer,
+  verdicts?: RuleVerdicts,
+): Counters {
   if (type === "multiple") {
     const want = Array.isArray(correct.correctIndices) ? correct.correctIndices : [];
     const got = Array.isArray(answer) ? answer : [];
@@ -163,6 +253,22 @@ function countTallies(type: QuestionType, correct: CorrectData, answer: Answer):
     }
     return { c, x, total: want.length };
   }
+  // PRD-57 FR-28aa4: the UNIT of a typed answer is a RULE. `c` counts the rules the
+  // answer satisfies, so a step table over `c` pays by accuracy — the author nests the
+  // tolerances themselves, ordering the rules from the strict one to the loose one, and
+  // an exact hit satisfies both while a near miss satisfies only the loose rule. No new
+  // machinery is introduced (FR-28ae): this is the same table the choice types use.
+  if (hasBlanks(type)) return blankTallies(correct, answer, verdicts);
+  if (isTextEntry(type)) {
+    const set = correct as unknown as AnswerRuleSet;
+    const rules = Array.isArray(set?.rules) ? set.rules : [];
+    const outcome = typeof answer === "string" ? checkRuleSet(set, answer, verdicts) : null;
+    const c = outcome ? outcome.perRule.filter(Boolean).length : 0;
+    // «Лишнего» у написанного ответа не бывает: `x` здесь означает «ответ есть, и он не
+    // подошёл ничему» — ровно то, чем эта величина была у короткого ответа до ступени.
+    const x = typeof answer === "string" && answer !== "" && c === 0 ? 1 : 0;
+    return { c, x, total: rules.length || 1 };
+  }
   // single: one correct option.
   const c = exactCorrect("single", correct, answer);
   return { c, x: answer !== null && answer !== undefined ? 1 - c : 0, total: 1 };
@@ -186,11 +292,40 @@ function evalPredicate(pred: ScoringPredicate, t: Counters): boolean {
 }
 
 /**
+ * Index of the first tier whose predicate holds — the one that pays, since the
+ * step table is priority-ordered. `null` covers every case where no row applies:
+ * a non-tiered method, an unanswered question, or the implicit «иначе → 0».
+ * Both the score and its explanation read this, so «what was paid» and «which
+ * row paid it» can never disagree.
+ */
+function firstMatchingTier(input: ScoreInput): number | null {
+  const { type, correct, answer, scoring, verdicts } = input;
+  if (!scoring || scoring.kind !== "tiered") return null;
+  if (answer === null || answer === undefined) return null;
+  const counters = countTallies(type, correct, answer, verdicts);
+  const index = scoring.tiers.findIndex((tier) => evalPredicate(tier.when, counters));
+  return index >= 0 ? index : null;
+}
+
+/**
  * Score one answer. Absent/`exact` scoring keeps the legacy 0/1 result so old
  * tests stay bit-identical (FR-02). `answer == null` always scores 0.
  */
 export function scoreAnswer(input: ScoreInput): ScoreResult {
   const { type, correct, answer, scoring } = input;
+  // «Сценарий в ИС»: эталона нет — долю цены даёт исход прогона за вычетом штрафов
+  // (`shared/sim/scoring`). Градуированные способы оценки (PRD-10) к сценарию не применяются.
+  if (isSimulation(type)) {
+    // Штрафы и «засчитывать частичное» уже разрешены по цепочке (контекст оценки теста кладёт в
+    // вопрос `{ kind: "simulation", … }`); без них — системные умолчания.
+    const sim = scoring?.kind === "simulation" ? scoring : null;
+    const ratio = simulationRatio(
+      answer,
+      sim?.penalties ? { ...DEFAULT_SIM_PENALTIES, ...sim.penalties } : DEFAULT_SIM_PENALTIES,
+      sim?.countPartial ?? true,
+    );
+    return { score: ratio, sMax: 1, ratio };
+  }
   const kind = scoring?.kind ?? "exact";
 
   if (kind === "weighted") {
@@ -207,18 +342,14 @@ export function scoreAnswer(input: ScoreInput): ScoreResult {
   if (kind === "tiered") {
     const tiers = scoring && scoring.kind === "tiered" ? scoring.tiers : [];
     const sMax = (scoring && scoring.kind === "tiered" && scoring.sMax) || maxOf(tiers.map((t) => t.score));
-    let score = 0;
-    if (answer !== null && answer !== undefined) {
-      const counters = countTallies(type, correct, answer);
-      const hit = tiers.find((tier) => evalPredicate(tier.when, counters));
-      if (hit) score = hit.score;
-    }
+    const hit = firstMatchingTier(input);
+    let score = hit !== null ? tiers[hit].score : 0;
     score = Math.max(0, score);
     return { score, sMax, ratio: sMax > 0 ? clamp01(score / sMax) : 0 };
   }
 
   // exact / absent.
-  const score = exactCorrect(type, correct, answer);
+  const score = exactCorrect(type, correct, answer, input.verdicts);
   return { score, sMax: 1, ratio: score };
 }
 
@@ -240,6 +371,14 @@ export function explainAnswer(input: ScoreInput): ScoreExplain {
   const { type, correct, answer, scoring } = input;
   const kind = scoring?.kind ?? "exact";
   const res = scoreAnswer(input);
-  const t = countTallies(type, correct, answer);
-  return { ...res, kind, answered: isAnswered(type, answer), c: t.c, x: t.x, total: t.total };
+  const t = countTallies(type, correct, answer, input.verdicts);
+  return {
+    ...res,
+    kind,
+    answered: isAnswered(type, answer),
+    c: t.c,
+    x: t.x,
+    total: t.total,
+    tierIndex: firstMatchingTier(input),
+  };
 }

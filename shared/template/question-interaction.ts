@@ -24,6 +24,10 @@
  * Pure/framework-free — no DOM, no Node — safe to bundle into the SCORM runtime.
  */
 import { normalizePool } from "./dnd/matching-model";
+import { checkRuleSet } from "../answer-check/rules";
+import { parseNumericAnswer } from "../answer-check/number";
+import { parseBlanks } from "../questions/blanks";
+import { referenceAnswer, type BlankRuleSet } from "../questions/blanks-render";
 import { renderInlineMarkdown } from "../text/markdown";
 import {
   allocationRemaining,
@@ -656,5 +660,226 @@ export function renderAllocation(
     `<div class="ou-alloc${review ? " ou-alloc--readonly" : ""}">` +
     `<div class="ou-alloc__counter${complete ? " is-complete" : ""}" role="status" aria-live="polite">` +
     `${counter}</div><div class="ou-alloc__rows">${rows}</div></div>`
+  );
+}
+
+/** How the host wants a typed-answer field drawn; all three come from its rule set. */
+export interface ShortAnswerOptions {
+  /** The rule set is numeric — narrower field and a decimal keyboard (§6.6). */
+  numeric?: boolean;
+  /** Display unit printed beside the field (`°C`); the learner never types it. */
+  unit?: string;
+  /** Review and preview draw the answer locked. */
+  readonly?: boolean;
+  /**
+   * PRD-57 FR-28v: how many characters the field accepts. The EFFECTIVE limit — the
+   * author's own, or the installation's ceiling — is resolved by the server before the
+   * question reaches either host: this module is pure and ships inside the package,
+   * where no configuration exists at run time.
+   */
+  maxLength?: number;
+}
+
+/**
+ * The single-line field of a typed answer (PRD-57 FR-28u).
+ *
+ * Markup is ported from the approved wireframe
+ * (`docs/wireframes/approved/prd57-question-input.html`): `ou-field` + `tb-answer-field`,
+ * with `tb-answer-field--num` narrowing the numeric variant to half the column. The
+ * answer font size rides the same `--tb-answer-fs` variable as every other type.
+ *
+ * The value is the learner's RAW text, not its comparison form: what they typed is what
+ * goes to the LMS and to the report, and normalisation belongs to the comparison alone.
+ *
+ * A NUMERIC field says what it expects and what it could not read (§6.6): «Введите число»
+ * above the box — the FORMAT, never the boundaries, which would hand over the answer
+ * (FR-28aa5) — and «Ожидается число» below it while the typed text does not parse
+ * (FR-28z1). The second message is always emitted and merely hidden: the package does not
+ * re-render the screen on every keystroke (that would steal the focus), so
+ * {@link module:shared/template/short-answer-dom} toggles this very node instead, and a
+ * node that is absent is nothing to toggle.
+ */
+export function renderShortAnswer(
+  question: InteractionQuestion,
+  answer: unknown,
+  options: ShortAnswerOptions = {},
+): string {
+  const value = typeof answer === "string" ? answer : "";
+  const numeric = options.numeric === true;
+  // Пустой ответ ошибкой не считается: человек ещё не начал, а не ошибся.
+  const notANumber = numeric && value.trim() !== "" && parseNumericAnswer(value) === null;
+  const wrap =
+    (numeric
+      ? "ou-field ou-field--l tb-answer-field tb-answer-field--num"
+      : "ou-field ou-field--l ou-field--full tb-answer-field") + (notANumber ? " ou-field--error" : "");
+  const mode = numeric ? ' inputmode="decimal" data-answer-kind="number"' : "";
+  const invalid = notANumber ? ' aria-invalid="true"' : "";
+  const locked = options.readonly ? " disabled" : "";
+  const affix = options.unit ? `<span class="ou-field__affix">${attrText(options.unit)}</span>` : "";
+  // Предел работает двумя способами сразу: атрибут не даёт набрать лишнего, подпись
+  // называет границу ДО того, как участник в неё упрётся.
+  //
+  // Читается У ЗАДАНИЯ — тем же приёмом, что у развёрнутого ответа. Сервер кладёт
+  // действующий предел в `data_json` (`withEffectiveMaxLength`) для обоих хостов, и
+  // пока он брался только из `options`, ни веб, ни пакет его не пересказывали:
+  // приёмка 2026-09-20 набрала 64 символа в поле с пределом 40 (AC-04b). `options`
+  // остаются перекрытием — для вызывающего, который знает предел лучше задания.
+  const own = (question.dataJson ?? {}) as { maxLength?: unknown };
+  const limit = typeof options.maxLength === "number" && options.maxLength > 0
+    ? options.maxLength
+    : typeof own.maxLength === "number" && own.maxLength > 0
+      ? own.maxLength
+      : null;
+  const limitAttr = limit === null ? "" : ` maxlength="${limit}"`;
+  const limitMsg = limit === null ? "" : `<div class="ou-field__msg">До ${limit} символов</div>`;
+  const formatHint = numeric ? `<div class="ou-field__msg">Введите число</div>` : "";
+  const nanMsg = numeric
+    ? `<div class="ou-field__msg ou-field__msg--error" data-role="nan"${notANumber ? "" : " hidden"}>` +
+      `Ожидается число. Например: -25, 12,5 или 3/4</div>`
+    : "";
+  return (
+    `<div class="${wrap}">` +
+    formatHint +
+    `<div class="ou-field__box">` +
+    `<input class="ou-field__input" type="text"${mode}${limitAttr} value="${attrText(value)}"` +
+    ` aria-label="Ваш ответ" data-action="short-answer"${invalid}${locked} />` +
+    affix +
+    `</div>` +
+    limitMsg +
+    nanMsg +
+    `</div>`
+  );
+}
+
+/** Что делать с маркерами пропусков в уже отрисованном тексте задания. */
+export interface BlanksPromptOptions {
+  /**
+   * `input` — поля участника; `answer` — его ответ с разметкой верности; `reference` —
+   * эталон автора; `dash` — прочерк (PRD-57 FR-24i).
+   */
+  mode: "input" | "answer" | "reference" | "dash";
+  blanks: readonly BlankRuleSet[];
+  answer?: Record<string, string> | null;
+  /** Разбор и предпросмотр рисуют поля запертыми. */
+  readonly?: boolean;
+}
+
+/**
+ * Ширина пропуска — подсказка о том, чего ждут (эскиз `prd57-question-input.html`).
+ *
+ * Считается из эталона: поле на две цифры и поле на слово — разные обещания. Эталона
+ * может не быть (выражение, допуск) — тогда ширина по умолчанию, а не ноль.
+ */
+function blankWidth(set: BlankRuleSet | undefined): number {
+  const reference = referenceAnswer(set);
+  if (!reference) return 12;
+  return Math.max(6, Math.min(24, reference.length));
+}
+
+/**
+ * Поставить поля ввода (или подстановки) на места маркеров `{{id}}`.
+ *
+ * Вход — УЖЕ отрисованный текст задания: разметка обрабатывается раньше подстановки, и
+ * порядок этот важен. Маркер — простой текст, разметку он переживает нетронутым; обратный
+ * порядок вставил бы куски HTML внутрь кода или ссылки и получил бы поле там, где его
+ * никто не ждал.
+ *
+ * @param promptHtml Текст задания после разметки.
+ * @param options    Режим и данные к нему.
+ */
+export function renderBlanksPrompt(promptHtml: string, options: BlanksPromptOptions): string {
+  if (typeof promptHtml !== "string" || promptHtml === "") return "";
+  const found = parseBlanks(promptHtml);
+  const byId = new Map((options.blanks ?? []).map((set) => [set.id, set]));
+  let out = "";
+  let at = 0;
+
+  for (const blank of found) {
+    out += promptHtml.slice(at, blank.start) + blankHtml(blank.id, byId.get(blank.id), options);
+    at = blank.end;
+  }
+  out += promptHtml.slice(at);
+  // Экранирование снимается ПОСЛЕ подстановки: иначе `\{{a}}` превратился бы в `{{a}}` и
+  // следующий проход принял бы его за настоящий пропуск.
+  return out.replace(/\\{\{/g, "{{");
+}
+
+/** Разметка ОДНОГО пропуска в выбранном режиме. */
+function blankHtml(id: string, set: BlankRuleSet | undefined, options: BlanksPromptOptions): string {
+  const width = `--tb-blank-w:${blankWidth(set)}ch`;
+  const written = options.answer?.[id];
+
+  if (options.mode === "input") {
+    const numeric = set?.answerKind === "number";
+    const mode = numeric ? ' inputmode="decimal" data-answer-kind="number"' : "";
+    const locked = options.readonly ? " disabled" : "";
+    return (
+      `<span class="tb-blank" style="${width}">` +
+      `<span class="ou-field ou-field--l ou-field--full"><span class="ou-field__box">` +
+      `<input class="ou-field__input" type="text"${mode} value="${attrText(written ?? "")}"` +
+      ` aria-label="Пропуск ${attrText(id)}" data-action="short-answer" data-blank="${attrText(id)}"${locked} />` +
+      `</span></span></span>`
+    );
+  }
+
+  if (options.mode === "answer") {
+    const text = typeof written === "string" && written.trim() !== "" ? written : "";
+    // Незаполненный пропуск показывается прочерком, а не пустой рамкой: пустая рамка
+    // читается как потеря данных.
+    if (text === "") return `<span class="tb-blank-sub tb-blank-sub--dash" style="${width}">&nbsp;</span>`;
+    const passed = set ? checkRuleSet(set, text).passed : false;
+    const tone = passed ? "correct-answer" : "incorrect-answer";
+    return `<span class="tb-blank-sub ${tone}" style="${width}">${attrText(text)}</span>`;
+  }
+
+  if (options.mode === "reference") {
+    const reference = referenceAnswer(set);
+    return reference === null
+      ? `<span class="tb-blank-sub tb-blank-sub--dash" style="${width}">&nbsp;</span>`
+      : `<span class="tb-blank-sub tb-blank-sub--etalon" style="${width}">${attrText(reference)}</span>`;
+  }
+
+  return `<span class="tb-blank-sub tb-blank-sub--dash" style="${width}">&nbsp;</span>`;
+}
+
+/** Что нужно многострочному полю развёрнутого ответа. */
+export interface LongAnswerOptions {
+  /** Разбор и предпросмотр рисуют поле запертым. */
+  readonly?: boolean;
+}
+
+/**
+ * Поле развёрнутого ответа (PRD-57 FR-11, FR-12).
+ *
+ * Многострочное и только многострочное: однострочное поле обещает участнику ответ в одну
+ * фразу, а тип заводился ровно для обратного. Блока «правильный ответ» рядом нет и быть
+ * не может — эталона у типа не существует (FR-13, FR-17).
+ *
+ * Подсказка-заполнитель и предел длины приходят из содержимого задания; предел — это
+ * ограничение LMS (`long-fill-in`, около 4000 символов), подставленное сервером, потому
+ * что конфигурации в рантайме пакета нет.
+ */
+export function renderLongAnswer(
+  question: InteractionQuestion,
+  answer: unknown,
+  options: LongAnswerOptions = {},
+): string {
+  const value = typeof answer === "string" ? answer : "";
+  const data = (question.dataJson ?? {}) as { placeholder?: unknown; maxLength?: unknown };
+  const placeholder = typeof data.placeholder === "string" && data.placeholder.trim() !== ""
+    ? ` placeholder="${attrText(data.placeholder)}"`
+    : "";
+  const limit = typeof data.maxLength === "number" && data.maxLength > 0 ? data.maxLength : null;
+  const limitAttr = limit === null ? "" : ` maxlength="${limit}"`;
+  const limitMsg = limit === null ? "" : `<div class="ou-field__msg">До ${limit} символов</div>`;
+  const locked = options.readonly ? " disabled" : "";
+  return (
+    `<div class="ou-field ou-field--l ou-field--full tb-answer-field tb-answer-field--long">` +
+    `<div class="ou-field__box">` +
+    `<textarea class="ou-field__input" rows="6"${placeholder}${limitAttr}` +
+    ` aria-label="Ваш ответ" data-action="short-answer"${locked}>${attrText(value)}</textarea>` +
+    `</div>` +
+    limitMsg +
+    `</div>`
   );
 }

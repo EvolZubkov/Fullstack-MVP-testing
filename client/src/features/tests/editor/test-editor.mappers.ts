@@ -18,16 +18,25 @@
  *   - §6.8  empty `description`/`webhookUrl` normalised to `null`
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
-import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
-import type { ReportSettings, TestIntro } from "@shared/schema";
+import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy, SectionGroup, SimScoringSettings } from "@shared/schema";
+import { simScoringSettingsSchema } from "@shared/schema";
+import type { ReportSettings, TestIntro, IntroText, BreakdownDisplaySetting } from "@shared/schema";
 import type { LearnerVisibility, LevelTone } from "@shared/scales/interpretation";
-import { formSetSchema } from "@shared/schema";
+import {
+  breakdownFeedbackSchema,
+  breakdownInterpretationSchema,
+  formSetSchema,
+  interpretationSchema,
+  sectionGroupsSchema,
+} from "@shared/schema";
 import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
   AdaptiveSettingsPayload,
   AdaptiveTopicConfig,
+  BreakdownFeedbackEntry,
+  InterpretationEntry,
   EditorSection,
   FeedbackAsset,
   FeedbackContent,
@@ -53,12 +62,17 @@ import type {
   SectionTimeLimit,
   TestEditorModel,
   TestMode,
+  ScenarioItemDraft,
   TestSectionPayload,
   TestSettingsPayload,
   TestStatus,
   TopicPassRule,
 } from "./test-editor.types";
+import { DEFAULT_BREAKDOWN_DISPLAY } from "./test-editor.types";
 import { makeQuestionOverride, type QuestionScoringOverride } from "./scoring-api";
+import type { DraftBlock } from "./use-report-document";
+import { itemOrderForSave } from "./sections/composition-items";
+import { scenarioItemKey } from "@shared/test-items";
 
 // ─── API response shape ───────────────────────────────────────────────────────
 
@@ -71,12 +85,15 @@ export type ApiTestResponse = {
   version?: number | null;
   title?: string | null;
   description?: string | null;
+  descriptionFormat?: "plain" | "richText" | "html" | null;
   mode?: string | null;
   status?: string | null;
   published?: boolean | null;
   showDifficultyLevel?: boolean | null;
   overallPassRuleJson?: unknown;
   passDecisionPolicy?: string | null;
+  /** PRD-50 §16 (FR-53): учитывать подтемы в вердикте темы (`tests.breakdown_gate_enabled`). */
+  breakdownGateEnabled?: boolean | null;
   webhookUrl?: string | null;
   feedback?: string | null;
   feedbackJson?: unknown;
@@ -89,11 +106,14 @@ export type ApiTestResponse = {
   showCorrectAnswers?: boolean | null;
   // PRD-19 (Блок A)
   allowReturnToUnanswered?: boolean | null;
+  allowFreeSectionNavigation?: boolean | null;
   allowAnswerChange?: boolean | null;
   // PRD-43: независим от allowReturnToUnanswered.
   quickAdvance?: boolean | null;
   showSectionResults?: boolean | null;
   skipReviewWhenComplete?: boolean | null;
+  closeSectionOnLeave?: boolean | null;
+  lmsAttemptResult?: "best" | "last" | null;
   copyProtection?: boolean | null;
   protectionWatermark?: boolean | null;
   protectionHideOnBlur?: boolean | null;
@@ -104,6 +124,10 @@ export type ApiTestResponse = {
   retakePolicyJson?: unknown;
   reportSettingsJson?: unknown;
   introJson?: unknown;
+  /** PRD-50 FR-13: subtotal-by-key display setting. */
+  breakdownDisplayJson?: unknown;
+  /** PRD-50 FR-11: named blocks of sections, in author order. */
+  sectionGroupsJson?: unknown;
   /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
   defaultQuestionPoints?: number | null;
   /** PRD-15 block D (FR-30): per-(test, question) scoring overrides. */
@@ -121,7 +145,58 @@ function isTestStatus(value: unknown): value is TestStatus {
 }
 
 function isTestMode(value: unknown): value is TestMode {
-  return value === "standard" || value === "adaptive";
+  return value === "standard" || value === "adaptive" || value === "scenario";
+}
+
+/** «Сценарий в ИС»: пункты-сценарии ответа в порядке автора. */
+function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
+  const items = (src as { scenarios?: unknown }).scenarios;
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((raw): ScenarioItemDraft[] => {
+    const item = raw as { id?: unknown; topicId?: unknown; topicName?: unknown; questionId?: unknown; title?: unknown; required?: unknown; groupKey?: unknown; defaultPoints?: unknown };
+    if (typeof item.topicId !== "string") return [];
+    return [{
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
+      topicId: item.topicId,
+      topicName: typeof item.topicName === "string" ? item.topicName : "",
+      questionId: typeof item.questionId === "string" ? item.questionId : null,
+      title: typeof item.title === "string" ? item.title : null,
+      required: item.required !== false,
+      ...(typeof item.groupKey === "string" ? { groupKey: item.groupKey } : {}),
+      ...(typeof item.defaultPoints === "number" ? { defaultPoints: item.defaultPoints } : {}),
+    }];
+  });
+}
+
+/**
+ * Техдолг №8: пороги пунктов-сценариев (`test_scenarios.pass_rule_json`) — в `passRules.byTopic`
+ * под ключом пункта `scenario:<id>`, рядом с порогами тем: таблица «Правила оценки тем и
+ * сценариев» правит их одним кодом. Пункт без id порога не несёт — его ключ ещё не устоялся.
+ */
+function readScenarioPassRulesFromApi(src: ApiTestResponse): PassRules["byTopic"] {
+  const items = (src as { scenarios?: unknown }).scenarios;
+  if (!Array.isArray(items)) return {};
+  const out: PassRules["byTopic"] = {};
+  for (const raw of items) {
+    if (!isPlainObject(raw) || typeof raw.id !== "string") continue;
+    out[scenarioItemKey(raw.id)] = readTopicPassRuleFromApi(raw.passRuleJson);
+  }
+  return out;
+}
+
+/** «Сценарий в ИС» (Э5а): штрафы сценариев теста из ответа; чужая форма читается как «нет». */
+function readSimScoringFromApi(src: ApiTestResponse): SimScoringSettings | null {
+  const parsed = simScoringSettingsSchema.safeParse((src as { simScoringJson?: unknown }).simScoringJson);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Штрафы теста для сохранения: ни одного заданного значения — `null`. */
+function simScoringForSave(value: SimScoringSettings | null | undefined): SimScoringSettings | null {
+  if (!value) return null;
+  const penalties = value.penalties && Object.keys(value.penalties).length > 0 ? value.penalties : undefined;
+  const countPartial = typeof value.countPartial === "boolean" ? value.countPartial : undefined;
+  if (!penalties && countPartial === undefined) return null;
+  return { ...(penalties ? { penalties } : {}), ...(countPartial !== undefined ? { countPartial } : {}) };
 }
 
 function isFlowMode(value: unknown): value is FlowMode {
@@ -336,6 +411,55 @@ function readFormSetFromApi(raw: unknown): FormSet | null {
 }
 
 /**
+ * Тексты подтем (PRD-50 FR-50) из jsonb API. Проверяются `breakdownFeedbackSchema`;
+ * отсутствие и любая испорченная форма вырождаются в `null` — «автор их не писал», —
+ * поэтому кривой блоб не роняет редактор, ровно как у порогов выше.
+ */
+function readBreakdownFeedbackFromApi(raw: unknown): Record<string, BreakdownFeedbackEntry> | null {
+  if (raw == null) return null;
+  const parsed = breakdownFeedbackSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const keys = parsed.data.keys as Record<string, BreakdownFeedbackEntry>;
+  return Object.keys(keys).length > 0 ? keys : null;
+}
+
+/**
+ * Толкование темы из jsonb API. Пустой текст читается как ОТСУТСТВИЕ: гейт стоит на
+ * тексте и в выдаче (`shared/interpretation/resolve`), и запись с пустой строкой означала
+ * бы в редакторе «переопределено», а у участника — ничего.
+ */
+function readInterpretationFromApi(raw: unknown): InterpretationEntry | null {
+  if (raw == null) return null;
+  const parsed = interpretationSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  return parsed.data.text.trim() !== "" ? parsed.data : null;
+}
+
+/** Толкования подтем из jsonb API — по тому же правилу, на каждый ключ. */
+function readBreakdownInterpretationFromApi(raw: unknown): Record<string, InterpretationEntry> | null {
+  if (raw == null) return null;
+  const parsed = breakdownInterpretationSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const keys: Record<string, InterpretationEntry> = {};
+  for (const [key, value] of Object.entries(parsed.data.keys as Record<string, InterpretationEntry>)) {
+    if (value.text.trim() !== "") keys[key] = value;
+  }
+  return Object.keys(keys).length > 0 ? keys : null;
+}
+
+/**
+ * Read the test's blocks of sections (PRD-50 FR-11) from the API jsonb. Validated
+ * with `sectionGroupsSchema`; absence or any malformed shape degrades to `[]` (no
+ * blocks) — the same thing an absent column has always meant (FR-27) — so a bad
+ * blob never breaks the editor.
+ */
+function readSectionGroupsFromApi(raw: unknown): SectionGroup[] {
+  if (raw == null) return [];
+  const parsed = sectionGroupsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : [];
+}
+
+/**
  * Map editor `SectionTimeLimit` back to the DB integer.
  * Both `inherit_test` and `none` are encoded as `null`.
  */
@@ -399,6 +523,13 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       drawBlueprint: readDrawBlueprintFromApi(raw.drawBlueprintJson),
       // PRD-17 (BR-12): fixed-variant set (validate; invalid/absent = null).
       formSet: readFormSetFromApi(raw.formSetJson),
+      breakdownFeedback: readBreakdownFeedbackFromApi(raw.breakdownFeedbackJson),
+      // Толкования: переопределение текста темы этим тестом и тексты подтем.
+      interpretation: readInterpretationFromApi(raw.interpretationJson),
+      breakdownInterpretation: readBreakdownInterpretationFromApi(raw.breakdownInterpretationJson),
+      // PRD-50 FR-11/FR-12: this section's block, or null when it belongs to none —
+      // including a legacy section saved before this PRD.
+      groupKey: typeof raw.groupKey === "string" ? raw.groupKey : null,
       // PRD-15 block D (FR-31): per-section default price (null = inherit test).
       defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
       // PRD-30 FR-18: only an explicit value is an override; anything else —
@@ -513,7 +644,11 @@ function buildRouterFlowFromApi(src: ApiTestResponse): FlowRouterSettings {
     }
   }
 
-  return { completionPolicy, sectionUnlockRules };
+  const itemOrder = Array.isArray(router.itemOrder)
+    ? router.itemOrder.filter((key): key is string => typeof key === "string")
+    : [];
+
+  return { completionPolicy, sectionUnlockRules, ...(itemOrder.length > 0 ? { itemOrder } : {}) };
 }
 
 // ─── Flow settings builder ────────────────────────────────────────────────────
@@ -607,6 +742,7 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
       ...buildScaleDomain(r.configJson),
       valence: buildScaleValence(r.configJson),
       ...buildSlotToggles(r.configJson),
+      ...buildRestScales(r.configJson),
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
     });
   });
@@ -641,6 +777,24 @@ function buildQuestionOverridesFromApi(src: ApiTestResponse): QuestionScoringOve
         pinnedContentHash: typeof r.pinnedContentHash === "string" ? r.pinnedContentHash : null,
       }),
     );
+  }
+  return out;
+}
+
+/**
+ * PRD-56: questions the test excludes from delivery. The flag rides on the same
+ * `questionScoring` rows as the scoring overrides but is NOT part of them: it is set
+ * by analytics, and the editor only reads it («Вопросы теста»). Keeping it out of
+ * `QuestionScoringOverride` keeps the overrides' save and dirty checks untouched.
+ */
+function readDeliveryExcludedFromApi(src: ApiTestResponse): string[] {
+  const raw = src.questionScoring;
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.questionId === "string" && r.excludedFromDelivery === true) out.push(r.questionId);
   }
   return out;
 }
@@ -682,6 +836,30 @@ function buildScaleDisplayMax(configJson: unknown): number | null {
 function buildSlotToggles(configJson: unknown): { showName: boolean; showLevel: boolean } {
   const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
   return { showName: config.showName !== false, showLevel: config.showLevel !== false };
+}
+
+/**
+ * PRD-53 §4.4: the «scales outside the profile» card from `config_json`.
+ *
+ * Returns an EMPTY patch when the block is absent, so an indicator that never had one
+ * round-trips without gaining an empty object — the dirty check compares by
+ * `JSON.stringify`, and a spurious `restScales: undefined` would read as a change.
+ * The same three-part shape is parsed on the server by `readRestScales`; keep them
+ * in step. A block without keys is not a block: it would print an empty card.
+ */
+function buildRestScales(configJson: unknown): Pick<ResultVariableModel, "restScales"> | Record<string, never> {
+  const raw = isPlainObject(configJson) ? (configJson as { restScales?: unknown }).restScales : undefined;
+  if (!isPlainObject(raw)) return {};
+  const src = raw as { show?: unknown; label?: unknown; keys?: unknown };
+  const keys = Array.isArray(src.keys) ? src.keys.filter((k): k is string => typeof k === "string" && k !== "") : [];
+  if (keys.length === 0) return {};
+  return {
+    restScales: {
+      show: src.show === true,
+      label: typeof src.label === "string" ? src.label : "",
+      keys,
+    },
+  };
 }
 
 /** PRD-29: the favourable direction stored in `config_json`; unknown degrades to "none". */
@@ -782,6 +960,10 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
       id: typeof r.id === "string" ? r.id : undefined,
       key: typeof r.key === "string" ? r.key : "",
       label: typeof r.label === "string" ? r.label : "",
+      // PRD-53: колонка есть в базе и возится книгой Excel, но редактор её не читал —
+      // и блок «шкалы вне профиля» печатал одни названия. NULL приводится к пустой
+      // строке: поле формы всегда строка, а обратно пустая строка станет null.
+      description: typeof r.description === "string" ? r.description : "",
       type: SCALE_TYPES.has(r.type as string) ? (r.type as ScaleModel["type"]) : "number",
       aggregation: SCALE_AGGREGATIONS.has(r.aggregation as string)
         ? (r.aggregation as ScaleModel["aggregation"])
@@ -890,6 +1072,15 @@ export function defaultRetakePolicy(): RetakePolicy {
  * Читается защитно, как и прочий jsonb автора: ветвь без текста — это отсутствие блока,
  * а не пустая карточка, поэтому пустые тексты не поднимаются в модель вовсе.
  */
+function readIntroText(raw: unknown): IntroText | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const b = raw as Record<string, unknown>;
+  const text = typeof b.text === "string" ? b.text : "";
+  if (!text.trim()) return undefined;
+  const format = b.format === "richText" || b.format === "html" ? b.format : "plain";
+  return { text, format };
+}
+
 function readIntroFromApi(api: ApiTestResponse): TestIntro {
   const raw = api.introJson;
   if (!isPlainObject(raw)) return {};
@@ -898,15 +1089,53 @@ function readIntroFromApi(api: ApiTestResponse): TestIntro {
     const branch = (raw as Record<string, unknown>)[side];
     if (!isPlainObject(branch)) continue;
     const b = branch as Record<string, unknown>;
-    const text = typeof b.text === "string" ? b.text : "";
-    if (!text.trim()) continue;
-    const format = b.format === "richText" || b.format === "html" ? b.format : "plain";
-    out[side] = { text, format };
+    const common = readIntroText(b);
+    const passed = readIntroText(b.passed);
+    const failed = readIntroText(b.failed);
+    // PRD-61: ветвь жива, пока в ней есть ХОТЬ ОДИН текст. Прежний код выходил по пустому
+    // общему вступлению и терял тексты исхода, заведённые книгой или через API, — а первое
+    // же сохранение теста из ящика записало бы эту потерю в базу.
+    if (!common && !passed && !failed) continue;
+    out[side] = {
+      format: common?.format ?? "plain",
+      text: common?.text ?? "",
+      ...(passed ? { passed } : {}),
+      ...(failed ? { failed } : {}),
+    };
   }
   // Признак «в отчёте тот же текст» живёт рядом с текстами и читается независимо от них:
   // включённым он остаётся и тогда, когда собственный текст отчёта пуст, — в этом и смысл.
   if ((raw as Record<string, unknown>).reportSameAsResults === true) out.reportSameAsResults = true;
   return out;
+}
+
+/**
+ * PRD-50 FR-13: `tests.breakdown_display_json`. Read defensively like the other
+ * author jsonb fields — a malformed or absent branch resolves to
+ * {@link DEFAULT_BREAKDOWN_DISPLAY} («Не показывать»), the setting every test built
+ * before this PRD implicitly has.
+ */
+function readBreakdownDisplayFromApi(api: ApiTestResponse): BreakdownDisplaySetting {
+  const raw = api.breakdownDisplayJson;
+  if (!isPlainObject(raw)) return DEFAULT_BREAKDOWN_DISPLAY;
+  const r = raw as Record<string, unknown>;
+  const visibility =
+    r.visibility === "bar" || r.visibility === "bar_and_value" ? r.visibility : "hidden";
+  const basis = r.basis === "points" ? "points" : "units";
+  // PRD-50 FR-44 (Э4): положение показа. Ключа нет (настройка сохранена до этого этапа) —
+  // поле НЕ подставляется: пустое значение и есть «в карточках тем», а дописать его здесь
+  // значило бы переписать настройку автора при первом же открытии редактора.
+  const placement =
+    r.placement === "block" || r.placement === "both" || r.placement === "topics" ? r.placement : undefined;
+  // Показ толкований подтем — по тому же правилу, что и положение выше: ключа нет значит
+  // «выключено», и подставлять его в настройку автора не за что.
+  const showInterpretation = r.showInterpretation === true ? true : undefined;
+  return {
+    visibility,
+    basis,
+    ...(placement ? { placement } : {}),
+    ...(showInterpretation ? { showInterpretation } : {}),
+  };
 }
 
 function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
@@ -931,6 +1160,39 @@ function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
   const labels = (raw as Record<string, unknown>).labels;
   if (isPlainObject(labels)) {
     (out as { labels?: unknown }).labels = labels;
+  }
+  return out;
+}
+
+/**
+ * PRD-51: строки документа отчёта, как их отдаёт API, — в форму черновика редактора.
+ *
+ * Порядок берётся из `sortOrder` и тут же ЗАБЫВАЕТСЯ: дальше порядок несёт сама позиция в
+ * массиве. Два источника истины о порядке разошлись бы, и спорить с ними было бы нечем.
+ * Признака `appended` здесь нет: его ставит разрешение документа, а не база.
+ */
+function readReportDocumentFromApi(api: ApiTestResponse): {
+  standard?: DraftBlock[];
+  adaptive?: DraftBlock[];
+} {
+  const raw = (api as { reportBlocks?: unknown }).reportBlocks;
+  if (!isPlainObject(raw)) return {};
+  const out: { standard?: DraftBlock[]; adaptive?: DraftBlock[] } = {};
+  for (const mode of ["standard", "adaptive"] as const) {
+    const rows = (raw as Record<string, unknown>)[mode];
+    if (!Array.isArray(rows)) continue;
+    out[mode] = rows
+      .filter(isPlainObject)
+      .map((r) => r as Record<string, unknown>)
+      .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
+      .map((r) => ({
+        block: String(r.block ?? ""),
+        templateKey: typeof r.templateKey === "string" ? r.templateKey : null,
+        enabled: r.enabled !== false,
+        values: isPlainObject(r.valuesJson) ? (r.valuesJson as Record<string, unknown>) : {},
+        settings: isPlainObject(r.settingsJson) ? (r.settingsJson as Record<string, unknown>) : {},
+      }))
+      .filter((b) => b.block.length > 0);
   }
   return out;
 }
@@ -989,6 +1251,7 @@ function readRetakePolicyFromApi(api: ApiTestResponse): RetakePolicy {
     eligibilityPlugin,
     attemptInterval,
     ...(typeof r.blockedPageId === "string" ? { blockedPageId: r.blockedPageId } : {}),
+    ...(typeof r.lmsCourseName === "string" ? { lmsCourseName: r.lmsCourseName } : {}),
   };
 }
 
@@ -1001,9 +1264,14 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     questionOrder: "random",
     flowSettings: {},
     folderId: args.folderId,
+    // Новый тест начинает со «Стандартного» — тем же шаблоном его обслуживает выдача,
+    // когда оформление не задано вовсе. Всё, что автор задаст поверх, копится здесь и
+    // уезжает вместе с созданием (см. `TestEditorModel.design`).
+    design: { templateId: "default", params: {} },
     basic: {
       title: "",
       description: "",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -1018,12 +1286,19 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       showCorrectAnswers: false,
       // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
       allowReturnToUnanswered: true,
+      // PRD-19 (FR-11c): свободная навигация ВЫКЛ и у нового теста — её включает автор.
+      allowFreeSectionNavigation: false,
       allowAnswerChange: false,
       // PRD-43: новый тест — как сегодняшнее двухшаговое поведение (ВКЛ возврата
       // + ВЫКЛ быстрого перехода).
       quickAdvance: false,
       showSectionResults: true,
       skipReviewWhenComplete: false,
+      // PRD-67: новый тест — выход из раздела лишь замораживает время.
+      closeSectionOnLeave: false,
+      lmsAttemptResult: "last",
+      // PRD-50 FR-13: новый тест — подытоги скрыты, как у любого теста без настройки.
+      breakdownDisplay: DEFAULT_BREAKDOWN_DISPLAY,
       // PRD-34 (FR-03): новый тест — защита ВКЛ.
       copyProtection: true,
       protectionWatermark: false,
@@ -1033,8 +1308,12 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       decisionPolicy: "overall_only",
       overall: { type: "percent", value: 70 },
       byTopic: {},
+      // PRD-50 FR-53: новый тест — подтемы вердикт темы не судят, как у любого теста до §16.
+      breakdownGateEnabled: false,
     },
     sections: [],
+    // PRD-50 FR-11: новый тест — блоков нет, как у любого теста без настройки.
+    sectionGroups: [],
     adaptive: {
       showDifficultyLevel: true,
       testSettings: { showDifficultyLevel: true },
@@ -1078,8 +1357,9 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
   const feedback = readFeedbackFromApi(src);
   const overall = readOverallPassRuleFromApi(src);
 
-  const { sections, byTopic } = buildSectionsFromApi(src);
-  const decisionPolicy = readPassDecisionPolicyFromApi(src, byTopic);
+  const { sections, byTopic: topicRules } = buildSectionsFromApi(src);
+  const decisionPolicy = readPassDecisionPolicyFromApi(src, topicRules);
+  const byTopic = { ...topicRules, ...readScenarioPassRulesFromApi(src) };
 
   const showDifficultyLevel =
     typeof src.showDifficultyLevel === "boolean" ? src.showDifficultyLevel : true;
@@ -1099,6 +1379,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     id: typeof src.id === "string" ? src.id : undefined,
     version: typeof src.version === "number" ? src.version : 1,
     mode,
+    scenarioItems: readScenarioItemsFromApi(src),
     flowMode,
     // PRD-30 FR-16: only the three known values; anything else (including a test
     // saved before the column existed) is the default «перемешивание».
@@ -1111,6 +1392,11 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     basic: {
       title: typeof src.title === "string" ? src.title : "",
       description: typeof src.description === "string" ? src.description : "",
+      // PRD-59 FR-03: отсутствие формата (тест старше трека, чужая запись) = «plain».
+      descriptionFormat:
+        src.descriptionFormat === "richText" || src.descriptionFormat === "html"
+          ? src.descriptionFormat
+          : "plain",
       status,
       feedback: feedback.content,
       feedbackLinks: feedback.links,
@@ -1128,6 +1414,11 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
         typeof src.showCorrectAnswers === "boolean" ? src.showCorrectAnswers : false,
       // PRD-19 (Блок A): consolidated in `resolvedAllowReturnToUnanswered` above.
       allowReturnToUnanswered: resolvedAllowReturnToUnanswered,
+      // PRD-19 (FR-11a): поля нет в ответе (тест до этой настройки) → ВЫКЛ, прежний фронтир.
+      allowFreeSectionNavigation:
+        typeof src.allowFreeSectionNavigation === "boolean"
+          ? src.allowFreeSectionNavigation
+          : false,
       allowAnswerChange:
         typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
       // PRD-43: поля нет в ответе (тест до PRD-43) → то же правило, что и у
@@ -1139,6 +1430,15 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
       skipReviewWhenComplete:
         typeof src.skipReviewWhenComplete === "boolean" ? src.skipReviewWhenComplete : false,
+      // PRD-67: a response without the column is a test that never closed sections.
+      closeSectionOnLeave:
+        typeof src.closeSectionOnLeave === "boolean" ? src.closeSectionOnLeave : false,
+      // Поле пришло с сервера как есть. Его нет только у ответа, собранного до колонки:
+      // такой тест вёл себя как «лучшая», и читать его иначе значило бы менять поведение
+      // задним числом.
+      lmsAttemptResult: src.lmsAttemptResult === "last" ? "last" : "best",
+      // PRD-50 FR-13: поля нет (тест до PRD-50) → подытоги скрыты.
+      breakdownDisplay: readBreakdownDisplayFromApi(src),
       // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.
       copyProtection:
         typeof src.copyProtection === "boolean" ? src.copyProtection : true,
@@ -1151,8 +1451,12 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       decisionPolicy,
       overall,
       byTopic,
+      // PRD-50 FR-53: поля нет (тест до §16) → гейт выключен, вердикт как был.
+      breakdownGateEnabled: src.breakdownGateEnabled === true,
     },
     sections,
+    // PRD-50 FR-11: поля нет (тест до PRD-50) → блоков нет (FR-27).
+    sectionGroups: readSectionGroupsFromApi(src.sectionGroupsJson),
     adaptive: {
       showDifficultyLevel,
       testSettings: { showDifficultyLevel },
@@ -1163,12 +1467,15 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     measurements: buildMeasurementsFromApi(src, scalesModel),
     retakePolicy: readRetakePolicyFromApi(src),
     report: readReportSettingsFromApi(src),
+    reportDocument: { saved: readReportDocumentFromApi(src) },
     intro: readIntroFromApi(src),
     scoring: {
       defaultQuestionPoints:
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
       questionOverrides: buildQuestionOverridesFromApi(src),
+      simDefaults: readSimScoringFromApi(src),
     },
+    deliveryExcludedQuestionIds: readDeliveryExcludedFromApi(src),
   };
 }
 
@@ -1194,9 +1501,15 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     events: model.basic.feedbackEvents,
   };
 
+  // PRD-51: правится ветвь ТЕКУЩЕГО режима; ветвь другого лежит в базе нетронутой, и
+  // сервер её не касается (замена идёт по паре «тест + режим»).
+  const documentDraft =
+    model.reportDocument?.draft?.[model.mode === "adaptive" ? "adaptive" : "standard"];
+
   const payload: TestSettingsPayload = {
     title: model.basic.title,
     description: emptyToNull(model.basic.description),
+    descriptionFormat: model.basic.descriptionFormat,
     status: model.basic.status,
     mode: model.mode,
     flowMode: model.flowMode,
@@ -1209,14 +1522,22 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     flowPolicyJson: buildFlowPolicyForPayload(model),
     overallPassRuleJson: model.passRules.overall,
     passDecisionPolicy: model.passRules.decisionPolicy,
+    // PRD-50 FR-53: гейт подтем — свойство ТЕСТА, шлём всегда, чтобы выключение доехало.
+    breakdownGateEnabled: model.passRules.breakdownGateEnabled === true,
     timeLimitMinutes: model.runtime.timeLimitMinutes,
     maxAttempts: model.runtime.maxAttempts,
     showCorrectAnswers: model.runtime.showCorrectAnswers,
     allowReturnToUnanswered: model.runtime.allowReturnToUnanswered,
+    allowFreeSectionNavigation: model.runtime.allowFreeSectionNavigation,
     allowAnswerChange: model.runtime.allowAnswerChange,
     quickAdvance: model.runtime.quickAdvance,
     showSectionResults: model.runtime.showSectionResults,
     skipReviewWhenComplete: model.runtime.skipReviewWhenComplete,
+    closeSectionOnLeave: model.runtime.closeSectionOnLeave,
+    lmsAttemptResult: model.runtime.lmsAttemptResult,
+    // PRD-50 FR-13: a draft persisted before this PRD carries no slice yet — resolves
+    // to the same «Не показывать» the missing column has always meant.
+    breakdownDisplayJson: model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY,
     copyProtection: model.runtime.copyProtection,
     protectionWatermark: model.runtime.protectionWatermark,
     protectionHideOnBlur: model.runtime.protectionHideOnBlur,
@@ -1243,11 +1564,47 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
       model.intro && (model.intro.results || model.intro.report || model.intro.reportSameAsResults)
         ? model.intro
         : null,
+    // PRD-50 FR-11: absent/empty persists as `null` — no blocks, same as a draft from
+    // before this PRD (FR-27).
+    sectionGroupsJson:
+      model.sectionGroups && model.sectionGroups.length > 0 ? model.sectionGroups : null,
     // PRD-15 block D (FR-31): test-wide default price (null = system default).
     // Defensive `?.` — drafts persisted before block D have no scoring slice.
     defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,
+    // «Сценарий в ИС» (Э5а): штрафы теста; пустой набор уходит `null` — системные умолчания.
+    simScoringJson: simScoringForSave(model.scoring?.simDefaults),
+    // PRD-51: документ уходит на сервер ТОЛЬКО если автор его правил. Отсутствие поля
+    // означает «не трогать», и это не то же, что пустой список: пустой список стёр бы
+    // документ теста, документа не собиравшего, — сохранением с чужой вкладки.
+    //
+    // Раскладка полей — КОНТРАКТ МАРШРУТА (`values`/`settings`), а не имена колонок:
+    // `toRowInputs` здесь звать нельзя, он готовит строку для РАЗРЕШЕНИЯ документа. Однажды
+    // его сюда уже подставили, и текст авторских страниц молча терялся: zod выбрасывает
+    // незаявленные ключи, ничего об этом не сказав. Порядок тело не несёт вовсе — сервер
+    // выводит его из позиции.
+    ...(documentDraft
+      ? {
+          reportBlocks: documentDraft.map((b) => ({
+            block: b.block,
+            templateKey: b.templateKey,
+            enabled: b.enabled,
+            values: b.values,
+            settings: b.settings,
+          })),
+        }
+      : {}),
     expectedVersion: model.version,
     folderId: model.folderId,
+    // Оформление едет только при СОЗДАНИИ, и только ВЫБОР ШАБЛОНА: системные страницы
+    // теста связывает с шаблоном та же транзакция, что их создаёт, и опоздать здесь
+    // нельзя. Всё прочее (параметры, палитры, надписи, порядок блоков) дописывается
+    // сразу после INSERT через `PUT /api/tests/:id/design` — там эта проверка против
+    // манифеста уже написана, и дублировать её в маршруте создания незачем.
+    //
+    // Срез есть только у черновика нового теста (см. `TestEditorModel.design`), поэтому
+    // PUT теста по-прежнему ничего об оформлении не сообщает: иначе сохранение с любой
+    // вкладки затирало бы то, чего модель существующего теста не знает.
+    ...(model.design ? { designSettingsJson: { templateId: model.design.templateId } } : {}),
   };
 
   return payload;
@@ -1346,6 +1703,26 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       drawBlueprintJson,
       // PRD-17 (BR-12): fixed-variant set (null = legacy draw).
       formSetJson: section.formSet ?? null,
+      // PRD-50 FR-50: тексты подтем. Пустая карта уходит как null: «ничего не написано» и
+      // «структура есть, но пустая» — одно и то же, а null короче в базе.
+      breakdownFeedbackJson:
+        section.breakdownFeedback && Object.keys(section.breakdownFeedback).length > 0
+          ? { axis: "tag" as const, keys: section.breakdownFeedback }
+          : null,
+      // Толкование темы, заданное этим тестом. Пустой текст уходит как `null`: «не
+      // переопределял» и «переопределил пустотой» — одно и то же, и лишняя запись в базе
+      // заставила бы карточку показывать различие, которого у участника нет.
+      interpretationJson:
+        section.interpretation && section.interpretation.text.trim() !== ""
+          ? section.interpretation
+          : null,
+      // Толкования подтем — по тому же правилу, что и их тексты выше.
+      breakdownInterpretationJson:
+        section.breakdownInterpretation && Object.keys(section.breakdownInterpretation).length > 0
+          ? { axis: "tag" as const, keys: section.breakdownInterpretation }
+          : null,
+      // PRD-50 FR-11/FR-12: the block this section belongs to; `null` = no block.
+      groupKey: section.groupKey ?? null,
       // PRD-15 block D (FR-31): per-section default price.
       defaultPoints: section.defaultPoints ?? null,
       // PRD-30 FR-18: the topic's override; `null` = «как в тесте».
@@ -1387,9 +1764,11 @@ export function mapEditorRouterFlowToPayload(model: TestEditorModel): FlowRouter
   if (!router) {
     return { completionPolicy: "all_required_completed", sectionUnlockRules: {} };
   }
+  const itemOrder = itemOrderForSave(model);
   return {
     completionPolicy: router.completionPolicy,
     sectionUnlockRules: router.sectionUnlockRules,
+    ...(itemOrder ? { itemOrder } : {}),
   };
 }
 

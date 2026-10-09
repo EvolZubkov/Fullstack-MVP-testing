@@ -413,6 +413,85 @@ async function main(): Promise<void> {
     console.log(`  + тест «${DEMO.test}»`);
   }
 
+  /*
+    Настройки, которые появились в продукте позже самого стенда и без которых их экраны
+    снимаются пустыми: вводные тексты по исходу (PRD-61), группы тем и толкования темы и
+    подтемы (трек «отчёт по референсу»), показ подытогов по подтемам (PRD-50).
+
+    Пишутся ОТДЕЛЬНЫМ PUT, а не при создании теста: стенд идемпотентен и переживает тесты,
+    заведённые прошлыми прогонами, — им эти поля тоже нужно проставить. PUT настроек требует
+    полного состава (`mode` + `sections`), иначе он молча отвечает 200 и не меняет ничего.
+  */
+  await api("PUT", `/api/tests/${test.id}`, {
+    mode: "standard",
+    introJson: {
+      results: {
+        format: "plain",
+        text:
+          "Ниже — результат проверки знаний по охране труда и пожарной безопасности. " +
+          "Разбор по темам показывает, где знания уверенные, а где их стоит освежить.",
+        passed: {
+          format: "plain",
+          text: "Порог взят: допуск к работам подтверждён на ближайший год.",
+        },
+        failed: {
+          format: "plain",
+          text:
+            "Порог не взят. Повторное прохождение доступно через сутки — " +
+            "перед ним просмотрите материалы по темам, отмеченным как непройденные.",
+        },
+      },
+      reportSameAsResults: true,
+    },
+    breakdownDisplayJson: {
+      visibility: "bar_and_value",
+      basis: "units",
+      placement: "topics",
+      showInterpretation: true,
+    },
+    sectionGroupsJson: [
+      { key: "mandatory", label: "Обязательная часть", order: 0 },
+      { key: "extra", label: "Дополнительная часть", order: 1 },
+    ],
+    sections: [
+      {
+        topicId: topicA.id,
+        drawCount: 5,
+        required: true,
+        groupKey: "mandatory",
+        topicPassRuleJson: { type: "percent", value: 60 },
+        drawBlueprintJson: { strata: [{ tag: "Средства защиты", count: 2, mode: "min" }] },
+        interpretationJson: {
+          format: "plain",
+          text:
+            "Тема отвечает за повседневную безопасность на рабочем месте: средства защиты, " +
+            "порядок действий и границы ответственности работника.",
+        },
+        breakdownInterpretationJson: {
+          axis: "tag",
+          keys: {
+            "средства защиты": {
+              format: "plain",
+              text: "Подтема о средствах индивидуальной защиты: что надевают и когда проверяют.",
+            },
+          },
+        },
+      },
+      {
+        topicId: topicB.id,
+        drawCount: 3,
+        required: false,
+        groupKey: "extra",
+        topicPassRuleJson: { type: "percent", value: 50 },
+        interpretationJson: {
+          format: "plain",
+          text: "Тема о поведении при возгорании: сигнал, эвакуация, первичные средства тушения.",
+        },
+      },
+    ],
+  });
+  console.log("  * вводные тексты по исходу, группы тем и толкования");
+
   // A per-question override, so the «Оценка» tab shows the «настроено в тесте» mark.
   await api("PUT", `/api/tests/${test.id}/question-scoring/${questionsA[4]}`, {
     points: 3,
@@ -426,28 +505,43 @@ async function main(): Promise<void> {
   });
   console.log("  * настроена цена одного вопроса (ступенчато)");
 
-  // A measurement scale plus contributions, so the «Шкалы» tab is not empty.
+  /*
+    A measurement scale plus contributions, so the «Шкалы» tab is not empty.
+
+    Нормализация СЫРАЯ, а не процентная: вклады здесь — по одному баллу за каждый из трёх
+    вопросов, то есть достижимый диапазон вырожден (и минимум, и максимум равны сумме
+    вкладов). Процент по такому диапазону не определён, движок честно сообщает
+    «percent: диапазон нормализации невозможен или нулевой», и отладочный прогон встречал
+    автора красной плашкой «Ошибка расчёта» — на стенде, который снимают для руководства.
+    Уровни поэтому заданы в тех же единицах, что и сама шкала: 0-3 балла.
+  */
+  const scaleBody = {
+    key: "safety_awareness",
+    label: "Внимательность к безопасности",
+    description: "Сводный показатель по вопросам о средствах защиты и порядке действий.",
+    type: "number",
+    aggregation: "sum",
+    normalization: "none",
+    direction: "positive",
+    learnerVisibility: "level",
+    scormTarget: "suspend_data",
+    configJson: {
+      bands: [
+        { level: "low", label: "Требует внимания", min: 0, max: 1 },
+        { level: "mid", label: "Достаточный уровень", min: 2, max: 2 },
+        { level: "high", label: "Высокий уровень", min: 3, max: 3 },
+      ],
+    },
+  };
   const scales = await api<Array<{ id: string; key: string }>>("GET", `/api/tests/${test.id}/scales`);
   let scale = scales.find((s) => s.key === "safety_awareness");
-  if (!scale) {
-    scale = await api<{ id: string; key: string }>("POST", `/api/tests/${test.id}/scales`, {
-      key: "safety_awareness",
-      label: "Внимательность к безопасности",
-      description: "Сводный показатель по вопросам о средствах защиты и порядке действий.",
-      type: "number",
-      aggregation: "sum",
-      normalization: "percent",
-      direction: "positive",
-      learnerVisibility: "level",
-      scormTarget: "suspend_data",
-      configJson: {
-        bands: [
-          { level: "low", label: "Требует внимания", min: 0, max: 39 },
-          { level: "mid", label: "Достаточный уровень", min: 40, max: 74 },
-          { level: "high", label: "Высокий уровень", min: 75, max: 100 },
-        ],
-      },
-    });
+  if (scale) {
+    // Стенд переживает прошлые прогоны, поэтому шкала не только заводится, но и
+    // ВЫРАВНИВАЕТСЯ: у заведённой прежним сидом стоит процентная нормализация.
+    await api("PUT", `/api/tests/${test.id}/scales/${scale.id}`, scaleBody);
+    console.log("  * шкала «Внимательность к безопасности» приведена к сырым баллам");
+  } else {
+    scale = await api<{ id: string; key: string }>("POST", `/api/tests/${test.id}/scales`, scaleBody);
     console.log("  + шкала «Внимательность к безопасности»");
   }
   for (const questionId of [questionsA[4], questionsA[5], questionsA[7]]) {

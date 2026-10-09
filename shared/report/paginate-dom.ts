@@ -208,6 +208,29 @@ function safeCutLines(root: Element, doc: Document, scale: number): number[] {
 }
 
 /**
+ * Фон страниц документа: подложка ТИТУЛЬНОЙ и фон всех остальных.
+ *
+ * Картинка-подложка — обложка, а не обои: повторённая на каждом листе, она спорит с текстом
+ * и печатает семь одинаковых разворотов вместо одного. Поэтому изображение остаётся первой
+ * странице, а прочие получают фон шаблона — тот самый градиент, который печатается, когда
+ * автор подложку не задал вовсе.
+ *
+ * Градиент читается ЗАМЕРОМ, а не собирается из строки: изображение приходит инлайновым
+ * `background-image` из макета и перебивает градиент CSS целиком, поэтому в вычисленном
+ * значении его уже нет. Инлайн снимается на время замера и возвращается на место.
+ */
+function pageBackgrounds(rendered: HTMLElement, doc: Document): { cover: string; rest: string } {
+  const view = doc.defaultView;
+  const cover = view?.getComputedStyle(rendered).background ?? "";
+  const inline = rendered.style.backgroundImage;
+  if (!inline) return { cover, rest: cover };
+  rendered.style.backgroundImage = "";
+  const rest = view?.getComputedStyle(rendered).background ?? "";
+  rendered.style.backgroundImage = inline;
+  return { cover, rest };
+}
+
+/**
  * Готовые СТРАНИЦЫ документа: элементы ровно в лист A4, из которых и снимается PDF.
  *
  * Почему страница — отдельный элемент, а не кусок общего снимка. Резать растр значит
@@ -219,6 +242,8 @@ function safeCutLines(root: Element, doc: Document, scale: number): number[] {
  *
  * Фон переносится на страницу, а у внутренней копии гасится: иначе градиент копии,
  * растянутый по её полной высоте, лёг бы поверх и вернул ту же поехавшую подложку.
+ * Картинку-подложку получает ТОЛЬКО первая страница, остальные — фон шаблона
+ * ({@link pageBackgrounds}).
  *
  * @param rendered Корень отрисованной страницы отчёта (`.tb-report`).
  * @param doc Документ, в котором она живёт.
@@ -226,11 +251,12 @@ function safeCutLines(root: Element, doc: Document, scale: number): number[] {
  * @returns Страницы в порядке документа; каждая — ровно лист A4.
  */
 export function buildReportPages(rendered: HTMLElement, doc: Document, mount?: HTMLElement): HTMLElement[] {
-  const background = doc.defaultView?.getComputedStyle(rendered).background ?? "";
+  const { cover, rest } = pageBackgrounds(rendered, doc);
   const pad = pagePadding(rendered, doc);
   const usable = usablePageHeight(rendered, doc);
   const parent = mount ?? (rendered.parentElement as HTMLElement | null);
-  return buildReportSheets(rendered, doc, mount).map((sheet) => {
+  return buildReportSheets(rendered, doc, mount).map((sheet, index) => {
+    const background = index === 0 ? cover : rest;
     const page = doc.createElement("div");
     // Класс — для узнаваемости в отладке и в тестах: снимок снимается со СТРАНИЦЫ, а
     // `.tb-report` лежит внутри неё копией.
@@ -289,7 +315,12 @@ export function buildReportSheets(rendered: HTMLElement, doc: Document, mount?: 
   const usable = usablePageHeight(rendered, doc);
   // Верхнее поле страницы: им отличается пространство ИЗМЕРЕНИЙ от пространства КУСКОВ.
   const pad = pagePadding(rendered, doc);
-  const planned = paginateBlocks(measureBlocks(rendered, scale), usable);
+  // Метки разрыва ВЕРХНЕГО УРОВНЯ решают раскладку страниц, а не разрез внутри листа:
+  // индексы совпадают с боксами, потому что и те и другие считаются по одним детям корня.
+  const breakBefore = new Set(
+    [...rendered.children].flatMap((child, i) => (child.matches(PAGE_BREAK_SELECTOR) ? [i] : [])),
+  );
+  const planned = paginateBlocks(measureBlocks(rendered, scale), usable, breakBefore);
   // Макет без блоков верхнего уровня (один текст в корне — так выглядят проверочные
   // страницы и вырожденные шаблоны) делить не на что: он остаётся одним листом.
   const plan = planned.length ? planned : [{ blocks: [], offset: 0, height: 0 }];

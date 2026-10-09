@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-52 — панель комментариев у автора (вкладка «Комментарии» в ящике теста,
+    стек ящиков при переходе по якорю, закрытие с исходом).
+    Спека: docs/specs/prd-52/test-review.md. План: docs/plans/2026-09-03-test-review.md.
+    Канон ящика — approved/prd17-test-variants.html. Состояния — кнопки навбара
+    (адресуемы через ?state=<id>). СОГЛАСОВАН 2026-09-03.
+    -->
+    <title>PRD-52 — Панель комментариев</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <style>
+      /* gate-skip-start */
+      .wf-sprite { display: none; }
+
+      /* Faux-drawer: ящик редактора теста в потоке страницы (канон prd17). */
+      .wf-drawer {
+        max-width: var(--wf-size-860, 860px); margin: 0 auto;
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l); box-shadow: var(--ou-shadow-m);
+        overflow: hidden; display: flex; flex-direction: column;
+      }
+      .wf-drawer__tabs { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); padding: 0 var(--ou-space-5); }
+      .wf-drawer-body { padding: var(--ou-space-5) var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      .wf-drawer-body [hidden] { display: none; }
+
+      /* СТЕК ЯЩИКОВ: ящик вопроса ложится ПОВЕРХ ящика теста со сдвигом и затемнением
+         нижнего слоя. Так видно, что нижний ящик жив и место в списке не потеряно. */
+      .wf-stack { position: relative; }
+      .wf-stack__under { filter: saturate(.75); opacity: .55; pointer-events: none; }
+      .wf-stack__over { position: relative; margin-top: calc(var(--ou-space-8) * -1); z-index: 2; }
+      .wf-stack__over .wf-drawer { max-width: var(--wf-size-780, 780px); box-shadow: var(--ou-shadow-l); }
+      .wf-stack-hint { max-width: var(--wf-size-860, 860px); margin: var(--ou-space-3) auto 0; }
+
+      /* Лента веток комментариев. */
+      .wf-group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+      .wf-thread-head { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+      .wf-thread-head .spacer { flex: 1; }
+      .wf-thread-who { font: var(--ou-text-body-s); font-weight: 600; }
+      .wf-thread-when { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      .wf-thread-ctx { font: var(--ou-text-caption); color: var(--ou-fg-muted); display: block; margin-top: var(--ou-space-1); }
+      .wf-thread-text { font: var(--ou-text-body-s); margin: var(--ou-space-2) 0 0; }
+      .wf-replies { margin: var(--ou-space-3) 0 0; padding-left: var(--ou-space-4); border-left: var(--wf-border-w) solid var(--ou-border-soft); display: flex; flex-direction: column; gap: var(--ou-space-3); }
+      .wf-actions { display: flex; align-items: center; gap: var(--ou-space-2); margin-top: var(--ou-space-3); flex-wrap: wrap; }
+      .wf-actions .spacer { flex: 1; }
+      .wf-panel-bar { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+      .wf-panel-bar .spacer { flex: 1; }
+      .wf-toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); cursor: pointer; }
+      .wf-toggle__lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      .wf-ctx-line { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); align-items: center; }
+      /* Сегмент выбора исхода прижат к контенту, а не растянут на всю колонку. */
+      .wf-inline { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); }
+      /* Зазор между кнопками в правой группе подвала формы (канон prd17). */
+      .ou-formactions > span { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-form { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+      .wf-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      /* wireframe-only: wf-utils скинит НАТИВНЫЙ select.ou-select, а DS-компонент —
+         div.ou-select + .ou-select__trigger, отчего рамка удваивается. Гасим внешний бокс. */
+      .ou-select:has(.ou-select__trigger) { padding: 0; border: 0; border-radius: 0; background: transparent; cursor: default; }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      /* Строка списка тестов со счётчиком открытых комментариев. */
+      .wf-testrow { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-m); background: var(--ou-bg-elevated); }
+      .wf-testrow .spacer { flex: 1; }
+      .wf-testrow__title { font: var(--ou-text-body-m); font-weight: 600; }
+      /* gate-skip-end */
+    </style>
+
+    <style data-wf-template-overrides>
+      :root { --wf-nav-offset: 92px; }
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960, 960px); margin: 0 auto; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Комментарии у автора:</span>
+      <button type="button" class="active" onclick="showState(this, 'tab')">вкладка в ящике</button>
+      <button type="button" onclick="showState(this, 'resolve')">закрытие с исходом</button>
+      <button type="button" onclick="showState(this, 'stack')">переход · стек ящиков</button>
+      <button type="button" onclick="showState(this, 'new')">комментарий из ящика</button>
+      <button type="button" onclick="showState(this, 'orphan')">объект удалён</button>
+      <button type="button" onclick="showState(this, 'rebuild')">панель в отладчике</button>
+      <button type="button" onclick="showState(this, 'list')">счётчик в списке</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ВКЛАДКА «КОММЕНТАРИИ» В ЯЩИКЕ ТЕСТА ░░░ -->
+      <div class="wf-state active" id="wf-tab">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификационный тест для руководителей</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: черновик">Черновик</span>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </header>
+
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+            <div class="ou-tabs__list" role="tablist">
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Состав</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Настройки</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Структура</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оценка</span></button>
+              <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Комментарии</span><span class="ou-tag ou-tag--warning ou-tag--s">3</span></button>
+            </div>
+          </div>
+
+          <div class="wf-drawer-body">
+            <div class="wf-panel-bar">
+              <button class="ou-btn ou-btn--primary ou-btn--s" onclick="showState(navBtn('new'), 'new')"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-message" /></svg></span><span>Добавить комментарий</span></button>
+              <span class="spacer"></span>
+              <label class="wf-toggle">
+                <span class="ou-switch ou-switch--s is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Только открытые" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                <span class="wf-toggle__lbl">Только открытые</span>
+              </label>
+              <button class="ou-btn ou-btn--secondary ou-btn--s">Следующий комментарий</button>
+            </div>
+
+            <div class="tb-section-label">Раздел «О компании»</div>
+            <div class="wf-group">
+              <div class="ou-card ou-card--outlined ou-card--sm">
+                <div class="ou-card__body">
+                  <div class="wf-thread-head">
+                    <span class="ou-avatar ou-avatar--xs ou-avatar--c-blue"><span class="ou-avatar__visual"><span class="ou-avatar__initials">ИП</span></span></span>
+                    <span class="wf-thread-who">Ирина Петрова</span>
+                    <span class="wf-thread-when">2 сентября, 14:20</span>
+                    <span class="spacer"></span>
+                    <span class="ou-tag ou-tag--warning ou-tag--s">открыто</span>
+                  </div>
+                  <span class="wf-thread-ctx">Вопрос 4 «Согласно «Стратегии-2030», какова целевая доля…»</span>
+                  <p class="wf-thread-text">Формулировка допускает два прочтения: доля рынка по абонентам или по выручке. Нужно уточнить в тексте вопроса.</p>
+                  <div class="wf-actions">
+                    <button class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(navBtn('stack'), 'stack')"><span>Перейти к вопросу</span><span class="ou-btn__ico"><svg width="13" height="13"><use href="#i-arrow-right" /></svg></span></button>
+                    <button class="ou-btn ou-btn--ghost ou-btn--s">Ответить</button>
+                    <span class="spacer"></span>
+                    <button class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(navBtn('resolve'), 'resolve')">Закрыть комментарий</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-card ou-card--outlined ou-card--sm">
+                <div class="ou-card__body">
+                  <div class="wf-thread-head">
+                    <span class="ou-avatar ou-avatar--xs ou-avatar--c-purple"><span class="ou-avatar__visual"><span class="ou-avatar__initials">СК</span></span></span>
+                    <span class="wf-thread-who">Сергей Ковалёв</span>
+                    <span class="wf-thread-when">2 сентября, 11:40</span>
+                    <span class="spacer"></span>
+                    <span class="ou-tag ou-tag--success ou-tag--s">учтено</span>
+                  </div>
+                  <span class="wf-thread-ctx">Вопрос 2 «Кластер «Кибербезопасность»»</span>
+                  <p class="wf-thread-text">В ключе отмечены три варианта, но по методике верных должно быть два.</p>
+                  <div class="wf-replies">
+                    <div>
+                      <div class="wf-thread-head">
+                        <span class="ou-avatar ou-avatar--xs ou-avatar--c-green"><span class="ou-avatar__visual"><span class="ou-avatar__initials">АВ</span></span></span>
+                        <span class="wf-thread-who">Вы</span>
+                        <span class="wf-thread-when">2 сентября, 12:10</span>
+                      </div>
+                      <p class="wf-thread-text">Убрал третий вариант из ключа.</p>
+                    </div>
+                  </div>
+                  <div class="wf-actions">
+                    <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">изменено после комментария</span>
+                    <button class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(navBtn('stack'), 'stack')"><span>Перейти к вопросу</span><span class="ou-btn__ico"><svg width="13" height="13"><use href="#i-arrow-right" /></svg></span></button>
+                    <span class="spacer"></span>
+                    <button class="ou-btn ou-btn--secondary ou-btn--s">Открыть заново</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tb-section-label">Тест в целом</div>
+            <div class="wf-group">
+              <div class="ou-card ou-card--outlined ou-card--sm">
+                <div class="ou-card__body">
+                  <div class="wf-thread-head">
+                    <span class="ou-avatar ou-avatar--xs ou-avatar--c-amber"><span class="ou-avatar__visual"><span class="ou-avatar__initials">ИП</span></span></span>
+                    <span class="wf-thread-who">Ирина Петрова</span>
+                    <span class="wf-thread-when">1 сентября, 18:02</span>
+                    <span class="spacer"></span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">отклонено</span>
+                  </div>
+                  <span class="wf-thread-ctx">Тест в целом</span>
+                  <p class="wf-thread-text">Порог 80% кажется завышенным для входного контроля.</p>
+                  <div class="wf-replies">
+                    <div>
+                      <div class="wf-thread-head">
+                        <span class="ou-avatar ou-avatar--xs ou-avatar--c-green"><span class="ou-avatar__visual"><span class="ou-avatar__initials">АВ</span></span></span>
+                        <span class="wf-thread-who">Вы</span>
+                        <span class="wf-thread-when">2 сентября, 09:15</span>
+                      </div>
+                      <p class="wf-thread-text">Порог задан приказом об аттестации, снизить не можем.</p>
+                    </div>
+                  </div>
+                  <div class="wf-actions">
+                    <span class="spacer"></span>
+                    <button class="ou-btn ou-btn--secondary ou-btn--s">Открыть заново</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wf-sum"><span>Всего 7 комментариев · открытых 3 · от двух экспертов</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ЗАКРЫТИЕ С ИСХОДОМ ░░░ -->
+      <div class="wf-state" id="wf-resolve">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификационный тест для руководителей</h2></div>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </header>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+            <div class="ou-tabs__list" role="tablist">
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Состав</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Структура</span></button>
+              <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Комментарии</span><span class="ou-tag ou-tag--warning ou-tag--s">3</span></button>
+            </div>
+          </div>
+          <div class="wf-drawer-body">
+            <div class="ou-card ou-card--outlined ou-card--sm">
+              <div class="ou-card__body">
+                <div class="wf-thread-head">
+                  <span class="ou-avatar ou-avatar--xs ou-avatar--c-blue"><span class="ou-avatar__visual"><span class="ou-avatar__initials">ИП</span></span></span>
+                  <span class="wf-thread-who">Ирина Петрова</span>
+                  <span class="wf-thread-when">2 сентября, 14:20</span>
+                  <span class="spacer"></span>
+                  <span class="ou-tag ou-tag--warning ou-tag--s">открыто</span>
+                </div>
+                <span class="wf-thread-ctx">Раздел «О компании» · Вопрос 4 «Согласно «Стратегии-2030»…»</span>
+                <p class="wf-thread-text">Формулировка допускает два прочтения: доля рынка по абонентам или по выручке.</p>
+
+                <div class="wf-form" style="margin-top:var(--ou-space-4)">
+                  <div class="ou-formfield">
+                    <span class="ou-formfield__lbl">Исход</span>
+                    <span class="wf-inline">
+                      <span class="ou-seg ou-seg--s ou-seg--accent" role="group" aria-label="Исход комментария">
+                        <button type="button" class="ou-seg__item">Учтено</button>
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Отклонено</button>
+                      </span>
+                    </span>
+                  </div>
+                  <div class="ou-formfield">
+                    <span class="ou-formfield__lbl">Ответ автора</span>
+                    <div class="ou-textarea ou-textarea--full">
+                      <div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="3" placeholder="Почему комментарий отклонён"></textarea></div>
+                    </div>
+                    <span class="ou-formfield__desc">При отклонении ответ обязателен: эксперт должен увидеть причину.</span>
+                  </div>
+                  <div class="ou-formactions ou-formactions--between">
+                    <button class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(navBtn('tab'), 'tab')">Отмена</button>
+                    <button class="ou-btn ou-btn--primary ou-btn--s" disabled>Закрыть комментарий</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="wf-sum"><span>Кнопка станет доступной, как только появится текст ответа. Для исхода «Учтено» ответ необязателен.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ПЕРЕХОД ПО ЯКОРЮ: СТЕК ЯЩИКОВ ░░░ -->
+      <div class="wf-state" id="wf-stack">
+        <div class="wf-stack">
+          <div class="wf-stack__under">
+            <div class="wf-drawer">
+              <header class="ou-drawer__head">
+                <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификационный тест для руководителей</h2></div>
+              </header>
+              <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+                <div class="ou-tabs__list" role="tablist">
+                  <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Состав</span></button>
+                  <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Комментарии</span><span class="ou-tag ou-tag--warning ou-tag--s">3</span></button>
+                </div>
+              </div>
+              <div class="wf-drawer-body">
+                <div class="tb-section-label">Раздел «О компании»</div>
+                <div class="ou-card ou-card--outlined ou-card--sm">
+                  <div class="ou-card__body">
+                    <div class="wf-thread-head">
+                      <span class="ou-avatar ou-avatar--xs ou-avatar--c-blue"><span class="ou-avatar__visual"><span class="ou-avatar__initials">ИП</span></span></span>
+                      <span class="wf-thread-who">Ирина Петрова</span>
+                      <span class="spacer"></span>
+                      <span class="ou-tag ou-tag--warning ou-tag--s">открыто</span>
+                    </div>
+                    <span class="wf-thread-ctx">Вопрос 4 «Согласно «Стратегии-2030»…»</span>
+                    <p class="wf-thread-text">Формулировка допускает два прочтения.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wf-stack__over">
+            <div class="wf-drawer">
+              <header class="ou-drawer__head">
+                <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Вопрос · Стратегия-2030</h2></div>
+                <span class="ou-tag ou-tag--accent ou-tag--outline">по комментарию 3 из 7</span>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор вопроса"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+              </header>
+              <div class="wf-drawer-body">
+                <div class="ou-banner ou-banner--subtle ou-banner--sm">
+                  <span class="ou-banner__ico"><svg width="16" height="16"><use href="#i-message" /></svg></span>
+                  <div class="ou-banner__body"><div class="ou-banner__desc">«Формулировка допускает два прочтения: доля рынка по абонентам или по выручке» — Ирина Петрова, 2 сентября.</div></div>
+                </div>
+                <div class="ou-formfield">
+                  <span class="ou-formfield__lbl">Формулировка</span>
+                  <div class="ou-textarea ou-textarea--full">
+                    <div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="3">Согласно «Стратегии-2030», какова целевая доля компании по выручке на мобильном рынке B2C к 2030 году?</textarea></div>
+                  </div>
+                </div>
+                <div class="ou-formactions ou-formactions--between">
+                  <button class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(navBtn('tab'), 'tab')">Отмена</button>
+                  <span>
+                    <button class="ou-btn ou-btn--secondary ou-btn--s">Сохранить и ответить</button>
+                    <button class="ou-btn ou-btn--primary ou-btn--s">Сохранить</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wf-stack-hint">
+            <div class="ou-banner ou-banner--subtle ou-banner--sm">
+              <span class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></span>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Ящик вопроса лежит ПОВЕРХ ящика теста: нижний слой жив, и после сохранения автор возвращается в то же место списка с тем же фильтром. Escape закрывает только верхний ящик.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ЗАМЕЧАНИЕ ИЗ ЯЩИКА (выбор якоря) ░░░ -->
+      <div class="wf-state" id="wf-new">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификационный тест для руководителей</h2></div>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </header>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+            <div class="ou-tabs__list" role="tablist">
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Состав</span></button>
+              <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Комментарии</span><span class="ou-tag ou-tag--warning ou-tag--s">3</span></button>
+            </div>
+          </div>
+          <div class="wf-drawer-body">
+            <div class="ou-card ou-card--outlined ou-card--sm">
+              <div class="ou-card__header"><span class="ou-card__title">Новый комментарий</span></div>
+              <div class="ou-card__body">
+                <div class="wf-form">
+                  <div class="ou-formgroup ou-formgroup--two">
+                    <div class="ou-formfield">
+                      <span class="ou-formfield__lbl">Место</span>
+                      <div class="ou-select ou-field--s" data-ou-options="Тест в целом|Раздел «О компании»|Раздел «Продукты и сервисы»|Стартовый экран|Экран итогов"><button type="button" class="ou-field__box ou-select__trigger"><span class="ou-select__value">Тест в целом</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <span class="ou-formfield__desc">По умолчанию — тест в целом.</span>
+                    </div>
+                    <div class="ou-formfield">
+                      <span class="ou-formfield__lbl">Вопрос или страница</span>
+                      <div class="ou-select ou-field--s is-disabled" data-ou-options="—"><button type="button" class="ou-field__box ou-select__trigger" disabled><span class="ou-select__value">Выберите раздел</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <span class="ou-formfield__desc">Доступно после выбора раздела.</span>
+                    </div>
+                  </div>
+                  <div class="ou-textarea ou-textarea--full">
+                    <div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="4" placeholder="Что не так и что предлагаете изменить"></textarea></div>
+                  </div>
+                  <div class="ou-formactions ou-formactions--between">
+                    <button class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(navBtn('tab'), 'tab')">Отмена</button>
+                    <button class="ou-btn ou-btn--primary ou-btn--s">Добавить</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="wf-sum"><span>Комментарий автора попадает в ту же историю и видно всем экспертам круга.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ОБЪЕКТ УДАЛЁН ░░░ -->
+      <div class="wf-state" id="wf-orphan">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификационный тест для руководителей</h2></div>
+          </header>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+            <div class="ou-tabs__list" role="tablist">
+              <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Комментарии</span><span class="ou-tag ou-tag--warning ou-tag--s">3</span></button>
+            </div>
+          </div>
+          <div class="wf-drawer-body">
+            <div class="ou-card ou-card--outlined ou-card--sm">
+              <div class="ou-card__body">
+                <div class="wf-thread-head">
+                  <span class="ou-avatar ou-avatar--xs ou-avatar--c-purple"><span class="ou-avatar__visual"><span class="ou-avatar__initials">СК</span></span></span>
+                  <span class="wf-thread-who">Сергей Ковалёв</span>
+                  <span class="wf-thread-when">30 августа, 10:12</span>
+                  <span class="spacer"></span>
+                  <span class="ou-tag ou-tag--warning ou-tag--s">открыто</span>
+                </div>
+                <span class="wf-thread-ctx">Раздел «Финансы» · Вопрос «Расчёт EBITDA по сегментам»</span>
+                <p class="wf-thread-text">Формула в условии не соответствует принятой в отчётности.</p>
+                <div class="wf-actions">
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">объект удалён</span>
+                  <button class="ou-btn ou-btn--secondary ou-btn--s" disabled><span>Перейти к вопросу</span></button>
+                  <span class="spacer"></span>
+                  <button class="ou-btn ou-btn--secondary ou-btn--s">Закрыть комментарий</button>
+                </div>
+              </div>
+            </div>
+            <div class="wf-sum"><span>Вопрос удалён из банка. Комментарий остался читаемым за счёт снимка контекста, переход отключён.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ПАНЕЛЬ В ОТЛАДЧИКЕ: БАННЕР ПЕРЕСБОРКИ ░░░ -->
+      <div class="wf-state" id="wf-rebuild">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Отладка теста · вкладка «Комментарии»</h2></div>
+          </header>
+          <div class="wf-drawer-body">
+            <div class="ou-banner ou-banner--subtle ou-banner--sm">
+              <span class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></span>
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">Сохранено. В текущем прогоне изменения не видны</div>
+                <div class="ou-banner__desc">Чтобы прогон учитывал правку, нужна пересборка пакета — она начнёт прохождение сначала.</div>
+              </div>
+              <div class="ou-banner__actions">
+                <button class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-refresh" /></svg></span><span>Пересобрать</span></button>
+              </div>
+            </div>
+            <div class="ou-card ou-card--outlined ou-card--sm">
+              <div class="ou-card__body">
+                <div class="wf-thread-head">
+                  <span class="ou-avatar ou-avatar--xs ou-avatar--c-blue"><span class="ou-avatar__visual"><span class="ou-avatar__initials">ИП</span></span></span>
+                  <span class="wf-thread-who">Ирина Петрова</span>
+                  <span class="spacer"></span>
+                  <span class="ou-tag ou-tag--warning ou-tag--s">открыто</span>
+                </div>
+                <span class="wf-thread-ctx">Вопрос 4 «Согласно «Стратегии-2030»…»</span>
+                <p class="wf-thread-text">Формулировка допускает два прочтения.</p>
+                <div class="wf-actions">
+                  <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">изменено после комментария</span>
+                  <span class="spacer"></span>
+                  <button class="ou-btn ou-btn--secondary ou-btn--s">Закрыть комментарий</button>
+                </div>
+              </div>
+            </div>
+            <div class="wf-sum"><span>Прогон остался на том же вопросе: правка открывалась ящиком поверх окна, стейдж не перезагружался.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ СЧЁТЧИК В СПИСКЕ ТЕСТОВ ░░░ -->
+      <div class="wf-state" id="wf-list">
+        <div class="wf-doc">
+          <div class="wf-testrow">
+            <span class="wf-testrow__title">Сертификационный тест для руководителей</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Черновик</span>
+            <span class="spacer"></span>
+            <span class="ou-tag ou-tag--warning ou-tag--s" aria-label="Открытых комментариев: 3"><svg width="12" height="12"><use href="#i-message" /></svg>3</span>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с тестом"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span></button>
+          </div>
+          <div class="wf-testrow" style="margin-top:var(--ou-space-2)">
+            <span class="wf-testrow__title">Входной контроль для менеджеров</span>
+            <span class="ou-tag ou-tag--success ou-tag--s">Опубликован</span>
+            <span class="spacer"></span>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с тестом"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></span></button>
+          </div>
+          <p style="margin-top:var(--ou-space-3);color:var(--ou-fg-muted)">Счётчик показывается только при открытых комментариях: у теста без них строка не меняется.</p>
+        </div>
+      </div>
+
+      <!-- ░░░ ПОЯСНЕНИЯ ░░░ -->
+      <div class="wf-state" id="wf-docs">
+        <div class="wf-doc">
+          <h2 class="wf-mapping-title">Пояснения к эскизу</h2>
+
+          <h3 class="wf-notes-title">Одна панель, три входа</h3>
+          <ul>
+            <li>Вкладка «Комментарии» в ящике редактора теста — равноправный способ работы, не вспомогательный:
+              автор читает, отвечает, переходит по якорю, закрывает с исходом и САМ создаёт комментарии, не запуская
+              прогон.</li>
+            <li>Та же панель — вкладкой в полном отладчике PRD-18.</li>
+            <li>Прямая ссылка <code>?review=&lt;id&gt;</code> открывает ящик на этой вкладке с раскрытой веткой.</li>
+          </ul>
+
+          <h3 class="wf-notes-title">Переход по якорю и возврат</h3>
+          <ul>
+            <li>Цель открывается ящиком ПОВЕРХ панели. Нижний ящик не размонтируется, поэтому после сохранения
+              автор оказывается в том же месте списка, с тем же фильтром и скроллом — отдельного «вернуться» нет.</li>
+            <li>Escape закрывает только ВЕРХНИЙ ящик. Сегодня <code>Drawer</code> вешает обработчик на документ, и
+              два открытых ящика закрылись бы вместе — нужна правка в ui-kit (стек открытых ящиков).</li>
+            <li>В ящике вопроса виден сам комментарий — чтобы править, не переключаясь обратно.</li>
+            <li>Если объект якоря удалён, переход отключается, а комментарий остаётся читаемым за счёт снимка контекста.</li>
+          </ul>
+
+          <h3 class="wf-notes-title">Закрытие с исходом</h3>
+          <ul>
+            <li>Исход — «Учтено» или «Отклонено», ставит только тот, кто может править тест.</li>
+            <li>При отклонении ответ обязателен: кнопка закрытия неактивна, пока текста нет.</li>
+            <li>Закрытую ветку можно открыть заново. Чужой комментарий не удаляется — только закрывается с исходом.</li>
+          </ul>
+
+          <h3 class="wf-notes-title">Правка из отладчика</h3>
+          <ul>
+            <li>Стейдж не перезагружается, прогон остаётся на том же вопросе.</li>
+            <li>Баннер честно говорит, что правка в текущем прогоне не видна, и предлагает пересборку —
+              с предупреждением, что прогон начнётся сначала.</li>
+          </ul>
+
+          <h3 class="wf-notes-title">DS Mapping</h3>
+          <table class="tb-table">
+            <thead><tr><th>Элемент эскиза</th><th>Компонент</th></tr></thead>
+            <tbody>
+              <tr><td>Хром ящика, заголовок, закрытие</td><td><code>ou-drawer__head</code>, <code>ou-drawer__title</code>, <code>ou-drawer__close</code></td></tr>
+              <tr><td>Вкладки ящика и счётчик на вкладке</td><td><code>ou-tabs--underline ou-tabs--m</code> + <code>ou-tag--warning ou-tag--s</code></td></tr>
+              <tr><td>Группировка по разделам</td><td><code>tb-section-label</code></td></tr>
+              <tr><td>Карточка ветки</td><td><code>ou-card ou-card--outlined ou-card--sm</code></td></tr>
+              <tr><td>Выбор исхода</td><td><code>ou-seg ou-seg--s</code></td></tr>
+              <tr><td>Ответ, текст комментария</td><td><code>ou-textarea</code> + <code>ou-textarea__input</code></td></tr>
+              <tr><td>Выбор якоря</td><td><code>ou-select</code> в <code>ou-formgroup--two</code></td></tr>
+              <tr><td>Баннер пересборки и цитата комментария</td><td><code>ou-banner ou-banner--subtle</code></td></tr>
+              <tr><td>Счётчик в списке тестов</td><td><code>ou-tag--warning</code> с иконкой</td></tr>
+              <tr><td>Стек ящиков</td><td>faux-chrome <code>wf-stack</code> — в проде это два настоящих <code>Drawer</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function navBtn(id) {
+        return document.querySelector('.wf-nav button[onclick*="\'' + id + '\'"]');
+      }
+      function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (s) { s.classList.remove('active'); });
+        var el = document.getElementById('wf-' + id);
+        if (el) el.classList.add('active');
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.remove('active');
+        });
+        if (btn) btn.classList.add('active');
+      }
+      (function () {
+        var want = new URLSearchParams(location.search).get('state');
+        if (want && navBtn(want)) showState(navBtn(want), want);
+      })();
+    </script>
+  </body>
+</html>

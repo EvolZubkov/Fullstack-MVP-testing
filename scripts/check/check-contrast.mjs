@@ -14,7 +14,7 @@
  * guard is written to take more sources than one — see {@link SOURCES}.
  *
  * What it does, with no browser and no new dependencies:
- *   1. reads the DS custom properties out of `university-rt.css` PER THEME
+ *   1. reads the DS custom properties out of `skillum-ds.css` PER THEME
  *      (`:root` primitives + the `.ou, .ou.ou--light` block, then `.ou.ou--dark` on top);
  *   2. unrolls `var(--x)` alias chains;
  *   3. evaluates `color-mix(in oklch|oklab, …)` and `oklch(…)` per CSS Color 4;
@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 /** The DS stylesheet the tokens are declared in. */
-const DS_CSS = join(REPO_ROOT, "client", "src", "styles", "vendor", "university-rt.css");
+const DS_CSS = join(REPO_ROOT, "client", "src", "styles", "vendor", "skillum-ds.css");
 
 /**
  * Declaration blocks that carry the tokens, per theme. Order matters: later blocks win,
@@ -140,7 +140,7 @@ function readTokens(css, selectors) {
     const at = css.indexOf(`${selector} {`);
     if (at < 0) {
       throw new Error(
-        `В university-rt.css нет блока «${selector.replace(/\n/g, " ")}» — ` +
+        `В skillum-ds.css нет блока «${selector.replace(/\n/g, " ")}» — ` +
           `структура токенов изменилась, обновите THEME_BLOCKS.`,
       );
     }

@@ -28,6 +28,7 @@ import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/s
 // both runtime hosts use, so a layout it rejects would throw unhandled in the
 // preview/runtime — we reject it at import instead (see the layout-syntax pass).
 import { compileTemplate } from "@shared/template/dsl";
+import { DATA_ATTR_PATTERN } from "@shared/template/params-css";
 import { validateVariantFields } from "@shared/template/field-types";
 import { validateManifestThemes } from "@shared/template/themes";
 import { validateReportVariants } from "@shared/report/report-variants";
@@ -95,6 +96,89 @@ function asString(v: unknown): string | null {
  * Collects every archive path referenced by the manifest (layouts, partials,
  * assets, preview demo data, rules, system-page layouts, renderer plugins).
  */
+/**
+ * Checks the two param attributes the file contract gained after the base schema
+ * (spec §6): `dataAttr` — the value is put on the scene root as that attribute, so a
+ * template can SELECT on the chosen option; `optionPreviews` — the pictures the editor
+ * shows instead of a bare dropdown.
+ *
+ * `dataAttr` is BLOCKING when malformed: both hosts skip an attribute name outside the
+ * pattern, so the template would silently render its fallback and the author would be
+ * left guessing. A preview for an option the param does not declare is only a WARNING —
+ * the picture is ignored, the choice still works.
+ */
+function validateParamExtras(
+  params: unknown[],
+  blocking: ValidationIssue[],
+  warnings: ValidationIssue[],
+): void {
+  params.forEach((raw, i) => {
+    const p = raw as Record<string, unknown> | null;
+    if (!p || typeof p !== "object") return;
+    const key = asString(p.key) ?? String(i);
+
+    const dataAttr = p.dataAttr;
+    if (dataAttr !== undefined && dataAttr !== null) {
+      if (typeof dataAttr !== "string" || !DATA_ATTR_PATTERN.test(dataAttr)) {
+        blocking.push({
+          code: "PARAM_DATA_ATTR_INVALID",
+          message:
+            `Параметр «${key}»: dataAttr должен быть именем вида data-имя (строчные латинские буквы, ` +
+            `цифры и дефис), получено ${JSON.stringify(dataAttr)}`,
+          ref: `params[${key}].dataAttr`,
+        });
+      }
+    }
+
+    const previews = p.optionPreviews;
+    if (previews === undefined || previews === null) return;
+    if (typeof previews !== "object" || Array.isArray(previews)) {
+      blocking.push({
+        code: "PARAM_PREVIEWS_INVALID",
+        message: `Параметр «${key}»: optionPreviews должен быть объектом «вариант -> путь к картинке»`,
+        ref: `params[${key}].optionPreviews`,
+      });
+      return;
+    }
+    if (p.type !== "select") {
+      warnings.push({
+        code: "PARAM_PREVIEWS_INVALID",
+        message: `Параметр «${key}»: optionPreviews учитывается только у типа select, у этого тип «${String(p.type)}»`,
+        ref: `params[${key}].optionPreviews`,
+      });
+    }
+    const options = Array.isArray(p.options) ? (p.options as unknown[]).map((o) => String(o)) : [];
+    for (const [option, ref] of Object.entries(previews as Record<string, unknown>)) {
+      // Допустимые формы: путь строкой или пара под темы интерфейса. Всё прочее —
+      // блокировка: молча проигнорированное превью выглядит как «картинка пропала».
+      const shapeOk =
+        typeof ref === "string" ||
+        (!!ref &&
+          typeof ref === "object" &&
+          !Array.isArray(ref) &&
+          Object.entries(ref as Record<string, unknown>).every(
+            ([k, v]) => (k === "light" || k === "dark") && typeof v === "string",
+          ));
+      if (!shapeOk) {
+        blocking.push({
+          code: "PARAM_PREVIEWS_INVALID",
+          message:
+            `Параметр «${key}»: превью варианта «${option}» должно быть путём к файлу ` +
+            `или объектом { light, dark } с путями`,
+          ref: `params[${key}].optionPreviews.${option}`,
+        });
+      }
+      if (options.length > 0 && !options.includes(option)) {
+        warnings.push({
+          code: "PARAM_PREVIEWS_INVALID",
+          message: `Параметр «${key}»: превью объявлено для варианта «${option}», которого нет в options`,
+          ref: `params[${key}].optionPreviews.${option}`,
+        });
+      }
+    }
+  });
+}
+
 function collectReferences(manifest: Record<string, unknown>): Array<{ ref: string; field: string }> {
   const refs: Array<{ ref: string; field: string }> = [];
   const push = (v: unknown, field: string) => {
@@ -119,6 +203,30 @@ function collectReferences(manifest: Record<string, unknown>): Array<{ ref: stri
 
   const preview = manifest.preview as Record<string, unknown> | undefined;
   if (preview) push(preview.demoData, "preview.demoData");
+
+  // Option previews of a `select` param (§6): the pictures the editor shows instead of
+  // a bare dropdown. They are ordinary files of the package, so they are collected like
+  // any other reference — a missing one is reported, and a present one does not read as
+  // an unused file.
+  const params = manifest.params;
+  if (Array.isArray(params)) {
+    params.forEach((p, i) => {
+      const previews = (p as Record<string, unknown> | null)?.optionPreviews;
+      if (!previews || typeof previews !== "object") return;
+      const key = asString((p as Record<string, unknown>).key) ?? String(i);
+      for (const [option, ref] of Object.entries(previews as Record<string, unknown>)) {
+        // One path, or a pair per interface theme: a lockup drawn for a light ground is
+        // unreadable on the dark editor, so a template may ship both.
+        if (ref && typeof ref === "object" && !Array.isArray(ref)) {
+          for (const [theme, themed] of Object.entries(ref as Record<string, unknown>)) {
+            push(themed, `params[${key}].optionPreviews.${option}.${theme}`);
+          }
+          continue;
+        }
+        push(ref, `params[${key}].optionPreviews.${option}`);
+      }
+    });
+  }
 
   const systemPages = manifest.systemPages;
   if (Array.isArray(systemPages)) {
@@ -473,6 +581,8 @@ export function validateTemplatePackage(
   }
   if (!Array.isArray(manifest.params)) {
     blocking.push({ code: "REQUIRED_FIELD_MISSING", message: "Отсутствует params", ref: "params" });
+  } else {
+    validateParamExtras(manifest.params, blocking, warnings);
   }
   if (!manifest.capabilities || typeof manifest.capabilities !== "object") {
     blocking.push({ code: "REQUIRED_FIELD_MISSING", message: "Отсутствует capabilities", ref: "capabilities" });

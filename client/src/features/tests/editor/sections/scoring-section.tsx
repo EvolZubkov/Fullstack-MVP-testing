@@ -12,6 +12,10 @@
  *     against the snapshot (scoring-api `saveQuestionOverrides`); each persisted
  *     PUT/DELETE bumps the test version (FR-12).
  *
+ * Сохранённого теста вкладка НЕ требует: вопросы приходят из банка, а обе части
+ * состояния — умолчания и переопределения — живут в модели. У нового теста они
+ * дописываются сразу после INSERT тем же `saveQuestionOverrides`.
+ *
  * The questions table shows the EFFECTIVE values (shared resolver). The
  * «настроено в тесте» mark — an accent bar on the row + a soft accent fill on
  * each overridden cell (tooltip «Настроено в тесте») — flags a configured
@@ -25,29 +29,38 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, CircleDot, MonitorPlay, Pencil, RotateCcw } from "lucide-react";
 import {
-  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, SlidersHorizontal, ThermometerSun, Unplug,
-  type LucideIcon,
-} from "lucide-react";
-import {
-  Banner, Collapsible, CollapsibleContent, CollapsibleTrigger, IconButton, Input, Tag,
-} from "@universityrt/ui-kit";
+  Collapsible, CollapsibleContent, CollapsibleTrigger, IconButton, Input, Tag,
+} from "@skillum/ui-kit";
 
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
-import { t } from "@/lib/i18n";
-import type { Question } from "@shared/schema";
-import type { TestEditorModel } from "../test-editor.types";
+import { isSimulation } from "@shared/questions/question-type";
+import { questionLabel } from "@shared/questions/question-label";
+import { resolveSimScoring } from "@shared/sim/scoring";
+import type { Question, SimScoringSettings } from "@shared/schema";
+import type { ScenarioItemDraft, TestEditorModel } from "../test-editor.types";
+import { compositionEntries } from "./composition-items";
+import { SimPartialSwitch, SimPenaltiesTable } from "./sim-penalties";
 import {
   makeQuestionOverride,
+  overridesScoring,
   type QuestionScoringOverride,
   type QuestionScoringPatch,
 } from "../scoring-api";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { QuestionScoringModal } from "./question-scoring-modal";
+import { QUESTION_TYPE_ICON, QUESTION_TYPE_LABEL } from "./question-type-icon";
 
 export type ScoringSectionProps = {
   model: TestEditorModel;
-  /** Test id; `undefined` in create mode — per-question overrides need a saved test. */
+  /**
+   * Тест, если он уже существует; `undefined` в режиме создания. Вкладка от него не
+   * зависит: вопросы приходят из банка, а переопределения лежат в черновике модели и
+   * дописываются сразу после создания теста (см. `useTestEditor`). Идентификатор
+   * нужен только строке переопределения — и только чтобы она не мешала сравнению
+   * черновика со снимком.
+   */
   testId?: string;
   updateModel: (updater: (model: TestEditorModel) => TestEditorModel) => void;
   readOnly?: boolean;
@@ -57,29 +70,31 @@ type QuestionRow = Question & { topicName?: string };
 
 import type { QuestionType } from "@shared/questions/question-type";
 
-/** Question-type pictograms — same convention as the content tree (content-tree.tsx). */
-const TYPE_ICON: Record<QuestionType, LucideIcon> = {
-  single: CircleDot,
-  multiple: CheckSquare,
-  matching: Unplug,
-  ranking: ListOrdered,
-  scale: ThermometerSun,
-  allocation: SlidersHorizontal,
-};
-const TYPE_LABEL: Record<QuestionType, string> = {
-  single: t.questions.singleChoice,
-  multiple: t.questions.multipleChoice,
-  matching: t.questions.matching,
-  ranking: t.questions.ranking,
-  scale: t.questions.scaleChoice,
-  allocation: t.questions.allocation,
-};
+// Pictogram and label of a question type — shared with «Вклады вопросов».
+const TYPE_ICON = QUESTION_TYPE_ICON;
+const TYPE_LABEL = QUESTION_TYPE_LABEL;
 
 /** Human label of a graded-config kind (PRD-10). */
 const KIND_LABEL: Record<string, string> = {
   exact: "Точное",
   weighted: "Веса",
   tiered: "Ступени",
+  // «Сценарий в ИС» (Э5а): сценарий оценивается штрафами прогона.
+  simulation: "Штрафы",
+};
+
+/**
+ * Одна карточка списка «Оценки ответа» — раздел темы или пункт-сценарий (Э5а). Устроены одинаково:
+ * шапка с выдачей и баллом по умолчанию, ниже таблица вопросов.
+ */
+type ScoringCard = {
+  key: string;
+  name: string;
+  kind: "topic" | "scenario";
+  drawLabel: string;
+  defaultPoints: number | null;
+  setDefault: (raw: string) => void;
+  questions: QuestionRow[];
 };
 
 /** Parse a default-price text field: "" = inherit (null), else a whole >= 0. */
@@ -100,6 +115,7 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
   const [modalState, setModalState] = useState<{
     question: QuestionRow;
     sectionName: string;
+    sectionKind: "topic" | "scenario";
     sectionDefaultPoints: number | null;
   } | null>(null);
 
@@ -172,16 +188,80 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
     }));
   };
 
+  /**
+   * «Сценарий в ИС» (Э5а): пункты-сценарии, которые тест сейчас выдаёт, — у теста «Сценарий» его
+   * единственный пункт, у роутера все. От них зависят и карточки пунктов, и блок штрафов.
+   */
+  const activeItems = useMemo<ScenarioItemDraft[]>(() => {
+    if (model.mode === "scenario") return (model.scenarioItems ?? []).slice(0, 1);
+    return compositionEntries(model).flatMap((e) => (e.kind === "scenario" ? [e.item] : []));
+  }, [model]);
+
+  const setItemDefault = (itemId: string | undefined, raw: string) => {
+    const parsed = parseDefaultPoints(raw);
+    if (parsed === undefined) return;
+    updateModel((m) => ({
+      ...m,
+      scenarioItems: (m.scenarioItems ?? []).map((item) => (item.id === itemId ? { ...item, defaultPoints: parsed } : item)),
+    }));
+  };
+
+  /** Карточки в порядке состава: темы и пункты-сценарии; у теста «Сценарий» — только пункт. */
+  const cards: ScoringCard[] = (() => {
+    const topicCard = (topicId: string): ScoringCard | null => {
+      const section = model.sections.find((s) => s.topicId === topicId);
+      if (!section) return null;
+      // Обычный раздел сценариев пока не выдаёт (техдолг трека, п. 5) — и в оценке их нет.
+      const questions = (questionsByTopic.get(section.topicId) ?? []).filter((q) => !isSimulation(q.type));
+      const poolSize = section.maxQuestions || questions.length;
+      return {
+        key: section.topicId,
+        name: section.topicName,
+        kind: "topic",
+        drawLabel: section.drawAll ? `вся тема (${poolSize})` : `выдача ${section.drawCount} из ${poolSize}`,
+        defaultPoints: section.defaultPoints,
+        setDefault: (raw) => setSectionDefault(section.topicId, raw),
+        questions,
+      };
+    };
+    const itemCard = (item: ScenarioItemDraft, index: number): ScoringCard => {
+      const bank = (questionsByTopic.get(item.topicId) ?? []).filter((q) => isSimulation(q.type));
+      const questions = item.questionId ? bank.filter((q) => q.id === item.questionId) : bank;
+      return {
+        key: `scenario:${item.id ?? index}`,
+        name: item.title?.trim() || item.topicName,
+        kind: "scenario",
+        drawLabel: item.questionId ? "фиксированный" : `выдаётся 1 из ${bank.length}`,
+        defaultPoints: item.defaultPoints ?? null,
+        setDefault: (raw) => setItemDefault(item.id, raw),
+        questions,
+      };
+    };
+    if (model.mode === "scenario") return activeItems.map(itemCard);
+    return compositionEntries(model).flatMap((entry, n) => {
+      if (entry.kind === "scenario") return [itemCard(entry.item, n)];
+      const card = topicCard(entry.section.topicId);
+      return card ? [card] : [];
+    });
+  })();
+
   // ── Per-section folding (ephemeral view state, all expanded on open) ──────────
-  const sectionIds = useMemo(() => model.sections.map((s) => s.topicId), [model.sections]);
-  const fold = useSectionFold(sectionIds);
+  const fold = useSectionFold(cards.map((c) => c.key));
+
+  /** Штрафы уровнем выше для окна вопроса-сценария: тест, а где он молчит — система. */
+  const simTestLevel = resolveSimScoring(model.scoring.simDefaults ?? null, null);
+  const setSimDefaults = (patch: SimScoringSettings) =>
+    updateModel((m) => ({
+      ...m,
+      scoring: { ...m.scoring, simDefaults: { ...(m.scoring.simDefaults ?? {}), ...patch } },
+    }));
 
   return (
     <div className="tb-qscoring" data-testid="scoring-section">
       <div className="tb-qscoring__default-row">
         <span className="tb-qscoring__default-lbl">Балл за вопрос по умолчанию</span>
         <Input
-          size="s"
+          size="m"
           className="tb-qscoring__num"
           inputMode="numeric"
           value={model.scoring.defaultQuestionPoints?.toString() ?? ""}
@@ -194,66 +274,85 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
         <span className="tb-qscoring__default-hint">
           Пусто — системное умолчание: 1 балл за полностью верный ответ.
         </span>
-        {testId && model.sections.length > 0 && (
+        {/* С блоком штрафов кнопки свёртки уходят под него, к карточкам, которые сворачивают
+            (эскиз sim-e5-answer); без него стоят здесь, как прежде. */}
+        {cards.length > 0 && activeItems.length === 0 && (
           <FoldAllButtons fold={fold} testIdPrefix="scoring" />
         )}
       </div>
 
-      {!testId && (
-        <Banner
-          tone="info"
-          size="sm"
-          description="Сохраните тест, чтобы настраивать балл, цену ответа и сложность отдельных вопросов."
-          data-testid="scoring-create-hint"
-        />
+      {/* «Сценарий в ИС» (Э5а, эскиз sim-e5-answer): штрафы сценариев теста по умолчанию — только
+          когда в тесте есть сценарий. Пустое поле — системное умолчание, оно в подсказке. */}
+      {activeItems.length > 0 && (
+        <>
+          <div className="tb-qscoring__price">
+            <span className="tb-qscoring__price-lbl">Штрафы сценариев по умолчанию</span>
+            <Tag tone="neutral" variant="outline">% цены вопроса за каждый случай</Tag>
+          </div>
+          <SimPenaltiesTable
+            value={model.scoring.simDefaults?.penalties}
+            inherited={resolveSimScoring(null, null).penalties}
+            onChange={(penalties) => setSimDefaults({ penalties })}
+            disabled={readOnly}
+            label="Штрафы сценариев по умолчанию"
+            testIdPrefix="scoring-sim"
+          />
+          <SimPartialSwitch
+            checked={simTestLevel.countPartial}
+            onChange={(countPartial) => setSimDefaults({ countPartial })}
+            disabled={readOnly}
+          />
+          <div className="tb-fold-toolbar">
+            <FoldAllButtons fold={fold} testIdPrefix="scoring" />
+          </div>
+        </>
       )}
 
-      {model.sections.map((section) => {
-        const questions = questionsByTopic.get(section.topicId) ?? [];
-        const poolSize = section.maxQuestions || questions.length;
-        const drawLabel = section.drawAll
-          ? `вся тема (${poolSize})`
-          : `выдача ${section.drawCount} из ${poolSize}`;
-
-        const open = fold.isOpen(section.topicId);
-
+      {cards.map((card) => {
+        const open = fold.isOpen(card.key);
         return (
-          <div className="tb-qscoring__sec" key={section.topicId} data-testid={`scoring-sec-${section.topicId}`}>
-            <Collapsible open={open} onOpenChange={() => fold.toggle(section.topicId)}>
-              <div className="tb-qscoring__sec-head">
+          <div className="tb-fold-sec" key={card.key} data-testid={`scoring-sec-${card.key}`}>
+            <Collapsible open={open} onOpenChange={() => fold.toggle(card.key)}>
+              <div className="tb-fold-sec-head">
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
                     className="tb-fold-trigger"
-                    aria-label={open ? `Свернуть секцию ${section.topicName}` : `Развернуть секцию ${section.topicName}`}
-                    data-testid={`scoring-sec-toggle-${section.topicId}`}
+                    aria-label={open ? `Свернуть секцию ${card.name}` : `Развернуть секцию ${card.name}`}
+                    data-testid={`scoring-sec-toggle-${card.key}`}
                   >
                     {open
                       ? <ChevronDown className="tb-fold-chev" width={16} height={16} aria-hidden="true" />
                       : <ChevronRight className="tb-fold-chev" width={16} height={16} aria-hidden="true" />}
-                    <span className="tb-qscoring__sec-name">{section.topicName}</span>
+                    <span className="tb-fold-sec-name">
+                      {card.kind === "scenario" && (
+                        <MonitorPlay className="tb-acc-title-ico" width={16} height={16} aria-label="Сценарий" />
+                      )}
+                      {card.name}
+                    </span>
                   </button>
                 </CollapsibleTrigger>
-                <Tag tone="neutral" variant="outline">{drawLabel}</Tag>
+                <Tag tone="neutral" variant="outline">{card.drawLabel}</Tag>
                 <span className="tb-qscoring__sec-default">
                   <span className="tb-qscoring__sec-default-lbl">Балл по умолчанию в секции</span>
                   <Input
                     size="s"
                     className="tb-qscoring__num"
                     inputMode="numeric"
-                    value={section.defaultPoints?.toString() ?? ""}
+                    value={card.defaultPoints?.toString() ?? ""}
                     placeholder={(model.scoring.defaultQuestionPoints ?? 1).toString()}
                     disabled={readOnly}
-                    aria-label={`Балл по умолчанию секции ${section.topicName}`}
-                    onChange={(e) => setSectionDefault(section.topicId, e.target.value)}
-                    data-testid={`scoring-sec-default-${section.topicId}`}
+                    aria-label={`Балл по умолчанию секции «${card.name}»`}
+                    onChange={(e) => card.setDefault(e.target.value)}
+                    data-testid={`scoring-sec-default-${card.key}`}
                   />
                 </span>
               </div>
 
               <CollapsibleContent>
-            {testId && questions.length > 0 && (
-              <table className="tb-table">
+                <div className="tb-fold-sec__body">
+            {card.questions.length > 0 && (
+              <table className="tb-table" aria-label={card.kind === "scenario" ? `Оценка сценариев пункта «${card.name}»` : `Оценка вопросов темы «${card.name}»`}>
                 <thead>
                   <tr>
                     <th>Вопрос</th>
@@ -265,8 +364,11 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                   </tr>
                 </thead>
                 <tbody>
-                  {questions.map((q) => {
+                  {card.questions.map((q) => {
                     const override: QuestionScoringOverride | undefined = overrideByQuestion.get(q.id);
+                    // Строка, заведённая аналитикой ради «исключён из выдачи», в оценке ничего
+                    // не задаёт: ни отметки, ни «Сбросить» у неё быть не должно.
+                    const configured = overridesScoring(override);
                     const effective = resolveEffectiveScoring({
                       override: override
                         ? {
@@ -277,7 +379,7 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                           }
                         : null,
                       defaults: {
-                        sectionDefaultPoints: section.defaultPoints,
+                        sectionDefaultPoints: card.defaultPoints,
                         testDefaultPoints: model.scoring.defaultQuestionPoints,
                       },
                       // T-40: the question no longer carries points/scoringJson;
@@ -291,21 +393,22 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                     const openModal = () =>
                       setModalState({
                         question: q,
-                        sectionName: section.topicName,
-                        sectionDefaultPoints: section.defaultPoints,
+                        sectionName: card.name,
+                        sectionKind: card.kind,
+                        sectionDefaultPoints: card.defaultPoints,
                       });
 
                     return (
                       <tr
                         key={q.id}
-                        className={override ? "tb-qscoring__row--override" : undefined}
+                        className={configured ? "tb-qscoring__row--override" : undefined}
                         data-testid={`scoring-row-${q.id}`}
                       >
                         <td>
                           <span className="tb-qscoring__qtype" title={TYPE_LABEL[qType] ?? qType}>
                             <TypeIcon width={16} height={16} aria-hidden="true" />
                           </span>
-                          {q.prompt}
+                          {questionLabel(q)}
                         </td>
                         <td
                           className={override?.points != null ? "tb-qscoring__cell--override" : undefined}
@@ -318,7 +421,7 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                           title={override?.scoringJson != null ? cellTitle : undefined}
                         >
                           <Tag tone="neutral" variant="outline">
-                            {KIND_LABEL[effective.scoring.kind] ?? effective.scoring.kind}
+                            {isSimulation(q.type) ? KIND_LABEL.simulation : (KIND_LABEL[effective.scoring.kind] ?? effective.scoring.kind)}
                           </Tag>
                         </td>
                         <td
@@ -328,7 +431,11 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                           {difficulty}
                         </td>
                         <td>
-                          {effective.stale && (
+                          {/* Колонка «Состояние» говорит о ПЕРЕОПРЕДЕЛЕНИИ, а не только о
+                              его порче: подсветка ячеек показывает, ЧТО задано, а тег —
+                              что строка вообще настроена в тесте. Устаревание — частный
+                              случай, и тогда тег говорит о нём. */}
+                          {effective.stale ? (
                             <Tag
                               tone="warning"
                               title="Состав вариантов вопроса изменился после настройки оценки"
@@ -336,7 +443,11 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                             >
                               Настройка устарела
                             </Tag>
-                          )}
+                          ) : configured ? (
+                            <Tag tone="warning" data-testid={`scoring-override-${q.id}`}>
+                              задано в тесте
+                            </Tag>
+                          ) : null}
                         </td>
                         <td>
                           <div className="tb-qscoring__actions">
@@ -344,12 +455,12 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                               icon={<Pencil width={14} height={14} aria-hidden="true" />}
                               variant="ghost"
                               size="s"
-                              aria-label={override ? "Изменить оценку вопроса" : "Настроить оценку вопроса"}
+                              aria-label={configured ? "Изменить оценку вопроса" : "Настроить оценку вопроса"}
                               disabled={readOnly}
                               onClick={openModal}
                               data-testid={`scoring-edit-${q.id}`}
                             />
-                            {override && (
+                            {configured && (
                               <IconButton
                                 icon={<RotateCcw width={14} height={14} aria-hidden="true" />}
                                 variant="ghost"
@@ -368,17 +479,23 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                 </tbody>
               </table>
             )}
+                </div>
               </CollapsibleContent>
             </Collapsible>
           </div>
         );
       })}
 
-      {modalState && testId && (
+      {modalState && (
         <QuestionScoringModal
           question={modalState.question}
           sectionName={modalState.sectionName}
-          override={overrideByQuestion.get(modalState.question.id) ?? null}
+          sectionKind={modalState.sectionKind}
+          simInherited={simTestLevel}
+          override={(() => {
+            const o = overrideByQuestion.get(modalState.question.id);
+            return overridesScoring(o) ? o! : null;
+          })()}
           sectionDefaultPoints={modalState.sectionDefaultPoints}
           testDefaultPoints={model.scoring.defaultQuestionPoints}
           readOnly={readOnly}

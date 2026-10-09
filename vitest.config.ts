@@ -23,14 +23,18 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    // Vitest 5 turned clearMocks on by default (vi.clearAllMocks() before every
+    // test). The suite was written against the v4 behaviour, where call history
+    // survives between tests of one file; keep it until the suite is audited.
+    clearMocks: false,
     // The DAL tests under tests/storage/** each spin up an in-process pglite
     // (WASM Postgres) in a beforeAll that applies the full schema; several such
     // hooks running concurrently in the parallel pool can exceed the default
     // 10s hook timeout, so give hooks more headroom.
     hookTimeout: 30000,
-    // Vitest 4: worker-count limits are top-level (poolOptions was removed).
+    // Worker-count limit is top-level (Vitest 4 removed poolOptions; Vitest 5
+    // removed minWorkers, so only the ceiling is configurable).
     maxWorkers: maxForks,
-    minWorkers: 1,
     setupFiles: ["./client/src/test/setup.ts", "./tests/setup-config.ts"],
     include: [
       "client/src/**/*.{test,spec}.{js,ts,jsx,tsx}",
@@ -84,8 +88,8 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       // Vendored design-system source (see vite.config.ts). `/css` before bare.
-      "@universityrt/ui-kit/css": path.resolve(import.meta.dirname, "vendor", "ui-kit", "css", "university-rt.css"),
-      "@universityrt/ui-kit": path.resolve(import.meta.dirname, "vendor", "ui-kit", "src", "index.ts"),
+      "@skillum/ui-kit/css": path.resolve(import.meta.dirname, "vendor", "ui-kit", "css", "skillum-ds.css"),
+      "@skillum/ui-kit": path.resolve(import.meta.dirname, "vendor", "ui-kit", "src", "index.ts"),
       // Same React deduplication as in vite.config.ts — see comment there.
       react: path.resolve(import.meta.dirname, "node_modules", "react"),
       "react-dom": path.resolve(import.meta.dirname, "node_modules", "react-dom"),

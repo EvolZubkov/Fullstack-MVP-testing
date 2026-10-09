@@ -8,10 +8,11 @@
  *
  *   - «Основное»          — title (required), description, mode toggle
  *                            (standard / adaptive), flowMode select
- *   - «Ограничения»       — timeLimitMinutes, maxAttempts, per-topic limits and
- *                            the retake block (PRD-6/31/40: cooldown + attempt
- *                            interval), which used to be a rail item of its own
- *   - «Интеграция»        — webhookUrl, telemetryEnabled
+ *   - «Ограничения»       — timeLimitMinutes, maxAttempts, per-topic limits,
+ *                            closeSectionOnLeave (PRD-67) and the retake block
+ *                            (PRD-6/31/40: cooldown + attempt interval), which
+ *                            used to be a rail item of its own
+ *   - «Интеграция»        — telemetryEnabled (адрес приёма — в конфигурации системы)
  *   - «Правила прохождения» — passDecisionPolicy + per-topic pass rules
  *   - «Адаптивный режим»   — adaptive levels editor (hidden when mode !== "adaptive")
  *
@@ -19,26 +20,33 @@
  * Drawer is responsible for save / validation / dirty tracking — this
  * section just renders inputs and reports changes.
  */
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, MonitorPlay, Plus, Trash2 } from "lucide-react";
+import { compositionEntries, hasRouterItems } from "./composition-items";
+import { pluralize, t } from "@/lib/i18n";
 import {
-  Accordion,
-  AccordionItem,
   Banner,
   Button,
   Card,
   CardBody,
   CardHeader,
+  FormSection,
   Input,
   NumberInput,
   RadioGroup,
   SegmentedControl,
   Select,
   Switch,
-  Textarea,
-} from "@universityrt/ui-kit";
-import type { EligibilityPluginRef, Form, IntroBlock, RetakePolicy } from "@shared/schema";
+  RichTextEditor,
+} from "@skillum/ui-kit";
+import { richTextToHtml, richTextToPlain } from "@shared/template/rich-text";
+import { formatMinutesHuman } from "@shared/template/duration";
+import {
+  sanitizeHtml as sanitizeContentHtml,
+  DESCRIPTION_SCOPE,
+} from "@shared/security/html-sanitize";
+import type { EligibilityPluginRef, Form, IntroBlock, IntroText, RetakePolicy } from "@shared/schema";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 // PRD-31: the clamp is shared with the mapper so the field and a value read back
 // from the server can never disagree about the valid range.
@@ -48,24 +56,24 @@ import {
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
+import { FoldAllButtons, useSectionFold } from "./section-fold";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
   AdaptiveTopicConfig,
   EditorSection,
-  FeedbackAsset,
-  FeedbackContent,
-  FeedbackEvent,
-  FeedbackLink,
   FlowMode,
   OverallPassRule,
   OverallPassType,
   PassDecisionPolicy,
   TestEditorModel,
+  TestMode,
   TopicPassRule,
 } from "../test-editor.types";
+import { DEFAULT_BREAKDOWN_DISPLAY } from "../test-editor.types";
 import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
 import type { UseDesignSettingsResult } from "../use-design-settings";
+import { useContentPages } from "../use-content-pages";
 import { ReportSettingsCard } from "./report-settings-card";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -87,145 +95,29 @@ export type SettingsSectionProps = {
 /** Backwards-compatible alias: original skeleton lived under this name. */
 export type BasicSettingsSectionProps = SettingsSectionProps;
 
-type RailKey =
-  | "basic"
-  | "pass-rules"
-  | "limits"
-  | "integration"
-  | "adaptive";
-
-const RAIL_ITEMS: { key: RailKey; label: string }[] = [
-  { key: "basic", label: "Основное" },
-  { key: "pass-rules", label: "Правила прохождения" },
-  { key: "limits", label: "Ограничения" },
-  { key: "integration", label: "Интеграция" },
-  { key: "adaptive", label: "Адаптивный режим" },
-];
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
-/** FR-20c: which validated field paths live under each settings sub-pane. */
-const RAIL_ERROR_PREFIXES: Record<RailKey, string[]> = {
-  basic: ["basic.title", "flowMode"],
-  "pass-rules": ["passRules"],
-  limits: [],
-  integration: ["basic.webhookUrl"],
-  adaptive: ["adaptive"],
-};
-
-export function SettingsSection({
-  model,
-  updateModel,
-  fieldErrors = EMPTY_FIELD_ERRORS,
-  design,
-}: SettingsSectionProps) {
-  const [active, setActive] = useState<RailKey>("basic");
-  // Per requirements: «Адаптивный режим» sub-section is only relevant when
-  // the test itself runs in adaptive mode. Hide the rail item in standard
-  // mode; if it was active, fall back to the previous tab.
-  const isAdaptive = model.mode === "adaptive";
-  const visibleRailItems = isAdaptive
-    ? RAIL_ITEMS
-    : RAIL_ITEMS.filter((it) => it.key !== "adaptive");
-  const effectiveActive: RailKey =
-    active === "adaptive" && !isAdaptive ? "basic" : active;
-
-  // Error dot: no topic is enabled (stop-factor for adaptive mode).
-  const hasAdaptiveError =
-    isAdaptive &&
-    model.sections.length > 0 &&
-    !model.adaptive.topics.some((t) => t.enabled);
-  // Warning dot: at least one enabled topic has fewer than 2 levels.
-  const hasAdaptiveWarning =
-    isAdaptive &&
-    !hasAdaptiveError &&
-    model.sections.some((section) => {
-      const topic = model.adaptive.topics.find((t) => t.topicId === section.topicId);
-      return topic?.enabled && topic.levels.length < 2;
-    });
-
-  return (
-    <div className="ou-drawer__split" data-testid="settings-split">
-      <nav className="ou-drawer__rail" aria-label="Подразделы настроек">
-        {visibleRailItems.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={
-              "ou-drawer__rail-item" +
-              (effectiveActive === item.key ? " is-active" : "")
-            }
-            aria-current={effectiveActive === item.key ? "page" : undefined}
-            onClick={() => setActive(item.key)}
-            data-testid={`settings-rail-${item.key}`}
-          >
-            {item.label}
-            {/* FR-20c: error dot when any validated field in this pane is invalid.
-                Adaptive keeps its dedicated stop-factor check below. */}
-            {item.key !== "adaptive" &&
-              RAIL_ERROR_PREFIXES[item.key].some((p) => fieldErrors.has(p)) && (
-                <span
-                  className="tb-status-dot tb-status-dot--err"
-                  aria-label="Ошибка"
-                />
-              )}
-            {item.key === "adaptive" && (hasAdaptiveError || fieldErrors.has("adaptive")) && (
-              <span
-                className="tb-status-dot tb-status-dot--err"
-                aria-label="Ошибка"
-              />
-            )}
-            {item.key === "adaptive" && hasAdaptiveWarning && !fieldErrors.has("adaptive") && (
-              <span
-                className="tb-status-dot tb-status-dot--warn"
-                aria-label="Требует внимания"
-              />
-            )}
-          </button>
-        ))}
-      </nav>
-      <div
-        className="tb-settings-content"
-        data-testid={`settings-pane-${effectiveActive}`}
-      >
-        {effectiveActive === "basic" && (
-          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} design={design} />
-        )}
-        {effectiveActive === "pass-rules" && (
-          <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
-        )}
-        {effectiveActive === "limits" && (
-          <LimitsPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
-        )}
-        {effectiveActive === "integration" && (
-          <IntegrationPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
-        )}
-        {effectiveActive === "adaptive" && isAdaptive && (
-          <AdaptivePane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Backwards-compatible re-export under the old skeleton name. */
-export const BasicSettingsSection = SettingsSection;
+/*
+ * Рейл «Настроек» жил здесь до перестройки ящика (Э3): пять пунктов, которые резали
+ * настройки по трём осям сразу. Теперь рейлы ведут сами вкладки редактора, а этот
+ * модуль отдаёт им панели — MainPane, ScenarioSettingsPane, NavigationPane и прочие.
+ */
 
 // ─── Sub-pane: Основное ───────────────────────────────────────────────────────
 
-function BasicPane({
+/**
+ * «Основное» → чем тест ЯВЛЯЕТСЯ: название, описание, режим (Э3.2).
+ *
+ * Прежняя панель «Основное» держала заодно сценарий прохождения, обратную связь, вводный
+ * текст и карточку отчёта — четыре разных разговора в одном месте. Каждый переехал туда,
+ * где ему отвечают: сценарий — в «Состав и сценарий», тексты и отчёт — в «Обратную связь
+ * и итоги».
+ */
+export function MainPane({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
-  design,
 }: SettingsSectionProps) {
-  // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
-  // carries the underlying fields (basic.feedback / feedbackLinks /
-  // feedbackAssets), populated by the API on load (PRD-7 S2). This UI block
-  // is the missing surface that lets the author edit them via the unified
-  // FeedbackEditorModal, identical to topic-level feedback elsewhere.
   return (
-    <>
+    <FormSection title="О тесте" stacked>
       <div className="ou-formfield" data-field="basic.title">
         <Input
           id="settings-title"
@@ -248,39 +140,55 @@ function BasicPane({
       </div>
 
       <div className="ou-formfield">
-        <Textarea
+        {/* PRD-59 FR-05..FR-09, эскиз `docs/wireframes/prd59-description-field.html`.
+            Значение поля — ИСХОДНИК автора: в простом режиме это настоящий текст с
+            настоящими переводами строк, и именно он уезжает в письмо, в метаданные
+            пакета и в книгу Excel. Разметку строит ядро при выдаче, а не это поле.
+            Подсказка стоит под полем, а не плейсхолдером: у компонента его нет. */}
+        <RichTextEditor
           id="settings-description"
-          size="m"
+          label="Описание"
           fullWidth
           rows={3}
-          label="Описание"
+          maxRows={10}
+          hint="Опишите цели теста и аудиторию"
           value={model.basic.description}
-          placeholder="Опишите цели теста и аудиторию"
-          onChange={(e) => {
-            const value = e.target.value;
+          mode={model.basic.descriptionFormat === "richText" ? "rich" : model.basic.descriptionFormat}
+          modes={["plain", "rich", "html"]}
+          sourceMode={{
+            toMarkup: (text) => richTextToHtml(text, "plain"),
+            toPlain: (html) => richTextToPlain(html, "richText"),
+          }}
+          sanitize={(html) => sanitizeContentHtml(html, { scope: DESCRIPTION_SCOPE })}
+          onChange={(value) =>
+            updateModel((m) => ({ ...m, basic: { ...m.basic, description: value } }))
+          }
+          onModeChange={(next) =>
             updateModel((m) => ({
               ...m,
-              basic: { ...m.basic, description: value },
-            }));
-          }}
+              basic: { ...m.basic, descriptionFormat: next === "rich" ? "richText" : next },
+            }))
+          }
           data-testid="settings-description-input"
         />
       </div>
 
-      <hr className="wf-sep" />
-
       <div className="ou-formfield" data-testid="settings-mode-group">
         <label className="ou-formfield__lbl">Режим теста</label>
-        <SegmentedControl<"standard" | "adaptive">
+        <SegmentedControl<TestMode>
           size="m"
           value={model.mode}
           aria-label="Режим теста"
           items={[
             { value: "standard", label: "Стандартный" },
             { value: "adaptive", label: "Адаптивный" },
+            { value: "scenario", label: "Сценарий" },
           ]}
           onChange={(value) => {
               updateModel((m) => {
+                // Переключение в адаптивный режим заводит лестницу для каждой темы теста:
+                // сам режим без уровней ничего не значит, а автор не должен собирать их
+                // по одному после смены режима.
                 if (value === "adaptive" && m.mode !== "adaptive" && m.sections.length > 0) {
                   const existingTopics = m.adaptive.topics;
                   const updatedTopics = m.sections.map((section) => {
@@ -303,18 +211,53 @@ function BasicPane({
                     adaptive: { ...m.adaptive, topics: [...updatedTopics, ...otherTopics] },
                   };
                 }
+                // «Сценарий в ИС»: у теста «Сценарий» нет тем, поэтому и разбивки потока по темам —
+                // он идёт одним потоком: страницы «До теста», задание, страницы «После теста».
+                if (value === "scenario") return { ...m, mode: value, flowMode: "linear_flat" };
                 return { ...m, mode: value };
               });
             }}
         />
+        {/* «Сценарий в ИС» (согласованный эскиз sim-scenario-test-editor.html, «сценарий: режим»):
+            встроенное предупреждение без подтверждения, как у адаптивного режима — данные не
+            удаляются, темы вернутся при возврате к стандартному режиму. */}
+        {model.mode === "scenario" && model.sections.length > 0 && (
+          <Banner
+            tone="warning"
+            variant="subtle"
+            title="Переключение на режим «Сценарий»"
+            description={`${model.sections.length} ${pluralize(model.sections.length, "тема", "темы", "тем")} теста и их настройки в этом режиме не используются и сохраняются: вернутся при возврате к стандартному режиму. Вкладка «Состав и сценарий» заменяется вкладкой «Задание».`}
+            data-testid="settings-mode-scenario-warning"
+          />
+        )}
       </div>
+    </FormSection>
+  );
+}
 
-      <div className="ou-formfield">
+// ─── Панель «Сценарий» (вкладка «Состав и сценарий») ──────────────────────────
+
+/**
+ * Сценарий прохождения: как тест ведёт участника — одним потоком, по темам или через
+ * страницу-маршрутизатор. Стоит рядом с полотном сценария, а не в «Основном»: это ответ
+ * на вопрос «как он идёт», а не «что это за тест» (Э3.3).
+ */
+export function ScenarioSettingsPane({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+}: SettingsSectionProps) {
+  return (
+    <FormSection title="Сценарий" stacked>
+      <div className="ou-formfield" data-field="flowMode">
         <Select<FlowMode>
           id="settings-flow-mode"
           size="m"
           fullWidth
           label="Сценарий прохождения"
+          // Адаптивный тест в плоском сценарии не поддерживается. Ошибка адресована
+          // ЭТОМУ выбору — он и помечается, иначе автор видит её только счётчиком.
+          error={fieldErrors.get("flowMode")}
           value={model.flowMode}
           // PRD-4 v1.1 L1 guard: linear_flat is disabled when mode=adaptive
           // (the (adaptive, linear_flat) combo is deferred to a future PRD).
@@ -343,137 +286,300 @@ function BasicPane({
           />
         )}
       </div>
+    </FormSection>
+  );
+}
 
-      {/*
-        PRD-47 §6.2: карточка «Отчёт о результатах» переехала на вкладку «Оформление», в
-        свой пункт рейла. Отчёт — часть шаблона, его поля объявляет манифест ровно как
-        параметры оформления, и место им рядом с «Макетом», а не под правилами
-        прохождения. Хранение при этом НЕ переехало: поля отчёта остаются своей колонкой
-        (PRD-27 §4.2), поэтому `model.report` по-прежнему часть модели теста.
-      */}
+// ─── Панель «Во время теста» (вкладка «Обратная связь и итоги») ───────────────
 
-      <hr className="wf-sep" />
-
-      <Card variant="outlined" data-testid="settings-feedback-card">
-        <CardHeader title="Общая обратная связь теста" />
-        <CardBody>
-          <TestFeedbackTrigger
-            feedback={model.basic.feedback}
-            links={model.basic.feedbackLinks}
-            assets={model.basic.feedbackAssets}
-            events={model.basic.feedbackEvents}
-            onSave={(next) => {
+/**
+ * Что участник видит ПО ХОДУ: показывать ли правильные ответы и подводить ли итог
+ * каждого раздела. Настройки живут рядом с текстами обратной связи, потому что говорят
+ * о том же — что человек узнаёт о своём результате и когда (Э3.6).
+ */
+export function DuringTestPane({ model, updateModel }: SettingsSectionProps) {
+  // PRD-19: экран итогов раздела осмыслен только у секционного теста, где разделы есть.
+  const showSectionResultsApplicable =
+    model.flowMode !== "linear_flat" && model.sections.length > 0;
+  return (
+    <>
+      <FormSection title="Показ правильных ответов" stacked>
+        <div className="ou-formfield">
+          <Switch
+            // Имя поля переименовано вместе с книгой Excel и списком изменений:
+            // подсветка печатается сразу ПОСЛЕ ОТВЕТА, а не в конце прохождения,
+            // и форма оставалась последним местом со старой формулировкой.
+            label={t.tests.showCorrectAnswers}
+            checked={model.runtime.showCorrectAnswers}
+            onChange={(e) => {
+              const checked = e.target.checked;
               updateModel((m) => ({
                 ...m,
-                basic: {
-                  ...m.basic,
-                  feedback: { format: next.format, text: next.text },
-                  feedbackLinks: next.links,
-                  feedbackAssets: next.assets,
-                  feedbackEvents: next.events,
+                runtime: {
+                  ...m.runtime,
+                  showCorrectAnswers: checked,
+                  // PRD-19 FR-04b: взаимоисключение — при показе правильных ответов
+                  // изменение ответа недоступно.
+                  allowAnswerChange: checked ? false : m.runtime.allowAnswerChange,
                 },
               }));
             }}
+            data-testid="settings-show-correct-checkbox"
           />
-          <hr className="wf-sep" />
+        </div>
+      </FormSection>
+      {/* PRD-19 FR-05a: экран с результатом раздела выдаётся ПО ХОДУ теста — на границе
+          разделов, — поэтому переключатель стоит здесь, среди того, что участник узнаёт о
+          своём результате, а не в «Сценарии», где он читался как настройка потока
+          (решение владельца 2026-09-20). У плоского теста разделов нет — подводить нечего,
+          и секция не показывается вовсе. */}
+      {showSectionResultsApplicable && (
+        <FormSection title="Итоги раздела" stacked>
           <div className="ou-formfield">
             <Switch
-              label="Показывать правильные ответы после прохождения"
-              checked={model.runtime.showCorrectAnswers}
+              label="Показывать итоги раздела"
+              checked={model.runtime.showSectionResults}
               onChange={(e) => {
                 const checked = e.target.checked;
                 updateModel((m) => ({
                   ...m,
-                  runtime: {
-                    ...m.runtime,
-                    showCorrectAnswers: checked,
-                    // PRD-19 FR-04b: взаимоисключение — при показе правильных ответов
-                    // изменение ответа недоступно.
-                    allowAnswerChange: checked ? false : m.runtime.allowAnswerChange,
-                  },
+                  runtime: { ...m.runtime, showSectionResults: checked },
                 }));
               }}
-              data-testid="settings-show-correct-checkbox"
+              data-testid="settings-show-section-results-checkbox"
+            />
+            {/* Без иконки тона: подпись подчинена переключателю над ней и объясняет, КОГДА
+                участник увидит этот экран, а не тревожит о состоянии формы. */}
+            <Banner
+              tone="info"
+              size="sm"
+              icon={false}
+              description="Экран с баллом и вердиктом раздела показывается после завершения каждого раздела, кроме последнего: за ним сразу идут итоги теста."
             />
           </div>
-        </CardBody>
-      </Card>
+        </FormSection>
+      )}
+    </>
+  );
+}
 
-      <hr className="wf-sep" />
+// ─── Панель «Обратная связь» (тексты после теста) ─────────────────────────────
 
-      {/*
-        ВВОДНЫЕ БЛОКИ. Идут первыми в своей выдаче и объясняют слушателю, что он читает.
-        Текстов два, потому что адресаты разные: экран пробегают глазами сразу, отчёт
-        уносят с собой и показывают специалисту. Пустой текст = блока нет.
-      */}
-      <Card variant="outlined" data-testid="settings-intro-card">
-        <CardHeader title="Вводный текст" />
-        <CardBody>
-          <IntroEditTrigger
-            label="На экране итогов"
-            modalTitle="Вводный текст на экране итогов"
-            description="Идёт первым, до сводки и результатов по темам. Пусто — блока нет."
-            value={model.intro?.results ?? null}
-            onSave={(next) =>
-              updateModel((m) => ({ ...m, intro: { ...(m.intro ?? {}), results: next } }))
+/**
+ * ОБЩЕЕ ВСТУПЛЕНИЕ ветви выдачи — без текстов исхода (PRD-61).
+ *
+ * Триггер правит ОДИН текст, а ветвь несёт три, поэтому её приходится разбирать. Пустое
+ * вступление при заполненных текстах исхода — законное состояние: автор вправе обратиться
+ * только к прошедшему.
+ */
+function introCommonOf(side: IntroBlock | null | undefined): IntroText | null {
+  if (!side || !String(side.text ?? "").trim()) return null;
+  return { format: side.format ?? "plain", text: side.text };
+}
+
+/** Ветвь выдачи, собранная из трёх частей; пустая целиком = ветви нет. */
+function introSide(
+  common: IntroText | null,
+  passed: IntroText | null | undefined,
+  failed: IntroText | null | undefined,
+): IntroBlock | undefined {
+  if (!common && !passed && !failed) return undefined;
+  return {
+    format: common?.format ?? "plain",
+    text: common?.text ?? "",
+    ...(passed ? { passed } : {}),
+    ...(failed ? { failed } : {}),
+  };
+}
+
+/**
+ * Правка ОБЩЕГО вступления одной выдачи. Тексты исхода при этом обязаны уцелеть: автор,
+ * стирающий вступление, не просил стереть поздравление.
+ */
+function setIntroCommon(
+  m: TestEditorModel,
+  side: "results" | "report",
+  next: IntroText | null,
+): TestEditorModel {
+  const cur = m.intro?.[side];
+  return {
+    ...m,
+    intro: { ...(m.intro ?? {}), [side]: introSide(next, cur?.passed, cur?.failed) },
+  };
+}
+
+/** Правка ОДНОГО текста исхода; общее вступление и второй исход не трогаются. */
+function setIntroOutcome(
+  m: TestEditorModel,
+  side: "results" | "report",
+  outcome: "passed" | "failed",
+  next: IntroText | null,
+): TestEditorModel {
+  const cur = m.intro?.[side];
+  const common = introCommonOf(cur);
+  const passed = outcome === "passed" ? next : cur?.passed;
+  const failed = outcome === "failed" ? next : cur?.failed;
+  return {
+    ...m,
+    intro: { ...(m.intro ?? {}), [side]: introSide(common, passed, failed) },
+  };
+}
+
+/**
+ * Тексты, которые участник читает ПОСЛЕ теста: общая обратная связь и вводный текст
+ * итогов и отчёта. Прежде они висели в «Основном» вперемешку с названием теста (Э3.6).
+ */
+export function FeedbackTextsPane({ model, updateModel }: SettingsSectionProps) {
+  return (
+    <>
+      {/* PRD-61 (эскиз approved/prd61-intro-by-outcome.html): вводный текст разведён на ДВЕ
+          карточки, по одной на выдачу, и в каждой три текста — общий и два по вердикту.
+          Адресат ушёл в заголовок карточки, поэтому подписи полей внутри короткие и
+          параллельные. */}
+      <FormSection stacked title="Вводный текст на экране итогов" data-testid="settings-intro-card">
+        <IntroEditTrigger
+          label="При любом исходе"
+          modalTitle="Вводный текст на экране итогов"
+          description="Идёт первым, до сводки и результатов по темам. Печатается всегда."
+          value={introCommonOf(model.intro?.results)}
+          onSave={(next) => updateModel((m) => setIntroCommon(m, "results", next))}
+          testId="settings-intro-results"
+        />
+        <IntroEditTrigger
+          label="Если тест пройден"
+          modalTitle="Вводный текст на экране итогов, если тест пройден"
+          description="Печатается под общим текстом. Тест без порога прохождения его не показывает."
+          value={model.intro?.results?.passed ?? null}
+          onSave={(next) => updateModel((m) => setIntroOutcome(m, "results", "passed", next))}
+          testId="settings-intro-results-passed"
+        />
+        <IntroEditTrigger
+          label="Если тест не пройден"
+          modalTitle="Вводный текст на экране итогов, если тест не пройден"
+          description="Печатается под общим текстом. Тест без порога прохождения его не показывает."
+          value={model.intro?.results?.failed ?? null}
+          onSave={(next) => updateModel((m) => setIntroOutcome(m, "results", "failed", next))}
+          testId="settings-intro-results-failed"
+        />
+      </FormSection>
+      <FormSection stacked title="Вводный текст в отчёте" data-testid="settings-intro-report-card">
+        {/* Переключатель — ССЫЛКА, а не копия: включённый, он не переносит тексты в ветвь
+            отчёта, поэтому правка на экране меняет обе выдачи разом, а собственные тексты
+            отчёта дожидаются своего часа нетронутыми. Действует на все три сразу. */}
+        <div className="ou-formfield">
+          <Switch
+            id="intro-report-same"
+            label="Те же тексты, что на экране итогов"
+            description="Правятся в одном месте. Выключите, чтобы задать отчёту своё вводное слово."
+            checked={!!model.intro?.reportSameAsResults}
+            onChange={(e) =>
+              updateModel((m) => ({
+                ...m,
+                intro: { ...(m.intro ?? {}), reportSameAsResults: e.target.checked },
+              }))
             }
-            testId="settings-intro-results"
+            data-testid="settings-intro-same-switch"
           />
-          <hr className="wf-sep" />
-          {/* Переключатель — ССЫЛКА, а не копия: включённый, он не переносит текст в
-              ветвь отчёта, поэтому правка на экране меняет обе выдачи разом, а
-              собственный текст отчёта дожидается своего часа нетронутым. */}
-          <div className="ou-formfield">
-            <Switch
-              id="intro-report-same"
-              label="В отчёте — тот же текст, что на экране итогов"
-              description="Правится в одном месте. Выключите, чтобы задать отчёту своё вводное слово."
-              checked={!!model.intro?.reportSameAsResults}
-              onChange={(e) =>
-                updateModel((m) => ({
-                  ...m,
-                  intro: { ...(m.intro ?? {}), reportSameAsResults: e.target.checked },
-                }))
-              }
-              data-testid="settings-intro-same-switch"
-            />
-          </div>
-          {!model.intro?.reportSameAsResults && (
+        </div>
+        {!model.intro?.reportSameAsResults && (
+          <>
             <IntroEditTrigger
-              label="В отчёте"
+              label="При любом исходе"
               modalTitle="Вводный текст в отчёте"
-              description="Идёт первым, до карточки результата. Задаётся отдельно от текста экрана."
-              value={model.intro?.report ?? null}
-              onSave={(next) =>
-                updateModel((m) => ({ ...m, intro: { ...(m.intro ?? {}), report: next } }))
-              }
+              description="Идёт первым, до карточки результата. Печатается всегда."
+              value={introCommonOf(model.intro?.report)}
+              onSave={(next) => updateModel((m) => setIntroCommon(m, "report", next))}
               testId="settings-intro-report"
             />
-          )}
-        </CardBody>
-      </Card>
+            <IntroEditTrigger
+              label="Если тест пройден"
+              modalTitle="Вводный текст в отчёте, если тест пройден"
+              description="Печатается под общим текстом. Тест без порога прохождения его не показывает."
+              value={model.intro?.report?.passed ?? null}
+              onSave={(next) => updateModel((m) => setIntroOutcome(m, "report", "passed", next))}
+              testId="settings-intro-report-passed"
+            />
+            <IntroEditTrigger
+              label="Если тест не пройден"
+              modalTitle="Вводный текст в отчёте, если тест не пройден"
+              description="Печатается под общим текстом. Тест без порога прохождения его не показывает."
+              value={model.intro?.report?.failed ?? null}
+              onSave={(next) => updateModel((m) => setIntroOutcome(m, "report", "failed", next))}
+              testId="settings-intro-report-failed"
+            />
+          </>
+        )}
+      </FormSection>
 
-      {/*
-        Отчёт — тоже обратная связь обучающемуся, поэтому его СОДЕРЖАНИЕ (выдавать ли
-        документ и что в нём показывать) стоит здесь, рядом с текстом, который слушатель
-        прочтёт (PRD-27 §7.1). Облик документа — подложка, логотип, вид — остался в
-        «Оформлении», где живут шаблон и брендинг: поля делит сам шаблон признаком `scope`.
-      */}
-      <hr className="wf-sep" />
+      {/* PRD-61 §10: карточка «Общая обратная связь теста» отсюда УБРАНА. Три вводных текста
+          закрывают её назначение и говорят то же самое в начале документа, а не в конце среди
+          рекомендаций; материалы (курсы, файлы, мероприятия) остаются у ТЕМ, на странице «По
+          темам», где ими и пользуются. Колонки `tests.feedback_json` и легаси `tests.feedback`
+          пока живы и сносятся отдельной миграцией — см. пункт технического долга. */}
+    </>
+  );
+}
 
+// ─── Панель «Отчёт» (содержание документа) ────────────────────────────────────
+
+/**
+ * Отчёт — тоже обратная связь обучающемуся, поэтому его СОДЕРЖАНИЕ (выдавать ли документ,
+ * что в нём показывать, из каких блоков он собран) стоит рядом с текстами, которые
+ * слушатель прочтёт (PRD-27 §7.1). Облик документа остался в «Оформлении».
+ */
+export function ReportContentPane({ model, updateModel, design }: SettingsSectionProps) {
+  // Заголовки итога живут свойствами узла «Итоги теста» (`content_pages.settings_json`), а
+  // не в модели теста, поэтому страницы читаются здесь — иначе предпросмотр печатал бы
+  // название теста там, где слушателю уйдёт авторский заголовок документа.
+  const pages = useContentPages(model.id, design?.draft.templateId);
+  const resultsSettings = (pages.pages.find((p) => p.kind === "results")?.settingsJson ?? {}) as
+    Record<string, unknown>;
+  const heading = (key: string) => {
+    const value = resultsSettings[key];
+    return typeof value === "string" && value.trim() !== "" ? value : undefined;
+  };
+  const reportHeadings = {
+    ...(heading("headingDocument") ? { document: heading("headingDocument") } : {}),
+    ...(heading("headingPassed") ? { passed: heading("headingPassed") } : {}),
+    ...(heading("headingFailed") ? { failed: heading("headingFailed") } : {}),
+  };
+  return (
       <ReportSettingsCard
         scope="content"
-        mode={model.mode}
+        // Тест «Сценарий» печатает стандартный отчёт: его пункт — раздел темы-банка.
+        mode={model.mode === "adaptive" ? "adaptive" : "standard"}
         draftTemplateId={design?.draft.templateId}
         designParams={design?.draft.params}
         value={model.report ?? {}}
         onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+        // PRD-51: документ ветви текущего режима. Сохранённые строки и черновик разведены:
+        // из первых разрешается начальный вид документа, второй появляется с первой правкой
+        // и только он уходит на сервер.
+        savedDocument={model.reportDocument?.saved?.[model.mode === "adaptive" ? "adaptive" : "standard"]}
+        document={model.reportDocument?.draft?.[model.mode === "adaptive" ? "adaptive" : "standard"]}
+        onDocumentChange={(next) =>
+          updateModel((m) => ({
+            ...m,
+            reportDocument: {
+              ...m.reportDocument,
+              draft: {
+                ...m.reportDocument?.draft,
+                [m.mode === "adaptive" ? "adaptive" : "standard"]: next,
+              },
+            },
+          }))
+        }
         // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста.
         testName={model.basic.title}
+        headings={Object.keys(reportHeadings).length > 0 ? reportHeadings : undefined}
+        breakdownDisplay={model.runtime.breakdownDisplay}
+        intro={model.intro}
+        sectionGroups={model.sectionGroups}
         sections={model.sections.map((s) => ({
           topicId: s.topicId,
           topicName: s.topicName,
           questionCount: s.drawCount,
+          groupKey: s.groupKey ?? null,
         }))}
         levelNames={
           model.mode === "adaptive"
@@ -481,7 +587,6 @@ function BasicPane({
             : undefined
         }
       />
-    </>
   );
 }
 
@@ -492,54 +597,107 @@ function BasicPane({
  * the in-attempt ones (attempt count, time) and the between-attempts retake
  * block, which lives here instead of a rail item of its own.
  */
-function LimitsPane({ model, updateModel }: SettingsSectionProps) {
+export function LimitsPane({ model, updateModel }: SettingsSectionProps) {
+  // Срок прохождения автор нередко набирает таймером: две недели превращаются в
+  // 20160 минут, и без расшифровки ни поле, ни обложка не говорят, что это за
+  // число. Раскладку даёт ТОТ ЖЕ построитель, что печатает лимит ученику, поэтому
+  // редактор и стартовый экран не могут разойтись. Меньше часа расшифровывать
+  // нечего — строка повторила бы само поле.
+  const timeLimitMinutes = model.runtime.timeLimitMinutes;
+  const timeLimitHint =
+    timeLimitMinutes != null && timeLimitMinutes >= 60 ? formatMinutesHuman(timeLimitMinutes) : "";
   return (
     <>
-      <div className="ou-formfield">
-        <NumberInput
-          id="settings-max-attempts"
-          size="m"
-          label="Максимум попыток"
-          hint="Оставьте 0 для неограниченного числа попыток."
-          value={model.runtime.maxAttempts ?? 0}
-          min={0}
-          data-testid="settings-max-attempts-input"
-          onChange={(next) =>
-            updateModel((m) => ({
-              ...m,
-              runtime: { ...m.runtime, maxAttempts: next === 0 ? null : next },
-            }))
-          }
-        />
-      </div>
+      {/* Э3.4: два барьера отвечают на разные вопросы — «сколько длится ПОПЫТКА» и
+          «когда можно ПОВТОРИТЬ». Прежде они шли одним столбцом, и лимит времени теста
+          читался как ограничение повторов. */}
+      <FormSection title="Ограничения попытки" stacked>
+        <div className="ou-formfield">
+          <NumberInput
+            id="settings-time-limit"
+            size="m"
+            label="Лимит времени теста"
+            hint={
+              timeLimitHint
+                ? `Оставьте 0, чтобы не ограничивать. Сейчас это ${timeLimitHint} на одну попытку.`
+                : "Оставьте 0, чтобы не ограничивать."
+            }
+            value={model.runtime.timeLimitMinutes ?? 0}
+            min={0}
+            suffix="минут"
+            data-testid="settings-time-limit-input"
+            onChange={(next) =>
+              updateModel((m) => ({
+                ...m,
+                runtime: { ...m.runtime, timeLimitMinutes: next === 0 ? null : next },
+              }))
+            }
+          />
+        </div>
+        <PerTopicLimitsBlock model={model} updateModel={updateModel} />
+        <CloseSectionOnLeaveField model={model} updateModel={updateModel} />
+      </FormSection>
 
-      <div className="ou-formfield">
-        <NumberInput
-          id="settings-time-limit"
-          size="m"
-          label="Лимит времени теста"
-          hint="Оставьте 0, чтобы не ограничивать."
-          value={model.runtime.timeLimitMinutes ?? 0}
-          min={0}
-          suffix="минут"
-          data-testid="settings-time-limit-input"
-          onChange={(next) =>
-            updateModel((m) => ({
-              ...m,
-              runtime: { ...m.runtime, timeLimitMinutes: next === 0 ? null : next },
-            }))
-          }
-        />
-      </div>
-      <hr className="wf-sep" />
-      <PerTopicLimitsBlock model={model} updateModel={updateModel} />
-      {/* PRD-7 S13.2-G8: «Показывать правильные ответы» переехал в Основное
-          → секция «Общая обратная связь теста» (вместе с feedback editor),
-          per wireframe prd7-editor-settings-tab.html lines 820-837. */}
-      <hr className="wf-sep" />
-      <h3 className="tb-topics-title">Повторное прохождение</h3>
-      <RetakeBlock model={model} updateModel={updateModel} />
+      <FormSection title="Ограничения повторных попыток" stacked>
+        <div className="ou-formfield">
+          <NumberInput
+            id="settings-max-attempts"
+            size="m"
+            label="Максимум попыток"
+            hint="Оставьте 0 для неограниченного числа попыток."
+            value={model.runtime.maxAttempts ?? 0}
+            min={0}
+            data-testid="settings-max-attempts-input"
+            onChange={(next) =>
+              updateModel((m) => ({
+                ...m,
+                runtime: { ...m.runtime, maxAttempts: next === 0 ? null : next },
+              }))
+            }
+          />
+        </div>
+        <RetakeBlock model={model} updateModel={updateModel} />
+      </FormSection>
     </>
+  );
+}
+
+// ─── PRD-67: «Закрывать раздел при выходе» ───────────────────────────────────
+
+/**
+ * PRD-67 switch, the last field of «Ограничения попытки» (wireframe
+ * `approved/prd67-section-close-on-leave.html`). It acts only where a clock could be
+ * dodged, so it is shown only when some limit exists: the test-wide one or the per-topic
+ * ones. Hiding it keeps the stored value — turning a limit back on brings it back as set.
+ */
+function CloseSectionOnLeaveField({ model, updateModel }: SettingsSectionProps) {
+  const hasTestLimit = (model.runtime.timeLimitMinutes ?? 0) > 0;
+  const hasTopicLimits = model.sections.some((s) => s.timeLimit.source !== "inherit_test");
+  if (!hasTestLimit && !hasTopicLimits) return null;
+  const on = model.runtime.closeSectionOnLeave;
+  return (
+    <div className="ou-formfield">
+      <label className="ou-switch-field">
+        <Switch
+          size="m"
+          checked={on}
+          aria-label="Закрывать раздел при выходе"
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({ ...m, runtime: { ...m.runtime, closeSectionOnLeave: checked } }));
+          }}
+          data-testid="settings-close-section-on-leave-switch"
+        />
+        <span className="ou-switch-field__text">
+          <span className="ou-switch-field__label">Закрывать раздел при выходе</span>
+          <span className="ou-switch-field__desc">
+            {on
+              ? "Если ученик покинул раздел — перешёл дальше, вернулся к списку разделов или закрыл браузер, — вернуться и дорешать нельзя. В тесте без разделов выход завершает попытку."
+              : "Выключено — при выходе время замирает, а по возвращении ученик продолжает с того же места."}
+          </span>
+        </span>
+      </label>
+    </div>
   );
 }
 
@@ -575,7 +733,7 @@ function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
       <Banner
         tone="info"
         size="sm"
-        description="Индивидуальные лимиты для тем доступны после добавления хотя бы одной темы во вкладке «Состав»."
+        description="Индивидуальные лимиты для тем доступны после добавления хотя бы одной темы в подразделе «Состав»."
         data-testid="settings-per-topic-no-topics"
       />
     );
@@ -610,7 +768,6 @@ function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
       <div className="ou-formfield">
         <Switch
           label="Индивидуальные лимиты для тем"
-          description="Если выключено, действует только общий лимит теста (см. выше)."
           checked={hasCustomLimits}
           onChange={(e) => {
             const checked = e.target.checked;
@@ -760,11 +917,6 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
       <div className="ou-formfield">
         <Switch
           label="Ограничить повторное прохождение"
-          description={
-            enabled
-              ? "Допуск проверяется до старта курса."
-              : "Выключено — учащийся может перезапускать курс без ограничений (как сейчас)."
-          }
           checked={enabled}
           onChange={(e) => {
             const checked = e.target.checked;
@@ -828,24 +980,9 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
             <>
               <div className="ou-formfield">
                 <NumberInput
-                  id="settings-retake-cooldown-passed"
-                  size="m"
-                  label="При успешном прохождении, дней"
-                  hint="От 1 до 3650 дней."
-                  value={policy.cooldownPeriodDaysPassed ?? 30}
-                  min={1}
-                  max={3650}
-                  data-testid="settings-retake-cooldown-passed-input"
-                  onChange={(next) =>
-                    setPolicy({ cooldownPeriodDaysPassed: Math.min(3650, Math.max(1, next || 1)) })
-                  }
-                />
-              </div>
-              <div className="ou-formfield">
-                <NumberInput
                   id="settings-retake-cooldown-failed"
                   size="m"
-                  label="При неуспешном прохождении, дней"
+                  label="После неуспешной попытки, дней"
                   hint="От 1 до 3650 дней."
                   value={policy.cooldownPeriodDaysFailed ?? 30}
                   min={1}
@@ -853,6 +990,21 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
                   data-testid="settings-retake-cooldown-failed-input"
                   onChange={(next) =>
                     setPolicy({ cooldownPeriodDaysFailed: Math.min(3650, Math.max(1, next || 1)) })
+                  }
+                />
+              </div>
+              <div className="ou-formfield">
+                <NumberInput
+                  id="settings-retake-cooldown-passed"
+                  size="m"
+                  label="После успешной попытки, дней"
+                  hint="От 1 до 3650 дней."
+                  value={policy.cooldownPeriodDaysPassed ?? 30}
+                  min={1}
+                  max={3650}
+                  data-testid="settings-retake-cooldown-passed-input"
+                  onChange={(next) =>
+                    setPolicy({ cooldownPeriodDaysPassed: Math.min(3650, Math.max(1, next || 1)) })
                   }
                 />
               </div>
@@ -872,13 +1024,25 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
             />
           </div>
 
+          {/* The gate matches WebTutor records by the course name EXACTLY; a course
+              named differently from the test is found only through this field. */}
           {currentKey === "webtutor_cooldown" && (
-            <Banner
-              tone="warning"
-              size="sm"
-              description="Проверка через WebTutor находит прошлые попытки по НАЗВАНИЮ курса. Ограничение сработает только если название курса (модуля) в WebTutor точно совпадает с названием этого теста. Если при загрузке в LMS курс назван иначе — период охлаждения применяться не будет."
-              data-testid="settings-retake-webtutor-name-warning"
-            />
+            <div className="ou-formfield">
+              <Input
+                id="settings-retake-lms-course-name"
+                size="m"
+                fullWidth
+                label="Название курса в WebTutor"
+                value={policy.lmsCourseName ?? ""}
+                placeholder={model.basic.title}
+                hint="По этому названию проверка находит прошлые попытки в WebTutor, поэтому оно должно совпадать точно. Если поле пустое, используется название теста."
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setPolicy({ lmsCourseName: value });
+                }}
+                data-testid="settings-retake-lms-course-name"
+              />
+            </div>
           )}
 
           <div
@@ -906,7 +1070,6 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
       {/* PRD-31 барьер B: интервал между попытками ВНУТРИ одного назначения.
           Отделён от группы выше, потому что барьеры независимы (FR-03) и стоят
           на разных границах: кулдаун — между назначениями, интервал — внутри. */}
-      <div className="ou-card__divider" />
 
       <label className="ou-switch-field">
         <Switch
@@ -955,7 +1118,6 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
 
           <Banner
             tone="info"
-            size="sm"
             description={
               enabled
                 ? "Период охлаждения действует между назначениями, ограничение между попытками — внутри одного назначения."
@@ -971,31 +1133,9 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
 
 // ─── Sub-pane: Интеграция ─────────────────────────────────────────────────────
 
-function IntegrationPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+export function IntegrationPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
   return (
-    <>
-      <div className="ou-formfield" data-field="basic.webhookUrl">
-        <Input
-          id="settings-webhook"
-          size="m"
-          fullWidth
-          label="Webhook URL"
-          type="url"
-          value={model.basic.webhookUrl}
-          placeholder="https://example.com/webhook"
-          error={fieldErrors.get("basic.webhookUrl")}
-          onChange={(e) => {
-            const value = e.target.value;
-            updateModel((m) => ({
-              ...m,
-              basic: { ...m.basic, webhookUrl: value },
-            }));
-          }}
-          data-testid="settings-webhook-input"
-        />
-        <div className="ou-formfield__desc">Оставьте пустым, если webhook не нужен.</div>
-      </div>
-
+    <FormSection title="Интеграция" stacked>
       <div className="ou-formfield">
         <Switch
           label="Отправлять телеметрию о прохождении"
@@ -1009,41 +1149,66 @@ function IntegrationPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS 
           }}
           data-testid="settings-telemetry-checkbox"
         />
+        {/* Адреса здесь нет намеренно: принимает телеметрию эта система, и адрес у неё один на
+            установку (`scorm.telemetryBaseUrl` в конфигурации). Тест решает только, включена ли. */}
+        <Banner
+          tone="info"
+          size="sm"
+          icon={false}
+          description="Пакет SCORM отправляет данные о прохождениях в эту систему — они появятся в аналитике теста. Настройка действует на пакеты, выгруженные после её изменения."
+          data-testid="settings-telemetry-note"
+        />
       </div>
-    </>
+
+      <div className="ou-formfield">
+        <Select<"best" | "last">
+          id="settings-lms-attempt-result"
+          size="m"
+          fullWidth
+          label="Результат для LMS при нескольких попытках"
+          value={model.runtime.lmsAttemptResult}
+          options={[
+            { value: "best", label: "Лучшая попытка" },
+            { value: "last", label: "Последняя попытка" },
+          ]}
+          data-testid="settings-lms-attempt-result"
+          onChange={(next) =>
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, lmsAttemptResult: next },
+            }))
+          }
+        />
+      </div>
+    </FormSection>
   );
 }
 
-// ─── Sub-pane: Правила прохождения ────────────────────────────────────────────
+// ─── Панель «Навигация» (вкладка «Правила прохождения») ───────────────────────
 
-const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
-  { value: "overall_only", label: "достигнут общий проходной порог теста" },
-  {
-    value: "overall_and_required_topics",
-    label:
-      "достигнут общий проходной порог и пройдены все обязательные темы",
-  },
-  { value: "required_topics_only", label: "пройдены все обязательные темы" },
-  { value: "all_topics_passed", label: "пройдена каждая выбранная тема" },
-];
-
-function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+/**
+ * Как участник ходит по тесту: возврат к пропущенным, правка ответа, обзор, быстрый
+ * переход. Часть переключателей гасится другими настройками, и подпись под погашенным
+ * называет ПРИЧИНУ вместе с её адресом — иначе автор ищет её по всему ящику (Э3.4).
+ */
+export function NavigationPane({ model, updateModel }: SettingsSectionProps) {
   // PRD-19 (FR-04b): «изменение ответа» зависит от возврата ВКЛ и взаимоисключается с показом
-  // правильных ответов (раздел «Ограничения»). showSectionResults — только для секционных.
+  // правильных ответов («Обратная связь и итоги» → «Во время теста»).
   const changeDisabled =
     !model.runtime.allowReturnToUnanswered || model.runtime.showCorrectAnswers;
+  // PRD-19 (FR-11c): свободная навигация имеет смысл только при возврате ВКЛ — иначе карта
+  // вопросов вообще не навигация. Показ правильных ответов ей, в отличие от «изменения
+  // ответа», не мешает: открытый вперёд вопрос не даёт увидеть чужую подсказку.
+  const freeNavDisabled = !model.runtime.allowReturnToUnanswered;
   // PRD-43: НЕ зависит от allowReturnToUnanswered (все 4 комбинации допустимы) —
   // блокируется только показом правильного ответа, который всегда требует
   // отдельного шага перед переходом дальше.
   const quickAdvanceDisabled = model.runtime.showCorrectAnswers;
-  const showSectionResultsApplicable =
-    model.flowMode !== "linear_flat" && model.sections.length > 0;
   return (
-    <>
+    <FormSection title="Навигация" stacked>
       <div className="ou-formfield">
         <Switch
           label="Разрешить возврат к неотвеченным вопросам"
-          description="Ученик может пропускать вопросы и возвращаться к ним до завершения. Включает карту-индикатор прогресса и экран обзора."
           checked={model.runtime.allowReturnToUnanswered}
           onChange={(e) => {
             const checked = e.target.checked;
@@ -1054,6 +1219,11 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                 allowReturnToUnanswered: checked,
                 // изменение ответа невозможно без возврата
                 allowAnswerChange: checked ? m.runtime.allowAnswerChange : false,
+                // FR-11c: свободная навигация тоже держится на возврате — без него карта
+                // вопросов не навигация, а индикатор, и открывать в ней нечего.
+                allowFreeSectionNavigation: checked
+                  ? m.runtime.allowFreeSectionNavigation
+                  : false,
               },
             }));
           }}
@@ -1062,8 +1232,29 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
       </div>
       <div className="ou-formfield">
         <Switch
+          label="Свободная навигация внутри раздела"
+          checked={model.runtime.allowFreeSectionNavigation && !freeNavDisabled}
+          disabled={freeNavDisabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, allowFreeSectionNavigation: checked },
+            }));
+          }}
+          data-testid="settings-free-navigation-checkbox"
+        />
+        {freeNavDisabled && (
+          <Banner
+            tone="warning"
+            size="sm"
+            description="Доступно только при включённом возврате к неотвеченным."
+          />
+        )}
+      </div>
+      <div className="ou-formfield">
+        <Switch
           label="Позволить изменять ответ до завершения"
-          description="При возврате к уже отвеченному вопросу можно изменить ответ (до завершения раздела/теста)."
           checked={model.runtime.allowAnswerChange && !changeDisabled}
           disabled={changeDisabled}
           onChange={(e) => {
@@ -1075,37 +1266,24 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           }}
           data-testid="settings-allow-change-checkbox"
         />
+        {/* Без иконки тона: баннер подчинён переключателю над ним и объясняет ЕГО
+            состояние, а колонка треугольников в форме читается как список тревог. */}
         {changeDisabled && (
           <Banner
             tone="warning"
             size="sm"
+            icon={false}
             description={
               !model.runtime.allowReturnToUnanswered
                 ? "Доступно только при включённом возврате к неотвеченным."
-                : "Недоступно при включённом показе правильных ответов (раздел «Ограничения»): иначе ученик увидит правильный ответ и переправит свой."
+                : "Недоступно при включённом показе правильных ответов («Обратная связь и итоги» → «Во время теста»): иначе ученик увидит правильный ответ и переправит свой."
             }
           />
         )}
       </div>
       <div className="ou-formfield">
         <Switch
-          label="Не показывать обзор, если отвечены все вопросы"
-          description="Обзор нужен, чтобы вернуться к пропущенному вопросу. Когда пропущенных не осталось, ученик перейдёт сразу к завершению. Пока что-то пропущено, обзор показывается всегда."
-          checked={model.runtime.skipReviewWhenComplete}
-          onChange={(e) => {
-            const checked = e.target.checked;
-            updateModel((m) => ({
-              ...m,
-              runtime: { ...m.runtime, skipReviewWhenComplete: checked },
-            }));
-          }}
-          data-testid="settings-skip-review-complete-checkbox"
-        />
-      </div>
-      <div className="ou-formfield">
-        <Switch
           label="Переходить к следующему вопросу сразу после ответа"
-          description="Без отдельного нажатия «Далее»: ответ фиксируется и сразу открывается следующий вопрос."
           checked={model.runtime.quickAdvance && !quickAdvanceDisabled}
           disabled={quickAdvanceDisabled}
           onChange={(e) => {
@@ -1121,37 +1299,86 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           <Banner
             tone="warning"
             size="sm"
-            description="Недоступно при включённом показе правильных ответов (раздел «Ограничения»): нужно увидеть правильный ответ, прежде чем переходить дальше."
+            icon={false}
+            description="Недоступно при включённом показе правильных ответов («Обратная связь и итоги» → «Во время теста»): нужно увидеть правильный ответ, прежде чем переходить дальше."
           />
         )}
       </div>
-      {showSectionResultsApplicable && (
-        <div className="ou-formfield">
-          <Switch
-            label="Показывать итоги раздела"
-            description="После завершения раздела показывается экран с его результатом. Только для секционных тестов."
-            checked={model.runtime.showSectionResults}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              updateModel((m) => ({
-                ...m,
-                runtime: { ...m.runtime, showSectionResults: checked },
-              }));
-            }}
-            data-testid="settings-show-section-results-checkbox"
-          />
-        </div>
-      )}
+      <div className="ou-formfield">
+        <Switch
+          label="Не показывать обзор, если отвечены все вопросы"
+          checked={model.runtime.skipReviewWhenComplete}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, skipReviewWhenComplete: checked },
+            }));
+          }}
+          data-testid="settings-skip-review-complete-checkbox"
+        />
+      </div>
+    </FormSection>
+  );
+}
 
-      <hr className="wf-sep" />
+// ─── Панель «Во время прохождения» (вкладка «Правила прохождения») ────────────
 
+/**
+ * Что участник видит НА ЭКРАНЕ ВОПРОСА. Параметры прогресса объявляет шаблон, и рисует их
+ * вкладка «Оформление» своим механизмом, — здесь стоит то, что принадлежит правилам
+ * прохождения: показ уровня сложности в адаптивном тесте (Э3.4, решение 18).
+ */
+export function DuringRunPane({ model, updateModel }: SettingsSectionProps) {
+  if (model.mode !== "adaptive") {
+    return (
+      <Banner
+        tone="info"
+        title="Показывать нечего"
+        description="Уровень сложности показывает только адаптивный тест. Режим теста выбирается во вкладке «Основное»."
+        data-testid="during-run-not-adaptive"
+      />
+    );
+  }
+  return (
+    <>
+      <div className="ou-formfield">
+        <Switch
+          label="Показывать уровень сложности при прохождении"
+          checked={model.adaptive.showDifficultyLevel}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              adaptive: {
+                ...m.adaptive,
+                showDifficultyLevel: checked,
+                testSettings: { ...m.adaptive.testSettings, showDifficultyLevel: checked },
+              },
+            }));
+          }}
+          data-testid="adaptive-show-difficulty"
+        />
+      </div>
+    </>
+  );
+}
+
+// ─── Панель «Защита контента» (вкладка «Правила прохождения») ─────────────────
+
+/**
+ * PRD-34: три независимых меры против выноса заданий. Стоят своим подразделом, а не в
+ * хвосте правил прохождения: это отдельный разговор, и автор ищет их по названию (Э3.4).
+ */
+export function ProtectionPane({ model, updateModel }: SettingsSectionProps) {
+  return (
+    <FormSection title="Защита контента" stacked>
       {/* PRD-34: блок «Защита». Три переключателя НЕЗАВИСИМЫ (FR-02) — водяной знак и
           скрытие при потере фокуса осмысленны и без основной защиты, поэтому
           подчинённости между ними нет ни здесь, ни в базе. */}
       <div className="ou-formfield">
         <Switch
           label="Защищать текст задания от копирования"
-          description="На экране вопроса и на экране обзора текст не выделяется, не копируется, не перетаскивается и не печатается. В тестовом прогоне автора защита не действует."
           checked={model.runtime.copyProtection}
           onChange={(e) => {
             const checked = e.target.checked;
@@ -1166,7 +1393,6 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
       <div className="ou-formfield">
         <Switch
           label="Показывать водяной знак"
-          description="Поверх экранов вопроса, обзора, итогов раздела и итогов теста печатается обезличенный идентификатор и время. Снимок экрана остаётся возможным, но становится атрибутируемым."
           checked={model.runtime.protectionWatermark}
           onChange={(e) => {
             const checked = e.target.checked;
@@ -1181,7 +1407,6 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
       <div className="ou-formfield">
         <Switch
           label="Скрывать задание при уходе из окна"
-          description="Если ученик переключился на другую вкладку, задание закрывается заглушкой и открывается снова само, как только окно активно. Таймер и ответы не затрагиваются."
           checked={model.runtime.protectionHideOnBlur}
           onChange={(e) => {
             const checked = e.target.checked;
@@ -1193,33 +1418,239 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           data-testid="settings-protection-hide-on-blur-checkbox"
         />
       </div>
+    </FormSection>
+  );
+}
 
-      <hr className="wf-sep" />
+// ─── Панель «Состав итогов» → показ подытогов ─────────────────────────────────
 
-      <Card
-        variant="outlined"
-        size="sm"
+/**
+ * PRD-50: показ подытогов по подтемам. После Э1 у подтемы нет вердикта, поэтому все три
+ * поля говорят только о ПОКАЗЕ — включение полос, база числа и место печати, — и живут
+ * рядом с порядком подблоков и надписями, а не в оценке (решение 17).
+ */
+export function BreakdownDisplayPane({ model, updateModel }: SettingsSectionProps) {
+  return (
+    <>
+      {/* Э5.3: группа названа предметом — подтемами, а не «ключами» движка (эскиз
+          `s-feedback`, решение 23). «Ключ» остаётся в коде и в спецификациях. */}
+      <FormSection title="Подытоги по подтемам" stacked>
+        <div className="ou-formfield">
+          <Select<"hidden" | "bar" | "bar_and_value">
+            id="settings-breakdown-visibility"
+            size="m"
+            fullWidth
+            label="Подытоги по подтемам (тегам)"
+            // Ф-2: подсказка обещала «итоги раздела», а этот экран разрез не печатает и не
+            // может — поля нет в его контексте, блока нет ни в одной раскладке. Обещание
+            // экрана, которого не будет, читается как дефект выдачи, а не как текст.
+            hint="Полосы по подтемам (тегам вопросов): на экране итогов теста и в отчёте. Экран «Итоги раздела» подытогов не печатает. «Не показывать» убирает подытоги совсем и прячет два поля ниже."
+            value={(model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).visibility}
+            options={[
+              { value: "hidden", label: "Не показывать" },
+              { value: "bar", label: "Полоса" },
+              { value: "bar_and_value", label: "Полоса и число" },
+            ]}
+            onChange={(value) =>
+              updateModel((m) => ({
+                ...m,
+                runtime: {
+                  ...m.runtime,
+                  breakdownDisplay: {
+                    ...(m.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY),
+                    visibility: value,
+                  },
+                },
+              }))
+            }
+            data-testid="settings-breakdown-visibility-select"
+          />
+        </div>
+        {(model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).visibility !== "hidden" && (
+          <div className="ou-formfield">
+            <Select<"units" | "points">
+              id="settings-breakdown-basis"
+              size="m"
+              fullWidth
+              label="База подытогов"
+              value={(model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).basis}
+              options={[
+                { value: "units", label: "Доля вопросов" },
+                { value: "points", label: "Доля баллов" },
+              ]}
+              onChange={(value) =>
+                updateModel((m) => ({
+                  ...m,
+                  runtime: {
+                    ...m.runtime,
+                    breakdownDisplay: {
+                      ...(m.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY),
+                      basis: value,
+                    },
+                  },
+                }))
+              }
+              data-testid="settings-breakdown-basis-select"
+            />
+          </div>
+        )}
+        {/* PRD-50 FR-44 (Э4): ГДЕ показывать подытоги. Два места отвечают на разные вопросы —
+            ключ внутри одного раздела и тот же ключ по всему тесту, — поэтому автор выбирает
+            любое из них или оба. Поля нет в настройке, сохранённой до этого этапа: там оно
+            читается как «В карточках тем», то есть ровно то, что тест печатал. */}
+        {(model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).visibility !== "hidden" && (
+          <div className="ou-formfield">
+            <Select<"topics" | "block" | "both">
+              id="settings-breakdown-placement"
+              size="m"
+              fullWidth
+              label="Где показывать подытоги"
+              hint="Сводный блок печатает подтему, живущую в нескольких разделах, одной строкой по всему тесту. В адаптивном тесте карточка темы говорит подтверждённым уровнем и полос не печатает — там работает только сводный блок."
+              value={(model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).placement ?? "topics"}
+              options={[
+                { value: "topics", label: "В карточках тем" },
+                { value: "block", label: "Отдельным блоком в итогах" },
+                { value: "both", label: "В карточках тем и отдельным блоком" },
+              ]}
+              onChange={(value) =>
+                updateModel((m) => ({
+                  ...m,
+                  runtime: {
+                    ...m.runtime,
+                    breakdownDisplay: {
+                      ...(m.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY),
+                      placement: value,
+                    },
+                  },
+                }))
+              }
+              data-testid="settings-breakdown-placement-select"
+            />
+          </div>
+        )}
+        {/* «Показывать или не показывать» — настройка обратной связи и итогов либо блока
+            шаблона (решение владельца 2026-09-21), поэтому переключатель стоит здесь, рядом
+            с самими подытогами. Доступен, пока подытоги показаны: без полосы толкованию не
+            под чем печататься. Тексты при этом никуда не деваются — они хранятся на
+            разделе, и выключение их не стирает. */}
+        {(model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).visibility !== "hidden" && (
+          <div className="ou-formfield">
+            <Switch
+              label="Показывать толкование подтем"
+              description="Выключено — тексты хранятся, но участнику не печатаются. Тексты задаются в разделе «Обратная связь» → «По темам», карточка «По подтемам (тегам)»."
+              checked={
+                (model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).showInterpretation === true
+              }
+              onChange={(e) => {
+                const checked = e.target.checked;
+                updateModel((m) => {
+                  const current = m.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY;
+                  // Выключение СНИМАЕТ ключ, а не пишет `false`: настройка теста, не
+                  // трогавшего толкования, обязана остаться прежней до байта — это то же
+                  // правило, по которому поле читается (`readBreakdownDisplayFromApi`).
+                  const { showInterpretation: _drop, ...rest } = current;
+                  return {
+                    ...m,
+                    runtime: {
+                      ...m.runtime,
+                      breakdownDisplay: checked ? { ...rest, showInterpretation: true } : rest,
+                    },
+                  };
+                });
+              }}
+              data-testid="settings-breakdown-interpretation-switch"
+            />
+          </div>
+        )}
+      </FormSection>
+    </>
+  );
+}
+
+// ─── Панель «Вердикт» (вкладка «Оценка результата») ───────────────────────────
+
+const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
+  { value: "overall_only", label: "достигнут общий проходной порог теста" },
+  {
+    value: "overall_and_required_topics",
+    label: "достигнут порог и пройдены все обязательные темы",
+  },
+  { value: "required_topics_only", label: "пройдены все обязательные темы" },
+  { value: "all_topics_passed", label: "пройдена каждая выбранная тема" },
+];
+
+/**
+ * Техдолг №8: в тесте с пунктами-сценариями политика судит и их — обязательный сценарий проверяется
+ * своим порогом наравне с обязательной темой (согласованный эскиз, «роутер: порог сценария»).
+ */
+const DECISION_POLICIES_WITH_SCENARIOS: { value: PassDecisionPolicy; label: string }[] = [
+  { value: "overall_only", label: "достигнут общий проходной порог теста" },
+  {
+    value: "overall_and_required_topics",
+    label: "достигнут порог и пройдены все обязательные темы и сценарии",
+  },
+  { value: "required_topics_only", label: "пройдены все обязательные темы и сценарии" },
+  { value: "all_topics_passed", label: "пройден каждый выбранный пункт" },
+];
+
+/** Строка таблицы правил: тема или (у роутера) пункт-сценарий — в порядке состава. */
+interface RuleRow {
+  key: string;
+  kind: "topic" | "scenario";
+  name: string;
+  section?: EditorSection;
+}
+
+function ruleRowsOf(model: TestEditorModel): RuleRow[] {
+  if (!hasRouterItems(model) || (model.scenarioItems ?? []).length === 0) {
+    return model.sections.map((section) => ({ key: section.topicId, kind: "topic", name: section.topicName, section }));
+  }
+  return compositionEntries(model).map((entry, n): RuleRow =>
+    entry.kind === "topic"
+      ? { key: entry.section.topicId, kind: "topic", name: `${n + 1}. ${entry.section.topicName}`, section: entry.section }
+      : { key: entry.key, kind: "scenario", name: `${n + 1}. ${entry.item.title?.trim() || entry.item.topicName}` },
+  );
+}
+
+/**
+ * Что значит «тест пройден»: общая политика, общее правило и правила тем. Прежде карточка
+ * стояла в хвосте «Правил прохождения» — рядом с навигацией, к которой не относится (Э3.5).
+ */
+export function VerdictPane({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+}: SettingsSectionProps) {
+  const ruleRows = ruleRowsOf(model);
+  const withScenarios = ruleRows.some((r) => r.kind === "scenario");
+  return (
+    <>
+      <FormSection
+        stacked
+        title="Тест пройден, если"
         className="tb-pass-card"
         data-testid="settings-pass-rules-card"
         data-field="passRules"
       >
-        <CardHeader title="Тест пройден, если:" />
-        <CardBody>
-          <RadioGroup<PassDecisionPolicy>
-            name="pass-decision-policy"
-            value={model.passRules.decisionPolicy}
-            options={DECISION_POLICIES}
-            onChange={(value) =>
-              updateModel((m) => ({
-                ...m,
-                passRules: { ...m.passRules, decisionPolicy: value },
-              }))
-            }
-          />
+          {/* Свой якорь и своя пометка: адрес `passRules.decisionPolicy` проверяется
+              отдельно от порога, и без них переход упирался в карточку целиком, а
+              ошибка не была видна ни у одного элемента. */}
+          <div data-field="passRules.decisionPolicy">
+            <RadioGroup<PassDecisionPolicy>
+              name="pass-decision-policy"
+              value={model.passRules.decisionPolicy}
+              options={withScenarios ? DECISION_POLICIES_WITH_SCENARIOS : DECISION_POLICIES}
+              error={fieldErrors.get("passRules.decisionPolicy")}
+              onChange={(value) =>
+                updateModel((m) => ({
+                  ...m,
+                  passRules: { ...m.passRules, decisionPolicy: value },
+                }))
+              }
+            />
+          </div>
 
-          <hr className="wf-sep" />
-
-          <div className="tb-pass-overall">
+          <>
             <div className="ou-formfield">
               <Select<OverallPassType>
                 id="pass-overall-type"
@@ -1249,11 +1680,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                 <NumberInput
                   id="pass-overall-value"
                   size="m"
-                  label={
-                    model.passRules.overall.type === "percent"
-                      ? "Порог (%)"
-                      : "Порог (баллы)"
-                  }
+                  label="Порог"
                   value={model.passRules.overall.value}
                   min={0}
                   max={model.passRules.overall.type === "percent" ? 100 : undefined}
@@ -1272,36 +1699,64 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                 />
               </div>
             )}
-          </div>
-        </CardBody>
-      </Card>
+          </>
+      </FormSection>
+
+      {/* PRD-50 §16 (FR-53): один переключатель на весь тест, сразу под блоком, вердикт
+          которого он уточняет, и ПЕРЕД правилами тем — гейт судит именно тему. */}
+      <div className="ou-formfield">
+        <label className="tb-quota-toggle">
+          <Switch
+            checked={model.passRules.breakdownGateEnabled === true}
+            onChange={(e) =>
+              updateModel((m) => ({
+                ...m,
+                passRules: { ...m.passRules, breakdownGateEnabled: e.target.checked },
+              }))
+            }
+            aria-label="Учитывать подтемы в вердикте темы"
+            data-testid="breakdown-gate-toggle"
+          />
+          <span className="tb-section-label">Учитывать подтемы в вердикте темы</span>
+        </label>
+        <div className="tb-card-desc">
+          Тема не пройдена, если хотя бы одна её подтема (тег) набрала меньше порога темы. Отдельных
+          порогов у подтем нет: подтема живёт по правилу своей темы, а тема с «Не проверять отдельно»
+          не судит и свои подтемы.
+        </div>
+      </div>
 
       {model.sections.length > 0 && (
-        <>
-          <h3 className="tb-topics-title">Правила прохождения тем</h3>
+        // Техдолг №8: у теста с пунктами-сценариями строки идут в порядке состава, и сценарий
+        // судится своим порогом, как тема (решение владельца 2026-10-08). Без сценариев таблица
+        // прежняя.
+        <FormSection stacked title={withScenarios ? "Правила оценки тем и сценариев" : "Правила оценки тем"}>
           <table
             className="tb-table tb-pass-table"
-            aria-label="Правила прохождения тем"
+            aria-label={withScenarios ? "Правила оценки тем и сценариев" : "Правила оценки тем"}
             data-testid="pass-rules-topics-table"
           >
             <thead>
               <tr>
-                <th scope="col" className="tb-pass-table__topic-col">Тема</th>
-                <th scope="col">Правило прохождения темы</th>
+                <th scope="col" className="tb-pass-table__topic-col">
+                  {withScenarios ? "Пункт" : "Тема"}
+                </th>
+                <th scope="col">{withScenarios ? "Правило оценки" : "Правило оценки темы"}</th>
               </tr>
             </thead>
             <tbody>
-              {model.sections.map((section) => {
+              {ruleRows.map(({ key, kind, name, section }) => {
                 const rule: TopicPassRule =
-                  model.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
+                  model.passRules.byTopic[key] ?? { source: "inherit_overall" };
                 return (
                   <PassTopicRow
-                    key={section.topicId}
-                    topicId={section.topicId}
-                    topicName={section.topicName}
+                    key={key}
+                    topicId={key}
+                    topicName={name}
+                    kind={kind}
                     rule={rule}
-                    forms={section.formSet?.forms}
-                    variantMaxPoints={variantMaxPointsFor(model, section)}
+                    forms={section?.formSet?.forms}
+                    variantMaxPoints={section ? variantMaxPointsFor(model, section) : undefined}
                     fieldErrors={fieldErrors}
                     onSourceChange={(source) =>
                       updateModel((m) => ({
@@ -1310,21 +1765,21 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                           ...m.passRules,
                           byTopic: {
                             ...m.passRules.byTopic,
-                            [section.topicId]: buildTopicRuleBySource(source, rule, section, m),
+                            [key]: buildTopicRuleBySource(source, rule, section, m),
                           },
                         },
                       }))
                     }
                     onVariantTypeChange={(formId, type) =>
-                      updateModel((m) => updateVariantEntry(m, section.topicId, formId, (e) => ({ ...e, type })))
+                      updateModel((m) => updateVariantEntry(m, key, formId, (e) => ({ ...e, type })))
                     }
                     onVariantValueChange={(formId, value) =>
-                      updateModel((m) => updateVariantEntry(m, section.topicId, formId, (e) => ({ ...e, value })))
+                      updateModel((m) => updateVariantEntry(m, key, formId, (e) => ({ ...e, value })))
                     }
                     onCustomTypeChange={(customType) =>
                       updateModel((m) => {
                         const current =
-                          m.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
+                          m.passRules.byTopic[key] ?? { source: "inherit_overall" };
                         if (current.source !== "custom") return m;
                         return {
                           ...m,
@@ -1332,7 +1787,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                             ...m.passRules,
                             byTopic: {
                               ...m.passRules.byTopic,
-                              [section.topicId]: { ...current, type: customType },
+                              [key]: { ...current, type: customType },
                             },
                           },
                         };
@@ -1341,7 +1796,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                     onCustomValueChange={(value) =>
                       updateModel((m) => {
                         const current =
-                          m.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
+                          m.passRules.byTopic[key] ?? { source: "inherit_overall" };
                         if (current.source !== "custom") return m;
                         return {
                           ...m,
@@ -1349,7 +1804,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                             ...m.passRules,
                             byTopic: {
                               ...m.passRules.byTopic,
-                              [section.topicId]: { ...current, value },
+                              [key]: { ...current, value },
                             },
                           },
                         };
@@ -1360,7 +1815,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
               })}
             </tbody>
           </table>
-        </>
+        </FormSection>
       )}
 
       {model.sections.length === 0 && (
@@ -1372,7 +1827,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           <div className="ou-banner__body">
             <div className="ou-banner__title">Сначала добавьте темы</div>
             <div className="ou-banner__desc">
-              Перейдите во вкладку «Состав» и добавьте хотя бы одну тему — после
+              Перейдите в подраздел «Состав» и добавьте хотя бы одну тему — после
               этого здесь появится таблица правил прохождения тем.
             </div>
           </div>
@@ -1383,8 +1838,11 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
 }
 
 function PassTopicRow(props: {
+  /** Ключ правила: `topicId` темы или `scenario:<id>` пункта-сценария. */
   topicId: string;
   topicName: string;
+  /** Техдолг №8: строка пункта-сценария — значок сценария и «сценария» в подписях. */
+  kind?: "topic" | "scenario";
   rule: TopicPassRule;
   /** PRD-24: the topic's variants (PRD-17). Empty = «По вариантам» is not offered. */
   forms?: Form[];
@@ -1399,18 +1857,32 @@ function PassTopicRow(props: {
 }) {
   const isCustom = props.rule.source === "custom";
   const forms = props.forms ?? [];
+  const noun = props.kind === "scenario" ? "сценария" : "темы";
   // FR-02: the per-variant rule only exists for a topic delivered as variants.
   const hasVariants = forms.length >= 2;
   return (
     <>
       <tr data-testid={`pass-topic-row-${props.topicId}`}>
-        <td>{props.topicName}</td>
         <td>
+          {props.kind === "scenario" ? (
+            <span className="tb-pass-table__item">
+              <MonitorPlay size={16} aria-label="Сценарий" />
+              {props.topicName}
+            </span>
+          ) : (
+            props.topicName
+          )}
+        </td>
+        <td data-field={`passRules.byTopic[${props.topicId}]`}>
           <Select<TopicPassRule["source"]>
             size="s"
             fullWidth
             value={props.rule.source}
-            aria-label={`Правило прохождения темы ${props.topicName}`}
+            aria-label={`Правило оценки ${noun} ${props.topicName}`}
+            // «По вариантам» у темы без вариантов: правило выбрано, а варианта нет.
+            // Пометка садится на САМ выбор — больше её посадить не на что, а строка
+            // без неё выглядит исправной.
+            error={props.fieldErrors?.get(`passRules.byTopic[${props.topicId}]`)}
             options={[
               { value: "inherit_overall", label: "Как у теста" },
               { value: "custom", label: "Индивидуальное правило" },
@@ -1506,7 +1978,7 @@ function PassTopicRow(props: {
                   size="s"
                   label="Тип"
                   value={props.rule.type}
-                  aria-label={`Тип индивидуального правила темы ${props.topicName}`}
+                  aria-label={`Тип индивидуального правила ${noun} ${props.topicName}`}
                   options={[
                     { value: "percent", label: "Процент" },
                     { value: "absolute", label: "Сумма баллов" },
@@ -1527,7 +1999,7 @@ function PassTopicRow(props: {
                   max={props.rule.type === "percent" ? 100 : undefined}
                   suffix={props.rule.type === "percent" ? "%" : undefined}
                   error={props.fieldErrors?.get(`passRules.byTopic[${props.topicId}].value`)}
-                  aria-label={`Значение порога темы ${props.topicName}`}
+                  aria-label={`Значение порога ${noun} ${props.topicName}`}
                   data-testid={`pass-topic-custom-value-${props.topicId}`}
                   onChange={(next) => props.onCustomValueChange(next)}
                 />
@@ -1678,11 +2150,22 @@ function makeDefaultLevel(index: number): AdaptiveLevelConfig {
   };
 }
 
-function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
+export function AdaptivePane({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+}: SettingsSectionProps) {
   // Parent (SettingsSection) only renders this pane when mode === "adaptive",
   // so the «mode=standard» fallback banner has been removed. If you need to
   // re-introduce it (e.g., for a quick preview from standard mode), restore
   // the rail-item visibility predicate in SettingsSection first.
+
+  // Свёртка тем живёт в панели, а не в карточке темы: пара «Развернуть все / Свернуть все»
+  // из эскиза не может управлять состоянием, спрятанным в каждом аккордеоне по отдельности.
+  // Темы открываются свёрнутыми, как и раньше: у теста их десяток, и лестница уровней в
+  // каждой — простыня, в которой ничего не найти.
+  const topicIds = useMemo(() => model.sections.map((s) => s.topicId), [model.sections]);
+  const fold = useSectionFold(topicIds, true);
 
   const upsertTopic = (
     topicId: string,
@@ -1713,39 +2196,32 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
 
   return (
     <>
-
-      <div className="ou-formfield">
-        <Switch
-          label="Показывать уровень сложности при прохождении"
-          checked={model.adaptive.showDifficultyLevel}
-          onChange={(e) => {
-            const checked = e.target.checked;
-            updateModel((m) => ({
-              ...m,
-              adaptive: {
-                ...m.adaptive,
-                showDifficultyLevel: checked,
-                testSettings: { ...m.adaptive.testSettings, showDifficultyLevel: checked },
-              },
-            }));
-          }}
-          data-testid="adaptive-show-difficulty"
-        />
-      </div>
-
-      <hr className="wf-sep" />
-
-      <h3 className="tb-topics-title">Адаптивность по темам</h3>
+      {/* Эскиз рисует шапку разделом с пустым телом, а список тем — соседом раздела:
+          аккордеон идёт своим блоком `tb-adaptive-topics`, а не внутри `__body`. */}
+      <FormSection
+        stacked
+        title="Адаптивность по темам"
+        headClassName="tb-section-head"
+        meta={<FoldAllButtons fold={fold} testIdPrefix="adaptive-topics" />}
+      />
 
       {model.sections.length === 0 ? (
         <Banner
           tone="info"
           title="Сначала добавьте темы"
-          description="Адаптивность настраивается по темам теста. Перейдите во вкладку «Состав» и добавьте темы — после этого здесь появится список для настройки уровней."
+          description="Адаптивность настраивается по темам теста. Перейдите в подраздел «Состав» и добавьте темы — после этого здесь появится список для настройки уровней."
           data-testid="adaptive-no-topics"
         />
       ) : (
-        <div className="tb-adaptive-topics" data-testid="adaptive-topics-list">
+        // Корневые классы аккордеона обязательны: разделительный вид `--separated` живёт
+        // на корне, а без него `ou-acc__item` внутри остаются без рамок и отступов.
+        <div
+          className="ou-acc ou-acc--separated tb-adaptive-topics"
+          data-testid="adaptive-topics-list"
+          // Якорь ошибки «нужна хотя бы одна включённая тема»: сама она уже видна
+          // баннером ниже, но без адреса «Перейти к ошибкам» вело в никуда.
+          data-field="adaptive.topics"
+        >
           {model.sections.every((section) => {
             const topic = model.adaptive.topics.find((t) => t.topicId === section.topicId);
             return !topic || !topic.enabled;
@@ -1763,11 +2239,21 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
               section.topicId,
               section.topicName,
             );
+            // Адреса ошибок уровня считаются от позиции темы в `adaptive.topics`,
+            // а список на экране идёт по `sections`. Темы, которой в модели ещё нет,
+            // проверка не касается — тогда префикса нет и подсвечивать нечего.
+            const topicIdx = model.adaptive.topics.findIndex(
+              (t) => t.topicId === section.topicId,
+            );
             return (
               <AdaptiveTopicAccordion
                 key={section.topicId}
+                open={fold.isOpen(section.topicId)}
+                onToggleOpen={() => fold.toggle(section.topicId)}
                 topic={topic}
                 questionCount={section.maxQuestions}
+                fieldErrors={fieldErrors}
+                fieldPrefix={topicIdx >= 0 ? `adaptive.topics[${topicIdx}]` : null}
                 onToggleEnabled={(enabled) =>
                   upsertTopic(section.topicId, (t) => ({ ...t, enabled }))
                 }
@@ -1809,25 +2295,48 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
 }
 
 function AdaptiveTopicAccordion(props: {
+  /** Свёрткой владеет панель: пара «Развернуть все / Свернуть все» правит все темы разом. */
+  open: boolean;
+  onToggleOpen: () => void;
   topic: AdaptiveTopicConfig & { enabled: boolean };
   questionCount: number;
+  fieldErrors: FieldErrorIndex;
+  /** Адрес темы в модели (`adaptive.topics[i]`) или `null`, если её там ещё нет. */
+  fieldPrefix: string | null;
   onToggleEnabled: (enabled: boolean) => void;
   onFailureFeedbackChange: (text: string) => void;
   onAddLevel: () => void;
   onLevelChange: (levelIndex: number, patch: Partial<AdaptiveLevelConfig>) => void;
   onLevelRemove: (levelIndex: number) => void;
 }) {
-  const { topic, questionCount } = props;
-  const [open, setOpen] = useState(false);
+  const { topic, questionCount, open } = props;
 
   // Warning only applies to enabled topics: disabled topics are excluded from
   // the adaptive test logic so missing levels are not a problem there.
   const levelCount = topic.levels.length;
-  const statusTone: "ok" | "warn" =
-    !topic.enabled || levelCount >= 2 ? "ok" : "warn";
-  const levelsPlural =
-    levelCount === 1 ? "уровень" : levelCount >= 2 && levelCount <= 4 ? "уровня" : "уровней";
-  const subtitle = `${questionCount} вопросов · ${levelCount} ${levelsPlural}`;
+  // Ошибка внутри темы перебивает местный тон: тело аккордеона живёт только
+  // раскрытым, и свёрнутая тема с зелёной точкой молчала о поле, которое держит
+  // сохранение (контракт «Индикация проблем» — карточка говорит об ошибке внутри
+  // себя точкой в шапке).
+  const hasIssue = props.fieldPrefix ? props.fieldErrors.has(props.fieldPrefix) : false;
+  // Три состояния, а не два: выключенная тема НЕ «в порядке», она вне игры, и эскиз
+  // красит её серым `--off`. Зелёным остаётся только включённая с готовой лестницей.
+  const statusTone: "ok" | "warn" | "off" | "err" = hasIssue
+    ? "err"
+    : !topic.enabled
+      ? "off"
+      : levelCount >= 2
+        ? "ok"
+        : "warn";
+  // Число склоняется общим правилом языка, а не тремя ветками на месте: «21 вопрос»
+  // и «11 вопросов» отличаются, и ручная ветка это упускала.
+  const subtitle =
+    `${questionCount} ${pluralize(questionCount, "вопрос", "вопроса", "вопросов")} · ` +
+    // Отсутствие лестницы — не «0 уровней»: ноль читается как значение настройки, а
+    // уровней у темы просто нет.
+    (levelCount === 0
+      ? "уровней нет"
+      : `${levelCount} ${pluralize(levelCount, "уровень", "уровня", "уровней")}`);
   const levelHint =
     topic.enabled && levelCount === 0
       ? "Добавьте уровни сложности"
@@ -1843,13 +2352,15 @@ function AdaptiveTopicAccordion(props: {
       <button
         type="button"
         className="ou-acc__trigger tb-adaptive-topics__trigger"
-        onClick={() => setOpen((v) => !v)}
+        onClick={props.onToggleOpen}
         aria-expanded={open}
         data-testid={`adaptive-topic-toggle-${topic.topicId}`}
       >
+        {/* Точка несёт смысл, поэтому она подписана, а не спрятана от скринридера
+            (NFR-21): цвет — единственный носитель состояния, и без подписи его нет. */}
         <span
           className={`tb-status-dot tb-status-dot--${statusTone}`}
-          aria-hidden="true"
+          aria-label="Состояние темы"
         />
         <span className="ou-acc__trigger-text">
           <span className="ou-acc__title">{topic.topicName}</span>
@@ -1890,14 +2401,6 @@ function AdaptiveTopicAccordion(props: {
       )}
       {open && (
         <div className="ou-acc__body" data-testid={`adaptive-topic-body-${topic.topicId}`}>
-          <div className="ou-formfield">
-            <FailureFeedbackEditor
-              topicName={topic.topicName}
-              topicId={topic.topicId}
-              value={topic.failureFeedback ?? ""}
-              onChange={props.onFailureFeedbackChange}
-            />
-          </div>
 
           <div className="tb-adaptive-section">
             <div className="tb-adaptive-section__head">
@@ -1906,10 +2409,11 @@ function AdaptiveTopicAccordion(props: {
                 <Button
                   variant="secondary"
                   size="s"
+                  leadingIcon={<Plus size={16} aria-hidden="true" />}
                   onClick={props.onAddLevel}
                   data-testid={`adaptive-add-level-${topic.topicId}`}
                 >
-                  + Добавить уровень
+                  Добавить уровень
                 </Button>
               </div>
             </div>
@@ -1921,12 +2425,18 @@ function AdaptiveTopicAccordion(props: {
               </div>
             ) : (
               <div className="tb-adaptive-levels">
-                {topic.levels.map((level) => (
+                {topic.levels.map((level, levelPos) => (
                   <AdaptiveLevelCard
                     key={level.levelIndex}
                     topicId={topic.topicId}
                     level={level}
                     canRemove={topic.levels.length > 1}
+                    fieldErrors={props.fieldErrors}
+                    // Проверка адресует уровень ПОЗИЦИЕЙ в массиве, а не `levelIndex`:
+                    // после удаления среднего уровня они расходятся.
+                    fieldPrefix={
+                      props.fieldPrefix ? `${props.fieldPrefix}.levels[${levelPos}]` : null
+                    }
                     onChange={(patch) => props.onLevelChange(level.levelIndex, patch)}
                     onRemove={() => props.onLevelRemove(level.levelIndex)}
                   />
@@ -1944,12 +2454,18 @@ function AdaptiveLevelCard(props: {
   topicId: string;
   level: AdaptiveLevelConfig;
   canRemove: boolean;
+  fieldErrors: FieldErrorIndex;
+  /** Адрес уровня (`adaptive.topics[i].levels[j]`) или `null`, если темы нет в модели. */
+  fieldPrefix: string | null;
   onChange: (patch: Partial<AdaptiveLevelConfig>) => void;
   onRemove: () => void;
 }) {
   const { level } = props;
   const [collapsed, setCollapsed] = useState(false);
   const testIdBase = `adaptive-level-${props.topicId}-${level.levelIndex}`;
+  /** Сообщение проверки по адресу поля уровня; без префикса подсвечивать нечего. */
+  const errorOf = (leaf: string) =>
+    props.fieldPrefix ? props.fieldErrors.get(`${props.fieldPrefix}.${leaf}`) : undefined;
 
   // Validation: a level is "valid" when min ≤ max, questions ≥ 1 and
   // threshold is within bounds. Defer richer rules until validation
@@ -1959,7 +2475,11 @@ function AdaptiveLevelCard(props: {
     level.questionsCount >= 1 &&
     level.passThreshold >= 0 &&
     (level.passThresholdType !== "percent" || level.passThreshold <= 100);
-  const statusTone: "ok" | "err" = isValid ? "ok" : "err";
+  // Местная проверка повторяет часть общей, но не всю (ссылки уровня она не знает),
+  // поэтому точка слушает ОБЕ: иначе свёрнутый уровень молчал бы о находке, которую
+  // сводный баннер уже посчитал.
+  const hasIssue = props.fieldPrefix ? props.fieldErrors.has(props.fieldPrefix) : false;
+  const statusTone: "ok" | "err" = isValid && !hasIssue ? "ok" : "err";
   const statusLabel = isValid ? "валидно" : "невалидно";
 
   return (
@@ -1979,12 +2499,6 @@ function AdaptiveLevelCard(props: {
           />
         }
         title={level.levelName}
-        subtitle={
-          <>
-            {level.minDifficulty}–{level.maxDifficulty} · {level.questionsCount} вопросов · {level.passThreshold}
-            {level.passThresholdType === "percent" ? " %" : " б."} · {statusLabel}
-          </>
-        }
         trail={
           <>
             <Button
@@ -1995,7 +2509,7 @@ function AdaptiveLevelCard(props: {
               disabled={!props.canRemove}
               aria-label={
                 props.canRemove
-                  ? `Удалить уровень ${level.levelName}`
+                  ? `Удалить уровень «${level.levelName}»`
                   : "Нельзя удалить единственный уровень"
               }
               title={props.canRemove ? undefined : "Должен оставаться хотя бы один уровень"}
@@ -2030,7 +2544,10 @@ function AdaptiveLevelCard(props: {
               data-testid={`${testIdBase}-name`}
             />
           </div>
-          <div className="ou-formfield">
+          <div
+            className="ou-formfield"
+            data-field={props.fieldPrefix ? `${props.fieldPrefix}.minDifficulty` : undefined}
+          >
             <NumberInput
               id={`${testIdBase}-min`}
               size="s"
@@ -2038,11 +2555,15 @@ function AdaptiveLevelCard(props: {
               value={level.minDifficulty}
               min={0}
               max={100}
+              error={errorOf("minDifficulty")}
               data-testid={`${testIdBase}-min`}
               onChange={(next) => props.onChange({ minDifficulty: next })}
             />
           </div>
-          <div className="ou-formfield">
+          <div
+            className="ou-formfield"
+            data-field={props.fieldPrefix ? `${props.fieldPrefix}.maxDifficulty` : undefined}
+          >
             <NumberInput
               id={`${testIdBase}-max`}
               size="s"
@@ -2050,17 +2571,22 @@ function AdaptiveLevelCard(props: {
               value={level.maxDifficulty}
               min={0}
               max={100}
+              error={errorOf("maxDifficulty")}
               data-testid={`${testIdBase}-max`}
               onChange={(next) => props.onChange({ maxDifficulty: next })}
             />
           </div>
-          <div className="ou-formfield">
+          <div
+            className="ou-formfield"
+            data-field={props.fieldPrefix ? `${props.fieldPrefix}.questionsCount` : undefined}
+          >
             <NumberInput
               id={`${testIdBase}-questions`}
               size="s"
               label="Вопросов"
               value={level.questionsCount}
               min={1}
+              error={errorOf("questionsCount")}
               data-testid={`${testIdBase}-questions`}
               onChange={(next) => props.onChange({ questionsCount: next })}
             />
@@ -2079,7 +2605,10 @@ function AdaptiveLevelCard(props: {
               data-testid={`${testIdBase}-threshold-type`}
             />
           </div>
-          <div className="ou-formfield">
+          <div
+            className="ou-formfield"
+            data-field={props.fieldPrefix ? `${props.fieldPrefix}.passThreshold` : undefined}
+          >
             <NumberInput
               id={`${testIdBase}-threshold`}
               size="s"
@@ -2088,25 +2617,11 @@ function AdaptiveLevelCard(props: {
               min={0}
               max={level.passThresholdType === "percent" ? 100 : level.questionsCount}
               suffix={level.passThresholdType === "percent" ? "%" : "б."}
+              error={errorOf("passThreshold")}
               data-testid={`${testIdBase}-threshold`}
               onChange={(next) => props.onChange({ passThreshold: next })}
             />
           </div>
-        </div>
-        <div className="ou-formfield">
-          <LevelFeedbackEditor
-            topicId={props.topicId}
-            levelIndex={level.levelIndex}
-            levelName={level.levelName}
-            text={level.feedback ?? ""}
-            links={level.links}
-            onChange={({ text, links }) =>
-              props.onChange({
-                feedback: text === "" ? null : text,
-                links,
-              })
-            }
-          />
         </div>
       </CardBody>
     </Card>
@@ -2132,8 +2647,8 @@ function IntroEditTrigger(props: {
   label: string;
   modalTitle: string;
   description: string;
-  value: IntroBlock | null;
-  onSave: (next: IntroBlock | null) => void;
+  value: IntroText | null;
+  onSave: (next: IntroText | null) => void;
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -2173,62 +2688,9 @@ function IntroEditTrigger(props: {
   );
 }
 
-function TestFeedbackTrigger(props: {
-  feedback: FeedbackContent;
-  links: FeedbackLink[];
-  assets: FeedbackAsset[];
-  events: FeedbackEvent[];
-  onSave: (next: {
-    format: FeedbackContent["format"];
-    text: string;
-    links: FeedbackLink[];
-    assets: FeedbackAsset[];
-    events: FeedbackEvent[];
-  }) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <label className="ou-formfield__lbl">Обратная связь после прохождения</label>
-      {/* TD-02: grouped-list preview (Материалы / Курсы / Мероприятия) + pencil. */}
-      <FeedbackPreview
-        format={props.feedback.format}
-        text={props.feedback.text}
-        links={props.links}
-        assets={props.assets}
-        events={props.events}
-        onEdit={() => setOpen(true)}
-        editAriaLabel="Редактировать обратную связь теста"
-        testId="settings-feedback-trigger"
-      />
-      <FeedbackEditorModal
-        open={open}
-        title="Общая обратная связь теста"
-        description="Текст и материалы, которые обучающийся увидит после завершения теста."
-        value={{
-          format: props.feedback.format,
-          text: props.feedback.text,
-          links: props.links,
-          assets: props.assets,
-          events: props.events,
-        }}
-        onCancel={() => setOpen(false)}
-        onSave={(v: FeedbackEditorValue) => {
-          props.onSave({
-            format: v.format,
-            text: v.text,
-            links: v.links,
-            assets: v.assets,
-            events: v.events ?? [],
-          });
-          setOpen(false);
-        }}
-        testId="settings-feedback-modal"
-      />
-    </>
-  );
-}
+/* PRD-61 §10: здесь был `TestFeedbackTrigger` — окно правки общей обратной связи ТЕСТА.
+   Карточка снята, последний потребитель ушёл вместе с ней. Правка обратной связи ТЕМ и
+   РАЗДЕЛОВ живёт в своих компонентах и этим треком не затронута. */
 
 /**
  * Inline trigger that opens the unified FeedbackEditorModal (FR-36 / FR-37).
@@ -2236,7 +2698,12 @@ function TestFeedbackTrigger(props: {
  * adaptive mode) and «обратная связь для уровня» (per-level inside an
  * adaptive level card). Only the modal title and stored value shape differ.
  */
-function FeedbackEditTrigger(props: {
+/**
+ * Правка одного текста обратной связи: подпись, предпросмотр и модалка. Публичный,
+ * потому что тем же триггером пользуется карточка «По уровням» вкладки обратной связи —
+ * тексты уровней переехали туда, а правятся тем же элементом (Э2.5).
+ */
+export function FeedbackEditTrigger(props: {
   label: string;
   buttonAriaLabel: string;
   modalTitle: string;
@@ -2289,47 +2756,8 @@ function FeedbackEditTrigger(props: {
   );
 }
 
-function FailureFeedbackEditor(props: {
-  topicName: string;
-  topicId: string;
-  value: string;
-  onChange: (text: string) => void;
-}) {
-  return (
-    <FeedbackEditTrigger
-      label="Обратная связь при не пройденном уровне"
-      buttonAriaLabel={`Редактировать обратную связь темы ${props.topicName}`}
-      modalTitle={`Обратная связь по теме «${props.topicName}»`}
-      modalDescription="Показывается обучающемуся, если он не прошёл ни один уровень темы."
-      text={props.value}
-      links={[]}
-      hideAssets
-      onSave={({ text }) => props.onChange(text)}
-      testId={`adaptive-topic-failure-${props.topicId}`}
-    />
-  );
-}
-
-function LevelFeedbackEditor(props: {
-  topicId: string;
-  levelIndex: number;
-  levelName: string;
-  text: string;
-  links: AdaptiveLinkConfig[];
-  onChange: (patch: { text: string; links: AdaptiveLinkConfig[] }) => void;
-}) {
-  const testIdBase = `adaptive-level-${props.topicId}-${props.levelIndex}`;
-  return (
-    <FeedbackEditTrigger
-      label="Обратная связь для уровня"
-      buttonAriaLabel={`Редактировать обратную связь уровня ${props.levelName}`}
-      modalTitle={`Обратная связь уровня «${props.levelName}»`}
-      modalDescription="Показывается обучающемуся при достижении этого уровня сложности."
-      text={props.text}
-      links={props.links}
-      hideAssets
-      onSave={props.onChange}
-      testId={`${testIdBase}-feedback`}
-    />
-  );
-}
+/*
+ * Здесь стояли `FailureFeedbackEditor` и `LevelFeedbackEditor`. Тексты адаптивных уровней
+ * переехали во вкладку «Обратная связь и итоги», карточку «По уровням» (Э2.5): лестница
+ * отвечает за СТРУКТУРУ, а тексты живут там же, где все прочие тексты теста.
+ */

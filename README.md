@@ -141,7 +141,19 @@ administrator, developer, author, manager, learner), а эффективные �
 - **Навигация прохождения (PRD-19)** -- пропуск вопроса и возврат к нему в пределах попытки
   (`allowReturnToUnanswered`), разрешение/запрет изменения данного ответа (`allowAnswerChange`),
   промежуточные итоги раздела (`showSectionResults`), поэтапное завершение по разделам с обзорным экраном
+- **Разрезы результата (PRD-50)** -- подытоги попытки по ключам оси (сегодня это подтемы-теги вопросов):
+  полосы в карточке темы и/или СВОДНЫЙ блок по всему тесту (ключ, живущий в нескольких разделах, печатается
+  одной строкой), пороги по ключам как второй, независимый от квот гейт темы (тема пройдена, когда выполнено
+  и её правило, и все пороги её ключей; сравнение всегда по доле БАЛЛОВ, вид отображения вердикт не двигает),
+  названные блоки разделов со счётчиком «пройдено N из M», предупреждения публикации о сомнительной разметке
+  (сумма квот, вопросы без ключа, порог по невыдаваемому ключу, вопросы вне вариантов) -- они не блокируют
+  публикацию, а объясняют. Считает всё один движок `shared/breakdown/`, поэтому веб и SCORM-пакет печатают
+  на одной попытке одно и то же
+- **Настраиваемые заголовки блоков итогов (PRD-49)** -- надписи экрана итогов и отчёта объявляет ШАБЛОН, а
+  автор переформулирует или гасит их по одной; там же задаётся порядок блоков итогов
 - Гибкие правила прохождения (по процентам или абсолютным числам) для каждой темы и теста в целом
+- **«Тест пройден, если»** -- политика вердикта: только общий порог / общий порог и обязательные темы /
+  только обязательные темы / каждая проверяемая тема
 - Ограничение по времени и количеству попыток; гейт повторного прохождения / cooldown (PRD-6)
 - Показ правильных ответов после прохождения
 - **Публикация версиями-снапшотами (PRD-15)** -- опубликованный тест неизменен: попытки доигрываются на своей
@@ -173,6 +185,15 @@ administrator, developer, author, manager, learner), а эффективные �
   растеризации вендорятся в пакет (без CDN)
 - Передача score, completion, success status в LMS
 - Детальные interactions по темам
+- **Компактное состояние прогона (PRD-36)** -- в `cmi.suspend_data` не складывается содержимое
+  выданных вопросов: вопрос адресуется позицией в `TEST_DATA`, попытка хранится сводкой (счётчик,
+  лучшая, последняя), ряды пишутся плотной кодировкой. Состояние перестало расти с числом попыток;
+  при переполнении действует объявленный порядок жертв, оставляющий целыми прогон, счётчик, таймер
+  и обе даты барьеров. Бюджет берётся по профилю выгрузки: 64000 в SCORM 2004, 4096 -- проектная
+  цель профиля 1.2. Состояние пакета прежнего формата приводится к новому при первом чтении
+- **Результат для LMS при нескольких попытках** -- настройка теста `lmsAttemptResult`: пакет отдаёт
+  внешней системе лучшую попытку или ТЕКУЩУЮ. Умолчание новых тестов -- «последняя»: какую попытку
+  засчитать, решает LMS своей настройкой, а курс отчитывается за то, что ученик только что сделал
 
 #### Тестирование и отладка (PRD-18)
 
@@ -256,7 +277,7 @@ administrator, developer, author, manager, learner), а эффективные �
 | TanStack React Query | 5.101 | Управление серверным состоянием |
 | React Hook Form | 7.80 | Формы |
 | Zod | 4.4 | Валидация |
-| @universityrt/ui-kit | -- | Дизайн-система (компоненты `ou-*` + слой `tb-*`/plain CSS); вендорится в `vendor/ui-kit/` |
+| @skillum/ui-kit | -- | Дизайн-система (компоненты `ou-*` + слой `tb-*`/plain CSS); вендорится в `vendor/ui-kit/` |
 | Lucide React | -- | Иконки |
 | html2canvas + jsPDF | 1.4.1 / 2.5.1 | PDF-экспорт в SCORM-runtime; вендорятся в пакет из `assets/vendor/` (devDep-пин, без CDN) |
 
@@ -274,7 +295,7 @@ administrator, developer, author, manager, learner), а эффективные �
 | bcryptjs | 3.0 | Legacy-проверка старых bcrypt-хешей паролей (динамический импорт; удаляется после дренажа rehash, PRD-9 Этап 3) |
 | Nodemailer | 9.0 | Отправка email |
 | Multer | 2.2 | Загрузка файлов |
-| Archiver | 7.0 | Создание SCORM ZIP-пакетов |
+| JSZip | 3.10 | Создание и чтение ZIP (SCORM-пакеты, перенос теста, шаблоны) |
 | ExcelJS | 4.4 | Импорт/экспорт Excel |
 
 ### Инструменты сборки
@@ -382,7 +403,7 @@ npm run dev
 test-builder/
 |-- client/                          # Frontend (React SPA)
 |   |-- src/
-|   |   |-- components/              # Общие React-компоненты (DS @universityrt/ui-kit)
+|   |   |-- components/              # Общие React-компоненты (DS @skillum/ui-kit)
 |   |   |   |-- questions/           # Компоненты вопросов (media-uploader)
 |   |   |   |-- app-sidebar.tsx      # Боковая навигация (DS AppShell + Sidebar)
 |   |   |   |-- assign-test-dialog.tsx # Диалог назначения тестов
@@ -396,7 +417,6 @@ test-builder/
 |   |   |   |-- topics/              # Drawer темы: «Свойства» + «Доступ» (PRD-15)
 |   |   |   |-- templates/           # Админ-реестр шаблонов: список, загрузка, превью (PRD-3)
 |   |   |   +-- content-protection/  # UI защиты контента (409 + dry-run, PRD-15)
-|   |   |-- hooks/                   # Custom React hooks
 |   |   |-- lib/                     # Утилиты и конфигурация
 |   |   |   |-- auth.tsx             # Контекст аутентификации
 |   |   |   |-- roles.ts            # Клиентская модель ролей/прав (PRD-13)
@@ -423,6 +443,8 @@ test-builder/
 |   |   |-- content-pages.ts  result-variables.ts  scales.ts
 |   |   |-- templates.ts  admin-templates.ts (PRD-3)  workbook.ts  tests-workbook.ts (PRD-14)
 |   |   |-- analytics/  scorm-telemetry.ts  logs.ts  debug-player.ts (PRD-18)
+|   |   |-- analytics/question-bank.ts  # Качество вопросов банка по тестам читателя (PRD-70)
+|   |   |-- saved-filters.ts         # Сохранённые фильтры банка, «Тестов», «Пользователей» (PRD-70)
 |   |-- services/                    # Доменные сервисы (вне route-хендлеров)
 |   |   |-- result-compute.ts  result-context.ts  scoring-config.ts  effective-scoring.ts
 |   |   |-- retake-gate.ts (PRD-6)  template-render.ts  flow-policy-validator.ts
@@ -430,6 +452,8 @@ test-builder/
 |   |   |-- access.ts  test-access.ts  topic-access.ts (PRD-13/15)
 |   |   |-- content-guard.ts  draw-feasibility.ts  test-snapshot.ts (PRD-15)
 |   |   |-- workbook-import.ts  questions-import.ts  questions-export.ts (PRD-14)
+|   |   |-- analytics/               # Расчёты аналитики: психометрика теста (PRD-66),
+|   |   |                            #   качество вопросов и банка, статистика вопроса банка (PRD-70)
 |   |-- scorm/                       # SCORM 2004 генератор
 |   |   |-- builders/                # Сборщики пакета (manifest, metadata, test-json,
 |   |   |                            #   media-assets, shared-runtime — esbuild-бандл @shared)
@@ -441,7 +465,8 @@ test-builder/
 |   |   |-- debug-player/           # Ассеты плеера отладки: shim + TBInspector compute + стор (PRD-18)
 |   |   +-- zip.ts                  # ZIP-упаковка
 |   |-- middleware/                  # auth.ts, test-scope.ts, upload.ts (Multer)
-|   |-- utils/                       # crypto.ts (email AES + scrypt-хеш паролей PRD-9), excel.ts, mask-email.ts
+|   |-- utils/                       # crypto.ts (email AES + scrypt-хеш паролей PRD-9), excel.ts, mask-email.ts,
+|   |                                #   pg-error.ts (код PostgreSQL из `cause`: Drizzle заворачивает ошибку драйвера)
 |   |-- config.ts                    # Конфигурация (в т.ч. SUPERADMIN_EMAILS)
 |   |-- db.ts                        # Подключение к БД (Drizzle)
 |   |-- email.ts                     # Отправка email (сброс пароля)
@@ -496,7 +521,7 @@ test-builder/
 |-- migrations/                      # ЛЕГАСИ рукописные SQL-шаги эпохи push (001..036)
 |-- config/                          # Несекретная конфигурация: config.jsonc + <NODE_ENV>.config.jsonc
 |-- templates/                       # Внешние шаблоны оформления (в т.ч. «Сертификация») и их ZIP
-|-- vendor/ui-kit/                   # Дизайн-система @universityrt/ui-kit (редактируемая зависимость)
+|-- vendor/ui-kit/                   # Дизайн-система @skillum/ui-kit (редактируемая зависимость)
 |-- docker/                          # Образ, compose и регламент деплоя
 |-- uploads/                         # Загруженные файлы
 |   |-- media/                      # Медиа-файлы вопросов
@@ -517,7 +542,7 @@ test-builder/
 ```text
 +----------------------------------------------------------+
 |                     Browser (React SPA)                    |
-|   Wouter routing, TanStack Query, @universityrt/ui-kit    |
+|   Wouter routing, TanStack Query, @skillum/ui-kit    |
 +----------------------------+-----------------------------+
                              |  HTTP/REST API
                              |  /api/*
@@ -648,7 +673,7 @@ Test
 
 ## База данных
 
-PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в [shared/schema.ts](shared/schema.ts).
+PostgreSQL + Drizzle ORM, **37 таблиц**. Схема и Zod-типы -- в [shared/schema.ts](shared/schema.ts).
 
 **Модель миграций.** Схема ведётся версионированными миграциями: `drizzle-kit generate` создаёт файл,
 деплой применяет их командой `drizzle-kit migrate`. Прежний `drizzle-kit push --force` из деплоя убран --
@@ -745,7 +770,7 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | --- | --- | --- |
 | id | varchar(36) PK | UUID |
 | topicId | varchar | Тема |
-| type | enum | single, multiple, matching, ranking, scale (PRD-26) |
+| type | enum | single, multiple, matching, ranking, scale (PRD-26), allocation (PRD-44) |
 | prompt | text | Текст вопроса |
 | dataJson | jsonb | Варианты ответов |
 | correctJson | jsonb | Правильные ответы |
@@ -787,6 +812,10 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | allowReturnToUnanswered | boolean | Возврат к пропущенным вопросам в попытке (PRD-19; default true) |
 | allowAnswerChange | boolean | Разрешить менять уже данный ответ (PRD-19; default false) |
 | showSectionResults | boolean | Показывать промежуточные итоги раздела (PRD-19; default true) |
+| introJson | jsonb | Вводный блок итогов: два независимых текста -- для экрана и для отчёта (PRD-27; drizzle `0014`) |
+| breakdownDisplayJson | jsonb | Показ разреза результата: видимость (нет / полоса / полоса и число), база (доля вопросов или баллов) и место (карточки тем / сводный блок / оба) -- PRD-50; drizzle `0019` |
+| sectionGroupsJson | jsonb | Названные блоки разделов на экране итогов (PRD-50; drizzle `0021`) |
+| lmsAttemptResult | text | Что SCORM-пакет отдаёт в LMS при нескольких попытках: `best` / `last` (PRD-36 §12; drizzle `0022` проставляет `best` существующим тестам, `0023` делает `last` умолчанием для новых) |
 | telemetryEnabled | boolean | Телеметрия SCORM |
 | timeLimitMinutes / maxAttempts | integer | Лимит времени / попыток |
 | showCorrectAnswers | boolean | Показывать ответы |
@@ -800,7 +829,9 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 Секции теста (topicId, drawCount, drawAll, topicPassRuleJson, required, sortOrder, timeLimitMinutes).
 `drawBlueprintJson` -- квоты выдачи по тегам (PRD-11); `defaultPoints` -- умолчание цены вопроса для секции (PRD-15);
 `formSetJson` -- фиксированные варианты выдачи (form set, PRD-17); `questionOrder` (`random` / `fixed`) --
-порядок выдачи вопросов внутри темы (PRD-30). Пороги прохождения по вариантам (PRD-24) хранятся внутри
+порядок выдачи вопросов внутри темы (PRD-30); `breakdownRulesJson` -- пороги по ключам разреза
+(PRD-50; drizzle `0020`), `groupKey` -- в какой блок итогов попадает карточка темы (PRD-50; drizzle
+`0021`). Пороги прохождения по вариантам (PRD-24) хранятся внутри
 существующего `topicPassRuleJson` -- отдельной колонки для них нет.
 
 #### adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks
@@ -877,6 +908,20 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | `result_variables.config_json`, `scales.config_json` | PRD-29 | Толкования (интервалы / перечень исходов), достижимый домен шкалы, благоприятное направление |
 | `scales.learner_visibility`, `result_variables.learner_visibility` | PRD-29 | Трёхпозиционная видимость вместо булева `show_to_learner` (drizzle `0006`, с переносом данных; старая колонка удалена) |
 | `questions.order_index`, `test_sections.question_order` | PRD-30 | Индекс вопроса в теме и режим порядка выдачи (`random` / `fixed`; drizzle `0007`) |
+| `tests.intro_json` | PRD-27 | Вводный блок итогов: независимые тексты для экрана и для отчёта (drizzle `0014`) |
+| `tests.pass_decision_policy` | -- | «Тест пройден, если»: как общий порог и правила тем дают вердикт (drizzle `0016`/`0017`) |
+| `users.is_external`, `users.password_hash` (nullable) | PRD-28 | Внешний участник: учётка без пароля, вход только по ссылке (drizzle `0018`) |
+| `tests.breakdown_display_json` | PRD-50 | Показ разреза: видимость, база (вопросы/баллы), место (карточки/сводный блок/оба) (drizzle `0019`) |
+| `tests.breakdown_gate_enabled` | PRD-50 | Учитывать подтемы в вердикте темы: порог подтемы производный от порога её темы, отдельных порогов нет. Колонка `test_sections.breakdown_rules_json` (drizzle `0020`) снята той же миграцией (drizzle `0028`) |
+| `tests.section_groups_json`, `test_sections.group_key` | PRD-50 | Названные блоки разделов на экране итогов и принадлежность темы блоку (drizzle `0021`) |
+| `tests.lms_attempt_result` | PRD-36 | Что пакет отдаёт в LMS при нескольких попытках: `best` / `last` (drizzle `0022`/`0023`) |
+| `report_blocks` | PRD-51 | Документ отчёта: упорядоченные блоки по ветви на режим теста (обычный / адаптивный); отсутствие строк = документ шаблона по умолчанию (drizzle `0024`) |
+| `media_assets`, `media_usages` | -- | Ядро медиатеки: схема и репозиторий есть, продуктового трека пока нет (drizzle `0009`) |
+| `test_review_comments` | PRD-52 | Комментарии рецензирования теста с якорем на сущность и пином содержимого (drizzle `0025`) |
+| `lms_import_batches` | PRD-54 | Партии загруженных выгрузок отчётов LMS: тест, файл (sha-256 содержимого), счётчики, журнал; откат удаляет по партии (drizzle `0029`) |
+| `question_exposure` | PRD-55 | Счётчик выдач вопроса по (вопрос, тест, месяц, источник `live` / `import`); агрегат, пересобирается `npm run exposure:rebuild` (drizzle `0031`, источник — `0045`) |
+| `analytics_slices` | PRD-56 | Сохранённые срезы (`kind = 'slice'`, ровно один тест) и фильтры аналитики (`kind = 'filter'`, без теста) владельца (drizzle `0032`; срез принадлежит тесту — `0047`) |
+| `saved_list_filters` | PRD-70 | Личные сохранённые фильтры банка, «Тестов» и «Пользователей» (`scope`: `content` / `tests` / `users`), имя уникально у владельца в пределах экрана (drizzle `0048`) |
 
 Все опциональные колонки nullable/с дефолтом: их отсутствие сохраняет легаси-поведение.
 
@@ -1016,7 +1061,7 @@ tests                              # owner_id + status + snapshots
 | GET | `/api/analytics` | Общая аналитика |
 | GET | `/api/analytics/combined` | Сводная аналитика |
 | GET | `/api/analytics/tests/:testId/attempts` | Попытки по тесту |
-| GET | `/api/analytics/tests/:testId/export/excel` | Экспорт аналитики теста в Excel |
+| POST | `/api/export/excel` | Книга Excel по выборке реестра или одного теста (`testIds: [testId]`) |
 
 ### Домашняя страница и отчёт
 
@@ -1038,8 +1083,10 @@ API разнесён по модульным роутерам (`server/routes/`)
 (PRD-1), `/api/tests/:id/result-variables` (PRD-2), `/api/tests/:id/scales` (PRD-5),
 `/api/tests/:id/workbook/import|export` + `/api/workbook/*` (PRD-14 Excel), `/api/templates`
 (PRD-7) и `/api/admin/templates` (PRD-3 админ-реестр), `/api/tests/:id/debug/*` (PRD-18
-встроенный плеер отладки), `/api/groups`, `/api/analytics`, `/access/*` (magic-link, до
-session guard), телеметрия SCORM и `/api/logs`. Полный список маршрутов -- `routerConfig`
+встроенный плеер отладки), `/api/groups`, `/api/analytics` (в том числе качество вопросов банка
+`/api/analytics/bank/quality` и статистика вопроса банка `/api/analytics/questions/:id`, PRD-70),
+`/api/saved-filters` (сохранённые фильтры банка, «Тестов» и «Пользователей», PRD-70), `/access/*`
+(magic-link, до session guard), телеметрия SCORM и `/api/logs`. Полный список маршрутов -- `routerConfig`
 в [server/routes/index.ts](server/routes/index.ts).
 
 ---
@@ -1094,6 +1141,24 @@ UI: горизонтальная шкала на DS-компоненте `Steppe
 перемешивание запрещено. Без правильного ответа вопрос работает в измерительном режиме: не проверяется,
 не приносит баллов и не влияет на процент, его единственный результат -- вклад в шкалы и показатели.
 
+### Allocation (распределение баллов между шкалами, PRD-44)
+
+```typescript
+dataJson: {
+  options: ["Утверждение A", "Утверждение B", "Утверждение C"],  // от 2 до 10
+  budget: 10,          // сколько баллов ученик распределяет
+  minPerOption: 0,     // необязательные границы на один вариант
+  maxPerOption: 10,
+}
+correctJson: {}        // ипсативная методика: правильного ответа нет
+```
+
+Ученик раскладывает фиксированный бюджет баллов по утверждениям; сумма обязана сойтись с бюджетом.
+Вопрос измерительный: балл ученика становится вкладом в шкалы (источник вклада `option_allocation` --
+единственный, величину которого задаёт САМ ученик). Фазы 0-6 закрыты; смежные поверхности
+(телеметрия, аналитика, инспектор, снапшоты, демо-вопрос шаблона) доводятся фазой 7 --
+см. [ROADMAP](docs/ROADMAP.md) §0.0.1.
+
 ---
 
 ## SCORM Export
@@ -1120,6 +1185,30 @@ SCORM-пакет отправляет результаты обратно на �
 - Создание попытки (scormAttempts)
 - Сохранение ответов (scormAnswers)
 - Передача итогового результата
+
+### Состояние прогона в `cmi.suspend_data` (PRD-36)
+
+Между сессиями пакет хранит состояние попытки в `cmi.suspend_data` -- поле с жёстким пределом
+(64000 символов в SCORM 2004, 4096 в профиле 1.2), поэтому в нём НЕТ ничего, что выводится из
+`test_data.js`: ни текстов вопросов, ни названий тем, ни правил порогов. Вопрос адресуется
+позицией в `TEST_DATA`, ряды пишутся плотной кодировкой, а попытка хранится сводкой -- счётчик,
+лучшая, последняя, -- поэтому размер не растёт с числом попыток.
+
+Одно состояние делят пять механизмов: учёт попыток, якорь активного времени (PRD-20), интервал
+между попытками (PRD-31), дата кулдауна (PRD-6) и остаток времени по разделам (PRD-4). Состояние
+пакета прежнего формата приводится к новому при первом чтении, с переносом всех пяти. Своё
+принадлежит пакету: отпечаток включает состав банка вопросов, поэтому состояние, собранное для
+другого набора, не будет принято за своё.
+
+При нехватке бюджета действует объявленный порядок жертв: первой уходит повопросная детализация
+лучшей попытки, затем карта перемешивания прогона, затем сводка лучшей вырождается до процента и
+вердикта. Прогон в работе, счётчик попыток, якорь таймера и даты обоих барьеров не жертвуются
+никогда, а каждое срабатывание попадает в диагностику пакета и в отладочный плеер -- молчаливого
+усечения, которым этот класс ошибок и опасен, не остаётся.
+
+Что уходит в LMS при нескольких попытках, решает настройка теста `lmsAttemptResult`
+(«Ограничения» в редакторе): лучшая попытка или текущая. При `last` повопросная детализация в
+состоянии не хранится вовсе -- её единственным потребителем была сборка interactions по лучшей.
 
 ### SCORM API (взаимодействие с LMS)
 
@@ -1238,13 +1327,18 @@ scormAPI.terminate();
 ### Команды
 
 ```bash
-npm run dev          # Development-сервер (tsx + Vite HMR; tsx запускается БЕЗ --watch)
+npm run dev          # Development-сервер (tsx + Vite HMR; tsx запускается БЕЗ --watch).
+                     #   Перед стартом predev сверяет журнал миграций с dev-БД ПО ХЕШУ файла:
+                     #   аддитивные применяет сам, разрушающие (DROP/RENAME/смена типа/TRUNCATE)
+                     #   не применяет никогда — печатает список с причинами, называет
+                     #   npm run db:migrate и не пускает сервер. Отключается SKIP_MIGRATION_CHECK=1
 npm run build        # Production-сборка (перегенерация превью + esbuild + Vite)
 npm start            # Запуск production-версии
 npm run check        # Проверка типов TypeScript (tsc)
 npm test             # Юнит-тесты (vitest), БЕЗ покрытия. Точечно: npm test -- <путь>
 npm run test:cov     # Тот же набор С покрытием и порогом 80% (запускать в одиночку)
 npm run test:it      # Интеграционные тесты слоя данных на pglite (vitest.it.config.ts)
+npm run db:migrate   # Применить накопившиеся миграции из drizzle/ к локальной dev-БД
 npm run db:push      # Применить схему к БД напрямую — только для локальной разработки
 npm run seed         # Наполнить dev-БД демо-данными (гейт против production)
 npm run create-admin # Создать администратора
@@ -1531,6 +1625,23 @@ npm run build
 
 ## Лицензия
 
-MIT License
+Полный текст — в файле [LICENSE](LICENSE): MIT с дополнительным условием — коммерческое
+использование требует предварительного согласования условий с правообладателями. Это не
+стандартная MIT-лицензия, поэтому в `package.json` указано `SEE LICENSE IN LICENSE`.
 
-Copyright (c) 2024 Skill'Ум
+Copyright (c) 2025, 2026 Eugeny Zubkov <evolzubkov@gmail.com>,
+Vladislav Vnukovskiy <vvlad1973@gmail.com>
+
+Дизайн-система `@skillum/ui-kit` (`vendor/ui-kit/`, `client/src/styles/vendor/skillum-ds.css`) —
+часть проекта и распространяется на тех же условиях.
+
+### Сторонние компоненты
+
+| Компонент | Расположение | Лицензия |
+| --- | --- | --- |
+| jsPDF 2.5.1 | `server/scorm/assets/vendor/jspdf.umd.min.js` | MIT, текст сохранён в шапке файла |
+| html2canvas 1.4.1 | `server/scorm/assets/vendor/html2canvas.min.js` | MIT, текст сохранён в шапке файла |
+| Шрифт Roboto | `client/public/fonts/` | SIL Open Font License 1.1, текст в `Roboto-OFL.txt` |
+
+Остальные зависимости ставятся из npm и остаются под собственными лицензиями; их тексты —
+в `node_modules/<пакет>/LICENSE`.

@@ -14,13 +14,22 @@
  */
 
 import GLYPHS from "@shared/template/lucide-icons.generated.json";
+import ALIASES from "@shared/template/lucide-aliases.generated.json";
 import { SCALE_APPEARANCE_KEY, parseScaleAppearance } from "@shared/template/scale-appearance";
 
 const TABLE = GLYPHS as Record<string, string[]>;
+/**
+ * Прежние написания имени -> нынешнее. Библиотека ПЕРЕИМЕНОВЫВАЕТ глифы (`circle-help` ->
+ * `circle-question-mark`), оставляя старое имя алиасом. В набор алиасы не попадают — автор
+ * не должен видеть два имени одной картинки, — но резолвинг обязан их знать: имя уже лежит
+ * в тесте, выбранное до переименования, и без карты пиктограмма просто исчезла бы с экрана
+ * после обновления библиотеки.
+ */
+const ALIAS_TABLE = ALIASES as Record<string, string>;
 
 /** Contours of `name`, or `null` for a name this build does not know. */
 export function iconContours(name: string): string[] | null {
-  const paths = TABLE[name];
+  const paths = TABLE[name] ?? TABLE[ALIAS_TABLE[name]];
   return Array.isArray(paths) && paths.length > 0 ? paths : null;
 }
 

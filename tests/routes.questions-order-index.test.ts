@@ -174,3 +174,27 @@ describe("PUT /api/questions/:id — «Индекс в теме» (PRD-30 FR-01)
     expect(drawMock.assessQuestionChange).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/questions — сложность «Не задано» (PRD-16 FR-10)", () => {
+  const create = (extra: Record<string, unknown>) =>
+    asAuthor(request(app).post("/api/questions").send({
+      topicId: "t1", type: "single", prompt: "Q?",
+      dataJson: { options: ["A", "B"] }, correctJson: { correctIndex: 0 },
+      ...extra,
+    }));
+
+  it("null остаётся null — это «Не задано», а не 50", async () => {
+    await create({ difficulty: null });
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(expect.objectContaining({ difficulty: null }));
+  });
+
+  it("0 остаётся нулём — это сложность, а не пустота", async () => {
+    await create({ difficulty: 0 });
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(expect.objectContaining({ difficulty: 0 }));
+  });
+
+  it("без поля — умолчание 50", async () => {
+    await create({});
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(expect.objectContaining({ difficulty: 50 }));
+  });
+});

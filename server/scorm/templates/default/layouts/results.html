@@ -96,6 +96,31 @@
           {{/if}}
         </div>
         {{/if}}
+        <!-- ЛИНЕЙЧАТАЯ ДИАГРАММА (вид шкал «Линейчатая диаграмма»): столбики всех шкал в
+             одной фигуре, вместо списка карточек. Стоит рядом с розой или радаром, а не
+             вместо них: те отвечают на «как делится целое», эта — на «какая шкала выражена
+             сильнее». Длину задаёт наибольший балл попытки, поэтому ни дорожки до максимума
+             шкалы, ни подписей оси здесь нет: это не линейка прогресса. Ядро отдаёт фигуру
+             только тогда, когда собрало (`scaleBars`), поэтому гейт диаграммы и обратный
+             гейт списка ниже — одна и та же проверка. -->
+        {{#if @root.result.scaleBars}}
+        <div class="tb-bars" role="img" aria-label="{{@root.result.scaleBars.ariaLabel}}">
+          {{#each @root.result.scaleBars.rows}}
+          <div class="tb-bars__row" data-item="{{key}}">
+            <!-- Ячейка имени печатается ВСЕГДА, даже пустой: колонки строк держит одна
+                 сетка, и пропуск ячейки сдвинул бы столбик этой строки относительно
+                 соседних. -->
+            <div class="tb-bars__name">{{#unless hideName}}{{name}}{{/unless}}</div>
+            <div class="tb-bars__field"><span class="tb-bars__fill" style="width:{{widthPercent}}%;--tb-zone:{{color}}"></span></div>
+            <div class="tb-bars__val">
+              {{#if showValue}}<strong>{{valueLabel}}</strong>{{/if}}
+              {{#unless hideLevel}}{{#if levelLabel}}<span class="ou-tag ou-tag--s tb-bars__lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}{{/unless}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+        {{#unless @root.result.scaleBars}}
         <div class="tb-measures__list">
         {{#each @root.result.scales}}
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
@@ -142,6 +167,7 @@
         </div>
         {{/each}}
         </div>
+        {{/unless}}
       </div>
       {{/if}}
 
@@ -169,16 +195,103 @@
       {{/if}}
 
       {{#if isTopics}}
+      <!-- PRD-50 (FR-24/FR-25/FR-27): БЛОКИ РАЗДЕЛОВ. Состав блока и его счётчик считает
+           ядро: `result.topicGroups` появляется только тогда, когда автор завёл блоки и
+           хотя бы один раздел в них попал. Плоский `result.topicResults` при этом остаётся
+           ПОЛНЫМ — его печатает сторонний шаблон, не знающий блоков, — поэтому печатать его
+           РЯДОМ с блоками нельзя: тема вышла бы дважды. Отсюда три цикла и одна и та же
+           карточка в каждом: частичных шаблонов у макета нет, а фильтровать список DSL не
+           умеет. Темы без блока идут ПОСЛЕ всех блоков (FR-25). -->
+      {{#each @root.result.topicGroups}}
+      <div class="tb-topic-group">
+        <div class="tb-topic-group__head">
+          {{#if label}}<h4 class="tb-topic-group__title">{{label}}</h4>{{/if}}
+          {{#if counterLabel}}<span class="tb-topic-group__counter">{{counterLabel}}</span>{{/if}}
+        </div>
+          <!-- PRD-49: слот карточки темы гейтится СВОЕЙ надписью. Выключенная надпись —
+               это пустая строка, и она убирает не подпись, а ВЕСЬ слот: вердикт уходит
+               вместе с цветной пилюлей, «Правильно»/«Баллов» — вместе с числом. Без этого
+               выключенный тумблер оставлял пустой цветной чип и осиротевшее «4 / 5». -->
+        <div class="tb-topics-grid">
+          {{#each topics}}
+          <div class="ou-card tb-topic-card{{#if hasAside}} tb-topic-card--split{{/if}}">
+            <div class="ou-card__body">
+              <div class="tb-topic-card__main">
+                <span class="tb-topic-card__name">{{topicName}}</span>
+                {{#if statusLabel}}<span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>{{/if}}
+                {{#if total}}<div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>{{/if}}
+                <div class="tb-stat-rows">
+                  {{#if @root.labels.topic.correct}}{{#if total}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.correct }}</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>{{/if}}{{/if}}
+                  {{#if @root.labels.topic.points}}{{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.points }}</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}{{/if}}
+                </div>
+              </div>
+              <!-- ПРАВАЯ КОЛОНКА строки темы: толкование темы либо полосы подтем.
+                 Обёртки стоят ВСЕГДА, а раскладку решает модификатор карточки: у темы,
+                 которой нечего нести справа, обе прозрачны (`display: contents`), и
+                 карточка печатается ровно так, как печаталась. Толкование идёт ПЕРЕД
+                 полосами: сперва о чём тема, потом из чего сложился её результат. -->
+              <div class="tb-topic-card__aside">
+                {{#if interpretationHtml}}<div class="tb-topic-card__interpretation">{{& interpretationHtml }}</div>{{/if}}
+                {{#if breakdown}}
+                <div class="tb-topic__breakdown">
+                  {{#each breakdown}}
+                  <div class="tb-breakdown__row {{ passClass }}" data-item="{{ key }}">
+                    <div class="tb-breakdown__name">{{ key }}</div>
+                    <div class="tb-breakdown__bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+                    {{#if showValue}}<div class="tb-breakdown__val">{{ valueLabel }}</div>{{/if}}
+                    {{#if requiredLabel}}<div class="tb-breakdown__req">{{ requiredLabel }}</div>{{/if}}
+                    {{#if interpretationHtml}}<div class="tb-breakdown__note">{{& interpretationHtml }}</div>{{/if}}
+                  </div>
+                  {{/each}}
+                </div>
+                {{/if}}
+              </div>
+              {{#if requiredLabel}}<span class="tb-topic-card__req">{{requiredLabel}}</span>{{/if}}
+              {{#if hasRecommendations}}
+              <div class="tb-topic-card__fb">
+                <div class="tb-recs">{{#each recommendedCourses}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class="tb-rec"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span>{{title}}</span>{{/each}}</div>
+              </div>
+              {{/if}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </div>
+      {{/each}}
+      {{#if @root.result.ungroupedTopics}}
       <div class="tb-topics-grid">
-        {{#each @root.result.topicResults}}
-        <div class="ou-card tb-topic-card">
+        {{#each @root.result.ungroupedTopics}}
+        <div class="ou-card tb-topic-card{{#if hasAside}} tb-topic-card--split{{/if}}">
           <div class="ou-card__body">
-            <span class="tb-topic-card__name">{{topicName}}</span>
-            <span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>
-            {{#if total}}<div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>{{/if}}
-            <div class="tb-stat-rows">
-              {{#if total}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.correct }}</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>{{/if}}
-              {{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.points }}</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}
+            <div class="tb-topic-card__main">
+              <span class="tb-topic-card__name">{{topicName}}</span>
+              {{#if statusLabel}}<span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>{{/if}}
+              {{#if total}}<div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>{{/if}}
+              <div class="tb-stat-rows">
+                {{#if @root.labels.topic.correct}}{{#if total}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.correct }}</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>{{/if}}{{/if}}
+                {{#if @root.labels.topic.points}}{{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.points }}</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}{{/if}}
+              </div>
+            </div>
+            <!-- ПРАВАЯ КОЛОНКА строки темы: толкование темы либо полосы подтем.
+               Обёртки стоят ВСЕГДА, а раскладку решает модификатор карточки: у темы,
+               которой нечего нести справа, обе прозрачны (`display: contents`), и
+               карточка печатается ровно так, как печаталась. Толкование идёт ПЕРЕД
+               полосами: сперва о чём тема, потом из чего сложился её результат. -->
+            <div class="tb-topic-card__aside">
+              {{#if interpretationHtml}}<div class="tb-topic-card__interpretation">{{& interpretationHtml }}</div>{{/if}}
+              {{#if breakdown}}
+              <div class="tb-topic__breakdown">
+                {{#each breakdown}}
+                <div class="tb-breakdown__row {{ passClass }}" data-item="{{ key }}">
+                  <div class="tb-breakdown__name">{{ key }}</div>
+                  <div class="tb-breakdown__bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+                  {{#if showValue}}<div class="tb-breakdown__val">{{ valueLabel }}</div>{{/if}}
+                  {{#if requiredLabel}}<div class="tb-breakdown__req">{{ requiredLabel }}</div>{{/if}}
+                  {{#if interpretationHtml}}<div class="tb-breakdown__note">{{& interpretationHtml }}</div>{{/if}}
+                </div>
+                {{/each}}
+              </div>
+              {{/if}}
             </div>
             {{#if requiredLabel}}<span class="tb-topic-card__req">{{requiredLabel}}</span>{{/if}}
             {{#if hasRecommendations}}
@@ -187,6 +300,72 @@
             </div>
             {{/if}}
           </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+      {{#unless @root.result.topicGroups}}
+      <div class="tb-topics-grid">
+        {{#each @root.result.topicResults}}
+        <div class="ou-card tb-topic-card{{#if hasAside}} tb-topic-card--split{{/if}}">
+          <div class="ou-card__body">
+            <div class="tb-topic-card__main">
+              <span class="tb-topic-card__name">{{topicName}}</span>
+              {{#if statusLabel}}<span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>{{/if}}
+              {{#if total}}<div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>{{/if}}
+              <div class="tb-stat-rows">
+                {{#if @root.labels.topic.correct}}{{#if total}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.correct }}</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>{{/if}}{{/if}}
+                {{#if @root.labels.topic.points}}{{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">{{ @root.labels.topic.points }}</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}{{/if}}
+              </div>
+            </div>
+            <!-- ПРАВАЯ КОЛОНКА строки темы: толкование темы либо полосы подтем.
+               Обёртки стоят ВСЕГДА, а раскладку решает модификатор карточки: у темы,
+               которой нечего нести справа, обе прозрачны (`display: contents`), и
+               карточка печатается ровно так, как печаталась. Толкование идёт ПЕРЕД
+               полосами: сперва о чём тема, потом из чего сложился её результат. -->
+            <div class="tb-topic-card__aside">
+              {{#if interpretationHtml}}<div class="tb-topic-card__interpretation">{{& interpretationHtml }}</div>{{/if}}
+              {{#if breakdown}}
+              <div class="tb-topic__breakdown">
+                {{#each breakdown}}
+                <div class="tb-breakdown__row {{ passClass }}" data-item="{{ key }}">
+                  <div class="tb-breakdown__name">{{ key }}</div>
+                  <div class="tb-breakdown__bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+                  {{#if showValue}}<div class="tb-breakdown__val">{{ valueLabel }}</div>{{/if}}
+                  {{#if requiredLabel}}<div class="tb-breakdown__req">{{ requiredLabel }}</div>{{/if}}
+                  {{#if interpretationHtml}}<div class="tb-breakdown__note">{{& interpretationHtml }}</div>{{/if}}
+                </div>
+                {{/each}}
+              </div>
+              {{/if}}
+            </div>
+            {{#if requiredLabel}}<span class="tb-topic-card__req">{{requiredLabel}}</span>{{/if}}
+            {{#if hasRecommendations}}
+            <div class="tb-topic-card__fb">
+              <div class="tb-recs">{{#each recommendedCourses}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class="tb-rec"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span>{{title}}</span>{{/each}}</div>
+            </div>
+            {{/if}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/unless}}
+      {{/if}}
+
+      <!-- PRD-50 (FR-28/FR-33): СВОДНЫЙ РАЗРЕЗ по всему тесту. Список ключей, и никогда не
+           разложение теста на части: ключи не обязаны разбивать выборку. Ключ, выданный в
+           нескольких разделах, стоит здесь ОДНОЙ строкой — ядро свело его отдельным
+           проходом по выданным элементам (FR-04), поэтому группировать строки по разделам
+           тут нельзя: это вернуло бы ровно ту дробность, ради снятия которой блок заведён.
+           Строка та же, что в карточке темы: разрез везде читается одинаково. -->
+      {{#if isBreakdown}}
+      <div class="tb-breakdown">
+        {{#each @root.result.breakdown}}
+        <div class="tb-breakdown__row {{ passClass }}" data-item="{{ key }}">
+          <div class="tb-breakdown__name">{{ key }}</div>
+          <div class="tb-breakdown__bar"><span style="width: {{ barPercent }}%;{{#if barFill}} background: {{ barFill }};{{/if}}"></span></div>
+          {{#if showValue}}<div class="tb-breakdown__val">{{ valueLabel }}</div>{{/if}}
+          {{#if requiredLabel}}<div class="tb-breakdown__req">{{ requiredLabel }}</div>{{/if}}
         </div>
         {{/each}}
       </div>

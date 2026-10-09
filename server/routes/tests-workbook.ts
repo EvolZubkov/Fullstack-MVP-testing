@@ -15,6 +15,7 @@ import ExcelJS from "exceljs";
 import { logger } from "../logger";
 import { addAoaSheet, addJsonSheet, readWorkbookFromBuffer, workbookToBuffer } from "../utils/excel";
 import { storage } from "../storage";
+import { isSimulation } from "@shared/questions/question-type";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
@@ -76,11 +77,15 @@ import {
   type DesignSource,
   type ReportSource,
   type FeedbackSource,
+  type InterpretationSource,
   type FeedbackLevelSource,
   type PageSource,
   type AdaptiveTopicSource,
 } from "../utils/workbook-sheets";
 import type { ContentPage, DrawBlueprint, FormSet } from "@shared/schema";
+// Тот же нормализатор списка блоков, что и у экрана итогов: книга не должна показать
+// автору порядок, отличный от печатаемого.
+import { normalizeSectionGroups } from "@shared/scoring/section-groups";
 
 const router = Router();
 
@@ -127,6 +132,7 @@ function pagesForSheet(
       mode: page.mode,
       autoAdvance: page.autoAdvance,
       autoAdvanceDelayMs: page.autoAdvanceDelayMs,
+      hidden: page.hidden,
       valuesJson: page.valuesJson,
       settingsJson: page.settingsJson,
     }));
@@ -189,7 +195,10 @@ router.get(
       // «Вопросы» = вопросы тем теста ∪ вопросы, измеряемые в тесте (round-trip).
       const measuredIds = new Set(measurements.map((m) => m.questionId));
       const allQuestions = await storage.getQuestions();
+      // «Сценарий в ИС»: вопрос-сценарий книга не переносит (он едет архивом `.scenario.zip`) —
+      // ровно как экспорт банка вопросов; иначе сценарий обычной темы ушёл бы строкой без смысла.
       const questions = allQuestions
+        .filter((q) => !isSimulation(q.type))
         .filter((q) => topicIds.has(q.topicId) || measuredIds.has(q.id))
         .sort((a, b) => (topicName.get(a.topicId) || "").localeCompare(topicName.get(b.topicId) || "", "ru"));
 
@@ -267,6 +276,10 @@ router.get(
         (test.flowPolicyJson as {
           router?: { sectionUnlockRules?: Record<string, { mode?: string; sectionIds?: string[] }> };
         } | null)?.router?.sectionUnlockRules ?? {};
+      // PRD-50 FR-11: ключ блока в книгу не едет — по нему подбирается название.
+      const sectionGroupLabelByKey = new Map(
+        normalizeSectionGroups(test.sectionGroupsJson).map((g) => [g.key, g.label]),
+      );
       const structureRows = orderedSections.map((s) =>
         serializeStructureRow({
           topicName: topicName.get(s.topicId) || "",
@@ -288,6 +301,10 @@ router.get(
           // PRD-48 FR-16: одно значение на тему, поэтому оно едет листом, у которого
           // ровно одна строка на тему.
           failureFeedback: failureFeedbackByTopic.get(s.topicId) ?? null,
+          // PRD-50 FR-11: блок называется так, как он подписан на экране итогов. Ссылка на
+          // блок, которого в списке теста нет, означает «вне блоков» — ровно как её читает
+          // сам экран, а не выдуманное название.
+          groupLabel: s.groupKey ? sectionGroupLabelByKey.get(s.groupKey) ?? "" : "",
         }),
       );
       const quotaRows: Record<string, unknown>[] = [];
@@ -332,6 +349,17 @@ router.get(
       const feedbackSections = orderedSections.map((s) => ({
         topicName: topicName.get(s.topicId) || "",
         feedback: (s.feedbackJson ?? null) as FeedbackSource | null,
+        // PRD-50 FR-50: тексты подтем раздела. Адресуются «Разделом» + «Подтемой»; раздел
+        // без них строк подтем не даёт, и книга такого теста прежняя.
+        keyFeedback:
+          ((s.breakdownFeedbackJson as { keys?: Record<string, FeedbackSource | null> } | null)
+            ?.keys ?? null),
+        // Толкования: переопределение раздела и тексты подтем. Толкование самой ТЕМЫ книга
+        // не возит — тема общая для многих тестов, а книга описывает тест.
+        interpretation: (s.interpretationJson ?? null) as InterpretationSource | null,
+        keyInterpretation:
+          ((s.breakdownInterpretationJson as { keys?: Record<string, InterpretationSource | null> } | null)
+            ?.keys ?? null),
       }));
       const testFeedback = (test.feedbackJson ?? null) as FeedbackSource | null;
       const feedbackRows = serializeFeedbackRows(testFeedback, feedbackSections);

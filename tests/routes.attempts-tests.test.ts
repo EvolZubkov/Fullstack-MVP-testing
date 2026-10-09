@@ -11,7 +11,13 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
   serviceMock: { create: vi.fn(), save: vi.fn() },
   storageMock: {
     getTest: vi.fn(), getTests: vi.fn(),
-    updateTest: vi.fn(), deleteTest: vi.fn(), getTestSections: vi.fn(),
+    updateTest: vi.fn(), deleteTest: vi.fn(), getTestSections: vi.fn(), getTestScenarios: vi.fn(async () => []),
+    // PRD-51: маршрут читает документ отчёта. Здесь он не предмет проверки —
+    // пустой список означает «документ по умолчанию шаблона».
+    listReportBlocks: vi.fn().mockResolvedValue([]),
+    // PRD-52 FR-32: список тестов считает открытые комментарии одним запросом на весь
+    // список. Здесь не предмет проверки — пустая карта означает «открытых нет».
+    countOpenReviewCommentsByTests: vi.fn().mockResolvedValue({}),
     patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
@@ -609,6 +615,65 @@ describe("Attempts routes — adaptive topic timer", () => {
     expect(storageMock.updateAttempt.mock.calls[0][1].finishedAt).not.toBeNull();
   });
 
+  // The whole-test timer running out must END the adaptive attempt on the SERVER,
+  // exactly as `/finish` does for the standard flow. Before this route existed the
+  // web host only flipped its own state and walked the learner to the result page of
+  // an attempt that was still open: `finished_at` and `result_json` stayed NULL and
+  // the run was lost («Результаты не найдены»).
+  it("POST finish-adaptive — finishes the attempt from the answers already stored", async () => {
+    const variant = makeAdaptiveVariant();
+    storageMock.getAttempt.mockResolvedValue({
+      ...dbAttempt,
+      variantJson: variant,
+      answersJson: { q1: "a" },
+    });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish-adaptive"));
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    expect(res.body.result).toBeTruthy();
+    const saved = storageMock.updateAttempt.mock.calls[0][1];
+    expect(saved.finishedAt).not.toBeNull();
+    expect(saved.resultJson).toBeTruthy();
+  });
+
+  it("POST finish-adaptive — idempotent: a finished attempt keeps its stored result", async () => {
+    storageMock.getAttempt.mockResolvedValue({
+      ...dbAttempt,
+      variantJson: makeAdaptiveVariant(),
+      finishedAt: new Date("2026-08-15T09:00:00Z"),
+      resultJson: { topicResults: [{ topicId: "t1" }] },
+    });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish-adaptive"));
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    expect(res.body.result).toEqual({ topicResults: [{ topicId: "t1" }] });
+    expect(storageMock.updateAttempt).not.toHaveBeenCalled();
+  });
+
+  it("POST finish-adaptive — 400 on a standard attempt", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, variantJson: { mode: "standard" } });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish-adaptive"));
+    expect(res.status).toBe(400);
+    expect(storageMock.updateAttempt).not.toHaveBeenCalled();
+  });
+
+  it("POST finish-adaptive — 403 for another user's attempt", async () => {
+    storageMock.getAttempt.mockResolvedValue({
+      ...dbAttempt,
+      userId: "other",
+      variantJson: makeAdaptiveVariant(),
+    });
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish-adaptive"));
+    expect(res.status).toBe(403);
+    expect(storageMock.updateAttempt).not.toHaveBeenCalled();
+  });
+
   it("POST expire-topic-adaptive — 403 for another user's attempt", async () => {
     storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, userId: "other", variantJson: makeAdaptiveVariant() });
     const res = await asLearner(
@@ -829,16 +894,16 @@ describe("Attempts routes — answer-adaptive", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.isFinished).toBe(true);
-    // Тема впереди раздела: общий источник раньше частного — тот же порядок, что у
-    // стандартного режима и у запечённого пакета.
-    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Текст темы", "Текст раздела"]);
+    // Текст раздела ЗАМЕНЯЕТ текст темы (PRD-29 §7.1a): у темы в тесте один разрешённый
+    // текст, а не склейка двух. Тот же порядок, что у запечённого пакета.
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Текст раздела"]);
     expect(res.body.result.topicResults[0].recommendedAssets).toEqual([
       { title: "Разбор темы", url: "/api/media/aaaa" },
       { title: "Памятка раздела", url: "/api/media/bbbb" },
     ]);
     // Сохраняются ВМЕСТЕ с попыткой, а не пересчитываются при показе.
     expect(storageMock.updateAttempt.mock.calls[0][1].resultJson.topicResults[0].feedbackTexts)
-      .toEqual(["Текст темы", "Текст раздела"]);
+      .toEqual(["Текст раздела"]);
     storageMock.getTopic.mockReset();
   });
 
@@ -1209,12 +1274,50 @@ describe("Attempts routes — finish attempt", () => {
       .send({ answers: { q1: 0 } }));
 
     expect(res.status).toBe(200);
-    // Тема впереди раздела: общий источник раньше частного (как у вложений).
-    expect(res.body.result.topicResults[0].feedbackTexts).toEqual([
-      "Текст темы",
-      "Текст раздела",
-    ]);
+    // Текст раздела ЗАМЕНЯЕТ текст темы (§7.1a). Вложения ведут себя иначе — они
+    // складываются: замена объявлена решением для ТЕКСТА.
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Текст раздела"]);
     storageMock.getTopic.mockReset();
+  });
+
+  // PRD-50 FR-11: блок раздела сохраняется ВМЕСТЕ с попыткой. Экран итогов рисуется из
+  // сохранённого результата, и без этого ключа он печатал бы плоский список тем даже
+  // тесту, у которого автор блоки завёл. Ключ ставится ТОЛЬКО у раздела с блоком:
+  // результат теста без блоков обязан остаться прежним.
+  it("POST /attempts/:id/finish — кладёт блок раздела в результат попытки", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1", topicPassRuleJson: null, groupKey: "knowledge",
+    }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].groupKey).toBe("knowledge");
+    expect(storageMock.updateAttempt.mock.calls[0][1].resultJson.topicResults[0].groupKey)
+      .toBe("knowledge");
+  });
+
+  it("POST /attempts/:id/finish — раздел без блока не получает ключа вовсе", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", topicPassRuleJson: null }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    expect("groupKey" in res.body.result.topicResults[0]).toBe(false);
   });
 
   it("POST /attempts/:id/finish — одинаковые тексты схлопываются, пустые отбрасываются", async () => {
@@ -1424,27 +1527,28 @@ describe("Attempts routes — result and history", () => {
       return (res.body.render?.context?.result?.recommendations?.texts ?? []) as string[];
     }
 
-    it("показывает тексты и вложения непройденной темы и обратную связь теста", async () => {
+    it("показывает тексты и вложения непройденной темы", async () => {
       storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(null));
       storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
       storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
 
       const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
       expect(res.status).toBe(200);
-      // Обратная связь теста — самый общий источник, поэтому впереди материалов темы.
-      expect(texts(res)).toEqual(["Разберите ошибки.", "Текст темы", "Текст раздела"]);
+      // PRD-61 §10: обратная связь ТЕСТА снята, список начинается с материалов темы.
+      expect(texts(res)).toEqual(["Текст темы", "Текст раздела"]);
       expect(res.body.render.context.result.recommendations.assets).toEqual([TOPIC_PDF]);
     });
 
-    it("тема с подтверждённым уровнем молчит, обратная связь теста остаётся", async () => {
+    it("тема с подтверждённым уровнем молчит — блока не остаётся вовсе", async () => {
       storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(1));
       storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
       storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
 
       const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
       expect(res.status).toBe(200);
-      expect(texts(res)).toEqual(["Разберите ошибки."]);
-      expect(res.body.render.context.result.recommendations.assets ?? []).toEqual([]);
+      // Второго источника у блока больше нет (PRD-61 §10), поэтому он пуст целиком.
+      expect(texts(res)).toEqual([]);
+      expect(res.body.render.context.result.recommendations?.assets ?? []).toEqual([]);
     });
 
     it("явно пройденный тест не показывает и своей обратной связи", async () => {

@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { TEMPLATE_IDS, TEMPLATE_NAMES, templateManifest } from "../../tests/helpers/template-roots";
 
 interface Field {
   key: string;
@@ -26,10 +27,11 @@ interface ContentTemplate {
   settings?: Field[];
 }
 
-const TEMPLATES = {
-  "Стандартный": "server/scorm/templates/default/manifest.json",
-  "Сертификация": "templates/certification/manifest.json",
-};
+// Реестр знает, где лежит каждый шаблон: встроенный — в дереве продукта, два
+// вынесенных — в собственных репозиториях.
+const TEMPLATES: Record<string, string> = Object.fromEntries(
+  TEMPLATE_IDS.map((id) => [TEMPLATE_NAMES[id], templateManifest(id)]),
+);
 
 function variants(path: string): ContentTemplate[] {
   const manifest = JSON.parse(readFileSync(resolve(path), "utf-8")) as {

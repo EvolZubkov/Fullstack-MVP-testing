@@ -31,6 +31,7 @@ import {
   canAssignTest,
   canReadTestAnalytics,
   canGrantAccess,
+  canReviewTest,
   canChangeOwner,
   readableTestScope,
 } from "../../server/services/test-access";
@@ -238,5 +239,36 @@ describe("AC-10 — readableTestScope (list/analytics filtering)", () => {
     const scope = await readableTestScope([ROLES.LEARNER], "u1");
     expect(scope.all).toBe(false);
     expect(scope.ids.size).toBe(0);
+  });
+});
+
+describe("PRD-52 — review scope (grant `review` or edit scope)", () => {
+  it("allows a holder of the review grant, whatever their role", async () => {
+    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "review" });
+    // An external expert holds `learner` only: the grant, not the role, opens the door.
+    await expect(canReviewTest([ROLES.LEARNER], "expert-1", TEST)).resolves.toBe(true);
+  });
+
+  it("allows the test owner without any grant", async () => {
+    await expect(canReviewTest([ROLES.AUTHOR], "owner-1", TEST)).resolves.toBe(true);
+    expect(storageMock.getTestGrantForUser).not.toHaveBeenCalled();
+  });
+
+  it("allows an author holding the edit grant", async () => {
+    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "edit" });
+    await expect(canReviewTest([ROLES.AUTHOR], "other", TEST)).resolves.toBe(true);
+  });
+
+  it("denies a stranger with no grant", async () => {
+    await expect(canReviewTest([ROLES.LEARNER], "stranger", TEST)).resolves.toBe(false);
+  });
+
+  it("denies a holder of the assign grant: delivery is not review", async () => {
+    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "assign" });
+    await expect(canReviewTest([ROLES.MANAGER], "manager-1", TEST)).resolves.toBe(false);
+  });
+
+  it("allows an administrator, as every other scope does", async () => {
+    await expect(canReviewTest([ROLES.ADMINISTRATOR], "anyone", TEST)).resolves.toBe(true);
   });
 });

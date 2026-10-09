@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ROLES } from "@shared/access";
 import { TestsListPage } from "../tests-list";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const { authMock } = vi.hoisted(() => ({
   authMock: {
@@ -26,6 +27,13 @@ const { authMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
+    can: (cap: string) => authMock.can(cap),
+    hasRole: (role: string) => authMock.roles.includes(role),
+    user: { id: authMock.userId },
+  }),
+  // Ящик редактора читает пользователя НЕОБЯЗАТЕЛЬНО (`useOptionalAuth`): он
+  // собирается и без провайдера. Мок обязан знать оба чтения, иначе падает импорт.
+  useOptionalAuth: () => ({
     can: (cap: string) => authMock.can(cap),
     hasRole: (role: string) => authMock.roles.includes(role),
     user: { id: authMock.userId },
@@ -106,9 +114,9 @@ function installFetch(opts: {
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <TestsListPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -137,8 +145,8 @@ describe("<TestsListPage /> — filter facets", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     // Owner Select trigger shows «Любой» until a specific author is chosen.
     fireEvent.click(within(panel).getByRole("button", { name: "Любой" }));
     fireEvent.click(within(panel).getByRole("option", { name: "Марина Иванова" }));
@@ -147,7 +155,7 @@ describe("<TestsListPage /> — filter facets", () => {
     const chip = await screen.findByText(/Владелец: Марина Иванова/i);
     expect(chip).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить"));
+    fireEvent.click(screen.getByLabelText(/^Снять условие/));
     await waitFor(() => expect(screen.queryByText(/Владелец: Марина Иванова/i)).toBeNull());
   });
 
@@ -156,8 +164,8 @@ describe("<TestsListPage /> — filter facets", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     fireEvent.click(within(panel).getByRole("button", { name: "Мои" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Применить" }));
 
@@ -171,8 +179,8 @@ describe("<TestsListPage /> — filter facets", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     fireEvent.click(within(panel).getByRole("button", { name: "Доступные" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Применить" }));
 

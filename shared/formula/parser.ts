@@ -16,6 +16,7 @@ import {
   type ScaleRankFn,
   ACCESSOR_PROPS,
   SCALE_RANK_PROPS,
+  SCALE_GROUP_PROPS,
   FormulaSyntaxError,
 } from "./types";
 import { tokenize, type Token } from "./tokens";
@@ -248,6 +249,33 @@ class Parser {
         place: Number(placeTok.value),
         prop: propTok.value,
       };
+    }
+
+    // `topGroup(["k1","k2"], 5).code` — форма повторяет `topScale`, но второй аргумент это ПОРОГ,
+    // а не место, и он принимает строку «N%»: доля нужна, когда шкалы группы имеют разные домены
+    // или домена не имеют вовсе.
+    if (name === "topGroup") {
+      this.next();
+      this.expectPunct("(");
+      const keys = this.parseKeyList();
+      this.expectPunct(",");
+      const thresholdTok = this.next();
+      if (thresholdTok.type !== "number" && thresholdTok.type !== "string") {
+        throw new FormulaSyntaxError(
+          "Порог верхней зоны — число или строка вида «10%»",
+          thresholdTok.pos,
+        );
+      }
+      const threshold =
+        thresholdTok.type === "number" ? Number(thresholdTok.value) : thresholdTok.value;
+      this.expectPunct(")");
+      this.expectPunct(".");
+      const groupProp = this.next();
+      if (groupProp.type !== "ident") throw new FormulaSyntaxError("Ожидалось свойство", groupProp.pos);
+      if (!SCALE_GROUP_PROPS.includes(groupProp.value)) {
+        throw new FormulaSyntaxError(`У «topGroup» нет свойства «${groupProp.value}»`, groupProp.pos);
+      }
+      return { type: "scaleGroup", keys, threshold, prop: groupProp.value };
     }
 
     if (COUNT_FNS.has(name as CountFn)) {

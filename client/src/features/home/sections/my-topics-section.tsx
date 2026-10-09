@@ -22,7 +22,7 @@ import {
   Stack,
   Tag,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { formatQuestions } from "@/lib/i18n";
 import type { MyTopicItem } from "@shared/home/contract";
 

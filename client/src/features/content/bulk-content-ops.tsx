@@ -25,10 +25,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Banner, Button, Cluster, Combobox, Input, Label, ModalDialog,
   RadioGroup, SegmentedControl, Select, Stack, Switch, Text,
-} from "@universityrt/ui-kit";
+  useToast,
+} from "@skillum/ui-kit";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
-import { useToast } from "@/hooks/use-toast";
 import { t, pluralize } from "@/lib/i18n";
 import type { Folder } from "@shared/schema";
 
@@ -164,7 +164,7 @@ export interface GroupMoveModalProps {
 }
 
 export function GroupMoveModal({ open, directTopicIds, folderIds, folders, onClose, onDone }: GroupMoveModalProps) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [target, setTarget] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   useEffect(() => { if (open) { setTarget(null); setPending(false); } }, [open]);
@@ -182,11 +182,11 @@ export function GroupMoveModal({ open, directTopicIds, folderIds, folders, onClo
           throw new Error(r.data?.error === "invalid_parent" ? c().cyclePrevented : (r.data?.error ?? "reparent"));
         }
       }
-      toast({ title: c().moved });
+      toast({ tone: "success", title: c().moved });
       onDone();
       onClose();
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }
@@ -236,7 +236,7 @@ export interface GroupAccessModalProps {
 
 export function GroupAccessModal(props: GroupAccessModalProps) {
   const { open, topicIds, topicCount, folderCount, users, isAdmin, canForce, onClose, onDone } = props;
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [op, setOp] = useState<AccessOp>("grant");
   const [granteeId, setGranteeId] = useState<string | null>(null);
   const [level, setLevel] = useState<Level>("use");
@@ -265,19 +265,19 @@ export function GroupAccessModal(props: GroupAccessModalProps) {
       if (op === "grant") {
         const r = await send("POST", "/api/topics/bulk-grant", { ids: topicIds, granteeId, accessLevel: level });
         if (!r.ok) throw new Error(r.data?.error ?? "grant");
-        toast({ title: c().accessGranted.replace("{n}", String(r.data.grantedCount ?? 0)) });
+        toast({ tone: "success", title: c().accessGranted.replace("{n}", String(r.data.grantedCount ?? 0)) });
       } else if (op === "vis") {
         const r = await send("POST", "/api/topics/bulk-visibility", { ids: topicIds, visibility });
         if (!r.ok) throw new Error(r.data?.error ?? "visibility");
-        toast({ title: c().visibilityUpdated.replace("{n}", String(r.data.updatedCount ?? 0)) });
+        toast({ tone: "success", title: c().visibilityUpdated.replace("{n}", String(r.data.updatedCount ?? 0)) });
       } else if (op === "owner") {
         const r = await send("POST", "/api/topics/bulk-owner", { ids: topicIds, ownerId });
         if (!r.ok) throw new Error(r.data?.error ?? "owner");
-        toast({ title: c().ownerUpdated.replace("{n}", String(r.data.updatedCount ?? 0)) });
+        toast({ tone: "success", title: c().ownerUpdated.replace("{n}", String(r.data.updatedCount ?? 0)) });
       } else if (op === "revoke" && revokeMode === "soft") {
         const r = await send("POST", "/api/topics/bulk-revoke", { ids: topicIds, granteeId });
         if (!r.ok) throw new Error(r.data?.error ?? "revoke");
-        toast({ title: c().accessRevoked.replace("{n}", String(r.data.revokedCount ?? 0)) });
+        toast({ tone: "success", title: c().accessRevoked.replace("{n}", String(r.data.revokedCount ?? 0)) });
       } else {
         // Hard revoke: preview dependents first (dry-run), then execute.
         const r = await send("POST", "/api/topics/bulk-revoke?mode=hard&dryRun=true", { ids: topicIds, granteeId });
@@ -292,7 +292,7 @@ export function GroupAccessModal(props: GroupAccessModalProps) {
       onDone();
       onClose();
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }
@@ -304,11 +304,11 @@ export function GroupAccessModal(props: GroupAccessModalProps) {
       const q = forced ? "?mode=hard&force=true" : "?mode=hard";
       const r = await send("POST", `/api/topics/bulk-revoke${q}`, { ids: topicIds, granteeId });
       if (!r.ok) throw new Error(r.data?.error ?? "revoke");
-      toast({ title: c().accessRevoked.replace("{n}", String(r.data.revokedCount ?? 0)) });
+      toast({ tone: "success", title: c().accessRevoked.replace("{n}", String(r.data.revokedCount ?? 0)) });
       onDone();
       onClose();
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }
@@ -451,7 +451,7 @@ export interface FolderDeleteDialogProps {
 
 export function FolderDeleteDialog(props: FolderDeleteDialogProps) {
   const { open, folderIds, folderName, standaloneTopicIds, folders, canForce, onClose, onDone } = props;
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [mode, setMode] = useState<"move" | "cascade">("move");
   const [target, setTarget] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
@@ -474,11 +474,11 @@ export function FolderDeleteDialog(props: FolderDeleteDialogProps) {
       if (standaloneTopicIds.length > 0) {
         await send("POST", "/api/topics/bulk-move", { ids: standaloneTopicIds, folderId: target });
       }
-      toast({ title: c().folderDeleted });
+      toast({ tone: "success", title: c().folderDeleted });
       onDone();
       onClose();
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }
@@ -510,7 +510,7 @@ export function FolderDeleteDialog(props: FolderDeleteDialogProps) {
       }
       setImpact({ deletable, blocked, forbidden });
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }
@@ -527,11 +527,11 @@ export function FolderDeleteDialog(props: FolderDeleteDialogProps) {
       if (standaloneTopicIds.length > 0) {
         await send("POST", `/api/topics/bulk-delete${q}`, { ids: standaloneTopicIds });
       }
-      toast({ title: c().folderDeleted });
+      toast({ tone: "success", title: c().folderDeleted });
       onDone();
       onClose();
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }
@@ -620,7 +620,7 @@ export interface GroupDeleteFlowProps {
 }
 
 export function GroupDeleteFlow({ open, topicIds, canForce, onClose, onDone }: GroupDeleteFlowProps) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [impact, setImpact] = useState<{ deletable: ImpactEntry[]; blocked: ImpactEntry[]; forbidden: ImpactEntry[] } | null>(null);
   const [forced, setForced] = useState(false);
   const [pending, setPending] = useState(false);
@@ -631,7 +631,7 @@ export function GroupDeleteFlow({ open, topicIds, canForce, onClose, onDone }: G
     (async () => {
       const r = await send("POST", "/api/topics/bulk-delete?dryRun=true", { ids: topicIds });
       if (!alive) return;
-      if (!r.ok) { toast({ variant: "destructive", title: t.common.error }); onClose(); return; }
+      if (!r.ok) { toast({ tone: "error", title: t.common.error }); onClose(); return; }
       setImpact({
         deletable: (r.data.deletable ?? []).map((x: any) => ({ id: x.topicId, name: x.name })),
         blocked: (r.data.blocked ?? []).map((x: any) => ({ id: x.topicId, name: x.name, detail: firstBlockingHint(x.blocking) })),
@@ -646,11 +646,11 @@ export function GroupDeleteFlow({ open, topicIds, canForce, onClose, onDone }: G
     try {
       const r = await send("POST", `/api/topics/bulk-delete${forced ? "?force=true" : ""}`, { ids: topicIds });
       if (!r.ok) throw new Error(r.data?.error ?? "delete");
-      toast({ title: c().deletedN.replace("{n}", String(r.data.deletedCount ?? 0)) });
+      toast({ tone: "success", title: c().deletedN.replace("{n}", String(r.data.deletedCount ?? 0)) });
       onDone();
       onClose();
     } catch (e) {
-      toast({ variant: "destructive", title: t.common.error, description: (e as Error).message });
+      toast({ tone: "error", title: t.common.error, description: (e as Error).message });
     } finally {
       setPending(false);
     }

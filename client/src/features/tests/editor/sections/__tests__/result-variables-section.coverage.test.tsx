@@ -33,12 +33,12 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     flowSettings: {},
     folderId: null,
     basic: {
-      title: "Sample", description: "", status: "draft",
+      title: "Sample", description: "", descriptionFormat: "plain", status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -74,7 +74,7 @@ function makeVar(over: Partial<ResultVariableModel> = {}): ResultVariableModel {
 /** A scale with two band levels — feeds the «Категория» / «Взвешенная сумма» pickers. */
 function scaleWithLevels(): ScaleModel {
   return {
-    key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
+    key: "comp", label: "Компетенция", description: "", type: "number", aggregation: "sum",
     normalization: "none", direction: "positive",
     bands: [
       { min: "0", max: "5", label: "Низкий", level: "low", text: "", tone: "" },
@@ -174,8 +174,9 @@ describe("<ResultVariablesSection /> — list & cards", () => {
     renderControlled(model);
 
     expect(screen.getByTestId("metrics-section")).toBeInTheDocument();
-    // >1 variable → the header gains the «порядок вычисления» affordance + add btn.
-    expect(screen.getByText(/порядок вычисления/)).toBeInTheDocument();
+    // Заголовок раздела — ровно «Показатели», как рисует утверждённый эскиз: прежняя
+    // подпись «Показатели результата · порядок вычисления» была подписью, а не заголовком.
+    expect(screen.getByRole("heading", { name: "Показатели" })).toBeInTheDocument();
     expect(screen.getByTestId("metrics-add")).toBeInTheDocument();
 
     const card0 = screen.getByTestId("metrics-card-0");
@@ -279,6 +280,18 @@ describe("<ResultVariablesSection /> — formula builder", () => {
     pickLabeledOption("Шаблон", "Сертификация / вердикт");
     expect(screen.getByTestId("metrics-status-0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Добавить условие/ })).toBeInTheDocument();
+  });
+
+  it("«Что получится» показывает собранное выражение и меняется вместе с ним", () => {
+    renderStateful(baseModel({ scales: [scaleWithLevels()], resultVariables: [makeVar()] }));
+    expandFirstCard();
+    // Строку, которую конструктор пишет в модель, автор видит ДО перехода в ручной режим.
+    const shown = screen.getByTestId("metrics-formula-generated");
+    const threshold = shown.textContent ?? "";
+    expect(threshold).not.toBe("");
+
+    pickLabeledOption("Шаблон", "Взвешенная сумма");
+    expect(screen.getByTestId("metrics-formula-generated").textContent).not.toBe(threshold);
   });
 
   it("threshold: edits the condition value input", () => {

@@ -1,0 +1,94 @@
+<!-- ШКАЛЫ идут ПЕРЕД показателями — тот же порядок, что на экране итогов: шкала —
+     измерение, показатель — вывод из измерений, и вывод читается после того, из чего
+     он сделан. -->
+{{#if result.scales}}
+<section class="tb-report__card">
+  {{#if labels.results.scales}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.scales }}</div>{{/if}}
+  <!-- Колонки «диаграмма слева, список справа» включает МОДИФИКАТОР, и ставится он по
+       тому же признаку, каким гейтится сама фигура. Без него единственный ребёнок —
+       список толкований — занимал колонку под диаграмму, 240 px из 545 доступных, и
+       текст уходил вниз лентой. Блок показателей диаграммы не имеет вовсе. -->
+  <div class="tb-report__scales{{#if result.scalesChart}} tb-report__scales--chart{{/if}}">
+    {{#if result.scalesChart}}
+    <!-- PRD-46: ОДИН блок на радар и розу. Ядро отдаёт обе диаграммы одной формой, и
+        неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего. Порядок
+        слоёв важен: заливки розы непрозрачны, поэтому сетка идёт ПОВЕРХ них. -->
+    <div class="tb-chart">
+      <svg class="tb-chart__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+        {{#each result.scalesChart.sectors}}
+        <path class="tb-rose__sector {{overflowClass}}" d="{{d}}" style="--tb-hue:{{color}}"></path>
+        {{/each}}
+        {{#each result.scalesChart.rings}}
+        <circle class="tb-chart__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+        {{/each}}
+        {{#each result.scalesChart.spokes}}
+        <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{x}}" y2="{{y}}"></line>
+        {{/each}}
+        {{#each result.scalesChart.axes}}
+        <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+        {{/each}}
+        {{#if result.scalesChart.isRadar}}
+        <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+        {{/if}}
+        {{#each result.scalesChart.axes}}
+        <circle class="tb-radar__dot {{quantizedClass}} {{overflowClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+        {{/each}}
+        {{#each result.scalesChart.icons}}
+        <g class="tb-rose__icon" transform="{{transform}}">{{#each paths}}<path d="{{.}}"></path>{{/each}}</g>
+        {{/each}}
+        {{#each result.scalesChart.labels}}
+        <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
+        {{/each}}
+      </svg>
+      {{#if result.scalesChart.limitCaption}}
+      <p class="tb-chart__limit">{{result.scalesChart.limitCaption}}</p>
+      {{/if}}
+    </div>
+    {{/if}}
+    <!-- ЛИНЕЙЧАТАЯ ДИАГРАММА: тот же вид шкал, что на экране итогов, — документ обязан
+         показать то же, что показал экран. Ядро отдаёт готовые длины и цвета
+         (`buildScaleBars`), отчёт растеризуется и не считает ничего сам. -->
+    {{#if result.scaleBars}}
+    <div class="tb-report__bars">
+      {{#each result.scaleBars.rows}}
+      <div class="tb-report__bar">
+        <div class="tb-report__bar-name">{{#unless hideName}}{{name}}{{/unless}}</div>
+        <div class="tb-report__bar-field"><span class="tb-report__bar-fill" style="width:{{widthPercent}}%;--tb-zone:{{color}}"></span></div>
+        <div class="tb-report__bar-val">{{#if showValue}}{{valueLabel}}{{/if}}</div>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+    {{#unless result.scaleBars}}
+    <div class="tb-report__scale-list">
+      {{#each result.scales}}
+      <div class="tb-report__scale">
+        <!-- PRD-49: тумблеры слотов карточки гасят показ и в документе — ученик уносит
+             его с собой. Признаки инвертированы, поэтому проверка через unless: контекст,
+             собранный вручную (превью шаблонов, фикстуры), их не ставит вовсе. -->
+        {{#unless hideName}}<div class="tb-report__scale-name">{{name}}</div>{{/unless}}
+        <div class="tb-report__scale-meta">
+          {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+          {{#unless hideLevel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/unless}}
+        </div>
+        <!-- Линейка — та же фигура, что на экране итогов: вид измерения задаёт ОДНА
+             настройка «Вид шкал», и документ обязан показать ученику то же, что показал
+             экран. Гейт тот же, что на экране, — наличие зон: шкала без домена рисуется
+             числом, и рисовать ей пустую полосу не из чего. Зоны, положение маркера и
+             границы приходят ПОСЧИТАННЫМИ из ядра (`buildMeasureView`) — отчёт
+             растеризуется, и вычислений на его стороне быть не должно. -->
+        {{#if zones}}
+        <div class="tb-report__scale-rail">
+          {{#each zones}}<span class="tb-report__scale-zone" style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>{{/each}}
+          <span class="tb-report__scale-marker" style="left:{{markerPercent}}%"></span>
+          {{#each marks}}<span class="tb-report__scale-mark" style="left:{{percent}}%">{{label}}</span>{{/each}}
+        </div>
+        {{/if}}
+        {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+    {{/unless}}
+  </div>
+</section>
+{{/if}}

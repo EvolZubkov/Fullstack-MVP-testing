@@ -1,14 +1,17 @@
-import nodemailer from "nodemailer";
+// nodemailer 10 ships its own types and its default export is a value, not a
+// namespace: the `Transporter` type has to be imported explicitly.
+import nodemailer, { type Transporter } from "nodemailer";
 import { logger } from "./logger";
 import { config, appBaseUrl } from "./config";
 import { EMAIL_COLORS as C } from "./email-theme";
+import { richTextToHtml, richTextToPlain, type RichTextFormat } from "@shared/template/rich-text";
 
 // SMTP settings are read from `config` (populated by initConfig) inside the
 // functions below — not at import time (the DI model). Non-secret settings
 // (host/port/secure/from) come from the config file; credentials are secrets.
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   const { host, port, secure, auth } = config.email;
   if (!host || !auth.user || !auth.pass) {
     logger.info("SMTP not configured. Email sending disabled.");
@@ -205,6 +208,8 @@ export async function sendAssignmentEmail(opts: {
   testId: string;
   testTitle: string;
   testDescription?: string | null;
+  /** PRD-59: format of `testDescription`; absent = plain. */
+  testDescriptionFormat?: RichTextFormat | null;
   dueDate?: Date | null;
   /**
    * The one-time passwordless entry link (`/access/<token>`). Omitted when the
@@ -306,7 +311,7 @@ export async function sendAssignmentEmail(opts: {
       <p>Вам назначено прохождение теста:</p>
       <div class="meta">
         <p><strong>📋 Тест:</strong> ${opts.testTitle}</p>
-        ${opts.testDescription ? `<p><strong>📝 Описание:</strong> ${opts.testDescription}</p>` : ""}
+        ${opts.testDescription ? `<div><strong>📝 Описание:</strong> ${richTextToHtml(opts.testDescription, opts.testDescriptionFormat)}</div>` : ""}
         ${dueDateStr ? `<p><strong>📅 Срок сдачи:</strong> ${dueDateStr}</p>` : ""}
       </div>
       ${ctaHtmlBlock}
@@ -336,7 +341,7 @@ ${ctaHref}
 Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!
 
 Вам назначено прохождение теста: ${opts.testTitle}
-${opts.testDescription ? `Описание: ${opts.testDescription}\n` : ""}${dueDateStr ? `Срок сдачи: ${dueDateStr}\n` : ""}
+${opts.testDescription ? `Описание: ${richTextToPlain(opts.testDescription, opts.testDescriptionFormat)}\n` : ""}${dueDateStr ? `Срок сдачи: ${dueDateStr}\n` : ""}
 ${ctaTextBlock}
 
 ---
@@ -489,6 +494,75 @@ export async function verifySmtpConnection(): Promise<boolean> {
     return true;
   } catch (error) {
     logger.error("SMTP connection verification failed: " + (error as Error).message);
+    return false;
+  }
+}
+/**
+ * PRD-52: приглашение рецензенту. Отдельное письмо, а не переиспользованное
+ * «вам назначен тест»: рецензента не оценивают, и обещание «ваш результат
+ * сохранится» было бы прямой неправдой — его прогон никуда не записывается.
+ */
+export async function sendReviewInviteEmail(opts: {
+  to: string;
+  userName?: string;
+  testTitle: string;
+  magicLink: string;
+  expiresAt: Date;
+}): Promise<boolean> {
+  const transport = getTransporter();
+  const APP_NAME = appName();
+  const SMTP_FROM = fromAddress();
+
+  if (!transport) {
+    // Рабочее окружение ссылку в журнал НЕ пишет (урок PRD-28): файл журнала с
+    // сотнями рабочих входов — это утечка. В журнал идёт только факт.
+    logger.info(`Review invite prepared for ${opts.to} (SMTP not configured)`);
+    return false;
+  }
+
+  const until = opts.expiresAt.toLocaleDateString("ru-RU");
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    ${BUTTON_CSS}
+    .muted { color: ${C.fgMuted}; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1>${APP_NAME}</h1></div>
+    <div class="content">
+      <p>Здравствуйте${opts.userName ? ", " + opts.userName : ""}!</p>
+      <p>Вас пригласили отрецензировать тест «${opts.testTitle}».</p>
+      <p>По ссылке откроется тест в режиме рецензирования: вы пройдёте его как участник и
+         сможете оставить комментарии к конкретным вопросам. Ваши ответы никуда не
+         записываются и никак не оцениваются — сохраняются только комментарии.</p>
+      <p style="text-align:center"><a class="button" href="${opts.magicLink}">Открыть тест</a></p>
+      <p class="muted">Ссылка личная, действует до ${until}. Не пересылайте её другим:
+         комментарии будут подписаны вашим именем.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await transport.sendMail({
+      from: SMTP_FROM,
+      to: opts.to,
+      subject: `Тест «${opts.testTitle}» — на рецензирование`,
+      html,
+    });
+    logger.info(`Review invite sent to ${opts.to} for test "${opts.testTitle}"`);
+    return true;
+  } catch (error) {
+    logger.error("Review invite email error: " + (error as Error).message);
     return false;
   }
 }

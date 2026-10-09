@@ -34,14 +34,29 @@ export interface ThumbTemplate {
  * round-trip before the fallback appears.
  */
 export function templatePreviewUrl(template: ThumbTemplate): string | null {
-  const rel = template.manifest?.assets?.preview;
-  if (typeof rel !== "string") return null;
+  return templateAssetUrl(template.id, template.manifest?.assets?.preview);
+}
+
+/**
+ * URL of ANY file of a template, or null when the reference is unusable.
+ *
+ * The same guard the preview asset needs, reused by every other place that shows a
+ * template's own file — the option previews of a `select` param (spec §6
+ * `optionPreviews`) among them. The manifest of an uploaded template is untrusted
+ * input: an absolute or protocol-relative reference would point the browser off-host
+ * (the package validator rejects those at import, but a row installed earlier may
+ * carry one), and a `..` segment would try to escape the template directory. Both are
+ * refused here rather than handed to the server route — which would answer 400 anyway,
+ * costing a round-trip before the fallback appears.
+ */
+export function templateAssetUrl(templateId: string, rel: unknown): string | null {
+  if (typeof rel !== "string" || !templateId) return null;
   const trimmed = rel.trim();
   if (trimmed === "" || /^(?:[a-z]+:)?\/\//i.test(trimmed)) return null;
   const segments = trimmed.split(/[\\/]/).filter((s) => s !== "" && s !== ".");
   if (segments.length === 0 || segments.includes("..")) return null;
   const path = segments.map(encodeURIComponent).join("/");
-  return `/api/templates/${encodeURIComponent(template.id)}/assets/${path}`;
+  return `/api/templates/${encodeURIComponent(templateId)}/assets/${path}`;
 }
 
 export interface TemplateThumbProps {

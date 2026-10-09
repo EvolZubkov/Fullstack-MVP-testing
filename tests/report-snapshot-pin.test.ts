@@ -23,6 +23,9 @@ const { storageMock, renderMock } = vi.hoisted(() => ({
     // assignment; `null` = the legacy bucket.
     getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getSnapshot: vi.fn(),
+    // PRD-51: документ отчёта. Тест про ВЫБОР ВАРИАНТА, а не про состав документа,
+    // поэтому строк нет — маршрут возьмёт документ по умолчанию шаблона.
+    listReportBlocks: vi.fn().mockResolvedValue([]),
     getLatestSnapshot: vi.fn().mockResolvedValue(undefined),
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["learner"]),

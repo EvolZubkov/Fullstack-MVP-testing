@@ -135,6 +135,67 @@ describe("buildMeasuresInput", () => {
   });
 });
 
+describe("buildResultContext + breakdownDisplayJson (PRD-50 FR-13)", () => {
+  const topicWithBreakdown = {
+    topicId: "t1",
+    topicName: "Право",
+    correct: 1,
+    total: 2,
+    percent: 50,
+    earnedPoints: 1,
+    possiblePoints: 2,
+    passed: false,
+    breakdown: [
+      {
+        scope: "section:law",
+        axis: "tag",
+        key: "ПДн",
+        items: 2,
+        answered: 2,
+        earned: 1,
+        possible: 2,
+        unitEarned: 1,
+        unitPossible: 2,
+        percentPoints: 50,
+        percentUnits: 40,
+      },
+    ],
+  };
+  const attemptWithBreakdown: AttemptResult = {
+    ...ATTEMPT,
+    topicResults: [topicWithBreakdown as never],
+  };
+
+  // The MeasuresSource the route hands over (server/routes/attempts.ts,
+  // `resultsMaterialForAttempt`) once the delivered test carries a saved
+  // `breakdown_display_json`. Confirms the adapter (`server/services/result-context`)
+  // actually threads `measures.breakdownDisplayJson` into the shared builder's
+  // `breakdownDisplay` option — the wiring PRD-50 Task 7 closes.
+  it("MeasuresSource.breakdownDisplayJson доезжает до строк разреза темы", () => {
+    const ctx = buildResultContext(attemptWithBreakdown, "Право", {
+      ...SOURCE,
+      scales: [],
+      variables: [],
+      breakdownDisplayJson: { visibility: "bar_and_value", basis: "points" },
+    });
+    const rows = (ctx.result.topicResults![0] as never as { breakdown: Array<Record<string, unknown>> })
+      .breakdown;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ key: "ПДн", barPercent: 50, showValue: true, valueLabel: "50 %" });
+  });
+
+  it("отсутствие breakdownDisplayJson оставляет полосы скрытыми (умолчание не меняет поведение)", () => {
+    const ctx = buildResultContext(attemptWithBreakdown, "Право", {
+      ...SOURCE,
+      scales: [],
+      variables: [],
+    });
+    expect(
+      (ctx.result.topicResults![0] as never as { breakdown?: unknown[] }).breakdown,
+    ).toBeUndefined();
+  });
+});
+
 describe("buildResultContext + measures", () => {
   it("не трогает контекст, когда у теста нет ни шкал, ни показателей", () => {
     const ctx = buildResultContext(ATTEMPT, "Контрольный", {

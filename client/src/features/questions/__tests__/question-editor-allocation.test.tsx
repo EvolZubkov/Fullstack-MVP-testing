@@ -14,6 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { questionTypeOptions } from "./helpers/question-type";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Question, Topic } from "@shared/schema";
 
@@ -23,6 +24,7 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 }));
 
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const topics = [{ id: "t1", name: "Лидерство" }] as unknown as Topic[];
 
@@ -73,9 +75,9 @@ function renderDrawer(overrides: Partial<QuestionEditorDrawerProps> = {}) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <QuestionEditorDrawer {...props} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -86,7 +88,7 @@ const numberInput = (testId: string): HTMLInputElement =>
 describe("карточка вопроса-распределения", () => {
   it("тип объявлен в списке типов (FR-44)", () => {
     renderDrawer();
-    expect(screen.getByText("Распределение баллов")).toBeInTheDocument();
+    expect(questionTypeOptions()).toContain("Распределение баллов");
   });
 
   it("открывает вопрос с бюджетом и доменом (FR-45)", () => {

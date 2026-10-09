@@ -12,7 +12,7 @@
 массив `result.blocks`, по которому макет проходит одним `{{#each}}` — так порядок выражен данными
 и одинаково честен на экране и в печатном отчёте.
 
-**Стек:** TypeScript, Vitest, Drizzle ORM, React 19, дизайн-система `@universityrt/ui-kit`,
+**Стек:** TypeScript, Vitest, Drizzle ORM, React 19, дизайн-система `@skillum/ui-kit`,
 собственный DSL шаблонов (`shared/template/dsl.ts`), рантайм SCORM на ES5 (`server/scorm/template/app`).
 
 **Спека:** `docs/specs/prd-49/results-headings.md`.
@@ -1507,7 +1507,7 @@ describe("card slot toggles (PRD-49)", () => {
 - [ ] **Шаг 3. Добавить тумблеры**
 
 В карточку переменной результата, рядом с полем «Видимость для обучающегося», добавить два
-переключателя дизайн-системы (компонент `Switch` из `@universityrt/ui-kit`; сырые `.ou-*` классы не
+переключателя дизайн-системы (компонент `Switch` из `@skillum/ui-kit`; сырые `.ou-*` классы не
 писать):
 
 ```tsx

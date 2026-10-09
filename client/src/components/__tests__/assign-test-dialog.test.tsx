@@ -14,6 +14,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { AssignTestDialog } from "../assign-test-dialog";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof AssignTestDialo
   });
   const onOpenChange = vi.fn();
   const utils = render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <AssignTestDialog
         open
         onOpenChange={onOpenChange}
@@ -83,7 +84,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof AssignTestDialo
         testTitle="Основы ИБ"
         {...props}
       />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onOpenChange };
 }
@@ -157,6 +158,25 @@ describe("<AssignTestDialog /> — current assignments tab", () => {
     fireEvent.click(screen.getByText("Группа Б"));
     expect(await screen.findByText("member@example.com")).toBeInTheDocument();
   });
+
+  // PRD-54 BR-54-42: участнику без почты ссылку отправить некуда — пункт гаснет, сервер отказ даёт сам.
+  it("гасит «Обновить ссылку» у участника группы без почты", async () => {
+    assignmentsData = [groupAssignment];
+    groupUsersData = [
+      { id: "m1", email: "member@example.com", name: "Член", status: "active", tokenStatus: "active" },
+      { id: "m2", email: null, name: "Участник 1a2b3c4d", status: "active", tokenStatus: "none" },
+    ];
+    renderDialog();
+    await screen.findByText("Группа Б");
+    fireEvent.click(screen.getByText("Группа Б"));
+    await screen.findByText("Участник 1a2b3c4d");
+    const [withEmail, withoutEmail] = screen.getAllByRole("button", { name: "Обновить ссылку" });
+    expect(withEmail).not.toBeDisabled();
+    expect(withoutEmail).toBeDisabled();
+    expect(withoutEmail).toHaveAttribute("title", "У участника нет почты — ссылку отправить некуда");
+    // Вместо почты в строке участника — прочерк, как на экране «Пользователи».
+    expect(screen.getByText("Участник 1a2b3c4d").previousElementSibling).toHaveTextContent("—");
+  });
 });
 
 describe("<AssignTestDialog /> — users tab", () => {
@@ -217,5 +237,64 @@ describe("<AssignTestDialog /> — groups tab", () => {
     await screen.findByText("Управление назначениями");
     fireEvent.click(screen.getByRole("tab", { name: /Группы/ }));
     expect(await screen.findByText("Все группы уже назначены")).toBeInTheDocument();
+  });
+});
+
+// ─── PRD-52: режим рецензирования ────────────────────────────────────────────
+
+describe("AssignTestDialog — режим рецензирования", () => {
+  it("называется «Отправить на рецензирование» и предупреждает о видимости", async () => {
+    renderDialog({ mode: "review" });
+    expect(await screen.findByText("Отправить на рецензирование")).toBeInTheDocument();
+    expect(screen.getByText(/видят комментарии друг друга/i)).toBeInTheDocument();
+  });
+
+  it("первая вкладка показывает приглашённых рецензентов, а не участников", async () => {
+    renderDialog({ mode: "review" });
+    expect(await screen.findByRole("tab", { name: /Приглашены/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Назначено/ })).not.toBeInTheDocument();
+  });
+
+  it("действие называется «Пригласить», а не «Назначить»", async () => {
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+    expect(await screen.findByRole("button", { name: /Пригласить/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Назначить/ })).not.toBeInTheDocument();
+  });
+
+  it("вкладки «Группы» нет: рецензентов приглашают поимённо", async () => {
+    renderDialog({ mode: "review" });
+    await screen.findByRole("tab", { name: /Приглашены/ });
+
+    expect(screen.queryByRole("tab", { name: /Группы/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Пользователи/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Списком/ })).toBeInTheDocument();
+  });
+
+  it("в обычном режиме вкладка «Группы» на месте", async () => {
+    renderDialog();
+    expect(await screen.findByRole("tab", { name: /Группы/ })).toBeInTheDocument();
+  });
+
+  it("не показывает срок сдачи: у рецензирования нет назначения", async () => {
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+
+    expect(screen.queryByLabelText("Срок выполнения")).toBeNull();
+    expect(screen.getByLabelText("Ссылка активна до")).toBeInTheDocument();
+  });
+
+  it("пустой список пользователей объясняется приглашением, а не назначением", async () => {
+    usersData = [];
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+
+    expect(await screen.findByText("Все пользователи уже приглашены")).toBeInTheDocument();
+  });
+
+  it("обычный режим заголовка и предупреждения не меняет", async () => {
+    renderDialog();
+    expect(screen.queryByText("Отправить на рецензирование")).not.toBeInTheDocument();
+    expect(screen.queryByText(/видят комментарии друг друга/i)).not.toBeInTheDocument();
   });
 });

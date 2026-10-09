@@ -55,7 +55,10 @@ export async function buildMyTests(
   const items = await Promise.all(
     window.map(async (test) => {
       const sections = await storage.getTestSections(test.id);
-      const questionCount = sections.reduce((sum, s) => sum + (s.drawCount ?? 0), 0);
+      const questionCount = test.mode === "scenario"
+        // «Сценарий в ИС»: у теста «Сценарий» нет разделов — его задание один пункт-сценарий.
+        ? 1
+        : sections.reduce((sum, s) => sum + (s.drawCount ?? 0), 0);
       const publication = await getPublicationState(test.id);
 
       const flags: AttentionKind[] = [];

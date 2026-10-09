@@ -12,7 +12,7 @@
 Конвейер загрузки списком живёт в отдельном сервисе, роуты остаются тонкими, интерфейс — четвёртая вкладка
 существующего диалога назначения теста.
 
-**Основа:** TypeScript, Express 5, Drizzle ORM, PostgreSQL, React 19, `@universityrt/ui-kit`, Vitest,
+**Основа:** TypeScript, Express 5, Drizzle ORM, PostgreSQL, React 19, `@skillum/ui-kit`, Vitest,
 ExcelJS.
 
 **Спека:** `docs/specs/prd-28/external-participant.md`. Ветка: `feat/bulk-invite`.
@@ -26,7 +26,7 @@ ExcelJS.
   одновременно работают несколько сессий.
 - Коммиты частые, по одному на задачу. Трейлер `Co-Authored-By` не добавлять никогда.
 - Все комментарии в коде и JSDoc — по-английски, JSDoc модулей обязателен и включает `@module`.
-- В интерфейсе только компоненты дизайн-системы (`@universityrt/ui-kit`), сырой Tailwind запрещён.
+- В интерфейсе только компоненты дизайн-системы (`@skillum/ui-kit`), сырой Tailwind запрещён.
 
 ## Состав файлов
 

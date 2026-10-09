@@ -20,8 +20,10 @@ import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 export type ResultVariableFormulaValidation = {
   valid: boolean;
   returnType?: "number" | "string" | "boolean";
-  errors: Array<{ message: string; position?: number }>;
-  warnings: Array<{ message: string; position?: number }>;
+  // `code` — устойчивый идентификатор находки из `shared/formula/types`. Сервер слал его
+  // всегда; здесь он не был объявлен, и отличать сообщения приходилось бы по ТЕКСТУ.
+  errors: Array<{ code?: string; message: string; position?: number }>;
+  warnings: Array<{ code?: string; message: string; position?: number }>;
 };
 
 /** One outcome as persisted in `config_json.outcomes` (mirror of `InterpretationOutcome`). */
@@ -75,6 +77,16 @@ function toConfigJson(v: ResultVariableModel): Record<string, unknown> {
   // touched keeps the exact config it had and never shows up as a change.
   if (v.showName === false) config.showName = false;
   if (v.showLevel === false) config.showLevel = false;
+  // PRD-53 §4.4: the «scales outside the profile» card. Written only when it is ON and
+  // has keys — that is exactly what `readRestScales` accepts on the server, and an
+  // off/empty block would be dead weight in every indicator's config.
+  if (v.restScales?.show && v.restScales.keys.length > 0) {
+    config.restScales = {
+      show: true,
+      label: v.restScales.label.trim(),
+      keys: v.restScales.keys,
+    };
+  }
   return config;
 }
 

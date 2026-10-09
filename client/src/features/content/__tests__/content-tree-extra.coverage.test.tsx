@@ -24,7 +24,10 @@ const { guardSpy, toastSpy } = vi.hoisted(() => ({ guardSpy: vi.fn(), toastSpy: 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ can: () => true, hasRole: () => false, user: { id: "u1", name: "Author" } }),
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/features/content-protection/use-content-guard", () => ({
   useContentGuard: () => ({ guard: guardSpy, dialogProps: { open: false } }),
 }));
@@ -109,10 +112,14 @@ function renderTree(data: TreeData = { folders, topics, questions, users }, onWr
 
 /** Apply a facet scope from the filter panel. */
 function applyScope(label: string) {
-  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
   fireEvent.click(screen.getByText(label));
   fireEvent.click(screen.getByText("Применить"));
 }
+
+// Дерево помнит фильтр в адресе и раскрытие в состоянии записи истории (возврат вглубь-назад);
+// jsdom делит их между тестами файла — каждый тест начинается с чистой записи.
+beforeEach(() => { window.history.replaceState(null, "", "/"); });
 
 beforeEach(() => {
   guardSpy.mockClear();
@@ -143,7 +150,7 @@ describe("<ContentTree /> — scope facet", () => {
     expect(screen.queryByText("Налоги")).not.toBeInTheDocument();
     expect(screen.getByText("Область: Мои")).toBeInTheDocument();
     // Removing the chip (commitFilter) restores every topic.
-    fireEvent.click(screen.getByLabelText("Удалить"));
+    fireEvent.click(screen.getByLabelText("Снять условие: Область: Мои"));
     expect(screen.getByText("Инвестиции")).toBeInTheDocument();
   });
 
@@ -170,7 +177,7 @@ describe("<ContentTree /> — facet chips & media", () => {
   it("Тип + Медиа facets produce their chips", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Один ответ")); // type: single
     fireEvent.click(screen.getByLabelText("С изображением")); // media: image
     fireEvent.click(screen.getByText("Применить"));
@@ -209,7 +216,7 @@ describe("<ContentTree /> — question bulk bar", () => {
     await waitFor(() => expect(screen.getByTestId("ct-move-questions-confirm")).toBeEnabled());
     fireEvent.click(screen.getByTestId("ct-move-questions-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
   });
 });
@@ -218,9 +225,9 @@ describe("<ContentTree /> — toolbar", () => {
   it("toggles the filter panel closed on a second click of «Фильтры»", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
-    expect(screen.getByRole("dialog", { name: "Фильтры" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
-    expect(screen.queryByRole("dialog", { name: "Фильтры" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    expect(screen.getByRole("dialog", { name: "Фильтр" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    expect(screen.queryByRole("dialog", { name: "Фильтр" })).not.toBeInTheDocument();
   });
 });

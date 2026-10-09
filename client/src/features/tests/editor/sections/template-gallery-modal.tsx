@@ -20,7 +20,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Eye, Search } from "lucide-react";
-import { Banner, Button, ModalDialog, Tag } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog, Tag } from "@skillum/ui-kit";
 import { useQuery } from "@tanstack/react-query";
 import type { TemplateRow } from "../use-design-settings";
 import { TemplateThumb } from "./template-thumb";

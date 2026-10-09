@@ -13,11 +13,11 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, SlidersHorizontal, type LucideIcon } from "lucide-react";
-import { Button, ModalDialog, Switch, Tabs, Tag, TransferList, type TransferItem } from "@universityrt/ui-kit";
+import { Braces, MonitorPlay, Pilcrow, CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, SlidersHorizontal, TextCursorInput, type LucideIcon } from "lucide-react";
+import { Button, ModalDialog, Switch, Tabs, Tag, TransferList, type TransferItem } from "@skillum/ui-kit";
+import { pluralize } from "@/lib/i18n";
 import type { FormSet, Form } from "@shared/schema";
 import type { QuestionType } from "@shared/scales/engine";
-import { pluralize } from "@/lib/i18n";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -32,12 +32,18 @@ export type VariantsEditorProps = {
   error?: string;
   /** Adaptive mode: variants don't apply — show the toggle disabled, not hidden. */
   disabled?: boolean;
+  /**
+   * Цена ответа на вопрос в ЭТОМ тесте. Считает вызывающий: цена — свойство теста, а
+   * не вопроса (PRD-15 блок D), и разрешается по цепочке «переопределение вопроса →
+   * умолчание раздела → умолчание теста». Не передана — мета покажет тип вопроса.
+   */
+  pointsOf?: (questionId: string) => number;
 };
 
 // ─── Question display helpers ───────────────────────────────────────────────────
 
 /** Minimal question shape the editor needs from `/api/questions`. */
-type QuestionRow = { id: string; topicId: string; type: QuestionType; prompt: string };
+type QuestionRow = { id: string; topicId: string; type: QuestionType; prompt: string; tags?: string[] };
 
 const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   single: CircleDot,
@@ -46,6 +52,10 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   ranking: ListOrdered,
   scale: ThermometerSun,
   allocation: SlidersHorizontal,
+  short: TextCursorInput,
+  blanks: Braces,
+  long: Pilcrow,
+  simulation: MonitorPlay,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: "Одиночный выбор",
@@ -54,15 +64,26 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   ranking: "Ранжирование",
   scale: "Шкала",
   allocation: "Распределение баллов",
+  short: "Короткий ответ",
+  blanks: "Пропуски",
+  long: "Развёрнутый ответ",
+  simulation: "Сценарий",
 };
 
+/** Буква варианта: A, B, C … Z, дальше — «Вариант 27» (столько вариантов не бывает). */
+function variantLetter(index: number): string {
+  return index >= 1 && index <= 26 ? String.fromCharCode(64 + index) : String(index);
+}
+
 function makeForm(index: number): Form {
-  return { id: crypto.randomUUID(), label: `Вариант ${index}`, questionIds: [] };
+  return { id: crypto.randomUUID(), label: `Вариант ${variantLetter(index)}`, questionIds: [] };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VariantsEditor({ topicId, topicName, formSet, onChange, error, disabled = false }: VariantsEditorProps) {
+export function VariantsEditor({
+  topicId, topicName, formSet, onChange, error, disabled = false, pointsOf,
+}: VariantsEditorProps) {
   const [open, setOpen] = useState(false);
   const { data: allQuestions = [] } = useQuery<QuestionRow[]>({ queryKey: ["/api/questions"] });
   const topicQuestions = useMemo(
@@ -89,14 +110,6 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error, d
   const present = topicQuestions.filter((q) => usedIds.has(q.id)).length;
   const orphan = topicQuestions.length - present;
 
-  // R-9: unequal variant sizes skew fairness (an absolute pass threshold loses
-  // meaning across differently sized variants) — surface a non-blocking warning.
-  // Only meaningful once every variant has questions; empty variants are flagged
-  // by their own «0» tag and a save-blocking validation error instead.
-  const sizes = formSet?.forms.map((f) => f.questionIds.length) ?? [];
-  const allFilled = sizes.length > 0 && sizes.every((n) => n > 0);
-  const balanced = allFilled && sizes.every((n) => n === sizes[0]);
-
   return (
     <>
       <label className="tb-quota-toggle">
@@ -108,7 +121,6 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error, d
           data-testid={`topic-variants-toggle-${topicId}`}
         />
         <span className="tb-section-label">
-          <List size={14} aria-hidden="true" />
           Варианты теста
         </span>
       </label>
@@ -173,24 +185,9 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error, d
             )}
           </div>
 
-          {allFilled && (
-            <div className="tb-quota-sum" data-testid={`topic-variants-balance-${topicId}`}>
-              {balanced ? (
-                <>
-                  <span>
-                    {sizes.length} {pluralize(sizes.length, "вариант", "варианта", "вариантов")} по{" "}
-                    {sizes[0]} · при старте темы выпадает один, выдаётся целиком; на повторе — другой
-                  </span>
-                  <Tag tone="success" size="s">сбалансировано</Tag>
-                </>
-              ) : (
-                <>
-                  <span>Варианты {sizes.join(" / ")} — неравные</span>
-                  <Tag tone="warning" size="s">неравные варианты</Tag>
-                </>
-              )}
-            </div>
-          )}
+          {/* Строка итога одна — охват банка. О неравных вариантах говорит общий контур
+              (предупреждение `variants_unequal`): приписка под карточкой темы не зажигает
+              ни точку рейла, ни баннер, и «Перейти к ошибкам» вести к ней некуда. */}
 
           {error && (
             <p className="tb-field-error" role="alert" data-testid={`topic-variants-error-${topicId}`}>
@@ -207,6 +204,7 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error, d
           topicName={topicName}
           formSet={formSet}
           questions={topicQuestions}
+          pointsOf={pointsOf}
           onChange={onChange}
         />
       )}
@@ -225,8 +223,10 @@ function VariantsModal(props: {
   formSet: FormSet;
   questions: QuestionRow[];
   onChange: (formSet: FormSet) => void;
+  /** См. {@link VariantsEditorProps.pointsOf}. */
+  pointsOf?: (questionId: string) => number;
 }) {
-  const { open, onClose, topicName, formSet, questions, onChange } = props;
+  const { open, onClose, topicName, formSet, questions, onChange, pointsOf } = props;
   const forms = formSet.forms;
   const [activeId, setActiveId] = useState<string>(forms[0]?.id ?? "");
 
@@ -260,7 +260,7 @@ function VariantsModal(props: {
     const next = forms
       .filter((f) => f.id !== id)
       // Re-number remaining variants so labels stay «Вариант 1…N».
-      .map((f, i) => ({ ...f, label: `Вариант ${i + 1}` }));
+      .map((f, i) => ({ ...f, label: `Вариант ${variantLetter(i + 1)}` }));
     setForms(next);
     setActiveId(next[Math.min(activeIndex, next.length - 1)]?.id ?? "");
   };
@@ -276,7 +276,14 @@ function VariantsModal(props: {
           <Icon size={16} aria-hidden="true" />
         </span>
       ),
-      meta: TYPE_LABEL[q.type],
+      meta: [
+        q.tags?.[0],
+        pointsOf
+          ? `${pointsOf(q.id)} ${pluralize(pointsOf(q.id), "балл", "балла", "баллов")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || TYPE_LABEL[q.type],
       tag:
         others.length > 0 ? (
           <span title={`Также в вариантах: ${others.join(", ")}`}>
@@ -314,8 +321,9 @@ function VariantsModal(props: {
       footer={
         <div className="tb-variants-modal__foot">
           <span className="tb-card-desc">
-            {forms.length} вариант(а/ов) · в вариантах задействовано {questions.length - orphan} из{" "}
-            {questions.length}
+            {`${forms.length} ${pluralize(forms.length, "вариант", "варианта", "вариантов")}`}
+            {` · в вариантах задействовано ${questions.length - orphan} из ${questions.length} `}
+            {pluralize(questions.length, "вопроса", "вопросов", "вопросов")}
             {orphan > 0 ? ` · ${orphan} не используются` : ""}
           </span>
           <Button variant="primary" onClick={onClose} data-testid="variants-modal-done">
@@ -327,6 +335,7 @@ function VariantsModal(props: {
     >
       <div className="tb-variants-modal__toolbar">
         <Tabs
+          listAriaLabel="Варианты темы"
           items={tabItems}
           value={active?.id}
           onChange={(id) => (id === ADD_TAB ? addVariant() : setActiveId(id))}

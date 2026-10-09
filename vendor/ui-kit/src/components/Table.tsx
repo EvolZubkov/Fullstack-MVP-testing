@@ -16,6 +16,14 @@ export type TableDensity = 'compact' | 'normal' | 'spacious';
 export type SortDir = 'asc' | 'desc';
 export type TableAlign = 'left' | 'right' | 'center';
 
+/**
+ * Выравнивание столбца: явное `align`, иначе числа — вправо, остальное — влево. Заголовок и
+ * значения столбца выравниваются ОДИНАКОВО (правило 2026-10-03).
+ */
+function columnAlign<T>(c: TableColumn<T>): TableAlign {
+  return c.align ?? (c.numeric ? 'right' : 'left');
+}
+
 export interface TableColumn<T> {
   key: string;
   header: React.ReactNode;
@@ -25,7 +33,10 @@ export interface TableColumn<T> {
   width?: string | number;
   align?: TableAlign;
   sortable?: boolean;
-  /** Делает столбец «numeric» (моноширинные цифры). */
+  /**
+   * Делает столбец «numeric» (моноширинные цифры; без `align` — правое выравнивание).
+   * Явный `align` важнее.
+   */
   numeric?: boolean;
   /**
    * Столбец — заголовок СТРОКИ: ячейки рендерятся как `<th scope="row">`.
@@ -141,7 +152,9 @@ export function Table<T>({
                 key={c.key}
                 className={cn(
                   c.sortable && 'is-sortable',
-                  cssStyleClass({ width: c.width, textAlign: c.align ?? 'left' }, 'ou-tbl-cell'),
+                  // Класс, а не только динамический text-align: правило `.ou-tbl th` его перебивало.
+                  `is-align-${columnAlign(c)}`,
+                  cssStyleClass({ width: c.width, textAlign: columnAlign(c) }, 'ou-tbl-cell'),
                 )}
                 onClick={c.sortable ? () => handleSort(c) : undefined}
                 aria-sort={sortKey === c.key
@@ -206,7 +219,9 @@ export function Table<T>({
                         scope={c.rowHeader ? 'row' : undefined}
                         className={cn(
                           c.numeric && 'is-numeric',
-                          cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-tbl-cell'),
+                          // Явное выравнивание перебивает правое у `is-numeric`.
+                          c.align && `is-align-${c.align}`,
+                          cssStyleClass({ textAlign: columnAlign(c) }, 'ou-tbl-cell'),
                         )}
                       >
                         {c.render

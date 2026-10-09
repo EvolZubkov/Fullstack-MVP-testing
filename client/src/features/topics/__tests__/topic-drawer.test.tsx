@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopicDrawer } from "../topic-drawer";
 import type { Topic } from "@shared/schema";
+import { ToastProvider } from "@skillum/ui-kit";
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -28,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function renderWithClient(ui: React.JSX.Element) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>);
 }
 
 const editTopic = {
@@ -283,5 +284,164 @@ describe("<TopicDrawer />", () => {
     );
     fireEvent.change(screen.getByTestId("input-topic-name"), { target: { value: "FTTB" } });
     expect(await screen.findByTestId("topic-name-warning")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #56: the topic's BASE interpretation (`topics.interpretation_json`) is edited
+ * here and nowhere else. The test-level override (`test_sections.interpretation_json`)
+ * already existed, while the topic layer had no UI at all: the author could override
+ * a text they had no way to write.
+ */
+describe("<TopicDrawer />: толкование темы", () => {
+  const withInterpretation = {
+    ...editTopic,
+    interpretationJson: { format: "plain", text: "Объясняет результат по теме" },
+  } as unknown as Topic;
+
+  it("create mode: толкование стоит ПЕРЕД обратной связью", () => {
+    // Порядок — это и есть паритет с карточкой «По темам» редактора теста, где автор
+    // правит переопределение этих же двух текстов.
+    renderWithClient(
+      <TopicDrawer target={{ mode: "create", folderId: null }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    // Ящик живёт в портале, а не в контейнере рендера — ищем по документу.
+    const previews = [...document.querySelectorAll("[data-testid]")]
+      .map((el) => el.getAttribute("data-testid"))
+      .filter((id) => id === "topic-interpretation" || id === "topic-feedback");
+    expect(previews).toEqual(["topic-interpretation", "topic-feedback"]);
+  });
+
+  it("edit mode: показывает сохранённое толкование темы", () => {
+    renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: withInterpretation }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    expect(screen.getByTestId("topic-interpretation")).toHaveTextContent("Объясняет результат по теме");
+  });
+
+  it("открывает СВОЙ редактор — не редактор обратной связи", async () => {
+    renderWithClient(
+      <TopicDrawer target={{ mode: "create", folderId: null }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId("topic-interpretation"));
+    const dialog = await screen.findByRole("dialog", { name: /Толкование темы/i });
+    expect(dialog).toBeInTheDocument();
+    // An interpretation carries no courses, materials or events: it explains, it does
+    // not advise.
+    expect(screen.queryByText("Курсы")).not.toBeInTheDocument();
+    expect(screen.queryByText("Материалы")).not.toBeInTheDocument();
+    expect(screen.queryByText("Мероприятия")).not.toBeInTheDocument();
+  });
+
+  it("edit mode: правка толкования уходит в PUT темы", async () => {
+    renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: withInterpretation }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId("topic-interpretation-edit"));
+    fireEvent.change(await screen.findByTestId("feedback-editor-text"), {
+      target: { value: "Новое толкование" },
+    });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    fireEvent.click(screen.getByTestId("button-submit-topic"));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) => String(c[0]) === "/api/topics/t1" && (c[1] as RequestInit | undefined)?.method === "PUT",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String((call![1] as RequestInit).body)).interpretationJson).toEqual({
+        format: "plain",
+        text: "Новое толкование",
+      });
+    });
+  });
+
+  it("create mode: POST несёт толкование", async () => {
+    renderWithClient(
+      <TopicDrawer target={{ mode: "create", folderId: null }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.change(screen.getByTestId("input-topic-name"), { target: { value: "Новая тема" } });
+    fireEvent.click(screen.getByTestId("topic-interpretation"));
+    fireEvent.change(await screen.findByTestId("feedback-editor-text"), {
+      target: { value: "Толкование новой темы" },
+    });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    fireEvent.click(screen.getByTestId("button-submit-topic"));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) => String(c[0]) === "/api/topics" && (c[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String((call![1] as RequestInit).body)).interpretationJson).toEqual({
+        format: "plain",
+        text: "Толкование новой темы",
+      });
+    });
+  });
+
+  it("сохранённый формат переживает открытие и сохранение", async () => {
+    // Формат — половина записи, и «plain» здесь умолчание сразу в двух местах
+    // (черновик ящика и схема). Тест на `plain` прошёл бы и у кода, теряющего формат.
+    const rich = {
+      ...editTopic,
+      interpretationJson: { format: "richText", text: "<p>Богатый текст</p>" },
+    } as unknown as Topic;
+    renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: rich }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId("topic-interpretation-edit"));
+    // У форматированного текста поле другое — область RTE, а не textarea.
+    const area = await screen.findByTestId("feedback-editor-rte-area");
+    area.innerHTML = "<p>Другой богатый текст</p>";
+    fireEvent.input(area);
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    fireEvent.click(screen.getByTestId("button-submit-topic"));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) => String(c[0]) === "/api/topics/t1" && (c[1] as RequestInit | undefined)?.method === "PUT",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String((call![1] as RequestInit).body)).interpretationJson).toEqual({
+        format: "richText",
+        text: "<p>Другой богатый текст</p>",
+      });
+    });
+  });
+
+  it("смена темы без размонтирования не тащит чужое толкование", async () => {
+    // Ящик смонтирован постоянно (`content-tree.tsx`), и утечка черновика между темами
+    // была бы видна автору как чужой текст в его теме.
+    const other = {
+      ...editTopic,
+      id: "t2",
+      name: "Другая тема",
+      interpretationJson: null,
+    } as unknown as Topic;
+    const { rerender } = renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: withInterpretation }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    expect(screen.getByTestId("topic-interpretation")).toHaveTextContent("Объясняет результат по теме");
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ToastProvider>
+        <TopicDrawer target={{ mode: "edit", topic: other }} folders={[]} isAdmin={false} onClose={() => {}} />
+      </ToastProvider></QueryClientProvider>,
+    );
+    expect(screen.getByTestId("topic-interpretation")).toHaveTextContent("Без текста");
+  });
+
+  it("стёртый текст сохраняется как пустое толкование, а не как прежний текст", async () => {
+    renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: withInterpretation }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId("topic-interpretation-edit"));
+    fireEvent.change(await screen.findByTestId("feedback-editor-text"), { target: { value: "   " } });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    fireEvent.click(screen.getByTestId("button-submit-topic"));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) => String(c[0]) === "/api/topics/t1" && (c[1] as RequestInit | undefined)?.method === "PUT",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String((call![1] as RequestInit).body)).interpretationJson.text.trim()).toBe("");
+    });
   });
 });

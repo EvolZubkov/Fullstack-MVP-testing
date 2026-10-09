@@ -13,7 +13,13 @@
  * attempts.ts (correct-COUNT basis, no source handling) — both of which mis-graded
  * `inherit_overall` / `none` (treated as an unsatisfiable `value:undefined` count
  * rule, so the topic always failed) and disagreed on the count basis.
+ *
+ * PRD-50 added a second half of the topic gate here — the thresholds of the section's
+ * breakdown keys. It is GONE (решение владельца 2026-09-03), and §16 removed the stored
+ * thresholds themselves: the порог подтемы is derived from the topic's own rule, so
+ * nothing about keys is resolved here any more.
  */
+
 
 /** A resolved, runtime-ready pass rule. `null` means "no gate" (topic informational). */
 export type ResolvedRule = { type: "percent" | "count"; value: number };

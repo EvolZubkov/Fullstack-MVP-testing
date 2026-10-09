@@ -3,9 +3,11 @@
  *
  * Unified per-topic Drawer (PRD-15 block C, T-32) — replaces the old shadcn
  * edit dialog AND the standalone access panel. Two tabs:
- *   - «Свойства»: name (live same-name check, FR-27), folder, description and
- *     rich feedback edited via the SHARED feedback editor (FeedbackEditorModal /
- *     FeedbackPreview) over topics.feedback_json (TD-02 r.2).
+ *   - «Свойства»: name (live same-name check, FR-27), folder, description, the
+ *     topic's INTERPRETATION (topics.interpretation_json — the base text every
+ *     test of this topic inherits, issue #56) and rich feedback, both edited via
+ *     the SHARED feedback editor (FeedbackEditorModal / FeedbackPreview) over
+ *     topics.feedback_json (TD-02 r.2).
  *   - «Доступ» (edit mode only): owner, visibility (private/shared) and the
  *     use/manage grant list with two-mode revoke. Grantees are USERS only.
  *
@@ -20,14 +22,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Drawer, Button, IconButton, Avatar, Label, Select, Combobox, EmptyState, Table,
   Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Box, Cluster, Stack, Text,
-} from "@universityrt/ui-kit";
+  useToast,
+} from "@skillum/ui-kit";
 import { Trash2, KeyRound, RotateCcw } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { FeedbackEditorModal } from "@/features/tests/editor/sections/feedback-editor-modal";
 import { FeedbackPreview } from "@/features/tests/editor/sections/feedback-preview";
-import type { FeedbackContent, Folder as FolderType, Topic } from "@shared/schema";
+import type {
+  FeedbackContent,
+  Folder as FolderType,
+  InterpretationText,
+  Topic,
+} from "@shared/schema";
 
 type AccessLevel = "use" | "manage";
 type GrantState = "active" | "revoked_in_use";
@@ -57,7 +64,11 @@ interface NameCheckResponse {
 
 /** Open target: a fresh topic (create) or an existing one (edit). */
 export type TopicDrawerTarget =
-  | { mode: "create"; folderId?: string | null }
+  /**
+   * `name` — начальное название новой темы. Им пользуется ящик теста: автор искал тему
+   * в окне выбора, не нашёл и создаёт её — набранное в поиске переносится сюда.
+   */
+  | { mode: "create"; folderId?: string | null; name?: string }
   | { mode: "edit"; topic: Topic };
 
 const LEVEL_OPTIONS: { value: AccessLevel; label: string }[] = [
@@ -94,6 +105,19 @@ function feedbackOf(topic: Topic | null): FeedbackContent {
   return { format: "plain", text: topic?.feedback ?? "", links: [], assets: [], events: [] };
 }
 
+/**
+ * Normalize a topic's stored INTERPRETATION into the editor's draft shape.
+ *
+ * Absent column, absent text and an empty string all mean the same thing — no
+ * interpretation at all (the gate stands on the TEXT, see
+ * `shared/interpretation/resolve`) — so they collapse into one empty draft here
+ * instead of at every read site.
+ */
+function interpretationOf(topic: Topic | null): InterpretationText {
+  const raw = (topic?.interpretationJson ?? null) as InterpretationText | null;
+  return { format: raw?.format ?? "plain", text: raw?.text ?? "" };
+}
+
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -109,6 +133,7 @@ export function TopicDrawer({
   isAdmin,
   initialTab = "props",
   onClose,
+  onCreated,
 }: {
   target: TopicDrawerTarget | null;
   folders: FolderType[];
@@ -116,8 +141,13 @@ export function TopicDrawer({
   isAdmin: boolean;
   initialTab?: TopicTab;
   onClose: () => void;
+  /**
+   * Called with the created topic after a successful CREATE (before `onClose`). The
+   * test editor uses it to add the new topic to the test right away.
+   */
+  onCreated?: (topic: Topic) => void;
 }) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const open = target !== null;
   const isEdit = target?.mode === "edit";
@@ -132,6 +162,8 @@ export function TopicDrawer({
   const [folderId, setFolderId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackContent>(() => feedbackOf(null));
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [interpretation, setInterpretation] = useState<InterpretationText>(() => interpretationOf(null));
+  const [interpretationOpen, setInterpretationOpen] = useState(false);
 
   // ── Access draft (edit only): owner + visibility batched, grants immediate ──
   const [ownerId, setOwnerId] = useState<string | null>(null);
@@ -152,12 +184,14 @@ export function TopicDrawer({
       setDescription(target.topic.description ?? "");
       setFolderId(target.topic.folderId ?? null);
       setFeedback(feedbackOf(target.topic));
+      setInterpretation(interpretationOf(target.topic));
     } else {
-      setName("");
+      setName(target.name ?? "");
       setCode("");
       setDescription("");
       setFolderId(target.folderId ?? null);
       setFeedback(feedbackOf(null));
+      setInterpretation(interpretationOf(null));
     }
     setChangingOwner(false);
     setAddUserId(null);
@@ -230,17 +264,23 @@ export function TopicDrawer({
 
   // ── Save: properties (PUT/POST) + visibility/owner (PATCH, edit only) ─────────
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    /** Resolves to the created topic on CREATE, to `null` on edit. */
+    mutationFn: async (): Promise<Topic | null> => {
       const body = {
         name: name.trim(),
         code: code.trim() || null,
         description: description.trim() || undefined,
         folderId,
         feedbackJson: feedback,
+        // The interpretation is ALWAYS sent: this Drawer is its only editor, and a
+        // body without the key means "leave it alone" to the server
+        // (server/routes/topics.ts) — so clearing the text would be impossible.
+        // An empty text is what "no interpretation" looks like.
+        interpretationJson: interpretation,
       };
       if (!isEdit) {
-        await apiRequest("POST", "/api/topics", body);
-        return;
+        const res = await apiRequest("POST", "/api/topics", body);
+        return (await res.json()) as Topic;
       }
       await apiRequest("PUT", `/api/topics/${topicId}`, body);
       if (access && shared !== (access.visibility === "shared")) {
@@ -261,17 +301,19 @@ export function TopicDrawer({
         });
         if (!res.ok) throw new Error((await res.json()).error || "Не удалось сменить владельца");
       }
+      return null;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
       refetchAccess();
-      toast({ title: isEdit ? "Тема обновлена" : "Тема создана" });
+      toast({ tone: "success", title: isEdit ? "Тема обновлена" : "Тема создана" });
+      if (created) onCreated?.(created);
       onClose();
     },
     onError: (e: Error) => {
       const dup = e.message.includes("duplicate_topic_name");
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка",
         description: dup
           ? (isEdit ? "У владельца уже есть тема с таким названием" : "У вас уже есть тема с таким названием")
@@ -292,7 +334,7 @@ export function TopicDrawer({
       if (!res.ok) throw new Error((await res.json()).error || "Не удалось выдать доступ");
     },
     onSuccess: () => { refetchAccess(); setAddUserId(null); setAddLevel("use"); },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   // ── Immediate revoke (soft default, hard admin-only, dependency-checked) ──────
@@ -315,9 +357,9 @@ export function TopicDrawer({
       refetchAccess();
       setRevokeTarget(null);
       setRevokeDeps(null);
-      toast({ title: "Доступ отозван" });
+      toast({ tone: "success", title: "Доступ отозван" });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   const grants = access?.grants ?? [];
@@ -397,6 +439,28 @@ export function TopicDrawer({
               placeholder="Необязательно"
               data-testid="input-topic-description"
             />
+            {/* The topic's base interpretation (issue #56). It stands BEFORE the feedback,
+                in the same order as the «По темам» card of the test editor, where the
+                author overrides these very two texts. */}
+            <Stack gap={2}>
+              <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">
+                Толкование темы
+              </Text>
+              <Text variant="body-s" tone="muted">
+                Объясняет результат по теме и печатается при любом вердикте. Общее для всех тестов
+                темы — отдельный тест может заменить его своим текстом.
+              </Text>
+              <FeedbackPreview
+                format={interpretation.format ?? "plain"}
+                text={interpretation.text ?? ""}
+                links={[]}
+                assets={[]}
+                events={[]}
+                onEdit={() => setInterpretationOpen(true)}
+                editAriaLabel="Редактировать толкование темы"
+                testId="topic-interpretation"
+              />
+            </Stack>
             <Stack gap={2}>
               <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">
                 Обратная связь по теме
@@ -476,7 +540,7 @@ export function TopicDrawer({
                   options={addableUsers.map((u) => ({
                     value: u.id,
                     label: displayName(u),
-                    searchText: `${u.name ?? ""} ${u.email}`,
+                    searchText: `${u.name ?? ""} ${u.email ?? ""}`,
                   }))}
                 />
                 <Select<AccessLevel>
@@ -503,7 +567,8 @@ export function TopicDrawer({
                 />
               ) : (
                 <Table<GrantRow>
-                  style={{ overflow: "visible" }}
+                  // Меню уровня доступа в ячейке: без модификатора его обрезал край таблицы.
+                  className="tb-tbl--menus"
                   rowKey={(g) => g.id}
                   rows={grants}
                   columns={[
@@ -589,6 +654,26 @@ export function TopicDrawer({
           setFeedbackOpen(false);
         }}
         testId="topic-feedback-editor"
+      />
+
+      {/* The same modal for the interpretation, but WITHOUT courses, materials and events —
+          exactly as in the «По темам» card: an interpretation explains the result, it does
+          not advise, and room for a link with nowhere to store it would be a promise. */}
+      <FeedbackEditorModal
+        open={interpretationOpen}
+        title={isEdit ? `Толкование темы «${topic?.name ?? ""}»` : "Толкование темы"}
+        description="Текст объясняет результат по этой теме и печатается при любом вердикте. Он общий для всех тестов темы; отдельный тест может заменить его своим."
+        value={{ format: interpretation.format ?? "plain", text: interpretation.text ?? "", links: [], assets: [] }}
+        hideLinks
+        hideAssets
+        hideEvents
+        textLabel="Текст толкования"
+        onCancel={() => setInterpretationOpen(false)}
+        onSave={(v) => {
+          setInterpretation({ format: v.format, text: v.text });
+          setInterpretationOpen(false);
+        }}
+        testId="topic-interpretation-editor"
       />
 
       {/* Revoke mode choice / hard-revoke dependency dialog */}

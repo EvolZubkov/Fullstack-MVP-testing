@@ -1,6 +1,6 @@
 /* CSS @import must precede all other statements. Order:
    0) preflight.css — self-hosted global reset (@layer base; was Tailwind preflight).
-   1) UniversityRT DS — `ou-*` BEM + tokens. Vendored under `styles/vendor/`
+   1) Skillum DS — `ou-*` BEM + tokens. Vendored under `styles/vendor/`
       because the upstream package does not declare `./css/*` in its `exports`
       map (see `styles/vendor/README.md`).
    2) Project DS-extensions (`tb-*` components + learner host chrome).
@@ -8,7 +8,7 @@
    "tailwindcss"`, no `@config`, no @apply/utility classes — DS primitives plus
    tb- and plain CSS only. */
 @import './styles/preflight.css';
-@import './styles/vendor/university-rt.css';
+@import './styles/vendor/skillum-ds.css';
 @import './styles/tb-components.css';
 @import './styles/tb-tests-list.css';
 @import './styles/tb-content-tree.css';

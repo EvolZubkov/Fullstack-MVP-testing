@@ -384,29 +384,23 @@ describe("PRD-6 gate — trusted date", () => {
     expect(await runGate()).toContain("date source: client (timeout after 2500 ms)");
   });
 
-  // FR-TD-05 on the SCORM path. `cooldownDecision` clamps an impossible "today" (a clock
+  // FR-TD-05 on the SCORM path: `cooldownDecision` clamps an impossible "today" (a clock
   // reading BEHIND the last attempt) up to the attempt date and reports it as
-  // `effectiveToday`; the gate must count the «через N дн.» line from THAT, not from the
-  // raw reading — otherwise the screen contradicts the verdict it sits on. This is the
-  // only SCORM consumer of `effectiveToday` (renderCooldownStart -> buildStartState).
-  it("counts the cooldown countdown from effectiveToday, not the raw clock", async () => {
+  // `effectiveToday`. The gate hands that verdict to the start screen through
+  // `state.retake`; the countdown drawn from it is covered where the screen is
+  // assembled (tests/scorm-start-screen-unified.test.ts).
+  it("reports effectiveToday clamped to the attempt date when the clock lags behind it", async () => {
     vi.useFakeTimers();
     // The portal reports 20.05 while the recorded attempt is 01.06 (clock rolled back,
     // or a portal whose date is behind the learning record). Cooldown 30 дн. =>
-    // available 01.07: 30 days from the clamped day, but 42 from the raw one.
+    // available 01.07.
     vi.setSystemTime(new Date("2026-05-20T10:00:00Z"));
     stubFetch({
       dateHeader: "Wed, 20 May 2026 10:00:00 GMT",
       records: [{ state: "Пройден", progress: "100%", last_usage_date: "01.06.2026" }],
     });
 
-    const startInputs: any[] = [];
-    vi.stubGlobal("TBTemplate", {
-      buildStartState: (input: any) => { startInputs.push(input); return { start: {} }; },
-      renderScreenInto: (el: HTMLElement) => { el.innerHTML = '<div data-testid="cooldown-start"></div>'; },
-    });
-
-    const state: Record<string, unknown> = { templateLayouts: { start: "<div></div>" } };
+    const state: Record<string, unknown> = { templateLayouts: {} };
     const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
@@ -417,11 +411,6 @@ describe("PRD-6 gate — trusted date", () => {
     expect((state.retake as any)?.todayDate).toBe("2026-05-20");
     expect((state.retake as any)?.effectiveToday).toBe("2026-06-01");
     expect((state.retake as any)?.availableDate).toBe("2026-07-01");
-    // The cooldown block handed to the start screen: 01.07 − 01.06 = 30, NOT 42.
-    expect(startInputs).toHaveLength(1);
-    expect(startInputs[0].cooldown).toMatchObject({ availableDateHuman: "01.07.2026", daysUntil: 30 });
-    // ...and that block did reach the rendered screen.
-    expect(document.querySelector('[data-testid="cooldown-start"]')).toBeTruthy();
   });
 
   // NFR-06 + NFR-TD-01: GATE_TIMEOUT_MS (5 s) is the budget for the WHOLE gate, and the

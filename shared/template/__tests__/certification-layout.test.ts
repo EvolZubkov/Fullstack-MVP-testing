@@ -25,25 +25,21 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { compileTemplate } from "../dsl";
+import { templateFile, templateManifest } from "../../../tests/helpers/template-roots";
 
-const LAYOUT = fs.readFileSync(
-  path.join(process.cwd(), "templates/certification/layouts/results.html"),
-  "utf-8",
-);
+const LAYOUT = fs.readFileSync(templateFile("certification", "layouts/results.html"), "utf-8");
 
 const ADAPTIVE_LAYOUT = fs.readFileSync(
-  path.join(process.cwd(), "templates/certification/layouts/results.adaptive.html"),
+  templateFile("certification", "layouts/results.adaptive.html"),
   "utf-8",
 );
 
 const SECTION_LAYOUT = fs.readFileSync(
-  path.join(process.cwd(), "templates/certification/layouts/section-results.html"),
+  templateFile("certification", "layouts/section-results.html"),
   "utf-8",
 );
 
-const MANIFEST = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), "templates/certification/manifest.json"), "utf-8"),
-) as {
+const MANIFEST = JSON.parse(fs.readFileSync(templateManifest("certification"), "utf-8")) as {
   labels: Array<{ key: string; default: string }>;
   resultsBlockOrder: Record<string, string[]>;
 };
@@ -413,7 +409,7 @@ describe("certification measure-card slot gates (PRD-49 section 6)", () => {
 });
 
 describe("certification manifest (PRD-49 task 15, results-heading parity)", () => {
-  it("declares all 15 label keys, each with a non-empty default", () => {
+  it("declares all 20 label keys, each with a non-empty default (PRD-50 FR-34 exception noted)", () => {
     const expectedKeys = [
       "results.heading",
       "results.recommendations",
@@ -421,6 +417,7 @@ describe("certification manifest (PRD-49 task 15, results-heading parity)", () =
       "results.scales",
       "results.indicators",
       "results.topics",
+      "results.breakdown",
       "recommendations.courses",
       "recommendations.events",
       "recommendations.assets",
@@ -429,27 +426,51 @@ describe("certification manifest (PRD-49 task 15, results-heading parity)", () =
       "facts.points",
       "topic.correct",
       "topic.points",
+      "topic.verdict.passed",
+      "topic.verdict.failed",
+      "topic.verdict.unknown",
+      "group.counter",
       "section.eyebrow",
     ];
     expect(MANIFEST.labels).toBeTruthy();
     const declaredKeys = MANIFEST.labels.map((label) => label.key);
     expect([...declaredKeys].sort()).toEqual([...expectedKeys].sort());
+    // `topic.verdict.unknown` is the ONE label allowed an empty default (PRD-50 FR-34):
+    // a topic with no pronounced verdict shows no tag today, and a non-empty default
+    // would change that for every test that never opens this field.
     for (const label of MANIFEST.labels) {
       expect(typeof label.default).toBe("string");
+      if (label.key === "topic.verdict.unknown") continue;
       expect(label.default.length).toBeGreaterThan(0);
     }
   });
 
   it("declares resultsBlockOrder matching the ACTUAL composition and order of its own layouts", () => {
-    // Read straight from the shipped results.html / results.adaptive.html (task
-    // description, "проверь это сам по файлам") — not copied from the default
-    // template's own order, which differs (indicators/scales are swapped here).
-    expect(MANIFEST.resultsBlockOrder.default).toEqual(["summary", "indicators", "scales", "topics"]);
-    expect(MANIFEST.resultsBlockOrder["results.adaptive"]).toEqual(["topics", "indicators", "scales"]);
+    // The order is the track decision, the SAME one the standard template carries: a
+    // scale is a measurement, an indicator is a conclusion drawn from measurements, and
+    // a conclusion is read after what it was made from. Until this template caught up it
+    // declared indicators before scales — a divergence nothing asked for, and one the
+    // byte-parity guard could not see, because the order lives in the manifest.
+    // PRD-50 FR-28: `breakdown` замыкает список — сводный разрез читается после разделов,
+    // из которых он сведён, и ровно туда же его дописывает `resolveBlockOrder` тесту,
+    // сохранившему порядок до Э4.
+    expect(MANIFEST.resultsBlockOrder.default).toEqual([
+      "summary",
+      "scales",
+      "indicators",
+      "topics",
+      "breakdown",
+    ]);
+    expect(MANIFEST.resultsBlockOrder["results.adaptive"]).toEqual([
+      "topics",
+      "scales",
+      "indicators",
+      "breakdown",
+    ]);
   });
 
   it("cross-checks the declared order against the branch order actually present in results.html", () => {
-    const order = ["isSummary", "isIndicators", "isScales", "isTopics"]
+    const order = ["isSummary", "isIndicators", "isScales", "isTopics", "isBreakdown"]
       .map((flag) => ({ key: flag.replace(/^is/, "").toLowerCase(), index: LAYOUT.indexOf(`{{#if ${flag}}}`) }))
       .filter((entry) => entry.index !== -1)
       .sort((a, b) => a.index - b.index)
@@ -458,7 +479,7 @@ describe("certification manifest (PRD-49 task 15, results-heading parity)", () =
   });
 
   it("cross-checks the declared order against the branch order actually present in results.adaptive.html", () => {
-    const order = ["isTopics", "isIndicators", "isScales"]
+    const order = ["isTopics", "isIndicators", "isScales", "isBreakdown"]
       .map((flag) => ({ key: flag.replace(/^is/, "").toLowerCase(), index: ADAPTIVE_LAYOUT.indexOf(`{{#if ${flag}}}`) }))
       .filter((entry) => entry.index !== -1)
       .sort((a, b) => a.index - b.index)

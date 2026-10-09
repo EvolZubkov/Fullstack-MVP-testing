@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { BookOpen, Home, LogOut, User, History, ClipboardList } from "lucide-react";
-import { Avatar, Box, Button, Cluster, IconButton, Separator, Stack, Text } from "@universityrt/ui-kit";
+import { Avatar, Box, Button, Cluster, IconButton, Separator, Stack, Text } from "@skillum/ui-kit";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";

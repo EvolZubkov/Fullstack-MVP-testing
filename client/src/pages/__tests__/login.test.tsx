@@ -9,21 +9,28 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const navigate = vi.fn();
 const login = vi.fn();
+const logout = vi.fn();
 const toast = vi.fn();
 
 vi.mock("wouter", () => ({
   useLocation: () => ["/login", navigate],
   Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ login }) }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ login, logout }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toast, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 
 import LoginPage from "../login";
+import { t } from "@/lib/i18n";
 
 beforeEach(() => {
   navigate.mockReset();
   login.mockReset();
+  logout.mockReset();
+  logout.mockResolvedValue(undefined);
   toast.mockReset();
 });
 afterEach(() => vi.clearAllMocks());
@@ -42,7 +49,7 @@ describe("<LoginPage />", () => {
   });
 
   it("signs in, toasts success and navigates home on valid credentials", async () => {
-    login.mockResolvedValue(true);
+    login.mockResolvedValue("ok");
     render(<LoginPage />);
     fill("user@e.test", "secret");
     fireEvent.click(screen.getByTestId("button-login"));
@@ -53,12 +60,28 @@ describe("<LoginPage />", () => {
   });
 
   it("toasts a destructive error and stays put on bad credentials", async () => {
-    login.mockResolvedValue(false);
+    login.mockResolvedValue("invalid-credentials");
     render(<LoginPage />);
     fill("user@e.test", "wrong");
     fireEvent.click(screen.getByTestId("button-login"));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
+    );
+    expect(logout).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  // A session still holding an invitation link refuses the sign-in itself. Ending
+  // that session here is what makes the next attempt succeed — otherwise the only
+  // cure is deleting the cookie by hand.
+  it("ends the invitation-link session when it is what blocked the sign-in", async () => {
+    login.mockResolvedValue("link-scope");
+    render(<LoginPage />);
+    fill("user@e.test", "right-password");
+    fireEvent.click(screen.getByTestId("button-login"));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ tone: "error", description: t.auth.linkScopeBlocksLogin }),
     );
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -69,7 +92,7 @@ describe("<LoginPage />", () => {
     fill("user@e.test", "secret");
     fireEvent.click(screen.getByTestId("button-login"));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(navigate).not.toHaveBeenCalled();
   });

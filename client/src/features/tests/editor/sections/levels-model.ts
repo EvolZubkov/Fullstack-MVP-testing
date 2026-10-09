@@ -331,3 +331,15 @@ export function moveLevel(draft: LevelsDraft, from: number, to: number): LevelsD
   levels.splice(to, 0, moved);
   return { ...draft, levels };
 }
+
+/**
+ * Как уровень назван ОБУЧАЮЩЕМУСЯ: его подпись, иначе код, иначе номер. Один помощник на
+ * все места, где уровень надо прочитать вслух, — лента покрытия, порог, заголовок модалки
+ * рекомендаций и список текстов во вкладке «Обратная связь»: уровень с кодом, но без
+ * подписи читался бы «high» в одном месте и «уровень 2» в сорока пикселях ниже.
+ *
+ * @public
+ */
+export function levelDisplayName(level: { label: string; level: string }, index: number): string {
+  return level.label.trim() || level.level.trim() || `Уровень ${index + 1}`;
+}

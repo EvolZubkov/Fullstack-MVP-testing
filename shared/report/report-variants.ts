@@ -25,6 +25,7 @@ import {
   type ResolvedLabels,
 } from "../template/labels";
 import { reportImageKeys, resolveReportImageValues } from "./report-assets";
+import { isReportBlockKey, REPORT_PAGE_BREAK_BLOCK } from "./report-blocks";
 
 /** Виды отчёта. Обычный режим и адаптивный — разные виды (D-5). */
 export const REPORT_KINDS = ["report", "report.adaptive"] as const;
@@ -39,6 +40,15 @@ export const REPORT_ROOT_CLASS = "tb-report";
 const SCENE_CLASS_PREFIX = "tb-scene";
 
 /**
+ * PRD-51 §3.2: вид варианта, который несёт раскладку ОДНОГО блока документа.
+ *
+ * Отдельный вид, а не третий элемент {@link REPORT_KINDS}: `report` и `report.adaptive` —
+ * это ДОКУМЕНТЫ (у теста один или другой, по режиму), а блоков в документе много, и
+ * выбирать между ними «вид отчёта» не должен.
+ */
+export const REPORT_BLOCK_KIND = "report.block";
+
+/**
  * Тип поля, недопустимый для отчёта: `sequence` — идентификатор последовательности
  * страниц прохождения (PRD-22), у отчёта последовательностей нет.
  */
@@ -49,6 +59,29 @@ export interface ReportVariantDecl {
   key: string;
   label?: string;
   kind: ReportKind;
+  layoutFile?: string;
+  styleFile?: string;
+  isDefault?: boolean;
+  settings?: unknown;
+  placeholders?: unknown;
+}
+
+/** Объявление варианта БЛОКА документа (PRD-51 §3.2). */
+export interface ReportBlockVariantDecl {
+  key: string;
+  label?: string;
+  kind: typeof REPORT_BLOCK_KIND;
+  /** Ключ блока из реестра продукта ({@link module:shared/report/report-blocks}). */
+  block: string;
+  /**
+   * Виды отчёта, которым служит этот вариант. ОТСУТСТВУЕТ — служит всем.
+   *
+   * Нужно потому, что один и тот же блок печатается по-разному в разных видах: карточка
+   * темы обычного отчёта говорит процентами, адаптивного — подтверждённым уровнем.
+   * Умолчание считается на пару «блок + вид», иначе двух раскладок одного блока не
+   * объявить вовсе.
+   */
+  kinds?: ReportKind[];
   layoutFile?: string;
   styleFile?: string;
   isDefault?: boolean;
@@ -346,6 +379,152 @@ function topLevelSelectors(css: string): string[] {
  *   провалившимися: отсутствие файлов не улика.
  * @returns Список замечаний; пустой — вариантов отчёта нет либо всё в порядке.
  */
+/**
+ * Проверки варианта БЛОКА документа (PRD-51 §3.2).
+ *
+ * Отдельная функция, а не ветка в общем цикле: у блока другой предмет проверки. Он не
+ * несёт корневой класс отчёта — блок печатается ВНУТРИ корня, который даёт оболочка, и
+ * требовать `tb-report` на нём значило бы требовать второго корня в документе. Зато у
+ * него есть то, чего нет у оболочки: ключ блока и авторские области содержимого.
+ *
+ * @param v Сырое объявление варианта.
+ * @param index Позиция в `contentTemplates[]` — для ссылки, когда ключа нет.
+ * @param seenPerBlock Счётчик вариантов на блок (накапливается вызывающим).
+ * @param defaultsPerBlock Счётчик умолчаний на блок (накапливается вызывающим).
+ * @param readFile Чтение файла пакета; без него проверяются только объявления.
+ */
+function validateBlockVariant(
+  v: { key?: unknown; block?: unknown; kinds?: unknown; layoutFile?: unknown; styleFile?: unknown; isDefault?: unknown },
+  index: number,
+  seenPerBlock: Map<string, number>,
+  defaultsPerBlock: Map<string, number>,
+  readFile?: ReportFileReader,
+): ReportVariantIssue[] {
+  const issues: ReportVariantIssue[] = [];
+  const key = typeof v.key === "string" && v.key.length > 0 ? v.key : `#${index + 1}`;
+  const at = (suffix: string) => `contentTemplates.${key}.${suffix}`;
+
+  if (typeof v.key !== "string" || v.key.length === 0) {
+    issues.push({ variantKey: key, ref: at("key"), message: "вариант блока обязан иметь key" });
+  }
+
+  const block = typeof v.block === "string" ? v.block : "";
+  if (!block) {
+    issues.push({
+      variantKey: key,
+      ref: at("block"),
+      message: `вариант "${key}" не назвал блок, которому принадлежит`,
+    });
+  } else if (!isReportBlockKey(block)) {
+    issues.push({ variantKey: key, ref: at("block"), message: `неизвестный блок "${block}"` });
+  } else if (block === REPORT_PAGE_BREAK_BLOCK) {
+    issues.push({
+      variantKey: key,
+      ref: at("block"),
+      message: "разрыв листа не имеет раскладки: это инструкция документу, а не блок содержимого",
+    });
+  } else {
+    // Счёт ведётся по паре «блок + вид»: у обычного и адаптивного отчёта свои раскладки
+    // одного и того же блока, и требовать на них одно умолчание значило бы запретить
+    // адаптивному иметь собственную.
+    const kinds = Array.isArray(v.kinds) && v.kinds.length ? (v.kinds as string[]) : [...REPORT_KINDS];
+    for (const kind of kinds) {
+      if (!isReportKind(kind)) {
+        issues.push({ variantKey: key, ref: at("kinds"), message: `неизвестный вид отчёта "${String(kind)}"` });
+        continue;
+      }
+      const slot = `${block}@${kind}`;
+      seenPerBlock.set(slot, (seenPerBlock.get(slot) ?? 0) + 1);
+      if (v.isDefault === true) defaultsPerBlock.set(slot, (defaultsPerBlock.get(slot) ?? 0) + 1);
+    }
+  }
+
+  const layoutPath = typeof v.layoutFile === "string" ? v.layoutFile : "";
+  if (!layoutPath) {
+    issues.push({ variantKey: key, ref: at("layoutFile"), message: "вариант блока обязан объявить layoutFile" });
+  } else if (readFile) {
+    const layout = readFile(layoutPath);
+    if (layout === null) {
+      issues.push({ variantKey: key, ref: at("layoutFile"), message: `макет не найден в пакете: ${layoutPath}` });
+    } else if (new RegExp(`\\b${SCENE_CLASS_PREFIX}[a-z_-]*`).test(layout)) {
+      issues.push({
+        variantKey: key,
+        ref: at("layoutFile"),
+        message:
+          `макет блока не вправе использовать классы слоя сцены ("${SCENE_CLASS_PREFIX}*"): ` +
+          "сцена — экран фиксированного вьюпорта, а отчёт печатается на A4",
+      });
+    }
+  }
+
+  const stylePath = typeof v.styleFile === "string" ? v.styleFile : "";
+  if (stylePath && readFile) {
+    const css = readFile(stylePath);
+    if (css === null) {
+      issues.push({ variantKey: key, ref: at("styleFile"), message: `таблица стилей не найдена в пакете: ${stylePath}` });
+    } else {
+      for (const selector of topLevelSelectors(css)) {
+        if (/(^|[\s,>+~])(:root|html|body)(?![\w-])/i.test(selector)) {
+          issues.push({
+            variantKey: key,
+            ref: at("styleFile"),
+            message: `селектор "${selector}" адресует документ; отчёт документом не является`,
+          });
+        } else if (!selectorScoped(selector)) {
+          issues.push({
+            variantKey: key,
+            ref: at("styleFile"),
+            message: `селектор "${selector}" не вложен в ".${REPORT_ROOT_CLASS}": стили отчёта обязаны быть скоуплены`,
+          });
+        }
+      }
+    }
+  }
+
+  // Поля: общий реестр типов. `placeholders[]` варианту блока РАЗРЕШЕНЫ — в них и живёт
+  // авторское содержимое документа, ради которого блоки заводились.
+  for (const issue of validateVariantFields(v as { placeholders?: unknown; settings?: unknown })) {
+    issues.push({ variantKey: key, ref: at(`${issue.list}.${issue.field}`), message: issue.message });
+  }
+
+  const settings = Array.isArray((v as { settings?: unknown }).settings)
+    ? ((v as { settings: Array<Record<string, unknown>> }).settings)
+    : [];
+  settings.forEach((field, i) => {
+    const type = field?.type;
+    const label = typeof field?.key === "string" && field.key ? field.key : `#${i + 1}`;
+    if (isSettingType(type) && SETTING_TYPES_FORBIDDEN_IN_REPORT.has(type)) {
+      issues.push({
+        variantKey: key,
+        ref: at(`settings.${label}`),
+        message:
+          `тип "${type}" неприменим к отчёту; допустимы: ` +
+          SETTING_TYPES.filter((t) => !SETTING_TYPES_FORBIDDEN_IN_REPORT.has(t)).join(", "),
+      });
+    }
+  });
+
+  // Ключ, объявленный дважды, — не про хранение (карты значений раздельные), а про
+  // человека: в карточке редактора оба списка стоят рядом, и два поля с одной подписью
+  // означают, что автор не понимает, какое из них правит.
+  const placeholders = Array.isArray((v as { placeholders?: unknown }).placeholders)
+    ? ((v as { placeholders: Array<Record<string, unknown>> }).placeholders)
+    : [];
+  const settingKeys = new Set(settings.map((f) => (typeof f?.key === "string" ? f.key : "")));
+  for (const field of placeholders) {
+    const fieldKey = typeof field?.key === "string" ? field.key : "";
+    if (fieldKey && settingKeys.has(fieldKey)) {
+      issues.push({
+        variantKey: key,
+        ref: at(`placeholders.${fieldKey}`),
+        message: `ключ "${fieldKey}" объявлен дважды — и в placeholders, и в settings`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 export function validateReportVariants(manifest: unknown, readFile?: ReportFileReader): ReportVariantIssue[] {
   const issues: ReportVariantIssue[] = [];
   const list = (manifest as { contentTemplates?: unknown } | null)?.contentTemplates;
@@ -353,9 +532,19 @@ export function validateReportVariants(manifest: unknown, readFile?: ReportFileR
 
   const defaultsPerKind = new Map<ReportKind, number>();
   const seenPerKind = new Map<ReportKind, number>();
+  /** PRD-51: сколько вариантов и сколько умолчаний объявлено на КАЖДЫЙ блок. */
+  const seenPerBlock = new Map<string, number>();
+  const defaultsPerBlock = new Map<string, number>();
 
   list.forEach((raw, index) => {
-    const v = (raw ?? {}) as Partial<ReportVariantDecl> & { kind?: unknown };
+    const v = (raw ?? {}) as Partial<ReportVariantDecl> & { kind?: unknown; block?: unknown };
+    // PRD-51 §3.2: вариант БЛОКА проверяется своим набором правил — у него есть ключ
+    // блока, ему разрешены `placeholders[]`, и корневой класс отчёта на нём не нужен:
+    // блок печатается ВНУТРИ корня, а не является им.
+    if ((v.kind as unknown) === REPORT_BLOCK_KIND) {
+      issues.push(...validateBlockVariant(v, index, seenPerBlock, defaultsPerBlock, readFile));
+      return;
+    }
     if (!isReportKind(v.kind)) return;
     const kind = v.kind;
     const key = typeof v.key === "string" && v.key.length > 0 ? v.key : `#${index + 1}`;
@@ -441,11 +630,17 @@ export function validateReportVariants(manifest: unknown, readFile?: ReportFileR
         });
       }
     });
+    // PRD-51 §3.2: запрет остаётся на ОБОЛОЧКЕ и становится честным. Авторское
+    // содержимое документа никуда не делось — оно переехало в варианты блоков
+    // (`kind: "report.block"`), где `placeholders[]` разрешены. У самой оболочки
+    // содержимого действительно нет: она даёт корневой узел, фон и брендинг.
     if (Array.isArray(v.placeholders) && v.placeholders.length > 0) {
       issues.push({
         variantKey: key,
         ref: at("placeholders"),
-        message: "у отчёта нет содержимого, которое читает обучающийся: placeholders неприменимы, используйте settings",
+        message:
+          "у оболочки отчёта нет содержимого, которое читает обучающийся: " +
+          "placeholders неприменимы, объявите их варианту блока (kind: report.block)",
       });
     }
   });
@@ -465,5 +660,102 @@ export function validateReportVariants(manifest: unknown, readFile?: ReportFileR
     }
   }
 
+  // PRD-51: то же правило на КАЖДЫЙ блок. Вариантов у блока может быть несколько — это и
+  // есть «Сменить вариант» в строке документа, — но умолчание обязано быть одно: иначе
+  // строка, у которой автор варианта не выбирал, печаталась бы то одним, то другим.
+  for (const [slot, count] of seenPerBlock) {
+    const defaults = defaultsPerBlock.get(slot) ?? 0;
+    if (count > 0 && defaults !== 1) {
+      const [block, kind] = slot.split("@");
+      issues.push({
+        variantKey: block,
+        ref: `contentTemplates.${REPORT_BLOCK_KIND}.${block}`,
+        message:
+          defaults === 0
+            ? `блок "${block}" вида "${kind}": ни один вариант не помечен isDefault`
+            : `блок "${block}" вида "${kind}": isDefault помечены ${defaults} варианта, допустим один`,
+      });
+    }
+  }
+
+  issues.push(...validateReportDocumentDecl(manifest, seenPerBlock));
+
   return issues;
+}
+
+/**
+ * Проверки документа по умолчанию (`reportDocument`, PRD-51 §3.3).
+ *
+ * Документ объявляет ПОРЯДОК блоков, и ошибка здесь стоит дороже опечатки в поле: тест,
+ * ничего не настраивавший, печатается ровно по этому списку, и блок, которого не из чего
+ * собрать, отнимет у документа целый раздел молча.
+ *
+ * @param manifest Разобранный `manifest.json`.
+ * @param seenPerBlock Блоки, у которых объявлен хотя бы один вариант.
+ */
+function validateReportDocumentDecl(
+  manifest: unknown,
+  seenPerBlock: Map<string, number>,
+): ReportVariantIssue[] {
+  const issues: ReportVariantIssue[] = [];
+  const raw = (manifest as { reportDocument?: unknown } | null)?.reportDocument;
+  if (raw === undefined || raw === null) return issues;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    issues.push({
+      variantKey: "reportDocument",
+      ref: "reportDocument",
+      message: "reportDocument обязан быть картой «вид отчёта → список блоков»",
+    });
+    return issues;
+  }
+
+  for (const kind of REPORT_KINDS) {
+    const list = (raw as Record<string, unknown>)[kind];
+    if (list === undefined) continue;
+    const ref = `reportDocument.${kind}`;
+    if (!Array.isArray(list)) {
+      issues.push({ variantKey: kind, ref, message: `${ref} обязан быть списком ключей блоков` });
+      continue;
+    }
+    const seen = new Set<string>();
+    for (const entry of list) {
+      if (typeof entry !== "string" || !isReportBlockKey(entry)) {
+        issues.push({ variantKey: kind, ref, message: `неизвестный блок "${String(entry)}" в документе по умолчанию` });
+        continue;
+      }
+      // Разрыв листа раскладки не имеет, поэтому варианта у него и не ищем — и повторяться
+      // он ОБЯЗАН: документ из трёх листов ставит два разрыва, из четырёх — три. Запрет
+      // повтора осмыслен только для блоков с данными: второй «Сводный разрез» напечатал бы
+      // одни и те же числа дважды, а второй разрыв просто открывает следующий лист.
+      if (entry === REPORT_PAGE_BREAK_BLOCK) continue;
+      if (seen.has(entry)) {
+        issues.push({ variantKey: kind, ref, message: `блок "${entry}" указан в документе дважды` });
+        continue;
+      }
+      seen.add(entry);
+      if (!seenPerBlock.has(`${entry}@${kind}`)) {
+        issues.push({
+          variantKey: kind,
+          ref,
+          message: `документ по умолчанию содержит блок "${entry}", у которого шаблон не объявил ни одного варианта`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * Документ по умолчанию, объявленный шаблоном для вида (PRD-51 §3.3).
+ *
+ * @param manifest Манифест шаблона.
+ * @param kind Вид отчёта: `report` или `report.adaptive`.
+ * @returns Ключи блоков в порядке печати; ПУСТОЙ массив = шаблон документа не объявил, и
+ *   отчёт печатается цельной раскладкой (§5.4).
+ */
+export function resolveReportDocumentDecl(manifest: unknown, kind: ReportKind): string[] {
+  const raw = (manifest as { reportDocument?: Record<string, unknown> } | null)?.reportDocument;
+  const list = raw && typeof raw === "object" ? (raw as Record<string, unknown>)[kind] : null;
+  return Array.isArray(list) ? list.filter((k): k is string => typeof k === "string") : [];
 }

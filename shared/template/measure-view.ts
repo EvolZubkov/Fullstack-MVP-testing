@@ -26,7 +26,47 @@ import {
 import { LEVEL_SCHEMES, rampColor, zoneColors, type HslTriple, type LevelRamp } from "./level-ramp";
 import { richTextToHtml } from "./rich-text";
 
-export type RenderKind = "label" | "value" | "value_of_max" | "ring" | "band_ruler" | "gradient_bar";
+export type RenderKind =
+  | "label"
+  | "value"
+  | "value_of_max"
+  | "ring"
+  | "band_ruler"
+  | "gradient_bar"
+  | "bars";
+
+/**
+ * Цвет столбика измерения — правило PRD-46 §7, одно на два места печати: карточку-градусник
+ * и строку линейчатой диаграммы ({@link module:shared/template/scale-bars}). Две копии
+ * разошлись бы на первой же правке, а шкала обязана быть ОДНОГО цвета и в списке, и на розе
+ * рядом с ним.
+ *
+ * Решается в два шага:
+ *
+ *   1. Направление объявлено — цвет ВЫСКАЗЫВАЕТ ВЕРДИКТ, поэтому его назначает рампа, и
+ *      авторский цвет к столбику не допускается.
+ *   2. Направления нет (типология) — цвет несёт ИДЕНТИЧНОСТЬ шкалы: берётся заданный автором
+ *      в «Оформлении шкал», чтобы столбик совпал с сектором розы. Не задан — нейтральная
+ *      схема, ТА ЖЕ, что у зон линейки ({@link zoneColors}): у типологии нет лучшего и
+ *      худшего уровня, и светофор высказал бы оценку, которой методика не выносит.
+ *
+ * @param valence Направление шкалы.
+ * @param ramp    Рампа уровней теста.
+ * @param authored Цвет шкалы из «Оформления шкал», если автор его задал.
+ * @param ratio   Положение значения в домене, 0..1.
+ */
+export function measureBarColor(
+  valence: Valence,
+  ramp: LevelRamp,
+  authored: HslTriple | undefined,
+  ratio: number,
+): HslTriple {
+  if (valence === "none" && authored) return authored;
+  return rampColor(
+    valence === "none" ? LEVEL_SCHEMES.neutral : ramp,
+    valence === "lower_is_better" ? 1 - ratio : ratio,
+  );
+}
 
 /** Ring geometry from `layouts/results.html` (`<circle r="63">`). */
 const RING_CIRCUMFERENCE = 2 * Math.PI * 63;
@@ -155,6 +195,19 @@ export interface MeasureViewInput {
    */
   showName?: boolean;
   showLevel?: boolean;
+  /**
+   * Print the domain's upper bound beside the value («30 из 98») or the value alone
+   * («30»). Absent = print it, so every measure built before this flag reads as it did.
+   *
+   * A design param of the TEST, not a property of the scale: the question it answers is
+   * whether the maximum tells the learner anything, and that is decided once for the
+   * whole readout. A methodology whose domain is an artefact of the scoring — a budget
+   * split across scales, say — states a raw score and nothing else; one with a fixed
+   * ceiling states the fraction. Both are the same scale with the same domain, which is
+   * why the domain itself must not carry the answer: it is still needed to POSITION the
+   * marker on the rail, and dropping it to hide the number would drop the ruler with it.
+   */
+  showMax?: boolean;
 }
 
 /**
@@ -175,6 +228,11 @@ export interface MeasureViewInput {
  * the plain value.
  */
 const FALLBACK_CHAINS: Record<RenderKind, RenderKind[]> = {
+  // Линейчатая диаграмма — это ОДИН блок на все шкалы, а не карточка (см.
+  // `shared/template/scale-bars`). Здесь она объявлена как вид ради отката: шаблон, чьи
+  // макеты о диаграмме не знают, и шкала, у которой нет домена и в общую ось её положить
+  // нечем, печатаются градусником — той же фигурой, только карточкой.
+  bars: ["bars", "gradient_bar", "band_ruler", "value_of_max", "value", "label"],
   gradient_bar: ["gradient_bar", "band_ruler", "value_of_max", "value", "label"],
   band_ruler: ["band_ruler", "value_of_max", "value", "label"],
   ring: ["ring", "value_of_max", "value", "label"],
@@ -186,6 +244,11 @@ const FALLBACK_CHAINS: Record<RenderKind, RenderKind[]> = {
 function isFeasible(kind: RenderKind, caps: MeasureCapabilities): boolean {
   if (!caps.isNumeric) return kind === "label";
   switch (kind) {
+    // Диаграмме довольно ЧИСЛА: масштаб ей задаёт наибольший балл попытки, а не домен
+    // (см. `shared/template/scale-bars`), поэтому методика без объявленных границ рисуется
+    // ею так же. Интервалы тоже не мешают — уровень остаётся тегом в строке.
+    case "bars":
+      return true;
     case "gradient_bar":
       return caps.hasDomain && !caps.hasBands;
     case "band_ruler":
@@ -317,6 +380,8 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   // to emit the INVERTED flags below — never exposed on the view itself.
   const showName = input.showName !== false;
   const showLevel = input.showLevel !== false;
+  // Same absent-means-show convention as the two above.
+  const showMax = input.showMax !== false;
 
   const base: CtxMeasureView = {
     key: input.key,
@@ -375,8 +440,13 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   const view: CtxMeasureView = {
     ...base,
     valueText: String(round1(value)),
-    maxText: hasDomain ? String(round1(domainMax)) : "",
-    valueLabel: hasDomain ? `${round1(value)} из ${round1(domainMax)}` : String(round1(value)),
+    // The maximum is printed only when the author leaves it on: the screen reads
+    // `maxText` (« из N» beside the value), the report reads the whole `valueLabel`.
+    // Both are silenced by the SAME flag — the number would otherwise vanish from the
+    // screen and stay in the document made from the same attempt.
+    maxText: hasDomain && showMax ? String(round1(domainMax)) : "",
+    valueLabel:
+      hasDomain && showMax ? `${round1(value)} из ${round1(domainMax)}` : String(round1(value)),
     levelLabel,
     tone,
     toneClass: `tb-tone--${tone}`,
@@ -405,29 +475,25 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
       { percent: 100, label: String(round1(domainMax)) },
     ];
   }
-  if (renderKind === "gradient_bar") {
+  // `bars` печатается диаграммой, а карточку получает ту же, что градусник: шаблон, чьи
+  // макеты диаграммы не знают, обязан показать шкалу, а не пустое место.
+  if (renderKind === "gradient_bar" || renderKind === "bars") {
     view.markerPercent = round1(clamped * 100);
     view.zones = [
       {
         label: "",
         leftPercent: 0,
-        widthPercent: 100,
-        // Цвет полосы решается в два шага, и оба — правило PRD-46 §7.
-        //
-        // 1. Направление объявлено — цвет ВЫСКАЗЫВАЕТ ВЕРДИКТ, поэтому его назначает
-        //    рампа и авторский цвет к полосе не допускается.
-        // 2. Направления нет (типология) — цвет несёт ИДЕНТИЧНОСТЬ шкалы: берётся тот,
-        //    что автор задал в «Оформлении шкал», чтобы полоса совпала с сектором розы.
-        //    Не задан — нейтральная схема, ТА ЖЕ, что у зон линейки ({@link zoneColors}):
-        //    у типологии нет лучшего и худшего уровня, и светофор высказал бы оценку,
-        //    которой методика не выносит.
-        color:
-          interpretation.valence === "none" && input.color
-            ? input.color
-            : rampColor(
-                interpretation.valence === "none" ? LEVEL_SCHEMES.neutral : input.ramp,
-                interpretation.valence === "lower_is_better" ? 1 - clamped : clamped,
-              ),
+        // Заливка идёт ДО значения, дальше остаётся дорожка — это и есть градусник,
+        // которым вид назван. Ровная заливка во всю длину, которая была здесь раньше,
+        // сообщала только цвет: положение приходилось читать по одному маркеру, а на
+        // шкале без интервалов маркеру не за что зацепиться — под ним нет ни зон, ни
+        // подписей границ, как у линейки. Столбик отвечает на «сколько» сам, до всякого
+        // чтения чисел, и рядом со шкалами разной длины это ЕДИНСТВЕННОЕ, что делает их
+        // сравнимыми на глаз.
+        widthPercent: round1(clamped * 100),
+        // Правило цвета живёт в {@link measureBarColor}: его читает и строка линейчатой
+        // диаграммы, а шкала обязана быть одного цвета всюду, где её печатают.
+        color: measureBarColor(interpretation.valence, input.ramp, input.color, clamped),
         current: true,
       },
     ];
@@ -440,7 +506,11 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
 
   if (renderKind === "band_ruler" || renderKind === "gradient_bar" || renderKind === "ring") {
     const level = view.levelLabel ? `, уровень: ${view.levelLabel}` : "";
-    view.ariaLabel = `${input.name}: ${view.valueText} из ${view.maxText}${level}`;
+    // «из N» только когда максимум вообще печатается: со скрытым максимумом (`showMax`)
+    // фраза обрывалась на предлоге — «21 из , уровень: …», — и читалка проговаривала
+    // именно это.
+    const outOf = view.maxText ? ` из ${view.maxText}` : "";
+    view.ariaLabel = `${input.name}: ${view.valueText}${outOf}${level}`;
   }
 
   return view;

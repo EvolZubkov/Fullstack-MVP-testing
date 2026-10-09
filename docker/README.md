@@ -102,7 +102,8 @@ a key installed there are no prompts at all.
 4. Config — refreshed from the package on **every** deploy, previous content
    kept under `config-backup/` and the diff printed
 5. Database — the only instance-specific step (see below)
-6. `drizzle-kit migrate` in a one-off container, before the app boots
+6. `node dist/migrate.cjs` (the migrator built into drizzle-orm; drizzle-kit is not
+   in the image) in a one-off container, before the app boots
 7. `docker compose up -d`, then waits until the container reports **healthy**
 
 ### Database initialization

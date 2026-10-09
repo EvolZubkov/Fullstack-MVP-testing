@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "allow_free_section_navigation" boolean DEFAULT false NOT NULL;

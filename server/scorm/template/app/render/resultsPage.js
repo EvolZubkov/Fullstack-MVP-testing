@@ -83,9 +83,10 @@ function buildScaleInteractions(scaleComputation) {
 
 // ─── PRD-2 (A7): result variables ────────────────────────────────────────────
 // Build the formula evaluation context from standard scoring. Этап A wires
-// percent + per-topic results; PRD-5 scales now fill `scales` (B5);
-// tags/sections resolve to neutral defaults (tag aggregation and PRD-4 section
-// keys come later).
+// percent + per-topic results; PRD-5 scales fill `scales` (B5); PRD-50 fills
+// `tags` from the attempt's breakdown records and `sections` from the topic
+// results. Mirrors server/services/result-compute.ts key for key — the two hosts
+// must hand the evaluator the SAME maps.
 function buildResultVarContext(results, scaleComputation) {
   // Topic name/code come from TEST_DATA.sections so `topicByName("<name>")` and
   // `topicById("<code>")` resolve (PRD-2 §4.2); fall back to topicResult fields.
@@ -94,6 +95,8 @@ function buildResultVarContext(results, scaleComputation) {
   for (var i = 0; i < secs.length; i++) meta[secs[i].topicId] = secs[i];
   var topics = {};
   var topicsByName = {};
+  var sections = {};
+  var sectionAliases = {};
   var totalScore = 0;
   (results.topicResults || []).forEach(function (tr) {
     var r = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
@@ -104,7 +107,35 @@ function buildResultVarContext(results, scaleComputation) {
     var name = m.topicName || tr.topicName || null;
     if (code) topics[code] = r;
     if (name) topicsByName[name] = r;
+    // `sectionById(...)` is the delivered section = the topic result, keyed by UUID and
+    // by the author's code. `completed` is true by construction: a section that produced
+    // a result was played to its end in the standard flow.
+    var sec = { percent: tr.percent || 0, passed: tr.passed === true, completed: true };
+    sections[tr.topicId] = sec;
+    if (code) sections[code] = sec;
+    sectionAliases[tr.topicId] = code ? [tr.topicId, code] : [tr.topicId];
   });
+  // PRD-50 FR-35/FR-36: `tag(...)` reads this attempt's breakdown records. The test scope
+  // keeps the plain key; a section scope is addressed by the COMPOSITE key
+  // «<section>::<key>», whose left part accepts the same two spellings `topicById` does.
+  // The DSL grammar is untouched.
+  var tags = {};
+  var entries = results.breakdowns || [];
+  for (var b = 0; b < entries.length; b++) {
+    var e = entries[b];
+    // `percent` is the POINTS-based ratio: it is the verdict currency (FR-21) and must
+    // not depend on which basis the author chose to display on screen.
+    var value = { percent: e.percentPoints, score: e.earned, maxScore: e.possible, count: e.items };
+    if (e.scope === 'test') {
+      tags[e.key] = value;
+      continue;
+    }
+    var sectionId = e.scope.slice('section:'.length);
+    var aliases = Object.prototype.hasOwnProperty.call(sectionAliases, sectionId)
+      ? sectionAliases[sectionId]
+      : [sectionId];
+    for (var a = 0; a < aliases.length; a++) tags[aliases[a] + '::' + e.key] = value;
+  }
   var scales = (scaleComputation && scaleComputation.values) || {};
   // Overall earned points across the test = Σ of per-topic earned points.
   return {
@@ -112,9 +143,9 @@ function buildResultVarContext(results, scaleComputation) {
     score: totalScore,
     topics: topics,
     topicsByName: topicsByName,
-    tags: {},
+    tags: tags,
     scales: scales,
-    sections: {},
+    sections: sections,
   };
 }
 
@@ -145,6 +176,42 @@ function buildResultVarInteractions(computation) {
   return out;
 }
 
+/**
+ * Значения шкал прохождения для телеметрии — «ключ -> число» (PRD-56 FR-21).
+ *
+ * Та же форма, в какой их пишет импорт выгрузки в `scorm_attempts.scales_json` (PRD-54): у
+ * одной величины не должно оказаться двух представлений в одной колонке. Шкала без значения
+ * (ни один её вопрос не отвечен) ключа не получает — ноль означал бы измеренный ноль.
+ */
+function telemetryScaleValues(scaleComputation) {
+  var out = {};
+  var values = (scaleComputation && scaleComputation.values) || {};
+  for (var key in values) {
+    if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+    var v = values[key];
+    if (v && v.hasValue && typeof v.raw === 'number') out[key] = v.raw;
+  }
+  return out;
+}
+
+/**
+ * Значения показателей прохождения для телеметрии — «имя -> строка» (PRD-56 FR-21).
+ *
+ * Строкой, а не числом: показатель бывает и числом, и кодом исхода, и выгрузка хранит его
+ * так же. Непосчитанный показатель ключа не получает.
+ */
+function telemetryVariableValues(resultComputation) {
+  var out = {};
+  var values = (resultComputation && resultComputation.values) || {};
+  for (var name in values) {
+    if (!Object.prototype.hasOwnProperty.call(values, name)) continue;
+    var value = values[name];
+    if (value === null || value === undefined) continue;
+    out[name] = String(value);
+  }
+  return out;
+}
+
 function pushAll(target, items) {
   for (var i = 0; i < items.length; i++) target.push(items[i]);
 }
@@ -163,6 +230,11 @@ function disableFinishButtons() {
 }
 
 function finishAndClose() {
+  // A viewing of a finished learning grades and reports nothing (main.js).
+  if (typeof state !== 'undefined' && state && state.reviewLaunch) {
+    closeReviewLaunch();
+    return;
+  }
   if (scormFinished) return;
   scormFinished = true;
   try { disableFinishButtons(); } catch (e) { }
@@ -214,6 +286,11 @@ function finishAndClose() {
   );
   console.log('📚 failedTopicCourses:', JSON.stringify(failedTopicCourses));
 
+  // PA-12f: пропущенные и неотвеченные вопросы уходят в телеметрию ДО завершения — тем же
+  // нулём, что и в балл, и в отчёт LMS. Адаптивный путь шлёт ответ на каждом шаге и
+  // невыданных уровнем вопросов не знает, поэтому досылка только у стандартной попытки.
+  if (!isAdaptive && typeof reportPendingAnswerTelemetry === 'function') reportPendingAnswerTelemetry();
+
   Telemetry.finish({
     percent: results.percent,
     passed: results.passed,
@@ -222,26 +299,33 @@ function finishAndClose() {
     totalQuestions: results.totalQuestions,
     correct: results.correct,
     achievedLevels: results.achievedLevels || null,
-    failedTopicCourses: failedTopicCourses
+    failedTopicCourses: failedTopicCourses,
+    // PRD-56 FR-21: шкалы и показатели этой попытки. Считаются выше по этому же пути
+    // (`results.scaleComputation` / `results.resultComputation`) — второго расчёта ради
+    // телеметрии не заводится.
+    scales: telemetryScaleValues(results.scaleComputation),
+    variables: telemetryVariableValues(results.resultComputation)
   });
 
   // ===== LMS: отправляем лучшую попытку с хаком если нужно =====
   var attemptsExhausted = !!TEST_DATA.maxAttempts && !hasAttemptsLeft();
-  var realPassed = !!results.passed;
 
-  var passedForLms = realPassed;
-
-  if (state.timeExpired) {
-    passedForLms = false;
-  }
+  // PRD-2 (A7): a boolean controls_status="success" variable decides the verdict instead of
+  // the pass rule (several of them combine with OR, see FormulaDSL.computeResultVariables).
+  // It is resolved FIRST, so the forced close below sees the verdict that will actually be
+  // sent: applied after it, the variable used to overwrite the forced «passed» back to
+  // «failed», and a course whose attempts were spent stayed open in the LMS for good.
+  var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
+  var realPassed = (typeof rcStatus.success === 'boolean') ? rcStatus.success : !!results.passed;
 
   var forcePassedHack = false;
   if (attemptsExhausted && !realPassed && !state.timeExpired) {
     console.log('🔴 Попытки кончились, принудительно закрываем с passed=true');
     forcePassedHack = true;
-    passedForLms = true;
     try {
-      SCORM.setValue('cmi.comments_from_learner', 'ATTEMPTS_EXHAUSTED: FAILED (forced close)');
+      // cmi.comments_from_learner is a COLLECTION in SCORM 2004: the bare element was
+      // rejected by the LMS (SetValue -> false), so the note was never written.
+      SCORM.setValue('cmi.comments_from_learner.0.comment', 'ATTEMPTS_EXHAUSTED: FAILED (forced close)');
       SCORM.commit();
       console.log('✅ Comments установлены успешно');
     } catch (e) {
@@ -249,24 +333,36 @@ function finishAndClose() {
     }
   }
 
-  var bestAttempt = getBestAttempt();
-  console.log('🏆 Лучшая попытка:', bestAttempt ? Math.round(bestAttempt.percent) + '%' : 'none');
+  // Какой результат уходит в LMS при нескольких попытках — решает АВТОР теста.
+  // Стандарт этого не задаёт: SCORM ничего не требует от LMS о хранении истории, и
+  // платформы (Moodle, Blackboard, Teachbase) держат выбор «лучшая / последняя» у себя,
+  // ожидая от содержимого данные ТЕКУЩЕЙ попытки. Но LMS, хранящая только снимок, при
+  // «последней» безвозвратно перекроет удачную попытку неудачной — поэтому выбор остаётся
+  // за автором. Отсутствие поля = «лучшая»: так ведут себя все уже выданные пакеты.
+  var lmsWantsLast = TEST_DATA.lmsAttemptResult === 'last';
+  var bestAttempt = lmsWantsLast ? null : getBestAttempt();
+  console.log(lmsWantsLast
+    ? '🏁 В LMS уходит текущая попытка (настройка теста)'
+    : '🏆 Лучшая попытка: ' + (bestAttempt ? Math.round(bestAttempt.percent) + '%' : 'none'));
 
   var resultsForLms = bestAttempt || results;
   var bestPassed = !!resultsForLms.passed;
 
-  if (forcePassedHack) {
-    console.log('🔓 Хак активирован - переопределяем passed на true');
-    bestPassed = true;
-  }
-
-  // PRD-2 (A7): a boolean controls_status="success" variable overrides the LMS
-  // pass flag (cmi.success_status); completion is applied after SCORM.finish.
-  var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
+  // PRD-2 (A7): the controls_status verdict overrides the LMS pass flag
+  // (cmi.success_status); completion is applied after SCORM.finish.
   if (typeof rcStatus.success === 'boolean') {
     console.log('🎚️ controls_status переопределяет passed:', rcStatus.success);
     bestPassed = rcStatus.success;
-    passedForLms = rcStatus.success;
+  }
+
+  // The package's own verdict, before the forced close replaces it: the points sent to the
+  // LMS are aligned with THIS, so a forced «passed» still records «Не пройден» in WebTutor.
+  var verdictForLms = bestPassed;
+
+  // The forced close goes LAST: nothing after it may take the «passed» back.
+  if (forcePassedHack) {
+    console.log('🔓 Хак активирован - переопределяем passed на true');
+    bestPassed = true;
   }
 
   console.log('📤 Отправляем в LMS:', Math.round(resultsForLms.percent) + '%, passed:', bestPassed);
@@ -282,20 +378,43 @@ function finishAndClose() {
     console.log('🔵 Адаптивный тест: принудительно passed=true для LMS');
     finishScormAdaptive(resultsForLms, true, resultComputation, scaleComputation);
   } else {
-    if (bestAttempt && bestAttempt !== results) {
-      console.log('🔄 Восстанавливаем state из лучшей попытки для LMS');
+    var bestDetail = (typeof getBestAttemptDetail === 'function') ? getBestAttemptDetail() : null;
+    if (bestAttempt && bestAttempt !== results && bestDetail) {
+      // PRD-36 FR-07/FR-08: the LMS report is built from the BEST attempt's OWN rows —
+      // delivery positions, answers AND statuses. Before this the attempt carried answers
+      // and question copies but no statuses, so `gradedAnswerFor` filtered a past attempt's
+      // interactions by the CURRENT run's statuses (§8, defect 1).
+      console.log('🔄 Восстанавливаем состояние лучшей попытки для LMS');
       var savedAnswers = state.answers;
       var savedFlatQuestions = state.flatQuestions;
+      var savedStatuses = state.questionStatuses;
 
-      state.answers = bestAttempt.answers || {};
-      state.flatQuestions = bestAttempt.flatQuestions || [];
+      var positions = TBRunState.decodeDelivery(bestDetail.dl || '');
+      var bestFlat = [], bestQuestions = [];
+      for (var bi = 0; bi < positions.length; bi++) {
+        var bsec = TEST_DATA.sections[positions[bi].s];
+        var bq = (bsec && bsec.questions) ? bsec.questions[positions[bi].q] : null;
+        if (!bq) continue;
+        bestQuestions.push(bq);
+        bestFlat.push({ question: bq, topicId: bsec.topicId, topicName: bsec.topicName });
+      }
+      var bestAnswers = TBRunState.decodeAnswers(bestDetail.an || '', bestQuestions);
+      var bestStatuses = TBRunState.decodeStatuses(bestDetail.st || '');
+      state.answers = {};
+      state.questionStatuses = {};
+      for (var bj = 0; bj < bestQuestions.length; bj++) {
+        if (bestAnswers[bj] !== undefined) state.answers[bestQuestions[bj].id] = bestAnswers[bj];
+        state.questionStatuses[bestQuestions[bj].id] = bestStatuses[bj] || 'unanswered';
+      }
+      state.flatQuestions = bestFlat;
 
-      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation, verdictForLms);
 
       state.answers = savedAnswers;
       state.flatQuestions = savedFlatQuestions;
+      state.questionStatuses = savedStatuses;
     } else {
-      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation, verdictForLms);
     }
   }
 
@@ -408,8 +527,28 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
   pushAll(interactions, buildScaleInteractions(scaleComputation));
   // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
   pushAll(interactions, buildResultVarInteractions(resultComputation));
+  // Версия формата строк ответа: без неё разбор выгрузки не отличит новый формат от старого.
+  interactions.push(buildResponseFormatInteraction());
+  // PRD-56 FR-19a: версия публикации и выданные варианты — о самом прохождении, а не о ответах.
+  pushAll(interactions, buildRunMetaInteractions());
+  // PRD-54, решение 13: номер и длительность попытки, уходящей в LMS.
+  pushAll(interactions, buildAttemptMetaInteractions(results));
+  // PRD-54 BR-54-35: метка регистрации — по ней импорт различает попытки одного дня.
+  pushAll(interactions, buildRegistrationInteraction());
 
-  SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
+  // A run with nothing to grade reports NO score (shared `lmsScoreFor`): «Пройден, 0 баллов»
+  // is a verdict we mean and a number we do not.
+  var lmsScore = window.TBTemplate.lmsScoreFor({ percent: percentScore, possiblePoints: results.possiblePoints });
+  SCORM.finish(
+    lmsScore ? lmsScore.raw : null,
+    lmsScore ? lmsScore.max : null,
+    // PRD-57 FR-40: попытка, в которой есть непроверенный ответ, отправляет `unknown`,
+    // а не `failed`. «Не сдал» по работе, которую никто не смотрел, — претензия
+    // участника, а не неточность данных.
+    results.gradingComplete === false ? null : passedForLms,
+    objectives,
+    interactions
+  );
 
   // Записываем уровень ПОСЛЕ finish
   try {
@@ -464,10 +603,23 @@ function computeSectionResult(topicId) {
   if (state.sectionResults && state.sectionResults[topicId]) {
     return state.sectionResults[topicId];
   }
+  var result = buildSectionResult(topicId);
+  if (!state.sectionResults) state.sectionResults = {};
+  state.sectionResults[topicId] = result;
+  return result;
+}
+
+/**
+ * Результат раздела по нынешним ответам — без кэша. Его же читает хаб роутера, когда фиксирует
+ * «пройден ли пункт» при возврате (техдолг №8): экрана итогов раздела может и не быть, а условие
+ * «открывается после успешного прохождения» и политика «все обязательные пройдены» читают исход.
+ */
+function buildSectionResult(topicId) {
   var earnedPoints = 0;
   var possiblePoints = 0;
   var fullyCorrect = 0;
   var total = 0;
+  var breakdownItems = [];
   var section = TEST_DATA.sections.find(function (s) { return s.topicId === topicId; }) || null;
 
   state.flatQuestions.forEach(function (fq) {
@@ -482,6 +634,17 @@ function computeSectionResult(topicId) {
     possiblePoints += qPoints;
     earnedPoints += qPoints * scoreRatio;
     if (scoreRatio === 1) fullyCorrect++;
+    // PRD-50 FR-19: тот же гейт, что у итогов теста. Измерительный вопрос в разрез не
+    // попадает — то же исключение, что делает `aggregateStandardResult` (FR-02).
+    if (!(typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(q))) {
+      breakdownItems.push({
+        sectionId: topicId,
+        axisKeys: q.tags && q.tags.length ? { tag: q.tags } : null,
+        earned: qPoints * scoreRatio,
+        possible: qPoints,
+        answered: answer !== undefined && answer !== null
+      });
+    }
   });
 
   var percent = possiblePoints > 0 ? (earnedPoints / possiblePoints) * 100 : 0;
@@ -496,6 +659,12 @@ function computeSectionResult(topicId) {
     { formId: deliveredFormId(topicId) }
   );
   var passed = resolvedRule ? window.TBTemplate.checkPassRule(resolvedRule, percent, earnedPoints) : null;
+
+  // Строки разреза раздела: только счёт, без вердикта. Пороги подтем ничего не судят
+  // (решение владельца 2026-09-03) — вердикт раздела дало его собственное правило выше.
+  var sectionEntries = window.TBTemplate.computeBreakdowns(breakdownItems).filter(function (e) {
+    return e.scope !== 'test';
+  });
 
   var result = {
     topicId: topicId,
@@ -512,10 +681,8 @@ function computeSectionResult(topicId) {
     resolvedPassRule: resolvedRule,
     recommendedCourses: section ? (section.recommendedCourses || []) : [],
     recommendedEvents: section ? (section.recommendedEvents || []) : [],
+    breakdown: sectionEntries,
   };
-
-  if (!state.sectionResults) state.sectionResults = {};
-  state.sectionResults[topicId] = result;
   return result;
 }
 
@@ -539,6 +706,9 @@ function calculateResults() {
         formId: deliveredFormId(fq.topicId),
         // «Тест пройден, если»: the `*_required_topics*` policies gate on this flag.
         required: section ? section.required !== false : true,
+        // PRD-50 FR-11: блок разделов, в который автор поместил ЭТОТ раздел; выпечен в
+        // TEST_DATA как section.groupKey. Отсутствие = раздел вне блоков.
+        groupKey: section ? (section.groupKey || null) : null,
         questions: [],
         extra: {
           recommendedCourses: (section && section.recommendedCourses) || [],
@@ -548,12 +718,17 @@ function calculateResults() {
       order.push(fq.topicId);
     }
     byTopic[fq.topicId].questions.push({
+      // PRD-57 (#43): исход каждого ответа попадает в результат — пакету он нужен ровно
+      // так же, как вебу: телеметрия отдаёт его аналитике.
+      id: q.id,
       type: q.type,
       correct: q.correct || {},
       scoring: q.scoring,
       points: q.points != null ? q.points : 1,
       // PRD-19 Block E (FR-07/FR-13): drafts/skipped/unanswered score 0 in flexible mode.
-      answer: gradedAnswerFor(q)
+      answer: gradedAnswerFor(q),
+      // PRD-50 FR-15: this question's breakdown axis keys; baked into TEST_DATA as q.tags.
+      axisKeys: q.tags && q.tags.length ? { tag: q.tags } : null
     });
   });
 
@@ -563,8 +738,19 @@ function calculateResults() {
     overallPassRule: TEST_DATA.overallPassRule,
     // «Тест пройден, если»: baked with the package. Absent in a package built before
     // the setting shipped — the shared engine then keeps the pre-policy verdict.
-    passDecisionPolicy: TEST_DATA.passDecisionPolicy
+    passDecisionPolicy: TEST_DATA.passDecisionPolicy,
+    // PRD-50 FR-53: учитывать ли подтемы в вердикте темы. Выпекается только когда автор
+    // включил; в пакете, собранном раньше, поля нет — ядро читает это как «выключено».
+    breakdownGateEnabled: TEST_DATA.breakdownGateEnabled
   });
+
+  // PRD-50 FR-35/FR-36: both scopes in ONE flat array — its and only its `buildResultVarContext`
+  // reads, so `tag()` can reach any scope.
+  var breakdowns = (agg.breakdowns || []).slice();
+  for (var bi = 0; bi < agg.topicResults.length; bi++) {
+    var secEntries = agg.topicResults[bi].breakdown || [];
+    for (var bj = 0; bj < secEntries.length; bj++) breakdowns.push(secEntries[bj]);
+  }
 
   return {
     correct: agg.correct,
@@ -573,6 +759,7 @@ function calculateResults() {
     possiblePoints: agg.possiblePoints,
     percent: agg.percent,
     passed: agg.passed,
+    breakdowns: breakdowns,
     topicResults: agg.topicResults.map(function (t) {
       return {
         topicId: t.topicId,
@@ -590,7 +777,26 @@ function calculateResults() {
         // the label — including for past attempts.
         resolvedPassRule: t.resolvedPassRule,
         recommendedCourses: t.extra.recommendedCourses,
-        recommendedEvents: t.extra.recommendedEvents
+        recommendedEvents: t.extra.recommendedEvents,
+        // PRD-50: this topic's breakdown records. Kept ON the topic on purpose:
+        // `saveAttemptResult` persists `topicResults` verbatim, and this is the ONLY
+        // path a breakdown record has into a saved attempt — without it, «Мой результат»
+        // and the report downloaded from it would print nothing where the web host on
+        // the same attempt prints bars (§14, item 5). Cost: ~3KB per attempt against the
+        // 30-55KB `flatQuestions` already weighs.
+        //
+        // Omitted (not `[]`) when empty: `aggregateStandardResult` always returns an
+        // array on `t.breakdown`, even for a topic with no keyed questions, so writing
+        // it unconditionally would put `"breakdown":[]` on every topic of every attempt
+        // — a few bytes each, on every test, whether or not it uses PRD-50 at all.
+        // `JSON.stringify` drops an `undefined` value's key outright, which is the one
+        // way to add nothing for a test that carries no keys.
+        breakdown: (t.breakdown && t.breakdown.length) ? t.breakdown : undefined,
+        // PRD-50 FR-11: блок раздела уходит в suspend_data вместе с темой — попытка
+        // помнит принадлежность, с которой её оценивали. `aggregateStandardResult`
+        // ставит поле ТОЛЬКО у раздела с блоком, а `JSON.stringify` гасит `undefined`,
+        // поэтому попытка теста без блоков не весит ни байтом больше.
+        groupKey: t.groupKey
       };
     })
   };
@@ -725,10 +931,20 @@ function to1(x) {
  * a literal, so a new question type does not silently fall through to `other`.
  */
 function mapScormType(q) {
+  // «Сценарий в ИС»: прогон по шагам — взаимодействие `performance` стандарта.
+  if (TBQType.isSimulation(q.type)) return 'performance';
   if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
   if (q.type === 'multiple') return 'choice';
   if (q.type === 'matching') return 'matching';
   if (q.type === 'ranking') return 'sequencing';
+  // PRD-57 FR-27: текстовый ввод — `fill-in`. Признак, а не литерал.
+  if (TBQType.isTextEntry(q.type)) return 'fill-in';
+  // PRD-57 FR-24h: задание с пропусками уезжает ОДНИМ взаимодействием `fill-in`, а не по
+  // одному на пропуск. В выгрузке WebTutor на взаимодействие приходится ровно четыре
+  // подколонки, и задание с шестью пропусками превратило бы отчёт в частокол столбцов.
+  if (TBQType.hasBlanks(q.type)) return 'fill-in';
+  // PRD-57 FR-19: развёрнутый ответ — `long-fill-in`; эталона у него нет вовсе.
+  if (TBQType.isOpenText(q.type)) return 'long-fill-in';
   return 'other';
 }
 
@@ -741,6 +957,40 @@ function mapScormType(q) {
 function formatResponse(q, ans) {
   if (ans == null) return '';
 
+  // «Сценарий в ИС»: ответ `performance` — шаги «имя[.]значение» через `[,]`: исход, доля цели
+  // в процентах и счётчики штрафов. Протокол в LMS не уходит — у отчёта на взаимодействие
+  // четыре подколонки, и сотни событий их бы затопили; он едет телеметрией.
+  if (TBQType.isSimulation(q.type)) {
+    var c = ans.counts || {};
+    var share = ans.goal && typeof ans.goal.share === 'number' ? Math.round(ans.goal.share * 100) : 0;
+    return [
+      'outcome[.]' + (ans.outcome || ''),
+      'goal[.]' + share,
+      'misses[.]' + (c.misses || 0),
+      'blocked[.]' + (c.blocked || 0),
+      'wrong[.]' + (c.wrongValues || 0),
+      'detours[.]' + (c.detours || 0),
+      'traps[.]' + (c.traps || 0),
+      'hints[.]' + (c.hints || 0),
+    ].join('[,]');
+  }
+
+  // PRD-57 §6.5: ответ уже строка, и в отчёт LMS он уходит РОВНО таким, каким его набрал
+  // участник. Нормализация живёт в сравнении: разбирая спор, важно видеть написание.
+  if (TBQType.isTextEntry(q.type)) return String(ans);
+  // PRD-57 §5: развёрнутый ответ уходит в отчёт LMS ровно таким, каким его набрали.
+  if (TBQType.isOpenText(q.type)) return String(ans);
+  // PRD-57 FR-24h: ответы пропусков идут в порядке набора правил и разделяются `[,]` —
+  // записью стандарта. Порядок берётся из эталона, а не из объекта ответа: у объекта
+  // порядок ключей ничего не гарантирует, а отчёт читают по колонкам.
+  if (TBQType.hasBlanks(q.type)) {
+    var sets = (q.correct && Array.isArray(q.correct.blanks)) ? q.correct.blanks : [];
+    var written = (ans && typeof ans === 'object' && !Array.isArray(ans)) ? ans : {};
+    return sets.map(function (set) {
+      var v = set ? written[set.id] : '';
+      return typeof v === 'string' ? v : '';
+    }).join('[,]');
+  }
   if (TBQType.isSingleIndexChoice(q.type)) return String(to1(ans));
   if (q.type === 'multiple') return (Array.isArray(ans) ? ans : []).map(to1).join(',');
   if (q.type === 'ranking') return (Array.isArray(ans) ? ans : []).map(to1).join(',');
@@ -755,11 +1005,14 @@ function formatResponse(q, ans) {
   // подходит (ответ не одно число), `matching` семантически ложен (пар нет), поэтому
   // взаимодействие пишется как `other`, а строка остаётся разбираемой отчётом LMS.
   // Нули НЕ выбрасываются: «поставил ноль» и «не дошёл» — разные факты для аналитики.
+  // Индексы 1-based, как у всех остальных типов (формат версии 2, см.
+  // `buildResponseFormatInteraction`): до выравнивания «1» у выбора и «1» у распределения
+  // означали РАЗНЫЕ варианты, и читатель выгрузки ошибался на единицу.
   if (TBQType.distributesBudget(q.type)) {
     return Object.keys(ans)
       .map(Number)
       .sort(function (a, b) { return a - b; })
-      .map(function (i) { return i + '[.]' + ans[i]; })
+      .map(function (i) { return to1(i) + '[.]' + ans[i]; })
       .join(',');
   }
   return '';
@@ -784,6 +1037,55 @@ function getCorrectAnswerFor(q) {
 }
 
 /**
+ * `cmi.interactions.n.correct_responses.0.pattern` для ОДНОГО задания.
+ *
+ * У текстового ввода эталон — набор правил (PRD-57 §6.1), и в `fill-in` он представим
+ * только тогда, когда все правила БУКВАЛЬНЫ: подстановочные знаки `*` и `?` стандартом для
+ * этого взаимодействия не предусмотрены. Как только образец появляется, эталон не пишется
+ * вовсе — промолчать честнее, чем отправить в отчёт LMS шаблон, который прочтут как ответ.
+ *
+ * Несколько допустимых ответов разделяются `[,]` — запись стандарта для `fill-in`.
+ */
+function correctPatternFor(q) {
+  // «Сценарий в ИС»: эталона-ответа у сценария нет — есть цель и проверки внутри сценария.
+  if (TBQType.isSimulation(q.type)) return '';
+  // PRD-57 FR-19: у развёрнутого ответа эталона НЕТ — `correct_responses` не пишется
+  // вовсе. Пустая рамка в отчёте читалась бы как потерянные данные.
+  if (TBQType.isOpenText(q.type)) return '';
+  // PRD-57 FR-24h: эталоны пропусков — в том же порядке, тем же разделителем. Пропуск,
+  // у которого эталона одной строкой нет (выражение, допуск, подстановочный знак),
+  // обнуляет весь образец: половина эталона в отчёте хуже, чем его отсутствие.
+  if (TBQType.hasBlanks(q.type)) {
+    var blanks = (q.correct && Array.isArray(q.correct.blanks)) ? q.correct.blanks : [];
+    if (blanks.length === 0) return '';
+    if (typeof TBTemplate === 'undefined' || !TBTemplate.referenceAnswer) return '';
+    var TBb = TBTemplate;
+    var refs = [];
+    for (var bi = 0; bi < blanks.length; bi++) {
+      var ref = TBb.referenceAnswer(blanks[bi]);
+      if (ref === null) return '';
+      refs.push(ref);
+    }
+    return refs.join('[,]');
+  }
+  if (TBQType.isTextEntry(q.type)) {
+    var set = q.correct || {};
+    var rules = Array.isArray(set.rules) ? set.rules : [];
+    if (rules.length === 0) return '';
+    var values = [];
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (!rule || rule.kind !== 'text' || rule.match !== 'wildcard') return '';
+      var value = String(rule.value == null ? '' : rule.value);
+      if (value.indexOf('*') !== -1 || value.indexOf('?') !== -1) return '';
+      values.push(value);
+    }
+    return values.join('[,]');
+  }
+  return formatResponse(q, getCorrectAnswerFor(q));
+}
+
+/**
  * The SCORM 2004 outcome of ONE question interaction.
  *
  * A measurement question (a scale without a correct grading, an allocation of points)
@@ -792,10 +1094,21 @@ function getCorrectAnswerFor(q) {
  * to get wrong. SCORM 2004 has a separate outcome for exactly this — `neutral`
  * (PRD-26 FR-08, PRD-44 FR-09). The rule reads the TYPE trait, so it covers both
  * measurement types at once and any future one.
+ *
+ * A PARTIAL answer (part of the price earned: multiple choice, matching, graded scoring) is
+ * reported as the earned share — SCORM 2004 allows a real number in `result`. «incorrect»
+ * there hid the half of the points the learner did earn, and the LMS export lost it for the
+ * analytics (PRD-54 decision 13). Full and zero stay `correct` / `incorrect`, so every
+ * all-or-nothing answer reads exactly as before.
+ *
+ * @param ratio The earned share of the price, `checkAnswer` of the reported answer.
  */
-function interactionResultFor(question, fullCorrect) {
+function interactionResultFor(question, fullCorrect, ratio) {
   var measurementOnly = typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(question);
-  return measurementOnly ? 'neutral' : (fullCorrect ? 'correct' : 'incorrect');
+  if (measurementOnly) return 'neutral';
+  if (fullCorrect) return 'correct';
+  if (typeof ratio === 'number' && ratio > 0 && ratio < 1) return String(Math.round(ratio * 10000) / 10000);
+  return 'incorrect';
 }
 
 /**
@@ -864,20 +1177,246 @@ function ratio(value) {
   return Math.round(value * 10000) / 10000;
 }
 
+/**
+ * The service interaction that tells the LMS report WHICH response format this package
+ * writes (`meta_response_format`).
+ *
+ * Version 1 (packages built before 2026-09-12) encoded an allocation of points 0-based while
+ * every other type was 1-based; version 2 aligned them. The two cannot be told apart by the
+ * string itself — «0,1,2» and «1,2,3» are equally plausible index sets — so the version has
+ * to travel with the data. An absent block in an export therefore means version 1, which is
+ * exactly what packages already in the field send.
+ *
+ * `neutral`, like the other service blocks (`scale_*`, `var_*`): there is nothing to be right
+ * or wrong about.
+ */
+function buildResponseFormatInteraction() {
+  return {
+    id: 'meta_response_format',
+    type: 'other',
+    result: 'neutral',
+    response: '2',
+    correct: '',
+    description: 'Версия формата строк ответа'
+  };
+}
+
+/**
+ * Идентификаторы вариантов (PRD-17), выданных этому прохождению — по одному на раздел в
+ * режиме вариантов. Пустой список у теста без вариантов, и это не потеря данных.
+ *
+ * Читается `state.deliveredForms` — карта «тема -> вариант», которую заполняет
+ * `generateVariant()` и восстанавливает `sessionRecovery`: продолженный прогон сообщает тот
+ * же состав, что и непрерывный.
+ */
+function deliveredFormIds() {
+  try {
+    var map = (typeof state !== 'undefined' && state.deliveredForms) || {};
+    var out = [];
+    for (var topicId in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, topicId)) continue;
+      if (map[topicId]) out.push(map[topicId]);
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Служебные блоки о САМОМ прохождении: версия публикации и выданные варианты
+ * (PRD-56 FR-19a). Зеркало `shared/lms-export/meta.ts`, парность держит
+ * `tests/scorm-meta-blocks`.
+ *
+ * Блока НЕТ, когда сообщать нечего: у пакета черновика версии не существует, у теста без
+ * вариантов — вариантов. Пустая ячейка и отсутствующая колонка означают для разбора одно и
+ * то же «не сообщено», а выдуманный номер версии сделал бы разрез по версиям бесполезным
+ * ровно там, где он и нужен.
+ *
+ * `neutral`, как и прочие служебные блоки: правильного ответа тут нет.
+ */
+function buildRunMetaInteractions() {
+  var out = [];
+  var version = (typeof TEST_DATA !== 'undefined' && TEST_DATA.publicationVersion) || null;
+  if (version) {
+    out.push({
+      id: 'meta_test_version',
+      type: 'other',
+      result: 'neutral',
+      response: String(version),
+      correct: '',
+      description: 'Версия публикации теста'
+    });
+  }
+
+  var forms = deliveredFormIds();
+  if (forms.length > 0) {
+    out.push({
+      id: 'meta_variant',
+      type: 'other',
+      result: 'neutral',
+      response: forms.join(';'),
+      correct: '',
+      description: 'Выданные варианты'
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Номер и длительность попытки, которая уходит в LMS (PRD-54, решение 13): блоки
+ * `meta_attempt` и `meta_duration`. Зеркало `ATTEMPT_INTERACTION_ID` и
+ * `DURATION_INTERACTION_ID` из `shared/lms-export/meta.ts`.
+ *
+ * Выгрузка отчёта не несёт ни даты завершения, ни номера попытки, а в LMS уходит ОДНА попытка
+ * регистрации — лучшая или последняя. Без номера импорт считал бы первой попыткой участника и
+ * третью, если первые две в отчёт не попали.
+ *
+ * Сохранённая попытка (`stored`, из сводки) несёт номер и длительность в себе (`attemptNumber`,
+ * `durationSeconds`); текущий прогон — в учёте попыток (`currentAttemptMeta`). Нет значения — нет
+ * блока: пустая ячейка и отсутствующая колонка для разбора означают одно «не сообщено».
+ * `neutral`, как и прочие служебные блоки.
+ *
+ * @param results Результат, который уходит в LMS.
+ */
+function buildAttemptMetaInteractions(results) {
+  // Сохранённая попытка говорит за себя, даже когда сказать нечего: у сводки, записанной до
+  // этой работы, номер 0 и длительности нет — и данные ТЕКУЩЕЙ попытки ей не подходят.
+  var stored = !!(results && results.stored);
+  var current = (!stored && typeof currentAttemptMeta === 'function') ? currentAttemptMeta() : { number: null, seconds: null };
+  var number = stored ? results.attemptNumber : current.number;
+  var seconds = stored
+    ? (typeof results.durationSeconds === 'number' ? results.durationSeconds : null)
+    : current.seconds;
+  var out = [];
+  if (typeof number === 'number' && number > 0) {
+    out.push({
+      id: 'meta_attempt',
+      type: 'other',
+      result: 'neutral',
+      response: String(number),
+      correct: '',
+      description: 'Номер попытки'
+    });
+  }
+  if (typeof seconds === 'number' && seconds >= 0) {
+    out.push({
+      id: 'meta_duration',
+      type: 'other',
+      result: 'neutral',
+      response: String(seconds),
+      correct: '',
+      description: 'Длительность попытки, секунды'
+    });
+  }
+  return out;
+}
+
+/**
+ * Метка регистрации SCO (PRD-54 раздел 7.1b, BR-54-35): по ней импорт выгрузки различает две
+ * строки одного участника за одну дату. Зеркало `REGISTRATION_INTERACTION_ID` из
+ * `shared/lms-export/meta.ts`, парность держит `tests/scorm-meta-blocks`.
+ *
+ * Метку хранит `registrationMark` (`suspendAttempts.js`); блока нет, если состояние недоступно.
+ * `neutral`, как и прочие служебные блоки.
+ */
+function buildRegistrationInteraction() {
+  var mark = (typeof registrationMark === 'function') ? registrationMark() : '';
+  if (!mark) return [];
+  return [{
+    id: 'meta_registration',
+    type: 'other',
+    result: 'neutral',
+    response: mark,
+    correct: '',
+    description: 'Метка прохождения'
+  }];
+}
+
+/**
+ * Time spent on this question as an ISO 8601 duration for `cmi.interactions.n.latency`.
+ *
+ * An empty string when the question was never shown (a run restored mid-way, a question the
+ * learner never reached): the element is then skipped entirely rather than written as «PT0S»,
+ * which would claim an instant answer. Mirrors `formatScormDuration` of
+ * `shared/lms-export/duration`, and the mirror is held by `tests/scorm-latency`.
+ */
+function questionLatency(questionId) {
+  if (typeof TBQuestionTime === 'undefined') return '';
+  var ms = TBQuestionTime.totalMsFor(questionId);
+  if (!ms || ms <= 0) return '';
+
+  var total = Math.floor(ms / 1000);
+  var hours = Math.floor(total / 3600);
+  var minutes = Math.floor((total % 3600) / 60);
+  var seconds = total % 60;
+
+  var out = 'PT';
+  if (hours > 0) out += hours + 'H';
+  if (minutes > 0) out += minutes + 'M';
+  if (seconds > 0 || out === 'PT') out += seconds + 'S';
+  return out;
+}
+
+/**
+ * «Сценарий в ИС»: протокол прогона для отчёта LMS — псевдо-взаимодействия `sim_<id>_<n>`.
+ *
+ * Требование владельца 2026-10-08: всё, что аналитика берёт из телеметрии и веба, приходит и
+ * выгрузкой отчёта. Сцены, типичные ошибки и карта промахов строятся по протоколу, поэтому он
+ * едет здесь — сжатый до входных событий (`shared/sim/protocol-codec`, зеркало разбора в
+ * `shared/lms-export/parse.ts`); остальное импорт восстановит повтором прогона.
+ *
+ * Протокол есть только у ответа, сыгранного в этой сессии SCO (поле `protocol`, см.
+ * `simulation.js`): у восстановленного из `suspend_data` — нет, и блоков тогда нет тоже.
+ * `neutral`, как и прочие служебные блоки.
+ */
+function buildSimProtocolInteractions() {
+  var out = [];
+  state.flatQuestions.forEach(function (fq) {
+    var q = fq.question;
+    if (!TBQType.isSimulation(q.type)) return;
+    var answer = state.answers[q.id];
+    if (!answer || !answer.protocol) return;
+    var chunks = TBTemplate.simProtocolChunks(answer.protocol);
+    for (var i = 0; i < chunks.length; i++) {
+      out.push({
+        id: 'sim_' + q.id + '_' + (i + 1),
+        type: 'other',
+        result: 'neutral',
+        response: chunks[i],
+        correct: '',
+        description: 'Протокол сценария, часть ' + (i + 1)
+      });
+    }
+  });
+  return out;
+}
+
 function buildQuestionInteraction(question, answer, fullCorrect) {
+  // «Сценарий в ИС»: прогон с целью и штрафами не делится на «верно / неверно» — достигнутая
+  // цель со штрафом за промах в отчёте LMS читалась бы как провал. SCORM 2004 разрешает в
+  // `result` число, и сценарий пишет долю цены, ту же, что пошла в балл.
+  var ratio = checkAnswer(question, answer);
+  var result = TBQType.isSimulation(question.type)
+    ? String(Math.round(ratio * 10000) / 10000)
+    : interactionResultFor(question, fullCorrect, ratio);
   return {
     id: 'q_' + question.id,
     type: mapScormType(question),
-    result: interactionResultFor(question, fullCorrect),
+    result: result,
     response: formatResponse(question, answer),
-    correct: formatResponse(question, getCorrectAnswerFor(question)),
-    description: authorTextPlain(question.prompt)
+    correct: correctPatternFor(question),
+    description: authorTextPlain(question.prompt),
+    latency: questionLatency(question.id)
   };
 }
 
 // Отправка результата в LMS. Телеметрия к этому моменту уже отправлена вызывающим —
 // `finishAndClose` шлёт её один раз для ТЕКУЩЕЙ попытки, тогда как в LMS уезжает лучшая.
-function finishScormLmsOnly(results, passedForLms, resultComputation, scaleComputation) {
+// `verdictForLms` — настоящий вердикт пакета (без подмены принудительным закрытием): по нему
+// баллы для LMS выравниваются с проходным, см. общий `lmsScoreFor`.
+function finishScormLmsOnly(results, passedForLms, resultComputation, scaleComputation, verdictForLms) {
   var objectives = results.topicResults.map(buildTopicObjective);
 
   var interactions = [];
@@ -893,6 +1432,9 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
     interactions.push(buildQuestionInteraction(q, ans, fullCorrect));
   });
+
+  // «Сценарий в ИС»: протокол прогона — следом за вопросами, кусками `sim_<id>_<n>`.
+  pushAll(interactions, buildSimProtocolInteractions());
 
   // --- Рекомендации для проваленных тем: передаём object_id курса ---
   results.topicResults.forEach(function (tr) {
@@ -924,6 +1466,34 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   pushAll(interactions, buildScaleInteractions(scaleComputation));
   // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
   pushAll(interactions, buildResultVarInteractions(resultComputation));
+  // Версия формата строк ответа — тем же блоком, что и в адаптивном пути.
+  interactions.push(buildResponseFormatInteraction());
+  // PRD-56 FR-19a: версия публикации и выданные варианты — тем же блоком, что и там.
+  pushAll(interactions, buildRunMetaInteractions());
+  // PRD-54, решение 13: номер и длительность попытки, уходящей в LMS.
+  pushAll(interactions, buildAttemptMetaInteractions(results));
+  // PRD-54 BR-54-35: метка регистрации — тем же блоком, что и в адаптивном пути.
+  pushAll(interactions, buildRegistrationInteraction());
 
-  SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
+  // A run with nothing to grade reports NO score — the same shared decision the adaptive
+  // path makes, so the two finish paths cannot drift on what the LMS is told.
+  // WebTutor records the outcome by comparing these points with the course's passing score
+  // (the administrator sets it equal to the test's at publication) and ignores
+  // success_status, so the points carry the package's verdict where the two disagree.
+  var lmsScore = window.TBTemplate.lmsScoreFor({
+    percent: percentScore,
+    possiblePoints: results.possiblePoints,
+    passed: (results.gradingComplete === false || typeof verdictForLms !== 'boolean') ? null : verdictForLms,
+    lmsThreshold: TEST_DATA.passPercent
+  });
+  SCORM.finish(
+    lmsScore ? lmsScore.raw : null,
+    lmsScore ? lmsScore.max : null,
+    // PRD-57 FR-40: попытка, в которой есть непроверенный ответ, отправляет `unknown`,
+    // а не `failed`. «Не сдал» по работе, которую никто не смотрел, — претензия
+    // участника, а не неточность данных.
+    results.gradingComplete === false ? null : passedForLms,
+    objectives,
+    interactions
+  );
 }

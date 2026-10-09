@@ -21,7 +21,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Banner, ColorPicker } from "@universityrt/ui-kit";
+import { Banner, ColorPicker } from "@skillum/ui-kit";
 import { IconGlyph, IconPickerModal, useGlyphTable, type GlyphTable } from "./icon-picker-modal";
 import { buildRoseChart } from "@shared/template/rose-view";
 import { LEVEL_SCHEMES } from "@shared/template/level-ramp";

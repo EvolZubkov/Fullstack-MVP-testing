@@ -8,7 +8,7 @@ import React from "react";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useDesignSettings } from "../use-design-settings";
+import { useDesignSettings, type DesignSettings } from "../use-design-settings";
 
 const TEST_ID = "te-1";
 
@@ -183,5 +183,92 @@ describe("useDesignSettings — themes (PRD-23)", () => {
     act(() => result.current.clearThemeParam("light", "primaryColor"));
     await waitFor(() => expect(result.current.themeParams.light).toEqual({}));
     expect(result.current.themeParams.dark).toEqual({ primaryColor: "D" });
+  });
+});
+
+
+// ─── Режим создания: настраивается до первого сохранения ────────────────────
+//
+// Теста ещё нет: читать и сохранять оформление по его адресу нечем. Но набирать
+// его автор уже может — черновик живёт в модели редактора и уезжает вместе с
+// созданием, а хук в этом режиме отвечает за манифест и за правку ЭТОГО черновика.
+
+/** Связка «черновик в состоянии вызывающего» — так её собирает ящик редактора. */
+function renderBound(initial: DesignSettings, onChange?: (next: DesignSettings) => void) {
+  const seen: DesignSettings[] = [];
+  const hook = renderHook(
+    ({ draft }: { draft: DesignSettings }) =>
+      useDesignSettings(undefined, {
+        draft,
+        onChange: (next) => {
+          seen.push(next);
+          onChange?.(next);
+        },
+      }),
+    { wrapper, initialProps: { draft: initial } },
+  );
+  return { ...hook, seen };
+}
+
+describe("useDesignSettings — режим создания", () => {
+  it("грузит манифест выбранного шаблона, не спрашивая оформление теста", async () => {
+    const calls: string[] = [];
+    mockFetch((url) => {
+      calls.push(url);
+      if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+
+    const { result } = renderBound({ templateId: "corporate", params: {} });
+
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+    expect(result.current.draft.templateId).toBe("corporate");
+    expect(calls.some((u) => u.includes("/design"))).toBe(false);
+  });
+
+  it("любая правка уходит в переданный черновик, а не в состояние хука", async () => {
+    mockFetch((url) => {
+      if (url.startsWith("/api/templates/")) return jsonResponse(TEMPLATE);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+
+    const { result, seen, rerender } = renderBound({ templateId: "corporate", params: {} });
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+
+    act(() => result.current.setParam("companyName", "Ромашка"));
+    expect(seen.at(-1)).toEqual({ templateId: "corporate", params: { companyName: "Ромашка" } });
+    // Пока вызывающий не перерисовал хук новым черновиком, тот показывает прежний:
+    // единственный источник истины — привязка.
+    expect(result.current.draft.params).toEqual({});
+
+    rerender({ draft: seen.at(-1)! });
+    expect(result.current.draft.params).toEqual({ companyName: "Ромашка" });
+
+    act(() => result.current.setTemplate("default"));
+    // Смена шаблона сбрасывает параметры — они принадлежали прежнему манифесту.
+    expect(seen.at(-1)).toEqual({ templateId: "default", params: {} });
+  });
+
+  it("никогда не грязный: сохранять по адресу теста нечего", async () => {
+    mockFetch((url) => {
+      if (url.startsWith("/api/templates/")) return jsonResponse(TEMPLATE);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+
+    const { result } = renderBound({ templateId: "corporate", params: { companyName: "Ромашка" } });
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+    expect(result.current.isDirty).toBe(false);
+  });
+
+  it("без привязки (хук вхолостую) не ходит в сеть вовсе", async () => {
+    const calls: string[] = [];
+    mockFetch((url) => {
+      calls.push(url);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+
+    renderHook(() => useDesignSettings(undefined), { wrapper });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls).toEqual([]);
   });
 });

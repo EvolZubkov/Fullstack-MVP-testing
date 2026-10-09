@@ -108,11 +108,19 @@ function stopTimerCommit() {
 }
 
 /**
- * Format a second count as "M:SS"; negative input clamps to "0:00".
+ * The countdown text. Delegates to the SHARED duration formatter in the bundle
+ * (`TBTemplate.formatCountdown`), so the package prints what the web host prints:
+ * "M:SS", growing an hour part from an hour up and a day part from a day up — a
+ * multi-day budget used to read "20160:00" here.
+ *
+ * With no bundle (a broken build) it degrades to the historical "M:SS" instead of
+ * throwing: the countdown keeps running, it just stops growing units.
  * @param {number} seconds
  * @returns {string}
  */
 function formatTime(seconds) {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (TB && typeof TB.formatCountdown === 'function') return TB.formatCountdown(seconds);
   var total = seconds > 0 ? seconds : 0;
   var mins = Math.floor(total / 60);
   var secs = total % 60;
@@ -411,4 +419,257 @@ function syncSectionBinding(section) {
 function clearSectionBinding() {
   if (typeof TEST_DATA === 'undefined' || !TEST_DATA.section || !TEST_DATA.section.current) return;
   TEST_DATA.section.current.timer = null;
+}
+
+/**
+ * A new attempt starts with clean section state. The budgets used to survive into the
+ * next attempt of the same registration, so a section spent in attempt 1 was spent from
+ * the first second of attempt 2; the PRD-67 closed list would do the same, only harder.
+ * Called by every path that registers a new attempt.
+ */
+function resetSectionRunState() {
+  try {
+    var s = readSuspendObj();
+    if (!s.sectionBudgets && !s.sectionGate) return;
+    delete s.sectionBudgets;
+    delete s.sectionGate;
+    writeSuspendObj(s);
+  } catch (e) {
+    /* storage unavailable — nothing persisted to clear */
+  }
+}
+
+// --- PRD-67: «Закрывать раздел при выходе» ---------------------------------
+//
+// The freeze above let a learner read a question, close the SCO, look the answer up
+// and come back to the same question with the same remainder. With the test setting
+// on, leaving a started section CLOSES it for good. A leave is recognised without any
+// clock: every SCO launch is a new session, so a section still marked open when the
+// package loads is a section the previous session broke off inside. Inside a session a
+// leave is a screen change — the hub, the next section, the section results.
+//
+// A test without sections is ONE section (`WHOLE_TEST_SECTION`): leaving it — only
+// possible by leaving the SCO — hands the attempt in. The rules (which sections the
+// setting acts on, how a gate opens and closes) live in the SHARED
+// `TBTemplate.sectionBudget` module, the same one the web server runs.
+
+/** Screen marker: this screen neither enters nor leaves a section (обзор, same-section page). */
+var LEAVE_KEEP = { keep: true };
+
+/** Whether the test turned the setting on. Absent in packages built before PRD-67. */
+function closeOnLeaveEnabled() {
+  return typeof TEST_DATA !== 'undefined' && TEST_DATA.closeSectionOnLeave === true;
+}
+
+/** Key of the implicit single section of a test without sections. */
+function wholeTestSectionKey() {
+  var api = sectionBudgetApi();
+  return (api && api.WHOLE_TEST_SECTION) || '__test__';
+}
+
+/** True for a test without sections — the whole test is the unit a leave closes. */
+function isFlatLeaveFlow() {
+  var mode = (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat';
+  return mode === 'linear_flat';
+}
+
+/** The unit a leave closes for a topic: the topic itself, or the whole test. */
+function leaveUnitOf(topicId) {
+  return isFlatLeaveFlow() ? wholeTestSectionKey() : topicId;
+}
+
+/** A section's own limit in minutes (0 when it has none). */
+function sectionOwnLimitMinutes(topicId) {
+  var sections = TEST_DATA.sections || [];
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].topicId === topicId) return sections[i].timeLimitMinutes || 0;
+  }
+  return 0;
+}
+
+/** Does the setting act on this unit? Only where there is a clock to dodge. */
+function leaveGuarded(unit) {
+  var api = sectionBudgetApi();
+  if (!api || !closeOnLeaveEnabled() || !unit) return false;
+  var own = 0;
+  if (unit === wholeTestSectionKey()) {
+    var sections = TEST_DATA.sections || [];
+    for (var i = 0; i < sections.length; i++) {
+      if ((sections[i].timeLimitMinutes || 0) > own) own = sections[i].timeLimitMinutes;
+    }
+  } else {
+    own = sectionOwnLimitMinutes(unit);
+  }
+  return api.closesOnLeave({
+    enabled: true,
+    testLimitMinutes: TEST_DATA.timeLimitMinutes,
+    sectionLimitMinutes: own
+  });
+}
+
+/**
+ * Does the setting act on any part of this test? What the start screen reports as
+ * `course.closesOnLeave` — the same shared rule the web host uses.
+ */
+function packageClosesOnLeave() {
+  var api = sectionBudgetApi();
+  if (!api || typeof api.testClosesOnLeave !== 'function') return false;
+  var limits = [];
+  var sections = TEST_DATA.sections || [];
+  for (var i = 0; i < sections.length; i++) limits.push(sections[i].timeLimitMinutes);
+  return api.testClosesOnLeave({
+    enabled: closeOnLeaveEnabled(),
+    testLimitMinutes: TEST_DATA.timeLimitMinutes,
+    sectionLimitMinutes: limits
+  });
+}
+
+/** Read the open/closed sections from suspend_data (absent = nothing open, nothing closed). */
+function readSectionGate() {
+  var api = sectionBudgetApi();
+  try {
+    var s = readSuspendObj();
+    return api ? api.readGate(s.sectionGate) : { open: null, closed: [] };
+  } catch (e) {
+    return { open: null, closed: [] };
+  }
+}
+
+/** Persist the gate (and, when given, the budgets) in one suspend_data write. */
+function writeSectionGate(gate, budgets) {
+  try {
+    var s = readSuspendObj();
+    s.sectionGate = gate;
+    if (budgets) s.sectionBudgets = budgets;
+    writeSuspendObj(s);
+  } catch (e) {
+    /* storage unavailable — the in-memory run goes on */
+  }
+}
+
+/** Was this topic's unit closed by a leave? */
+function isSectionClosedByLeave(topicId) {
+  if (!closeOnLeaveEnabled() || !topicId) return false;
+  return readSectionGate().closed.indexOf(leaveUnitOf(topicId)) >= 0;
+}
+
+/**
+ * Leave the open unit now: close it when the setting acts on it, merely clear it
+ * otherwise. Every running budget is frozen either way.
+ * @returns {string|null} the unit that got closed, or null.
+ */
+function leaveOpenSection() {
+  var api = sectionBudgetApi();
+  if (!api) return null;
+  var gate = readSectionGate();
+  if (!gate.open) return null;
+  var left = api.leaveSection(gate, readSectionBudgets(), sectionActiveMs(), leaveGuarded(gate.open));
+  writeSectionGate(left.gate, left.budgets);
+  return left.closed;
+}
+
+/**
+ * On SCO load: a unit still marked open means the previous session ended inside it —
+ * a reload, a closed browser, a killed tab. Close it before anything is restored.
+ * @returns {string|null} the unit that got closed, or null.
+ */
+function closeInterruptedSectionOnLoad() {
+  if (!closeOnLeaveEnabled()) return null;
+  return leaveOpenSection();
+}
+
+/** Human name of a section for the notice. */
+function sectionTitleOf(topicId) {
+  var sections = TEST_DATA.sections || [];
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].topicId === topicId) return sections[i].topicName || '';
+  }
+  return '';
+}
+
+/**
+ * Where the learner stands as far as a leave is concerned: a unit id (inside it), null
+ * (outside every section) or LEAVE_KEEP (the screen changes nothing — the обзор, a page of
+ * the section being worked through, anything in a test without sections).
+ */
+function currentLeaveUnit() {
+  if (state.submitted) return LEAVE_KEEP;
+  if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
+    var aItem = (typeof currentPageItem === 'function') ? currentPageItem() : null;
+    var aTopic = (aItem && aItem.kind === 'adaptive-session' && aItem.topicId) || state.currentRouterTopic || null;
+    return aTopic ? leaveUnitOf(aTopic) : LEAVE_KEEP;
+  }
+  if (state.phase === 'review') return LEAVE_KEEP;
+  if (state.phase === 'question') {
+    var fq = state.flatQuestions && state.flatQuestions[state.currentIndex];
+    return fq ? leaveUnitOf(fq.topicId) : LEAVE_KEEP;
+  }
+  // A test without sections is left only by leaving the SCO — its own pages are inside it.
+  if (isFlatLeaveFlow()) return LEAVE_KEEP;
+  if (state.phase === 'content') {
+    var item = (typeof currentPageItem === 'function') ? currentPageItem() : null;
+    var pageTopic = (item && item.page && item.page.topicId) || null;
+    if (pageTopic && readSectionGate().open === pageTopic) return LEAVE_KEEP;
+    return null;
+  }
+  // Section results, the router hub, start and results screens are outside every section.
+  return null;
+}
+
+/**
+ * The learner is on a screen of a closed unit: tell them why and move them on — past the
+ * section (linear), back to the hub marked done (router), or hand the attempt in (a test
+ * without sections). Returns true: the caller must not draw the closed screen.
+ */
+function redirectFromClosedSection(unit) {
+  if (unit === wholeTestSectionKey()) {
+    if (typeof showToast === 'function') {
+      showToast('Попытка завершена. Вы вышли из теста до завершения. Засчитаны ответы, данные до выхода.', 'warn', 8000);
+    }
+    if (typeof submit === 'function') submit(true);
+    return true;
+  }
+  var name = sectionTitleOf(unit);
+  if (typeof showToast === 'function') {
+    showToast((name ? 'Раздел «' + name + '» закрыт' : 'Раздел закрыт') +
+      '. Вы вышли из него до завершения. Ответы, данные до выхода, сохранены.', 'warn', 8000);
+  }
+  if (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode && RouterFlow.isRouterMode() &&
+      state.currentRouterTopic === unit && typeof RouterFlow.returnFromTopic === 'function') {
+    RouterFlow.returnFromTopic();
+    return true;
+  }
+  if (typeof skipSectionFromCurrent === 'function') {
+    skipSectionFromCurrent(unit);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * PRD-67 step run on EVERY render: leave the open unit when the screen is outside it,
+ * open the unit of a question screen, and move the learner off a closed one.
+ * @returns {boolean} true when it redirected (the caller skips drawing).
+ */
+function syncSectionLeaveGate() {
+  if (!closeOnLeaveEnabled() || !sectionBudgetApi()) return false;
+  var unit = currentLeaveUnit();
+  if (unit === LEAVE_KEEP) return false;
+  var gate = readSectionGate();
+  if (gate.open && gate.open !== unit) {
+    var closedUnit = leaveOpenSection();
+    // Whatever path led to the hub (return, «Назад» through the nav history), a closed
+    // topic is shown there «Пройдена» and never reopened.
+    if (closedUnit && state.routerTopicStates && typeof RouterFlow !== 'undefined' &&
+        RouterFlow.isRouterMode && RouterFlow.isRouterMode()) {
+      state.routerTopicStates[closedUnit] = 'completed';
+    }
+    gate = readSectionGate();
+  }
+  if (!unit || !leaveGuarded(unit)) return false;
+  if (gate.closed.indexOf(unit) >= 0) return redirectFromClosedSection(unit);
+  // Entering a unit is silent: the rule is the author's to state on an intro page, once,
+  // not a notice over every section's first question.
+  if (gate.open !== unit) writeSectionGate(sectionBudgetApi().openSection(gate, unit), null);
+  return false;
 }

@@ -5,13 +5,13 @@
  * choice, not a full-height inline tree) — used wherever the author chooses
  * WHERE to place content: the parent of a new folder and the folder of a topic.
  * A synthetic root node represents «без папки (корень)». `value` is a folder id,
- * or `null` for the root. Reuses the @universityrt/ui-kit `Tree` (no bespoke
+ * or `null` for the root. Reuses the @skillum/ui-kit `Tree` (no bespoke
  * tree rendering).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Folder as FolderIcon } from "lucide-react";
-import { Tree, type TreeNodeData } from "@universityrt/ui-kit";
+import { Tree, type TreeNodeData } from "@skillum/ui-kit";
 
 /** Sentinel id for the synthetic root («без папки») node. */
 export const FOLDER_ROOT = "__root__";

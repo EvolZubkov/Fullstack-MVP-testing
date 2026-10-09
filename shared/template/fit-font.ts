@@ -12,6 +12,7 @@
  */
 
 import { stripMarkdown } from "../text/plain";
+import { plainPromptOf } from "../questions/prompt-format";
 
 /** Fit configuration: clamp `[min, max]`, start shrinking past `from` chars, `per` px/char. */
 export interface FitFontConfig {
@@ -43,8 +44,11 @@ export function fitFont(len: number, cfg: FitFontConfig): string {
  * link's URL never reaches the screen at all, so counting those characters would
  * shrink a prompt for text the learner cannot see.
  */
-export function questionFont(prompt: unknown): string {
-  return fitFont(stripMarkdown(String(prompt ?? "")).length, QUESTION_FIT);
+export function questionFont(prompt: unknown, format?: unknown): string {
+  // PRD-57 §4.3: у задания, написанного разметкой, длину надо мерить БЕЗ тегов — иначе
+  // `<p class="lead">` считается за текст, и кегль выбирается по длине разметки.
+  const visible = plainPromptOf({ prompt, promptFormat: format });
+  return fitFont(visible.length, QUESTION_FIT);
 }
 
 /**

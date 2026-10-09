@@ -3,7 +3,7 @@ import { cn } from '../utils';
 
 /**
  * @module components/Layout
- * @description Framework-free layout primitives for the UniversityRT design
+ * @description Framework-free layout primitives for the Skillum design
  * system. They replace ad-hoc utility-class layout (flex/grid/spacing) with
  * token-driven components: spacing comes from `--ou-space-*`, surfaces from
  * `--ou-bg-*`, radii from `--ou-radius-*`. No arbitrary values, no inline

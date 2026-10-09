@@ -1,0 +1,1 @@
+ALTER TABLE "scorm_answers" ADD COLUMN "latency_ms" integer;

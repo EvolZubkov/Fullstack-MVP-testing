@@ -14,7 +14,16 @@ import type * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SettingsSection } from "../basic-settings-section";
+import {
+  AdaptivePane,
+  DuringTestPane,
+  FeedbackTextsPane,
+  LimitsPane,
+  NavigationPane,
+  ScenarioSettingsPane,
+  VerdictPane,
+} from "../basic-settings-section";
+import { CompositionTab } from "../editor-tabs";
 import type { TestEditorModel } from "../../test-editor.types";
 import { defaultRetakePolicy } from "../../test-editor.mappers";
 import { buildFieldErrorIndex, type FieldErrorIndex } from "../../field-errors";
@@ -31,6 +40,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     basic: {
       title: "Sample",
       description: "Desc",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -39,7 +49,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -97,7 +107,16 @@ function runUpdater(
 function renderSettings(
   model: TestEditorModel,
   updateModel: (u: (m: TestEditorModel) => TestEditorModel) => void = () => {},
-  opts: { fieldErrors?: FieldErrorIndex; seedPlugins?: unknown } = {},
+  opts: {
+    fieldErrors?: FieldErrorIndex;
+    seedPlugins?: unknown;
+    /** Панель нового дерева, на которой живёт проверяемая настройка. */
+    pane?: React.ComponentType<{
+      model: TestEditorModel;
+      updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
+      fieldErrors?: FieldErrorIndex;
+    }>;
+  } = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -105,9 +124,10 @@ function renderSettings(
   if (opts.seedPlugins && model.id) {
     client.setQueryData([`/api/tests/${model.id}/available-eligibility-plugins`], opts.seedPlugins);
   }
+  const Pane = opts.pane ?? NavigationPane;
   return render(
     <QueryClientProvider client={client}>
-      <SettingsSection model={model} updateModel={updateModel} fieldErrors={opts.fieldErrors} />
+      <Pane model={model} updateModel={updateModel} fieldErrors={opts.fieldErrors} />
     </QueryClientProvider>,
   );
 }
@@ -121,12 +141,11 @@ function selectOption(selectTestId: string, label: string | RegExp) {
 
 // ─── Limits pane: max attempts ────────────────────────────────────────────────
 
-describe("<SettingsSection /> — Ограничения: попытки", () => {
+describe("<LimitsPane /> — Ограничения: попытки", () => {
   it("sets maxAttempts to the entered number", () => {
     const updateModel = vi.fn();
     const model = baseModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    renderSettings(model, updateModel, { pane: LimitsPane });
     fireEvent.change(screen.getByTestId("settings-max-attempts-input"), { target: { value: "3" } });
     expect(runUpdater(updateModel, model).runtime.maxAttempts).toBe(3);
   });
@@ -134,8 +153,7 @@ describe("<SettingsSection /> — Ограничения: попытки", () =>
   it("clears maxAttempts to null when set to 0", () => {
     const updateModel = vi.fn();
     const model = baseModel({ runtime: { ...baseModel().runtime, maxAttempts: 3 } });
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    renderSettings(model, updateModel, { pane: LimitsPane });
     fireEvent.change(screen.getByTestId("settings-max-attempts-input"), { target: { value: "0" } });
     expect(runUpdater(updateModel, model).runtime.maxAttempts).toBeNull();
   });
@@ -143,14 +161,13 @@ describe("<SettingsSection /> — Ограничения: попытки", () =>
 
 // ─── Pass-rules pane: PRD-19 navigation switches ──────────────────────────────
 
-describe("<SettingsSection /> — навигация прохождения (PRD-19)", () => {
+describe("<NavigationPane /> — навигация прохождения (PRD-19)", () => {
   it("turning «возврат к неотвеченным» off also clears «изменение ответа»", () => {
     const updateModel = vi.fn();
     const model = baseModel({
-      runtime: { ...baseModel().runtime, allowReturnToUnanswered: true, allowAnswerChange: true },
+      runtime: { ...baseModel().runtime, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: true },
     });
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: NavigationPane });
     fireEvent.click(screen.getByTestId("settings-allow-return-checkbox"));
     const next = runUpdater(updateModel, model);
     expect(next.runtime.allowReturnToUnanswered).toBe(false);
@@ -160,8 +177,7 @@ describe("<SettingsSection /> — навигация прохождения (PRD
   it("toggles «изменение ответа» on when return is enabled and answers hidden", () => {
     const updateModel = vi.fn();
     const model = baseModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: NavigationPane });
     fireEvent.click(screen.getByTestId("settings-allow-change-checkbox"));
     expect(runUpdater(updateModel, model).runtime.allowAnswerChange).toBe(true);
   });
@@ -170,50 +186,62 @@ describe("<SettingsSection /> — навигация прохождения (PRD
     const model = baseModel({
       runtime: { ...baseModel().runtime, allowReturnToUnanswered: false },
     });
-    renderSettings(model);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
-    expect(screen.getByTestId("settings-allow-change-checkbox")).toBeDisabled();
-    expect(screen.getByText(/только при включённом возврате/i)).toBeInTheDocument();
+    renderSettings(model, undefined, { pane: NavigationPane });
+    const toggle = screen.getByTestId("settings-allow-change-checkbox");
+    expect(toggle).toBeDisabled();
+    // Причина ищется В ПОЛЕ этого переключателя, а не по всей панели: ту же причину
+    // печатает погашенная «Свободная навигация внутри раздела» (PRD-19 FR-11c), и поиск
+    // по одному тексту стал бы неоднозначным.
+    const field = toggle.closest(".ou-formfield") as HTMLElement;
+    expect(within(field).getByText(/только при включённом возврате/i)).toBeInTheDocument();
   });
 
   it("disables «изменение ответа» with a banner when correct answers are shown", () => {
     const model = baseModel({
       runtime: { ...baseModel().runtime, allowReturnToUnanswered: true, showCorrectAnswers: true },
     });
-    renderSettings(model);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, undefined, { pane: NavigationPane });
     expect(screen.getByTestId("settings-allow-change-checkbox")).toBeDisabled();
     expect(screen.getByText(/иначе ученик увидит правильный ответ/i)).toBeInTheDocument();
   });
 
+  // Решение владельца 2026-09-20: экран итогов раздела — это ПОКАЗ РЕЗУЛЬТАТА, поэтому
+  // переключатель живёт на «Обратная связь и итоги» → «Во время теста», а не в «Сценарии»,
+  // где автор искал его среди настроек потока и не находил.
   it("shows and toggles «итоги раздела» for a sectioned (non-flat) test", () => {
     const updateModel = vi.fn();
     const model = baseModel({
       flowMode: "linear_by_topics",
       sections: [buildSection({ topicId: "t1" })],
     });
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: DuringTestPane });
     fireEvent.click(screen.getByTestId("settings-show-section-results-checkbox"));
     expect(runUpdater(updateModel, model).runtime.showSectionResults).toBe(false);
   });
 
   it("hides «итоги раздела» for a flat test", () => {
     const model = baseModel({ flowMode: "linear_flat", sections: [buildSection({ topicId: "t1" })] });
-    renderSettings(model);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, undefined, { pane: DuringTestPane });
+    expect(screen.queryByTestId("settings-show-section-results-checkbox")).toBeNull();
+  });
+
+  it("no longer offers «итоги раздела» in the «Сценарий» pane", () => {
+    const model = baseModel({
+      flowMode: "linear_by_topics",
+      sections: [buildSection({ topicId: "t1" })],
+    });
+    renderSettings(model, undefined, { pane: ScenarioSettingsPane });
     expect(screen.queryByTestId("settings-show-section-results-checkbox")).toBeNull();
   });
 });
 
 // ─── Pass-rules pane: overall type=none + per-topic custom rules ───────────────
 
-describe("<SettingsSection /> — правила прохождения тем", () => {
+describe("<VerdictPane /> — правила прохождения тем", () => {
   it("switches the overall rule type to «Не задано» and hides the value input", () => {
     const updateModel = vi.fn();
     const model = baseModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: VerdictPane });
     selectOption("pass-overall-type", "Не задано");
     expect(runUpdater(updateModel, model).passRules.overall.type).toBe("none");
   });
@@ -232,8 +260,7 @@ describe("<SettingsSection /> — правила прохождения тем",
   it("updates a custom per-topic threshold value", () => {
     const updateModel = vi.fn();
     const model = customModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: VerdictPane });
     fireEvent.change(screen.getByTestId("pass-topic-custom-value-t1"), { target: { value: "90" } });
     const rule = runUpdater(updateModel, model).passRules.byTopic.t1;
     expect(rule.source === "custom" && rule.value).toBe(90);
@@ -242,8 +269,7 @@ describe("<SettingsSection /> — правила прохождения тем",
   it("switches a custom per-topic rule type to «Сумма баллов»", () => {
     const updateModel = vi.fn();
     const model = customModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: VerdictPane });
     selectOption("pass-topic-custom-type-t1", "Сумма баллов");
     const rule = runUpdater(updateModel, model).passRules.byTopic.t1;
     expect(rule.source === "custom" && rule.type).toBe("absolute");
@@ -252,8 +278,7 @@ describe("<SettingsSection /> — правила прохождения тем",
   it("switches a per-topic source to «Не проверять отдельно» (none)", () => {
     const updateModel = vi.fn();
     const model = customModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: VerdictPane });
     selectOption("pass-topic-source-t1", "Не проверять отдельно");
     expect(runUpdater(updateModel, model).passRules.byTopic.t1).toEqual({ source: "none" });
   });
@@ -261,8 +286,7 @@ describe("<SettingsSection /> — правила прохождения тем",
   it("switches a per-topic source back to «Как у теста» (inherit)", () => {
     const updateModel = vi.fn();
     const model = customModel();
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    renderSettings(model, updateModel, { pane: VerdictPane });
     selectOption("pass-topic-source-t1", "Как у теста");
     expect(runUpdater(updateModel, model).passRules.byTopic.t1).toEqual({ source: "inherit_overall" });
   });
@@ -270,15 +294,14 @@ describe("<SettingsSection /> — правила прохождения тем",
 
 // ─── Adaptive pane: banners, hints, level card ────────────────────────────────
 
-describe("<SettingsSection /> — Адаптивный режим (доп. ветки)", () => {
+describe("<AdaptivePane /> — Адаптивный режим (доп. ветки)", () => {
   function adaptive(over: Partial<TestEditorModel> = {}) {
     return baseModel({ mode: "adaptive", ...over });
   }
 
   it("shows the «no enabled topics» error banner", () => {
     const model = adaptive({ sections: [buildSection({ topicId: "t1" })] });
-    renderSettings(model);
-    fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
+    renderSettings(model, undefined, { pane: AdaptivePane });
     expect(screen.getByTestId("adaptive-no-enabled-topics")).toBeInTheDocument();
   });
 
@@ -291,8 +314,7 @@ describe("<SettingsSection /> — Адаптивный режим (доп. ве�
         topics: [{ topicId: "t1", topicName: "Тема А", failureFeedback: null, enabled: true, levels: [] }],
       },
     });
-    renderSettings(model);
-    fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
+    renderSettings(model, undefined, { pane: AdaptivePane });
     expect(screen.getByTestId("adaptive-topic-hint-t1")).toHaveTextContent(/Добавьте уровни/i);
   });
 
@@ -305,8 +327,7 @@ describe("<SettingsSection /> — Адаптивный режим (доп. ве�
         topics: [{ topicId: "t1", topicName: "Тема А", failureFeedback: null, enabled: true, levels: [makeLevel()] }],
       },
     });
-    renderSettings(model);
-    fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
+    renderSettings(model, undefined, { pane: AdaptivePane });
     expect(screen.getByTestId("adaptive-topic-hint-t1")).toHaveTextContent(/ещё один уровень/i);
   });
 
@@ -324,8 +345,7 @@ describe("<SettingsSection /> — Адаптивный режим (доп. ве�
   }
 
   function openTopicBody(model: TestEditorModel, updateModel = vi.fn()) {
-    renderSettings(model, updateModel);
-    fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
+    renderSettings(model, updateModel, { pane: AdaptivePane });
     fireEvent.click(screen.getByTestId("adaptive-topic-toggle-t1"));
     return updateModel;
   }
@@ -377,76 +397,97 @@ describe("<SettingsSection /> — Адаптивный режим (доп. ве�
     expect(screen.getByTestId("adaptive-level-t1-0-remove")).toBeDisabled();
   });
 
-  it("saves topic failure feedback through the modal", () => {
-    const model = adaptive({
-      sections: [buildSection({ topicId: "t1" })],
-      adaptive: {
-        showDifficultyLevel: true,
-        testSettings: { showDifficultyLevel: true },
-        topics: [{ topicId: "t1", topicName: "Тема А", failureFeedback: null, enabled: true, levels: [] }],
-      },
-    });
-    const updateModel = openTopicBody(model);
-    // Empty preview → the whole preview root is the click-to-edit target.
-    fireEvent.click(screen.getByTestId("adaptive-topic-failure-t1"));
-    fireEvent.change(screen.getByTestId("feedback-editor-text"), { target: { value: "Повторите тему" } });
-    fireEvent.click(screen.getByTestId("feedback-editor-save"));
-    expect(runUpdater(updateModel, model).adaptive.topics[0].failureFeedback).toBe("Повторите тему");
-  });
+  // Текст темы «при не пройденном уровне» и тексты уровней правятся не здесь: с Э2.5 они
+  // живут карточкой «По уровням» на вкладке обратной связи. Проверки — в
+  // `level-feedback-card.test.tsx`.
 });
 
-// ─── Rail error / warning dots (FR-20c) ───────────────────────────────────────
+// ─── Точки состояния рейла (FR-20c) ──────────────────────────────────────────
 
-describe("<SettingsSection /> — rail status dots", () => {
-  it("marks the «Основное» rail with an error dot when title is invalid", () => {
-    const fieldErrors = buildFieldErrorIndex([
-      { field: "basic.title", message: "Обязательное поле", code: "x", severity: "error" },
-    ]);
-    renderSettings(baseModel(), () => {}, { fieldErrors });
-    expect(within(screen.getByTestId("settings-rail-basic")).getByLabelText("Ошибка")).toBeInTheDocument();
-  });
-
-  it("marks the adaptive rail with an error dot when no topic is enabled", () => {
-    const model = baseModel({ mode: "adaptive", sections: [buildSection({ topicId: "t1" })] });
-    renderSettings(model);
-    expect(within(screen.getByTestId("settings-rail-adaptive")).getByLabelText("Ошибка")).toBeInTheDocument();
-  });
-
-  it("marks the adaptive rail with a warning dot when an enabled topic has <2 levels", () => {
-    const model = baseModel({
-      mode: "adaptive",
-      sections: [buildSection({ topicId: "t1" })],
-      adaptive: {
-        showDifficultyLevel: true,
-        testSettings: { showDifficultyLevel: true },
-        topics: [{ topicId: "t1", topicName: "Тема А", failureFeedback: null, enabled: true, levels: [makeLevel()] }],
-      },
+/**
+ * После перестройки ящика рейл принадлежит ВКЛАДКЕ, а не секции настроек: точки
+ * состояния проверяются на «Составе и сценарии», где живут адаптивные уровни. Ошибка
+ * названия теста показывается точкой самой вкладки «Основное» — рейла у неё нет.
+ */
+describe("<CompositionTab /> — точки состояния рейла", () => {
+  function renderTab(model: TestEditorModel) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    renderSettings(model);
+    return render(
+      <QueryClientProvider client={client}>
+        <CompositionTab
+          model={model}
+          updateModel={() => {}}
+          savedFlowMode={null}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("отмечает ошибкой «Адаптивные уровни», когда не включена ни одна тема", () => {
+    renderTab(baseModel({ mode: "adaptive", sections: [buildSection({ topicId: "t1" })] }));
+    expect(within(screen.getByTestId("composition-rail-adaptive")).getByLabelText("Ошибка")).toBeInTheDocument();
+  });
+
+  it("отмечает замечанием тему, у которой меньше двух уровней", () => {
+    renderTab(
+      baseModel({
+        mode: "adaptive",
+        sections: [buildSection({ topicId: "t1" })],
+        adaptive: {
+          showDifficultyLevel: true,
+          testSettings: { showDifficultyLevel: true },
+          topics: [{ topicId: "t1", topicName: "Тема А", failureFeedback: null, enabled: true, levels: [makeLevel()] }],
+        },
+      }),
+    );
     expect(
-      within(screen.getByTestId("settings-rail-adaptive")).getByLabelText("Требует внимания"),
+      within(screen.getByTestId("composition-rail-adaptive")).getByLabelText("Требует внимания"),
     ).toBeInTheDocument();
   });
+
+  it("не показывает «Адаптивные уровни» стандартному тесту", () => {
+    renderTab(baseModel());
+    expect(screen.queryByTestId("composition-rail-adaptive")).toBeNull();
+  });
 });
 
-// ─── Test-level feedback trigger ──────────────────────────────────────────────
+// ─── Вводный текст по исходу (PRD-61) ─────────────────────────────────────────
 
-describe("<SettingsSection /> — общая обратная связь теста", () => {
-  it("opens the feedback modal and persists edited text", () => {
+describe("<FeedbackTextsPane /> — вводный текст по исходу", () => {
+  // Здесь была правка общей обратной связи ТЕСТА: её сняли (PRD-61 §10), и вместо неё
+  // страница правит три вводных текста. Проверяется самое хрупкое место — правка текста
+  // ИСХОДА не должна задевать общий текст и наоборот.
+  it("текст исхода пишется в свою ветвь и не трогает общий", () => {
     const updateModel = vi.fn();
     const model = baseModel();
-    renderSettings(model, updateModel);
-    // Empty preview root opens the modal.
-    fireEvent.click(screen.getByTestId("settings-feedback-trigger"));
-    fireEvent.change(screen.getByTestId("feedback-editor-text"), { target: { value: "Молодец!" } });
+    renderSettings(model, updateModel, { pane: FeedbackTextsPane });
+    fireEvent.click(screen.getByTestId("settings-intro-results-failed-trigger"));
+    fireEvent.change(screen.getByTestId("feedback-editor-text"), { target: { value: "Не хватило баллов." } });
     fireEvent.click(screen.getByTestId("feedback-editor-save"));
-    expect(runUpdater(updateModel, model).basic.feedback.text).toBe("Молодец!");
+    const next = runUpdater(updateModel, model);
+    expect(next.intro?.results?.failed?.text).toBe("Не хватило баллов.");
+    expect(next.intro?.results?.text).toBe("");
+  });
+
+  it("общий текст пишется рядом с текстом исхода, не стирая его", () => {
+    const updateModel = vi.fn();
+    const model = baseModel();
+    model.intro = { results: { format: "plain", text: "", failed: { format: "plain", text: "Не хватило." } } };
+    renderSettings(model, updateModel, { pane: FeedbackTextsPane });
+    fireEvent.click(screen.getByTestId("settings-intro-results-trigger"));
+    fireEvent.change(screen.getByTestId("feedback-editor-text"), { target: { value: "Спасибо." } });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    const next = runUpdater(updateModel, model);
+    expect(next.intro?.results?.text).toBe("Спасибо.");
+    expect(next.intro?.results?.failed?.text).toBe("Не хватило.");
   });
 });
 
 // ─── Retake pane: cooldown clamp + plugin selection ───────────────────────────
 
-describe("<SettingsSection /> — Повторное прохождение (доп. ветки)", () => {
+describe("<LimitsPane /> — Повторное прохождение (доп. ветки)", () => {
   const plugins = {
     plugins: [
       { key: "webtutor_cooldown", name: "WebTutor", version: "1", description: "", bestEffort: false, configs: [] },
@@ -470,8 +511,7 @@ describe("<SettingsSection /> — Повторное прохождение (д�
   it("updates the cooldown period from the number input", () => {
     const updateModel = vi.fn();
     const model = enabledModel();
-    renderSettings(model, updateModel, { seedPlugins: plugins });
-    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    renderSettings(model, updateModel, { pane: LimitsPane, seedPlugins: plugins });
     fireEvent.change(screen.getByTestId("settings-retake-cooldown-input"), { target: { value: "45" } });
     expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDays).toBe(45);
   });
@@ -479,8 +519,7 @@ describe("<SettingsSection /> — Повторное прохождение (д�
   it("clamps an over-large cooldown down to 3650 days", () => {
     const updateModel = vi.fn();
     const model = enabledModel();
-    renderSettings(model, updateModel, { seedPlugins: plugins });
-    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    renderSettings(model, updateModel, { pane: LimitsPane, seedPlugins: plugins });
     fireEvent.change(screen.getByTestId("settings-retake-cooldown-input"), { target: { value: "5000" } });
     expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDays).toBe(3650);
   });

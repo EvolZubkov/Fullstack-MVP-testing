@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe: вопрос «Сценарий» и банк сценариев</title>
+  <!--
+    Сценарий в ИС, этап Э0, экран 1 (docs/specs/sim-scenario/plan-tests.md).
+    Основа — approved/content-bank-explorer.html. Оставлено только то, что относится к типу
+    вопроса «Сценарий»: три состояния ящика вопроса (загрузка архива .scenario.zip, сводка
+    принятого архива, отказ импорта) и три состояния банка (тема со сценариями, фильтр по типу,
+    только сценарии). Пиктограмма типа — lucide monitor-play. Прочие состояния, пояснения и
+    строки DS исходного экрана вырезаны: они согласованы там. Статус: СОГЛАСОВАНО владельцем 2026-10-06.
+  -->
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    .wf-state.active { display: block; }
+    .wf-state > .ou-drawer-root { top: var(--wf-nav-offset, var(--wf-size-52)); bottom: 0; height: auto; }
+    .wf-state > .ou-drawer-root > .ou-drawer { height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+
+    /* Page composition (DS tokens only; like prd7 .tree-*) */
+    .cb-wrap { max-width: 1080px; margin: 0 auto; padding: var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); position: relative; }
+    .cb-title { font: var(--ou-text-heading-s); font-weight: 700; }
+    .cb-spacer { flex: 1; }
+    .cb-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+    .cb-search { position: relative; flex: 1; min-width: var(--wf-size-200, 200px); }
+    .cb-search .ou-field { width: 100%; }
+    .cb-filternote { font: var(--ou-text-body-s); color: var(--ou-fg-muted); padding: 0 var(--ou-space-2) var(--ou-space-1); }
+    .cb-chips { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; padding: 0 var(--ou-space-2); }
+
+    /* Table-tree (язык списка «Тесты»): колонки НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ */
+    .cb-tree { display: flex; flex-direction: column; }
+    .cb-thead, .cb-row { display: grid; grid-template-columns: 1fr var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px); align-items: center; border-bottom: 1px solid var(--ou-border-default); }
+    .cb-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .cb-thead > div { padding: var(--ou-space-2); text-align: center; }
+    .cb-thead > div:first-child { text-align: left; padding-left: var(--ou-space-3); }
+    .cb-row { min-height: var(--wf-size-44, 44px); cursor: pointer; user-select: none; }
+    .cb-row:hover { background: var(--ou-bg-hover); }
+    .cb-name { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; padding: var(--ou-space-2) var(--ou-space-2) var(--ou-space-2) var(--ou-space-3); }
+    .cb-name__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-twist, .cb-ico, .cb-qtype { width: var(--ou-space-4); height: var(--ou-space-4); flex: none; display: inline-flex; color: var(--ou-fg-muted); }
+    .cb-ico--topic { color: var(--ou-accent-default); }
+    .cb-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
+    .cb-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--ou-space-1); padding-right: var(--ou-space-3); }
+    /* Корневой ярлык */
+    .cb-rootrow { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); border-bottom: 1px solid var(--ou-border-default); }
+    /* Папка */
+    .cb-row--folder .cb-name__label { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); }
+    .cb-foldercount { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    /* Тема */
+    .cb-row--topic .cb-name { padding-left: calc(var(--ou-space-3) + var(--ou-space-5)); }
+    .cb-row--topic .cb-name__label, .cb-row--topic-root .cb-name__label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+    .cb-row--topic.is-open, .cb-row--topic.is-open:hover { background: var(--ou-accent-soft); box-shadow: inset 3px 0 0 var(--ou-accent-default); }
+    /* Вопрос — лист под направляющей (indent-line) */
+    .cb-row--q .cb-name { padding-left: calc(var(--ou-space-3) + var(--ou-space-5) + var(--ou-space-6)); position: relative; }
+    .cb-row--q .cb-name::before { content: ""; position: absolute; left: calc(var(--ou-space-3) + var(--ou-space-5) + var(--ou-space-2)); top: 0; bottom: 0; width: 1px; background: var(--ou-border-default); }
+    .cb-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
+    .cb-qcheck { opacity: 0; flex: none; }
+    .cb-row--q:hover .cb-qcheck, .is-select .cb-qcheck { opacity: 1; }
+    .cb-emptyrow { padding: var(--ou-space-6) var(--ou-space-3); }
+    /* Selection mode */
+    .cb-seltools { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-2) var(--ou-space-3); background: var(--ou-accent-soft); border-bottom: 1px solid var(--ou-border-default); flex-wrap: wrap; }
+    .cb-selcount { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); }
+    .cb-seldiv { width: 1px; align-self: stretch; min-height: 1.2em; background: var(--ou-border-default); margin: 0 var(--ou-space-1); }
+    .cb-menu-pop { position: absolute; right: var(--ou-space-6); top: 200px; z-index: 30; }
+    .cb-menu-pop--q { top: 300px; }
+
+    /* Speed-dial FAB (canon prd7-tests-list) */
+    .fab-wrap { position: fixed; bottom: var(--ou-space-6); right: var(--ou-space-6); z-index: 30; width: var(--wf-size-56); height: var(--wf-size-56); }
+    .ou-fab { width: var(--wf-size-56); height: var(--wf-size-56); border-radius: var(--ou-radius-pill); background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--ou-shadow-m); transition: transform .2s; }
+    .ou-fab:hover { filter: brightness(1.1); }
+    .ou-fab--open { transform: rotate(45deg); }
+    .fab-actions { position: absolute; bottom: calc(100% + var(--ou-space-3)); right: calc((var(--wf-size-56) - var(--wf-size-44)) / 2); display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-end; width: max-content; }
+    .fab-action { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .fab-action-label { font: var(--ou-text-body-s); font-weight: 500; background: var(--ou-bg-elevated); color: var(--ou-fg-default); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); padding: var(--ou-space-1) var(--ou-space-3); box-shadow: var(--ou-shadow-xs); white-space: nowrap; }
+    .fab-action-btn { width: var(--wf-size-44); height: var(--wf-size-44); border-radius: var(--ou-radius-pill); background: var(--ou-bg-elevated); color: var(--ou-fg-default); border: var(--wf-border-w) solid var(--ou-border-default); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--ou-shadow-s); flex-shrink: 0; }
+    .fab-action-btn:hover { background: var(--ou-bg-hover); }
+
+    /* Full filter: facet panel */
+    .cb-filterpop { position: absolute; z-index: 30; top: var(--wf-size-90, 84px); left: var(--wf-size-200, 230px); width: var(--wf-size-620, 620px); max-width: calc(100% - var(--ou-space-6) * 2); background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-l, var(--ou-shadow-m)); }
+    .cb-filterpop__body { padding: var(--ou-space-4); display: flex; flex-direction: column; gap: var(--ou-space-5); max-height: 70vh; overflow: auto; }
+    .cb-filterpop__foot { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-default); }
+    .cb-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+    .cb-facet--wide { grid-column: 1 / -1; }
+    /* Conditional sub-group inside «Сложность»: hidden when «Не задана» is on */
+    .cb-cond { display: flex; flex-direction: column; gap: var(--ou-space-3); padding-top: var(--ou-space-1); }
+    .cb-facet.is-na .cb-cond { display: none; }
+    .cb-cond .ou-slider { padding-bottom: var(--ou-space-5); }
+    /* Сложность: свитч «Не задана» слева, контрол интервала справа в одной строке */
+    .cb-diffrow { display: flex; align-items: center; gap: var(--ou-space-5); }
+    .cb-diffrow__ctrl { flex: 1; min-width: 0; padding-top: 0; }
+    .cb-diffrow__ctrl .ou-slider { width: 100%; max-width: none; }
+    /* Сабхэдер «Сложности» (Интервал) — приглушённый стиль, не топ-капс */
+    .cb-diffrow .ou-slider__lbl { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); }
+    /* Drawer вопроса: сложность = слайдер (тянется) + поле ввода числа */
+    .qd-diffrow { display: flex; align-items: center; gap: var(--ou-space-4); }
+    .qd-diffrow .ou-slider { flex: 1; min-width: 0; max-width: none; padding-bottom: var(--ou-space-5); }
+    .qd-diffrow__num { width: var(--wf-size-90, 88px); flex: none; }
+    .qd-diffrow__sw { flex: none; white-space: nowrap; }
+    /* «Не задавать» ВКЛ — прячем контролы установки уровня (как «Не задана» в фильтре) */
+    .ou-formfield.is-na .qd-diffrow .ou-slider,
+    .ou-formfield.is-na .qd-diffrow__num,
+    .ou-formfield.is-na .qd-hint { display: none; }
+    /* Конструкторы вариантов по типам + состояния валидации */
+    .qd-error { display: flex; align-items: center; gap: var(--ou-space-1); margin-top: var(--ou-space-2); font: var(--ou-text-caption); color: var(--ou-error-default); }
+    .qd-opt.is-err .ou-field__box { box-shadow: inset 0 0 0 1px var(--ou-error-default); }
+    .qd-pair { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .qd-pair .ou-field { flex: 1; min-width: 0; }
+    .qd-pair__link { flex: none; color: var(--ou-fg-muted); }
+    .qd-rank { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .qd-rank .ou-field { flex: 1; min-width: 0; }
+    .qd-rank__handle { flex: none; color: var(--ou-fg-muted); display: inline-flex; cursor: grab; }
+    .qd-rank__num { flex: none; width: var(--ou-space-5); text-align: center; font-weight: 700; color: var(--ou-fg-muted); }
+    .qd-grip { flex: none; color: var(--ou-fg-muted); display: inline-flex; cursor: grab; }
+    .qd-shuffle { margin-top: var(--ou-space-2); }
+    .qd-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .cb-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+    .cb-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+
+    /* Drawer / modal form local layout */
+    .qd-stack { display: flex; flex-direction: column; gap: var(--ou-space-6); }
+    /* Поле «Тема» нарисовано ОТКРЫТЫМ, чтобы эскиз показывал строку поиска. Держать
+       состояние классом `is-open` нельзя: `prd7-shared.js` снимает его со всех
+       select'ов по любому клику на документе, и меню гасло сразу после переключения
+       состояния. Поэтому — собственный класс и своя специфичность поверх гейта
+       `.ou-select:not(.is-open) .ou-select__menu` из `wf-utils.css`. */
+    #s-q-drawer .wf-open-static .ou-select__menu { display: flex; }
+    #s-q-drawer .wf-open-static .ou-select__trigger { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+    #s-q-drawer .wf-open-static .ou-select__chev { transform: rotate(180deg); }
+    .qd-opt { display: flex; align-items: center; gap: var(--ou-space-3); }
+    .qd-opt .ou-field { flex: 1; }
+    /* Token/tag input — композиция Field + Chip (канон prd11-question-tags) */
+    .ou-field__box.wf-tags-box { display: flex; flex-wrap: wrap; align-items: center; height: auto; gap: var(--ou-space-2); padding: var(--ou-space-2); min-height: var(--ou-size-control-m); }
+    .wf-tags-input { flex: 1; min-width: 10ch; border: 0; background: transparent; outline: none; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+    .wf-tags-input::placeholder { color: var(--ou-fg-muted); }
+    .qd-spacer { flex: 1; }
+    .mv-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
+    /* utilities (заменяют инлайн-стили) */
+    .qd-stack--tight { gap: var(--ou-space-2); }
+    .qd-addrow { margin-top: var(--ou-space-2); }
+    .cb-drawer-tabs { padding: 0 var(--ou-space-6); border-bottom: 1px solid var(--ou-border-default); }
+
+    /* ── Групповые операции (Р-1..Р-8): режим «папки и темы», доступ, удаление папки, влияние ── */
+    /* Чекбоксы папок/тем видимы в режиме «папки и темы» (у вопросов свой режим) */
+    .cb-selcheck { flex: none; display: inline-flex; }
+    .cb-seltools__scope { flex-basis: 100%; font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    /* Групповой доступ: поля активной операции (сегмент переключает) */
+    .ba-group { display: none; flex-direction: column; gap: var(--ou-space-5); }
+    .ba-group.is-active { display: flex; }
+    .ba-scope { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding: var(--ou-space-3); background: var(--ou-accent-soft); border-radius: var(--ou-radius-s); font: var(--ou-text-body-s); }
+    .ba-scope__ico { color: var(--ou-accent-default); flex: none; }
+    /* Удаление папки: режим (radio) + его под-панель */
+    .fd-opt { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .fd-mode { display: flex; flex-direction: column; gap: var(--ou-space-3); padding: var(--ou-space-1) 0 var(--ou-space-2) calc(var(--ou-space-5) + var(--ou-space-3)); }
+    .fd-opt.is-off .fd-mode { display: none; }
+    /* Влияние (content-guard, partial-batch) */
+    .ci-group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .ci-grouplbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+    .ci-row { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-s); }
+    .ci-row__ico { flex: none; }
+    .ci-row__main { min-width: 0; }
+    .ci-row__title { font: var(--ou-text-body-s); font-weight: 600; }
+    .ci-row__meta { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .ci-row--block .ci-row__ico { color: var(--ou-error-default); }
+    .ci-row--ok .ci-row__ico { color: var(--ou-accent-default); }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></symbol>
+  <symbol id="i-topic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="i-expand-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></symbol>
+  <symbol id="i-collapse-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+  <symbol id="i-q-single" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-q-multiple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12 11 15 16 9"/></symbol>
+  <symbol id="i-q-matching" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/></symbol>
+  <symbol id="i-q-ranking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>  <symbol id="i-monitor-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z"/><path d="M12 17v4"/><path d="M8 21h8"/><rect x="2" y="3" width="20" height="14" rx="2"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-sim-empty')">Вопрос: загрузка архива</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-sim-loaded')">Вопрос: архив принят</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-sim-errors')">Вопрос: ошибки импорта</button>
+  <span class="wf-nav-sep"></span>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-sim-bank')">Банк: тема со сценариями</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-sim-filters')">Банк: фильтр по типу</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-sim-filtered')">Банк: только сценарии</button>
+</nav>
+
+<!-- ════ s-sim-empty: вопрос «Сценарий» (дельта к s-q-drawer) ════ -->
+<div class="wf-state active" id="s-sim-empty">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="s-sim-empty-qd-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="s-sim-empty-qd-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Работа в СЭД</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-sim-bank')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <!-- Тема — тот же одиночный выбор, что и был, плюс поиск: банк держит сотни
+               тем, и находить нужную глазами в плоском списке долго. Список фильтруется
+               по ПОДСТРОКЕ названия, совпадение подсвечивается; пустой запрос показывает
+               все темы, то есть поле работает и как обычный выпадающий список. Значение —
+               обычный текст (ни чипов, ни отметок-квадратов: тема у вопроса одна),
+               крестик сбрасывает выбор. Показано открытое состояние: меню лежит поверх
+               следующего поля, как и в жизни. -->
+          <div class="ou-select ou-field--m ou-field--full">
+            <label class="ou-field__lbl" for="s-sim-empty-qd-topic">Тема</label>
+            <div class="ou-select__control">
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="s-sim-empty-qd-topic" aria-haspopup="listbox" aria-expanded="true">
+                <span class="ou-select__value">Работа в СЭД</span>
+                <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить тему"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="s-sim-empty-qd-type">Тип вопроса</label>
+            <select class="ou-select ou-field--m" id="s-sim-empty-qd-type">
+              <option>Один ответ</option>
+              <option>Несколько ответов</option>
+              <option>Соответствие</option>
+              <option>Ранжирование</option>
+              <option>Шкала</option>
+              <option>Распределение баллов</option>
+              <option>Короткий ответ</option>
+              <option>Пропуски</option>
+              <option>Развёрнутый ответ</option>
+              <option selected>Сценарий</option>
+            </select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="s-sim-empty-qd-prompt">Текст задания</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="s-sim-empty-qd-prompt" rows="3">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сценарий</span>
+            <div class="ou-uploader" role="button" tabindex="0" aria-label="Загрузить архив сценария">
+              <span class="ou-uploader__icon"><svg width="24" height="24"><use href="#i-upload"/></svg></span>
+              <span class="ou-uploader__title">Перетащите архив сценария</span>
+              <span class="ou-uploader__sub">.scenario.zip · scenario.json и изображения media/ · до 40 МБ</span>
+              <span class="ou-uploader__cta" aria-hidden="true">Выбрать файл</span>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сложность</span>
+            <div class="qd-diffrow">
+              <label class="ou-switch-field qd-diffrow__sw"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.ou-formfield').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задано</span></span></label>
+              <div class="ou-slider ou-slider--h" aria-label="Сложность">
+                <div class="ou-slider__rail">
+                  <div class="ou-slider__fill" style="left:0%;right:60%"></div>
+                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:40%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="40" aria-label="Сложность"></div>
+                </div>
+              </div>
+              <div class="ou-field ou-field--m qd-diffrow__num"><div class="ou-field__box"><input class="ou-field__input" type="number" min="0" max="100" value="40" aria-label="Сложность (число)" /></div></div>
+            </div>
+            <span class="qd-hint">0 — очень легко, 100 — очень сложно</span>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Теги (подтемы)</span>
+            <div class="ou-field ou-field--m">
+              <div class="ou-field__box wf-tags-box">
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">регистрация</button><button type="button" class="ou-chip__close" aria-label="Удалить тег регистрация"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">справочники</button><button type="button" class="ou-chip__close" aria-label="Удалить тег справочники"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-sim-bank')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-sim-loaded: вопрос «Сценарий» (дельта к s-q-drawer) ════ -->
+<div class="wf-state" id="s-sim-loaded">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="s-sim-loaded-qd-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="s-sim-loaded-qd-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Работа в СЭД</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-sim-bank')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <!-- Тема — тот же одиночный выбор, что и был, плюс поиск: банк держит сотни
+               тем, и находить нужную глазами в плоском списке долго. Список фильтруется
+               по ПОДСТРОКЕ названия, совпадение подсвечивается; пустой запрос показывает
+               все темы, то есть поле работает и как обычный выпадающий список. Значение —
+               обычный текст (ни чипов, ни отметок-квадратов: тема у вопроса одна),
+               крестик сбрасывает выбор. Показано открытое состояние: меню лежит поверх
+               следующего поля, как и в жизни. -->
+          <div class="ou-select ou-field--m ou-field--full">
+            <label class="ou-field__lbl" for="s-sim-loaded-qd-topic">Тема</label>
+            <div class="ou-select__control">
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="s-sim-loaded-qd-topic" aria-haspopup="listbox" aria-expanded="true">
+                <span class="ou-select__value">Работа в СЭД</span>
+                <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить тему"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="s-sim-loaded-qd-type">Тип вопроса</label>
+            <select class="ou-select ou-field--m" id="s-sim-loaded-qd-type">
+              <option>Один ответ</option>
+              <option>Несколько ответов</option>
+              <option>Соответствие</option>
+              <option>Ранжирование</option>
+              <option>Шкала</option>
+              <option>Распределение баллов</option>
+              <option>Короткий ответ</option>
+              <option>Пропуски</option>
+              <option>Развёрнутый ответ</option>
+              <option selected>Сценарий</option>
+            </select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="s-sim-loaded-qd-prompt">Текст задания</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="s-sim-loaded-qd-prompt" rows="3">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сценарий</span>
+            <div class="qd-stack qd-stack--tight">
+            <div class="ou-file">
+              <div class="ou-file__thumb ou-file__thumb--default"><svg width="18" height="18" aria-label="Сценарий"><use href="#i-monitor-play"/></svg></div>
+              <div class="ou-file__main">
+                <div class="ou-file__name">Регистрация входящего письма</div>
+                <div class="ou-file__meta">Сценарий · СЭД · сцена 1920 × 1200 · 1,1 МБ</div>
+              </div>
+              <div class="ou-file__actions">
+                <button type="button" class="ou-file__btn" aria-label="Заменить архив"><svg width="16" height="16"><use href="#i-upload"/></svg></button>
+                <button type="button" class="ou-file__btn" aria-label="Скачать архив"><svg width="16" height="16"><use href="#i-download"/></svg></button>
+                <button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Удалить архив"><svg width="16" height="16"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+              <div class="ou-tag-group">
+                <span class="ou-tag ou-tag--neutral ou-tag--s">11 сцен</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">12 изображений</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">4 поля</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">2 ловушки</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">цель: 4 проверки</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">лимит 5:00</span>
+              </div>
+              <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><svg width="14" height="14"><use href="#i-play"/></svg> Сыграть</button></div>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сложность</span>
+            <div class="qd-diffrow">
+              <label class="ou-switch-field qd-diffrow__sw"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.ou-formfield').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задано</span></span></label>
+              <div class="ou-slider ou-slider--h" aria-label="Сложность">
+                <div class="ou-slider__rail">
+                  <div class="ou-slider__fill" style="left:0%;right:60%"></div>
+                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:40%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="40" aria-label="Сложность"></div>
+                </div>
+              </div>
+              <div class="ou-field ou-field--m qd-diffrow__num"><div class="ou-field__box"><input class="ou-field__input" type="number" min="0" max="100" value="40" aria-label="Сложность (число)" /></div></div>
+            </div>
+            <span class="qd-hint">0 — очень легко, 100 — очень сложно</span>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Теги (подтемы)</span>
+            <div class="ou-field ou-field--m">
+              <div class="ou-field__box wf-tags-box">
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">регистрация</button><button type="button" class="ou-chip__close" aria-label="Удалить тег регистрация"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">справочники</button><button type="button" class="ou-chip__close" aria-label="Удалить тег справочники"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-sim-bank')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-sim-errors: вопрос «Сценарий» (дельта к s-q-drawer) ════ -->
+<div class="wf-state" id="s-sim-errors">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="s-sim-errors-qd-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="s-sim-errors-qd-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Работа в СЭД</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-sim-bank')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <!-- Тема — тот же одиночный выбор, что и был, плюс поиск: банк держит сотни
+               тем, и находить нужную глазами в плоском списке долго. Список фильтруется
+               по ПОДСТРОКЕ названия, совпадение подсвечивается; пустой запрос показывает
+               все темы, то есть поле работает и как обычный выпадающий список. Значение —
+               обычный текст (ни чипов, ни отметок-квадратов: тема у вопроса одна),
+               крестик сбрасывает выбор. Показано открытое состояние: меню лежит поверх
+               следующего поля, как и в жизни. -->
+          <div class="ou-select ou-field--m ou-field--full">
+            <label class="ou-field__lbl" for="s-sim-errors-qd-topic">Тема</label>
+            <div class="ou-select__control">
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="s-sim-errors-qd-topic" aria-haspopup="listbox" aria-expanded="true">
+                <span class="ou-select__value">Работа в СЭД</span>
+                <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить тему"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="s-sim-errors-qd-type">Тип вопроса</label>
+            <select class="ou-select ou-field--m" id="s-sim-errors-qd-type">
+              <option>Один ответ</option>
+              <option>Несколько ответов</option>
+              <option>Соответствие</option>
+              <option>Ранжирование</option>
+              <option>Шкала</option>
+              <option>Распределение баллов</option>
+              <option>Короткий ответ</option>
+              <option>Пропуски</option>
+              <option>Развёрнутый ответ</option>
+              <option selected>Сценарий</option>
+            </select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="s-sim-errors-qd-prompt">Текст задания</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="s-sim-errors-qd-prompt" rows="3">Зарегистрируйте входящее письмо от ООО «Ромашка» с номером ВХ-1183 и темой «Запрос коммерческого предложения», исполнитель — Петрова.</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сценарий</span>
+            <div class="qd-stack qd-stack--tight">
+            <div class="ou-file">
+              <div class="ou-file__thumb ou-file__thumb--zip">ZIP</div>
+              <div class="ou-file__main">
+                <div class="ou-file__name">registraciya-vhodyashego.scenario.zip</div>
+                <div class="ou-file__meta">Архив сценария · 1,1 МБ · не принят</div>
+              </div>
+              <div class="ou-file__actions">
+                <button type="button" class="ou-file__btn" aria-label="Заменить архив"><svg width="16" height="16"><use href="#i-upload"/></svg></button>
+                <button type="button" class="ou-file__btn" aria-label="Скачать архив"><svg width="16" height="16"><use href="#i-download"/></svg></button>
+                <button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Удалить архив"><svg width="16" height="16"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+              <div role="alert" class="ou-banner ou-banner--subtle ou-banner--error">
+                <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">Архив не принят: 3 ошибки</div>
+                  <ul class="ou-banner__desc ou-list--bulleted">
+                    <li>Сцена «Карточка · справочник»: элемент dialog ссылается на изображение dir-dialog, которого нет в media/</li>
+                    <li>Зона delete-yes: у ловушки не задано название ошибки</li>
+                    <li>К цели «Документ зарегистрирован» нельзя дойти только по основному и другим верным путям</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="ou-banner ou-banner--subtle ou-banner--warning">
+                <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">Предупреждения: 1</div>
+                  <div class="ou-banner__desc">Сцена «Исходящие» недостижима от старта</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сложность</span>
+            <div class="qd-diffrow">
+              <label class="ou-switch-field qd-diffrow__sw"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.ou-formfield').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задано</span></span></label>
+              <div class="ou-slider ou-slider--h" aria-label="Сложность">
+                <div class="ou-slider__rail">
+                  <div class="ou-slider__fill" style="left:0%;right:60%"></div>
+                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:40%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="40" aria-label="Сложность"></div>
+                </div>
+              </div>
+              <div class="ou-field ou-field--m qd-diffrow__num"><div class="ou-field__box"><input class="ou-field__input" type="number" min="0" max="100" value="40" aria-label="Сложность (число)" /></div></div>
+            </div>
+            <span class="qd-hint">0 — очень легко, 100 — очень сложно</span>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Теги (подтемы)</span>
+            <div class="ou-field ou-field--m">
+              <div class="ou-field__box wf-tags-box">
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">регистрация</button><button type="button" class="ou-chip__close" aria-label="Удалить тег регистрация"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">справочники</button><button type="button" class="ou-chip__close" aria-label="Удалить тег справочники"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-sim-bank')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-sim-bank: тема — банк сценариев (дельта к s-default) ════ -->
+<div class="wf-state" id="s-sim-bank">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-sim-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы (312)</div>
+
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Информационные системы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа в СЭД</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">6</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q" onclick="showState(null,'s-sim-loaded')">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация входящего письма</span></div>
+        <div class="cb-cell">40</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация исходящего письма</span></div>
+        <div class="cb-cell">35</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Создание поручения по документу</span></div>
+        <div class="cb-cell">55</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Отправка документа на согласование</span></div>
+        <div class="cb-cell">62</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Какой реквизит присваивается документу при регистрации?</span></div>
+        <div class="cb-cell">22</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие документы регистрируются в журнале входящих?</span></div>
+        <div class="cb-cell">40</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа в 1С: склад</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">5</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа с порталом госуслуг</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">3</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-sim-filters: тип «Сценарий» в панели фасетов (дельта к s-filters) ════ -->
+<div class="wf-state" id="s-sim-filters">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-sim-bank')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры <span class="ou-tag ou-tag--neutral ou-tag--s">1</span></button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы (312)</div>
+
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Информационные системы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа в СЭД</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">6</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q" onclick="showState(null,'s-sim-loaded')">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация входящего письма</span></div>
+        <div class="cb-cell">40</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация исходящего письма</span></div>
+        <div class="cb-cell">35</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Создание поручения по документу</span></div>
+        <div class="cb-cell">55</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Отправка документа на согласование</span></div>
+        <div class="cb-cell">62</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Какой реквизит присваивается документу при регистрации?</span></div>
+        <div class="cb-cell">22</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие документы регистрируются в журнале входящих?</span></div>
+        <div class="cb-cell">40</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа в 1С: склад</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">5</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа с порталом госуслуг</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">3</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+    <div class="ou-card ou-card--outlined cb-filterpop" role="dialog" aria-label="Фильтры">
+      <div class="cb-filterpop__body">
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Тип вопроса</span>
+          <div class="cb-facet__row">
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Один ответ</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Несколько ответов</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Соответствие</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Ранжирование</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Шкала</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Распределение баллов</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Сценарий</span></span></label>
+          </div>
+        </div>
+        <div class="cb-facet cb-facet--wide">
+          <span class="cb-facet__lbl">Сложность</span>
+          <div class="cb-diffrow">
+            <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.cb-facet').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задана</span></span></label>
+            <div class="cb-cond cb-diffrow__ctrl">
+              <div class="ou-slider ou-slider--h" aria-label="Интервал сложности">
+                <div class="ou-slider__header"><span class="ou-slider__lbl">Интервал</span><span class="ou-slider__val"><strong>0 — 100</strong></span></div>
+                <div class="ou-slider__rail">
+                  <div class="ou-slider__fill" style="left:0%;right:0%"></div>
+                  <div class="ou-slider__marks">
+                    <span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span>
+                    <span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span>
+                    <span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span>
+                  </div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:0%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Сложность — нижняя граница"></div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-label="Сложность — верхняя граница"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cb-facet cb-facet--wide">
+          <span class="cb-facet__lbl">Теги (подтемы)</span>
+          <div class="ou-field ou-field--m">
+            <div class="ou-field__box wf-tags-box">
+              <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
+            </div>
+          </div>
+        </div>
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Медиа</span>
+          <div class="cb-facet__row">
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С изображением</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С аудио</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С видео</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Без медиа</span></span></label>
+          </div>
+        </div>
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Автор</span>
+          <select class="ou-select ou-field--m" aria-label="Автор"><option selected>Любой</option><option>Иванов И.</option><option>Петрова А.</option></select>
+        </div>
+        <div class="cb-facet cb-facet--wide">
+          <span class="cb-facet__lbl">Область</span>
+          <div class="ou-seg ou-seg--m" role="group" aria-label="Область">
+            <button type="button" class="ou-seg__item is-active" aria-pressed="true">Все</button>
+            <button type="button" class="ou-seg__item" aria-pressed="false">Мои</button>
+            <button type="button" class="ou-seg__item" aria-pressed="false">Доступные</button>
+            <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
+          </div>
+        </div>
+      </div>
+      <div class="cb-filterpop__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Сбросить всё</button>
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-sim-filtered')">Применить</button>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-sim-filtered: фильтр «Тип: Сценарий» (дельта к s-filtered) ════ -->
+<div class="wf-state" id="s-sim-filtered">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-sim-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры <span class="ou-tag ou-tag--neutral ou-tag--s">1</span></button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-chips">
+      <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Тип: Сценарий</button><button type="button" class="ou-chip__close" aria-label="Убрать условие: Тип Сценарий"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Очистить всё</button>
+    </div>
+    <div class="cb-filternote">Показано 7 совпадений в 2 темах · дерево автоматически раскрыто</div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Информационные системы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа в СЭД</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">4 / 6</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q" onclick="showState(null,'s-sim-loaded')">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация входящего письма</span></div>
+        <div class="cb-cell">40</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация исходящего письма</span></div>
+        <div class="cb-cell">35</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Создание поручения по документу</span></div>
+        <div class="cb-cell">55</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Отправка документа на согласование</span></div>
+        <div class="cb-cell">62</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Работа в 1С: склад</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">3 / 5</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Регистрация поступления товаров</span></div>
+        <div class="cb-cell">45</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Списание товара по акту</span></div>
+        <div class="cb-cell">58</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Сценарий"><svg width="16" height="16"><use href="#i-monitor-play"/></svg></span><span class="cb-name__label">Инвентаризация склада</span></div>
+        <div class="cb-cell">70</div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — только дельта «Сценарий»</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Модель / находка</th></tr></thead>
+    <tbody>
+      <tr><td>Тип «Сценарий» (дельта Э0)</td><td>В ящике остаются тема, текст задания, сложность и теги. Варианты ответа, «Случайный порядок вариантов» и медиа вопроса для типа неприменимы и скрыты: всё содержимое — в архиве</td><td>docs/specs/sim-scenario/plan-tests.md, Э1. <code>questions.type = simulation</code>, <code>dataJson</code> — <code>scenario.json</code> контракта</td></tr>
+      <tr><td>Загрузка архива</td><td>Архив <code>.scenario.zip</code>: <code>scenario.json</code> и <code>media/</code>. Редактора сценария нет — архив собирают руками</td><td>Изображения уходят в медиатеку, пути <code>media/…</code> заменяются её идентификаторами</td></tr>
+      <tr><td>Принятый сценарий</td><td>После загрузки имя файла не используется: карточка называет сценарий его названием <code>meta.title</code>, рядом — система <code>meta.system</code>, размер сцены и вес. Это же название — имя вопроса в банке. «Скачать» отдаёт архив сценария, собранный заново из сохранённого. Имя файла видно только в отказе импорта, пока сценария ещё нет</td><td>Контракт: exchange-format.md, раздел 4.1</td></tr>
+      <tr><td>Сводка архива</td><td>Числа из принятого сценария: сцены, изображения, поля, ловушки, проверки цели, лимит. «Сыграть» открывает тот же плеер на весь экран, что у участника; результат никуда не пишется</td><td>Плеер — <code>shared/sim</code></td></tr>
+      <tr><td>Ошибки импорта</td><td>Проверки контракта на сервере (exchange-format.md, раздел 6). Ошибка — архив не принят, «Сохранить» недоступна; предупреждение не мешает сохранить</td><td>Тексты ошибок называют сцену, зону или элемент, чтобы автор нашёл место в <code>scenario.json</code></td></tr>
+      <tr><td>Пиктограмма типа «Сценарий»</td><td>lucide <code>monitor-play</code> в колонке типа строки вопроса, в фильтре и везде, где показан тип</td><td>Решение владельца, 2026-10-06. Сырое значение <code>simulation</code> в интерфейсе не показывается</td></tr>
+      <tr><td>Тема — банк сценариев</td><td>Отдельной сущности «банк» нет: тема, где лежат вопросы-сценарии, и есть банк. Сценарии стоят в теме рядом с обычными вопросами и считаются в «Вопросов»</td><td>plan-tests.md, раздел 1. Пункт теста ссылается на тему и выдаёт из неё случайный или фиксированный сценарий</td></tr>
+      <tr><td>Фильтр «Тип: Сценарий»</td><td>Новое значение в фасете «Тип вопроса». Сюда ведёт «Открыть банк» из ящика теста — с фильтром по типу и раскрытой темой</td><td>Счётчик темы при фильтре — «совпало / всего»</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — Skillum</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-uploader</code> / <code>.ou-file</code></td><td>Загрузка и принятый архив сценария (дельта Э0)</td><td>FileUploader</td><td><code>FileUploader</code></td></tr>
+      <tr><td><code>.ou-banner--error</code> / <code>--warning</code></td><td>Ошибки и предупреждения импорта архива</td><td>Banner</td><td><code>Banner</code></td></tr>
+      <tr><td><code>.ou-tag-group</code></td><td>Сводка принятого сценария</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.cb-qtype</code></td><td>Пиктограмма типа «Сценарий» в строке вопроса</td><td>Icon (lucide <code>monitor-play</code>)</td><td><code>MonitorPlay</code> из <code>lucide-react</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    var want = new URLSearchParams(location.search).get('state');
+    // The nav wraps to several lines: the drawer must start under it, not under a fixed 52px.
+    var nav = document.querySelector('.wf-nav');
+    if (nav) { document.documentElement.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px'); document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px'); }
+    if (!want) return;
+    var btn = [].slice.call(document.querySelectorAll('.wf-nav button')).filter(function (b) { return (b.getAttribute('onclick') || '').indexOf("'" + want + "'") >= 0; })[0];
+    window.showState(btn || null, want);
+  });
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+  // Групповой доступ: сегмент операции переключает видимые поля
+  window.baOp = function baOp(btn, op) {
+    var modal = btn.closest('.ou-modal');
+    modal.querySelectorAll('.ou-seg[aria-label="Операция доступа"] .ou-seg__item').forEach(function (i) {
+      var on = i === btn; i.classList.toggle('is-active', on); i.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    modal.querySelectorAll('.ba-group').forEach(function (g) { g.classList.toggle('is-active', g.getAttribute('data-op') === op); });
+  };
+  // Удаление папки: radio переключает под-панель режима
+  window.fdMode = function fdMode(mode) {
+    document.getElementById('fd-opt-move').classList.toggle('is-off', mode !== 'move');
+    document.getElementById('fd-opt-cascade').classList.toggle('is-off', mode !== 'cascade');
+  };
+  // DS-радио показывает точку через класс .ou-radio.is-on (не через :checked) — держим его
+  // синхронным с checked, чтобы выбранный вариант был виден в статичном эскизе.
+  window.syncRadios = function syncRadios() {
+    document.querySelectorAll('.ou-radio__input').forEach(function (inp) {
+      var r = inp.closest('.ou-radio'); if (r) r.classList.toggle('is-on', inp.checked);
+    });
+  };
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('ou-radio__input')) window.syncRadios();
+  });
+  window.syncRadios();
+</script>
+
+</body>
+</html>

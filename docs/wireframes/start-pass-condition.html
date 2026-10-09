@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Wireframe: условие прохождения на обложке теста (стартовая страница).
+      Разметка обложки 1:1 с server/scorm/templates/default/layouts/start.html (tb-scene /
+      tb-cover / tb-facts), стили — настоящие: ui-kit + theme.css шаблона.
+      Дельта: плитка условия по политике «Тест пройден, если» (tests.pass_decision_policy):
+        - «Только общий результат»          — плитка «N % проходной балл», как сейчас;
+        - «Общий результат и обязательные»  — «N % проходной балл» + «K из K обязательных тем»;
+        - «Все обязательные темы»           — только «K из K обязательных тем»
+                                              (общий процент справочный, не показывается — 2.34.1);
+        - «Все темы»                         — «M из M тем».
+      Подпись под числом — «для прохождения», чтобы плитка читалась как условие, а не как
+      факт «в тесте 8 тем».
+      Черновик, к согласованию 2026-09-30.
+    -->
+    <title>Обложка теста — условие прохождения</title>
+    <link rel="stylesheet" href="/vendor/ui-kit/css/skillum-ds.css" />
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css" />
+    <style>
+      /* Каркас ТОЛЬКО эскиза: переключатель состояний и рамка сцены. */
+      body { margin: 0; background: var(--ou-bg-canvas, #f5f6f8); }
+      .wf-nav {
+        position: sticky; top: 0; z-index: 10;
+        display: flex; flex-wrap: wrap; align-items: center; gap: var(--ou-space-1);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated, #fff);
+        border-bottom: 1px solid var(--ou-border-soft, #e3e5e8);
+        font: var(--ou-text-body-s);
+      }
+      .wf-nav button { font: inherit; padding: var(--ou-space-1) var(--ou-space-3); cursor: pointer; }
+      .wf-nav button.active { font-weight: 600; }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-frame { max-width: 1100px; margin: var(--ou-space-6) auto; min-height: 640px; }
+      .wf-notes { max-width: 820px; margin: var(--ou-space-6) auto; font: var(--ou-text-body-m); }
+      .wf-notes td, .wf-notes th { padding: var(--ou-space-2) var(--ou-space-3); border-bottom: 1px solid var(--ou-border-soft, #e3e5e8); text-align: left; vertical-align: top; }
+    </style>
+  </head>
+  <body class="ou">
+    <nav class="wf-nav" aria-label="Состояния эскиза">
+      <span>Условие прохождения на обложке:</span>
+      <button type="button" data-state="overall" class="active">Только общий результат</button>
+      <button type="button" data-state="overall-required">Общий результат и обязательные темы</button>
+      <button type="button" data-state="required">Все обязательные темы</button>
+      <button type="button" data-state="all">Все темы</button>
+      <button type="button" data-state="notes">Пояснения</button>
+    </nav>
+
+    <!-- 1. Только общий результат: как сейчас. -->
+    <div class="wf-state active" data-state="overall">
+      <div class="wf-frame">
+        <div class="tb-scene tb-scene--cover">
+          <main class="tb-scene__body">
+            <div class="tb-cover">
+              <div class="tb-cover__main">
+                <div class="tb-cover__content">
+                  <div class="tb-cover__head">
+                    <div class="tb-cover__eyebrow"><span>Попытка 1 из 3</span></div>
+                    <h1 class="tb-cover__title">Охрана труда для руководителей</h1>
+                    <div class="tb-cover__desc"><p>Проверка знаний требований охраны труда.</p></div>
+                  </div>
+                  <div class="tb-facts">
+                    <div class="tb-facts__item"><div class="tb-facts__num">30</div><div class="tb-facts__lbl">вопросов</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">70%</div><div class="tb-facts__lbl">проходной балл</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">3</div><div class="tb-facts__lbl">попыток</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+          <footer class="tb-scene__foot">
+            <div class="tb-scene__foot-spacer"></div>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Начать тестирование</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Общий результат И обязательные темы: обе плитки. -->
+    <div class="wf-state" data-state="overall-required">
+      <div class="wf-frame">
+        <div class="tb-scene tb-scene--cover">
+          <main class="tb-scene__body">
+            <div class="tb-cover">
+              <div class="tb-cover__main">
+                <div class="tb-cover__content">
+                  <div class="tb-cover__head">
+                    <div class="tb-cover__eyebrow"><span>Попытка 1 из 2</span></div>
+                    <h1 class="tb-cover__title">Продукты компании</h1>
+                    <div class="tb-cover__desc"><p>Тест по линейке продуктов для B2B.</p></div>
+                  </div>
+                  <div class="tb-facts">
+                    <div class="tb-facts__item"><div class="tb-facts__num">40</div><div class="tb-facts__lbl">вопросов</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">70%</div><div class="tb-facts__lbl">проходной балл</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">3 из 3</div><div class="tb-facts__lbl">обязательных тем для прохождения</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">2</div><div class="tb-facts__lbl">попыток</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+          <footer class="tb-scene__foot">
+            <div class="tb-scene__foot-spacer"></div>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Начать тестирование</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Все обязательные темы («Сертификация»): процента нет, только условие по темам. -->
+    <div class="wf-state" data-state="required">
+      <div class="wf-frame">
+        <div class="tb-scene tb-scene--cover">
+          <main class="tb-scene__body">
+            <div class="tb-cover">
+              <div class="tb-cover__main">
+                <div class="tb-cover__content">
+                  <div class="tb-cover__head">
+                    <div class="tb-cover__eyebrow"><span>Попытка 1 из 1</span></div>
+                    <h1 class="tb-cover__title">Сертификация руководителей в «Ростелекоме»</h1>
+                    <div class="tb-cover__desc"><p>Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»? С помощью этого теста вы сможете самостоятельно проверить, насколько ваши компетенции, знания и навыки соответствуют профилю успешного руководителя.</p></div>
+                  </div>
+                  <div class="tb-facts">
+                    <div class="tb-facts__item"><div class="tb-facts__num">64</div><div class="tb-facts__lbl">вопросов</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">8 из 8</div><div class="tb-facts__lbl">обязательных тем для прохождения</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">1</div><div class="tb-facts__lbl">попыток</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+          <footer class="tb-scene__foot">
+            <div class="tb-scene__foot-spacer"></div>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Начать тестирование</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Все темы. -->
+    <div class="wf-state" data-state="all">
+      <div class="wf-frame">
+        <div class="tb-scene tb-scene--cover">
+          <main class="tb-scene__body">
+            <div class="tb-cover">
+              <div class="tb-cover__main">
+                <div class="tb-cover__content">
+                  <div class="tb-cover__head">
+                    <div class="tb-cover__eyebrow"><span>Попытка 1 из 2</span></div>
+                    <h1 class="tb-cover__title">Базовые технологии</h1>
+                    <div class="tb-cover__desc"><p>Сети доступа, транспорт, сервисы.</p></div>
+                  </div>
+                  <div class="tb-facts">
+                    <div class="tb-facts__item"><div class="tb-facts__num">40</div><div class="tb-facts__lbl">вопросов</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">5 из 5</div><div class="tb-facts__lbl">тем для прохождения</div></div>
+                    <div class="tb-facts__item"><div class="tb-facts__num">2</div><div class="tb-facts__lbl">попыток</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+          <footer class="tb-scene__foot">
+            <div class="tb-scene__foot-spacer"></div>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Начать тестирование</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- Пояснения. -->
+    <div class="wf-state" data-state="notes">
+      <div class="wf-notes">
+        <h2>Какая плитка при какой политике</h2>
+        <table>
+          <tr><th>«Тест пройден, если»</th><th>Плитки условия</th></tr>
+          <tr><td>Только общий результат</td><td>«N% — проходной балл» (как сейчас)</td></tr>
+          <tr><td>Общий результат и обязательные темы</td><td>«N% — проходной балл» и «K из K — обязательных тем для прохождения»</td></tr>
+          <tr><td>Все обязательные темы</td><td>«K из K — обязательных тем для прохождения»; общий процент не показывается (2.34.1)</td></tr>
+          <tr><td>Все темы</td><td>«M из M — тем для прохождения»</td></tr>
+        </table>
+        <p>K — число обязательных тем теста, M — число тем с порогом. Плитка скрыта, если таких
+          тем нет. Измерительный тест (без оценивания) условий не показывает, как сейчас.</p>
+        <p>Для шаблонов: новое необязательное поле контекста <code>course.passCondition</code>
+          (<code>{ count, total, kind: "required" | "all" }</code>); шаблон без него показывает
+          обложку как раньше. Меняется контракт шаблонов (минорная версия): плитка добавляется в
+          default, certification, corporate, minimal и rtk-storyline.</p>
+      </div>
+    </div>
+
+    <script>
+      document.querySelectorAll('.wf-nav button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var s = b.getAttribute('data-state');
+          document.querySelectorAll('.wf-nav button').forEach(function (x) { x.classList.toggle('active', x === b); });
+          document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el.getAttribute('data-state') === s); });
+        });
+      });
+    </script>
+  </body>
+</html>

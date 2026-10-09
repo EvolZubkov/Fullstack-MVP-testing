@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    // Same as vitest.config.ts: keep the v4 default until the suite is audited.
+    clearMocks: false,
     setupFiles: ["./tests/setup-config.ts"],
     include: ["tests/it/**/*.it.test.{js,ts}"],
     exclude: ["node_modules", "dist"],

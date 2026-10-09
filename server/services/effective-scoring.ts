@@ -27,6 +27,8 @@ import {
   resolveEffectiveDifficulty,
   type EffectiveScoring,
 } from "@shared/scoring/effective-scoring";
+import { isSimulation } from "@shared/questions/question-type";
+import { resolveSimScoring } from "@shared/sim/scoring";
 import type { Question, Test, TestSection, TestQuestionScoring } from "@shared/schema";
 
 /** The chain sources reader — live storage or a snapshot data source. */
@@ -52,18 +54,28 @@ export interface TestScoringContext {
  * test's section on its topic.
  */
 export function buildTestScoringContext(
-  test: Pick<Test, "defaultQuestionPoints"> | undefined,
+  test: (Pick<Test, "defaultQuestionPoints"> & Partial<Pick<Test, "simScoringJson">>) | undefined,
   sections: Array<Pick<TestSection, "topicId" | "defaultPoints">>,
   overrides: TestQuestionScoring[],
 ): TestScoringContext {
   const overrideByQuestion = new Map(overrides.map((row) => [row.questionId, row]));
   const sectionDefaultByTopic = new Map(sections.map((s) => [s.topicId, s.defaultPoints]));
+  // «Сценарий в ИС»: раздел пункта-сценария живёт под ключом `scenario:<id>`, а его сценарии — в
+  // теме-банке. Балл по умолчанию пункта отвечает за вопросы банка, если у банка нет своего
+  // раздела темы; одна тема в нескольких пунктах — первый пункт.
+  // (Признак раздела пункта — поле `scenarioItem`, см. `isScenarioSection` в test-snapshot; модуль
+  // не импортируется сюда, чтобы контекст оценки не тянул за собой источник выдачи.)
+  for (const section of sections) {
+    const item = (section as { scenarioItem?: { topicId: string; defaultPoints?: number | null } }).scenarioItem;
+    if (!item) continue;
+    if (!sectionDefaultByTopic.has(item.topicId)) sectionDefaultByTopic.set(item.topicId, item.defaultPoints ?? null);
+  }
   const testDefaultPoints = test?.defaultQuestionPoints ?? null;
 
   return {
     resolve(question: Question): EffectiveScoring {
       const override = overrideByQuestion.get(question.id);
-      return resolveEffectiveScoring({
+      const effective = resolveEffectiveScoring({
         override: override
           ? {
               points: override.points,
@@ -80,6 +92,16 @@ export function buildTestScoringContext(
         // resolves from the override and the section/test defaults only.
         questionContentHash: question.contentHash ?? null,
       });
+      // «Сценарий в ИС» (Э5а): штрафы и частичное выполнение разрешаются по цепочке система →
+      // тест → вопрос; в вопрос уходит полностью разрешённое значение — его читают подсчёт веба и
+      // пакет. Способы оценки PRD-10 к сценарию не применяются, поэтому чужой вид отбрасывается.
+      if (!isSimulation(question.type)) return effective;
+      const own = override?.scoringJson?.kind === "simulation" ? override.scoringJson : null;
+      return {
+        ...effective,
+        scoring: resolveSimScoring(test?.simScoringJson ?? null, own),
+        source: { ...effective.source, scoring: own ? "override" : effective.source.scoring },
+      };
     },
 
     difficultyOf(question: Question): number | null {

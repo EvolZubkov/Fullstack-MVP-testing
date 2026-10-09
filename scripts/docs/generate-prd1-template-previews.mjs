@@ -1,10 +1,17 @@
 /**
  * @module generate-prd1-template-previews
- * @description Wrapper script that generates preview.html for every template
- * found under server/scorm/templates/ AND the repo-root templates/ dir (external
- * PRD-3 packages, e.g. certification). All HTML, CSS, JS, and data are read
- * from the template directory and the PRD1 runtime; the script itself contains
- * no layout or styling logic.
+ * @description Wrapper script that generates preview.html for every template it can
+ * find: the built-in ones under server/scorm/templates/ and the ones VENDORED OUT into
+ * their own repositories (certification, standard-rt), which live side by side in the
+ * templates directory. All HTML, CSS, JS, and data are read from the template directory
+ * and the PRD1 runtime; the script itself contains no layout or styling logic.
+ *
+ * A vendored-out template keeps its package under `<repo>/template/`, so the scan accepts
+ * both shapes: a manifest directly in the directory and one a `template/` level deeper.
+ * Its preview is written back into ITS OWN repository — that is where the file belongs.
+ *
+ * The directory holding those repositories comes from SKILLUM_TEMPLATES_DIR, falling back
+ * to the agreed location next to the product.
  *
  * Usage: node scripts/docs/generate-prd1-template-previews.mjs
  */
@@ -14,11 +21,17 @@ import path from "node:path";
 import { buildSync } from "esbuild";
 
 const root = process.cwd();
-/** Roots scanned for template packages: the built-in dir and the repo-root
- *  `templates/` dir (external packages validated via the PRD-3 admin lifecycle). */
+
+/** Where the repositories of the vendored-out templates live. */
+const externalTemplatesDir =
+  process.env.SKILLUM_TEMPLATES_DIR && process.env.SKILLUM_TEMPLATES_DIR.trim().length > 0
+    ? process.env.SKILLUM_TEMPLATES_DIR
+    : path.join("C:", "Repositories", "skill'um", "templates");
+
+/** Roots scanned for template packages: the built-in dir and the vendored-out repos. */
 const TEMPLATE_ROOTS = [
   path.join(root, "server", "scorm", "templates"),
-  path.join(root, "templates"),
+  externalTemplatesDir,
 ];
 const runtimeDir    = path.join(root, "server", "scorm", "template", "app");
 
@@ -35,8 +48,20 @@ const BOOTSTRAP_FILE = path.join(root, "scripts", "docs", "_preview-bootstrap.js
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
+/**
+ * Read a source file with line endings NORMALISED to LF.
+ *
+ * Every caller ends up embedding the text into `preview.html` — layouts and styles as
+ * JS string literals through `JSON.stringify`, the runtime inline in a `<script>`. On a
+ * Windows checkout (`core.autocrlf=true`) the bytes on disk carry CRLF, so without this
+ * the literals gain `\r\n` while the committed previews hold `\n`: regeneration then
+ * produces a diff of thousands of invisible differences on top of the real edit, and two
+ * developers on different systems rewrite the file after each other forever. Normalising
+ * on READ (rather than on write) keeps the rule in ONE place — every embedding path goes
+ * through here.
+ */
 function readText(filePath) {
-  return fs.readFileSync(filePath, "utf8");
+  return fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
 }
 
 function readJson(filePath) {
@@ -68,10 +93,24 @@ function discoverTemplateDirs() {
     if (!fs.existsSync(base)) continue;
     for (const e of fs.readdirSync(base, { withFileTypes: true })) {
       if (!e.isDirectory()) continue;
-      if (!fs.existsSync(path.join(base, e.name, "manifest.json"))) continue;
-      if (seen.has(e.name)) continue; // first root wins on id collision
-      seen.add(e.name);
-      out.push({ id: e.name, dir: path.join(base, e.name) });
+      // Built-in: the manifest lies in the directory itself. Vendored out: the package
+      // sits under `template/`, because the repository also carries a README, the build
+      // script and the font/logo sources.
+      const candidates = [path.join(base, e.name), path.join(base, e.name, "template")];
+      const dir = candidates.find((c) => fs.existsSync(path.join(c, "manifest.json")));
+      if (!dir) continue;
+      // The id is the template's own, declared in its manifest — a repository is named
+      // after its package (`skillum-template-certification`), not after the template.
+      let id = e.name;
+      try {
+        const declared = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8")).id;
+        if (typeof declared === "string" && declared.length > 0) id = declared;
+      } catch {
+        /* unreadable manifest: fall back to the directory name and let the build report it */
+      }
+      if (seen.has(id)) continue; // first root wins on id collision
+      seen.add(id);
+      out.push({ id, dir });
     }
   }
   return out;
@@ -116,6 +155,30 @@ function readLayouts(templateDir, manifest) {
   }
 
   return result;
+}
+
+/**
+ * The design system, inlined into every preview BEFORE the template's own CSS —
+ * the same order the SCORM package assembles (`assemblePackageStyles`: DS first,
+ * theme.css over it).
+ *
+ * Without it the preview had `.ou` on <html> but no DS stylesheet behind it, so
+ * every `var(--ou-*)` in a template resolved to nothing: `gap: var(--ou-space-9)`
+ * fell back to `normal` and the start screen's facts row collapsed into one glued
+ * line. The scene is authored against DS tokens and `.ou-*` components, so a
+ * preview without them shows a different template than either host renders.
+ *
+ * `url('../fonts/…')` is authored relative to the ui-kit `css/` dir; the preview is
+ * served from `/api/templates/<id>/assets/preview.html`, so the path is rewritten to
+ * the app-absolute `/fonts/…` that `client/public/fonts/` answers.
+ */
+function readDsCss() {
+  const dsPath = path.join(root, "vendor", "ui-kit", "css", "skillum-ds.css");
+  if (!fs.existsSync(dsPath)) {
+    console.warn(`  [warn] DS stylesheet not found: ${path.relative(root, dsPath)}`);
+    return "";
+  }
+  return readText(dsPath).replace(/url\('\.\.\/fonts\//g, "url('/fonts/");
 }
 
 function readAssetStyles(templateDir, manifest) {
@@ -266,6 +329,13 @@ function previewFixesCss() {
   return `
     /* Undo template global resets that break the preview chrome */
     html,body{overflow:auto!important;display:block!important;height:auto!important;min-height:100vh!important;background:#e5e7eb!important}
+    /* The runtime marks the scene root with the DS theme classes (.ou plus .ou--dark or
+       .ou--light). In a package the html element IS that root; here it also carries the
+       preview chrome, so the DS background/color declarations on .ou would repaint the
+       builder mock in the template's theme - a dark template left the chrome
+       light-on-light. Keep the chrome neutral and give the STAGE the themed ground. */
+    html,body{color:var(--pv-fg)!important}
+    #pv-stage{background:var(--ou-bg-page);color:var(--ou-fg-default)}
     /* Force top-level player elements to fill the stage container instead of the viewport.
        The template's own aspect-ratio rule (if any) is preserved — only width/max-width are fixed. */
     #pv-stage>*{position:relative!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important}
@@ -277,6 +347,7 @@ function previewFixesCss() {
 function buildPreviewHtml(manifest, templateDir) {
   const demoData       = readDemoData(templateDir, manifest);
   const layouts        = readLayouts(templateDir, manifest);
+  const dsCss          = readDsCss();
   const templateCss    = readAssetStyles(templateDir, manifest);
   const templateScript = readAssetScripts(templateDir, manifest);
   const prd1Runtime    = readPrd1Runtime();
@@ -294,6 +365,7 @@ function buildPreviewHtml(manifest, templateDir) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escAttr(manifest.name)} · preview</title>
   <style>${previewChromeCss()}</style>
+  <style id="ds-styles">${dsCss}</style>
   <style id="tpl-styles">${templateCss}</style>
   <style id="pv-fixes">${previewFixesCss()}</style>
 </head>

@@ -43,6 +43,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     basic: {
       title: "Sample",
       description: "",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -51,7 +52,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -157,6 +158,14 @@ describe("<CompositionSection /> — draw all toggle", () => {
 // ─── QuotaEditor (PRD-11) ─────────────────────────────────────────────────────
 
 describe("<CompositionSection /> — QuotaEditor", () => {
+  /**
+   * Карточки квот открываются свёрнутыми: свёрнутая карточка говорит то же, что
+   * говорила строка таблицы. Поля живут в теле, поэтому тест правки сначала
+   * разворачивает карточку — ровно как это делает автор.
+   */
+  const expandQuota = (topicId: string, index = 0) =>
+    fireEvent.click(screen.getByTestId(`quota-fold-${topicId}-${index}`));
+
   it("shows the «no tags» hint and a disabled toggle for an untagged topic", () => {
     // top-2 has no seeded (tagged) questions.
     const model = baseModel({
@@ -259,6 +268,7 @@ describe("<CompositionSection /> — QuotaEditor", () => {
       ],
     });
     renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
+    expandQuota("top-1");
     fireEvent.change(screen.getByTestId("quota-count-top-1-0"), { target: { value: "3" } });
     const next = runUpdater(updateModel, model);
     expect(next.sections[0].drawBlueprint?.strata[0].count).toBe(3);
@@ -276,6 +286,7 @@ describe("<CompositionSection /> — QuotaEditor", () => {
       ],
     });
     renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
+    expandQuota("top-1");
     selectOption("quota-tag-top-1-0", "Сети");
     const next = runUpdater(updateModel, model);
     expect(next.sections[0].drawBlueprint?.strata[0].tag).toBe("Сети");
@@ -293,6 +304,7 @@ describe("<CompositionSection /> — QuotaEditor", () => {
       ],
     });
     renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
+    expandQuota("top-1");
     fireEvent.click(screen.getByRole("button", { name: "Не менее" }));
     const next = runUpdater(updateModel, model);
     expect(next.sections[0].drawBlueprint?.strata[0].mode).toBe("min");

@@ -26,6 +26,9 @@ const { storageMock } = vi.hoisted(() => ({
     // на несуществующем методе ещё до кода, который проверяет этот файл.
     getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getSnapshot: vi.fn(),
+    // PRD-51: маршрут читает документ отчёта. Здесь он не предмет проверки —
+    // пустой список означает «документ по умолчанию шаблона».
+    listReportBlocks: vi.fn().mockResolvedValue([]),
     getAttemptsByUserAndTest: vi.fn().mockResolvedValue([]),
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["learner"]),
@@ -121,7 +124,10 @@ describe("readResultsRenderPayload + измерения", () => {
     expect(scales![0].levelLabel).toBe("Высокий");
   });
 
-  it("материал обратной связи ТЕСТА доезжает до блока рекомендаций и получает адрес", () => {
+  it("материал обратной связи ТЕСТА в блок рекомендаций НЕ доезжает (PRD-61 §10)", () => {
+    // Здесь проверялось, что текст, курсы, мероприятия и вложения уровня ТЕСТА доходят
+    // до блока и получают адрес. Уровень снят целиком, поэтому не доходит ничего — а
+    // источники ШКАЛ и ПОКАЗАТЕЛЕЙ работают как работали, что и видно по текстам ниже.
     const withFeedback = {
       ...MEASURES,
       testFeedback: {
@@ -133,25 +139,15 @@ describe("readResultsRenderPayload + измерения", () => {
       },
     };
     const payload = readResultsRenderPayload(DIR, RESULT, "Маслач", null, undefined, undefined, withFeedback as never);
-    const recommendations = (payload!.context.result as {
-      recommendations?: {
-        texts: string[];
-        links: Array<{ title: string; url?: string }>;
-        events: Array<{ title: string }>;
-        assets: Array<{ title: string; url?: string }>;
-      };
-    }).recommendations;
-    expect(recommendations!.texts).toContain("Опросник носит справочный характер.");
-    expect(recommendations!.links).toEqual([{ title: "Курс", url: "https://e/x" }]);
-    expect(recommendations!.events).toEqual([{ title: "Вебинар" }]);
-    expect(recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/uploads/p.pdf" }]);
+    const recommendations = (payload!.context.result as { recommendations?: unknown }).recommendations;
+    // Ни текста, ни курса, ни вебинара, ни памятки: на этой попытке уровни измерений не
+    // сработали, и единственным источником блока была обратная связь теста.
+    expect(recommendations).toBeUndefined();
   });
 
-  it("обратная связь ТЕСТА доезжает и БЕЗ шкал и показателей (дефект Д-3)", () => {
-    // Самая массовая конфигурация продукта: контрольный тест без измерений. Обратная
-    // связь теста собиралась внутри ветки измерений, поэтому такой тест не получал
-    // блока рекомендаций вовсе — хотя обратная связь в нём существует ровно затем,
-    // чтобы её показали.
+  it("тест БЕЗ шкал и показателей блока рекомендаций не получает вовсе", () => {
+    // Самая массовая конфигурация продукта: контрольный тест без измерений. Единственным
+    // источником блока у него была обратная связь ТЕСТА — её сняли, и блока нет.
     const plain = {
       ...MEASURES,
       scales: [],
@@ -167,14 +163,9 @@ describe("readResultsRenderPayload + измерения", () => {
       },
     };
     const payload = readResultsRenderPayload(DIR, RESULT, "Опрос", null, undefined, undefined, plain as never);
-    const result = payload!.context.result as {
-      scales?: unknown;
-      recommendations?: { texts: string[]; assets: Array<{ title: string; url?: string }> };
-    };
-    // Карточек измерений нет — тест их не объявляет; блок рекомендаций есть.
+    const result = payload!.context.result as { scales?: unknown; recommendations?: unknown };
     expect(result.scales).toBeUndefined();
-    expect(result.recommendations!.texts).toEqual(["Спасибо за участие."]);
-    expect(result.recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/api/media/aaaa" }]);
+    expect(result.recommendations).toBeUndefined();
   });
 });
 
@@ -312,10 +303,10 @@ describe("GET /attempts/:id/result — источник толкований", (
     expect(res.body.render.context.result.showScoreSummary).toBeUndefined();
   });
 
-  it("тест БЕЗ шкал и показателей всё равно отдаёт обратную связь теста (Д-3, веб-путь)", async () => {
-    // Проверка идёт через МАРШРУТ, а не через адаптер: ломалось именно здесь —
-    // материал итогов не собирался вовсе, когда у теста нет измерений, и обратная
-    // связь теста терялась вместе с ним ещё до сборщика контекста.
+  it("обратная связь ТЕСТА не доезжает до итогов и через МАРШРУТ (PRD-61 §10)", async () => {
+    // Проверка идёт через маршрут, а не через адаптер: когда-то материал итогов не
+    // собирался вовсе у теста без измерений. Материал собирается по-прежнему — просто
+    // обратной связи уровня теста в нём больше нет.
     storageMock.getAttempt.mockResolvedValue({ ...attempt, snapshotId: null });
     storageMock.getScales.mockResolvedValue([]);
     storageMock.getResultVariables.mockResolvedValue([]);
@@ -336,8 +327,7 @@ describe("GET /attempts/:id/result — источник толкований", (
 
     expect(res.status).toBe(200);
     const result = res.body.render.context.result;
-    expect(result.recommendations.texts).toEqual(["Спасибо за участие."]);
-    expect(result.recommendations.assets).toEqual([{ title: "Памятка.pdf", url: "/api/media/aaaa" }]);
+    expect(result.recommendations).toBeUndefined();
     // Карточек измерений по-прежнему нет, и ответ не несёт `measures` — клиентский
     // отчёт печатает шкалы только у теста, который их объявляет.
     expect(result.scales).toBeUndefined();

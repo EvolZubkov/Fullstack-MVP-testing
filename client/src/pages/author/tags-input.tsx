@@ -9,7 +9,7 @@
  * offered as autocomplete suggestions; a non-matching input can be created as a
  * new tag. By these tags the author later sets per-topic draw quotas.
  */
-import { TagInput } from "@universityrt/ui-kit";
+import { TagInput } from "@skillum/ui-kit";
 import { t } from "@/lib/i18n";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 

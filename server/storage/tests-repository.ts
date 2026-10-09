@@ -6,22 +6,31 @@
  * the referential-integrity lookups that answer "which tests use this
  * topic/question" (PRD-15 FR-03). `deleteTest` is the single owner of test
  * deletion: it removes every row that has no meaning without the test
- * (adaptive config, sections, assignments, access grants, attempts, snapshots)
- * in one transaction; content_pages/scales/result_variables/question_measurements/
- * test_question_scoring go via FK ON DELETE CASCADE, and SCORM telemetry is
- * deliberately kept (nullable `testId`). Section WRITES live in
+ * (adaptive config, sections, assignments and their access links, access grants,
+ * attempts, snapshots, saved analytics slices, delivery exposure, and the whole
+ * LMS trail — telemetry, import batches, packages) in one transaction;
+ * content_pages/scales/result_variables/question_measurements/
+ * test_question_scoring go via FK ON DELETE CASCADE. Section WRITES live in
  * `TestSettingsService`, not here. Exposed through the `IStorage` facade, never
  * imported by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { db } from "../db";
 import {
-  tests, testSections, testSnapshots, attempts,
+  tests, testSections, testScenarios, testSnapshots, attempts,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
   testAssignments, testAccessGrants, questions, questionMeasurements, contentPages,
-  type Test, type InsertTest, type TestSection, type TestSnapshot,
+  assignmentAccessTokens, analyticsSlices, questionExposure,
+  type Test, type InsertTest, type TestSection, type TestScenario, type TestSnapshot,
 } from "@shared/schema";
+import { countTestLmsTrail, purgeTestLmsData, type TestLmsTrailCounts } from "./scorm-repository";
+
+/** What deleting a test takes with it (PRD-15 FR-07a): web attempts plus the LMS trail. */
+export interface TestDeleteImpact extends TestLmsTrailCounts {
+  /** Attempts taken in the service itself. */
+  webAttempts: number;
+}
 
 /**
  * Minimal projection of a test that depends on a topic/question (PRD-15
@@ -113,6 +122,19 @@ export class TestsRepository {
       .where(eq(testSnapshots.testId, testId))
       .orderBy(desc(testSnapshots.version))
       .limit(1);
+    return row || undefined;
+  }
+
+  /**
+   * PRD-56 FR-19a: снимок теста по НОМЕРУ версии — так прохождение из LMS находит свою
+   * версию публикации. Пара (тест, версия) уникальна (`test_snapshots_test_version_idx`),
+   * поэтому номера в пакете достаточно и идентификатор снимка наружу не уезжает.
+   */
+  async getSnapshotByVersion(testId: string, version: number): Promise<TestSnapshot | undefined> {
+    const [row] = await db
+      .select()
+      .from(testSnapshots)
+      .where(and(eq(testSnapshots.testId, testId), eq(testSnapshots.version, version)));
     return row || undefined;
   }
 
@@ -223,9 +245,10 @@ export class TestsRepository {
    * the single owner of test deletion (callers no longer clean up adaptive rows
    * themselves). FK ON DELETE CASCADE removes content_pages, scales,
    * result_variables, question_measurements and test_question_scoring when the
-   * test row goes. SCORM packages/attempts/answers are deliberately KEPT:
-   * `scorm_packages.testId` is nullable by design — the exported package outlives
-   * the test in the LMS, so its telemetry is retained.
+   * test row goes. The LMS trail (telemetry, import batches with the participants
+   * they created, packages) goes too — PRD-15 FR-07a, revised 2026-10-07: it used
+   * to be kept "for administrators", but without the test it explains nothing,
+   * the LMS keeps its own record, and archive is the retention path.
    */
   async deleteTest(id: string): Promise<boolean> {
     return db.transaction(async (tx) => {
@@ -238,18 +261,41 @@ export class TestsRepository {
 
       // Structural dependents.
       await tx.delete(testSections).where(eq(testSections.testId, id));
+      await tx.delete(testScenarios).where(eq(testScenarios.testId, id));
       await tx.delete(testAssignments).where(eq(testAssignments.testId, id));
+      // Personal access links (attempt and review) lead nowhere without the test.
+      await tx.delete(assignmentAccessTokens).where(eq(assignmentAccessTokens.testId, id));
       await tx.delete(testAccessGrants).where(eq(testAccessGrants.testId, id));
+      // Saved analytics slices are bound to exactly one test (PRD-56); filters carry none.
+      await tx.delete(analyticsSlices).where(eq(analyticsSlices.testId, id));
 
       // Delivery history. A hard delete is not restorable (archive is the
       // retention path), so attempts and snapshots go too. Attempts pin
       // snapshots, so drop attempts first.
       await tx.delete(attempts).where(eq(attempts.testId, id));
       await tx.delete(testSnapshots).where(eq(testSnapshots.testId, id));
+      await tx.delete(questionExposure).where(eq(questionExposure.testId, id));
+
+      // LMS trail. AFTER assignments and web attempts: the batch rollback keeps a
+      // participant it created while anything still refers to them.
+      await purgeTestLmsData(tx, id);
 
       const result = await tx.delete(tests).where(eq(tests.id, id)).returning();
       return result.length > 0;
     });
+  }
+
+  /**
+   * What {@link deleteTest} would take with the test — the numbers the delete
+   * dialog names (PRD-15 FR-07a). Read-only; counts every attempt, finished or
+   * abandoned, since all of them go.
+   */
+  async getTestDeleteImpact(id: string): Promise<TestDeleteImpact> {
+    const [[web], lms] = await Promise.all([
+      db.select({ n: sql<number>`count(*)::int` }).from(attempts).where(eq(attempts.testId, id)),
+      countTestLmsTrail(id),
+    ]);
+    return { webAttempts: Number(web?.n ?? 0), ...lms };
   }
 
   async getTestSections(testId: string): Promise<TestSection[]> {
@@ -260,8 +306,38 @@ export class TestsRepository {
       .orderBy(testSections.sortOrder);
   }
 
+  /** «Сценарий в ИС»: пункты-сценарии теста в порядке автора. */
+  async getTestScenarios(testId: string): Promise<TestScenario[]> {
+    return db
+      .select()
+      .from(testScenarios)
+      .where(eq(testScenarios.testId, testId))
+      .orderBy(testScenarios.sortOrder);
+  }
+
+  /** Пункты-сценарии, для которых тема служит банком — «где используется тема». */
+  async getTestScenariosByTopic(topicId: string): Promise<TestScenario[]> {
+    return db.select().from(testScenarios).where(eq(testScenarios.topicId, topicId));
+  }
+
   async getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
     return db.select().from(testSections).where(eq(testSections.topicId, topicId));
+  }
+
+  /**
+   * Разделы сразу по НЕСКОЛЬКИМ темам — PRD-54: определение теста по вопросам из шапки выгрузки.
+   *
+   * Одним запросом, а не циклом из `getTestSectionsByTopic`: тем в выгрузке столько же, сколько
+   * различных тем у её вопросов, и опрос по одной превратил бы опознание файла в N обращений к базе.
+   *
+   * @param topicIds идентификаторы тем
+   * @returns разделы, ссылающиеся на любую из них; пустой массив на пустом списке
+   */
+  async getTestSectionsByTopicIds(topicIds: string[]): Promise<TestSection[]> {
+    // Пустой список проверяется отдельно: `inArray` с пустым массивом даёт `IN ()` — синтаксическую
+    // ошибку Postgres, а не пустую выборку.
+    if (topicIds.length === 0) return [];
+    return db.select().from(testSections).where(inArray(testSections.topicId, topicIds));
   }
 
   async getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {

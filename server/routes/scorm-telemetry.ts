@@ -3,8 +3,111 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { logger } from "../logger";
+import { parseTestVersion } from "@shared/lms-export/meta";
 
 const router = Router();
+
+// ============================================
+// PRD-56: то, что пакет сообщает О ПРОХОЖДЕНИИ
+// ============================================
+
+/**
+ * Снимок публикации по номеру версии, сообщённому пакетом (FR-19a).
+ *
+ * `null` во всех сомнительных случаях: версия не сообщена, сообщена мусором, снимка с таким
+ * номером нет (тест заведён заново, снимок подчищен `pruneSnapshots`) или база не ответила.
+ * Прохождение тогда идёт в разрез отдельной строкой «Версия не указана» — приписать его
+ * текущей версии значит сделать разрез слепым ровно там, где он и нужен.
+ *
+ * Сбой чтения не имеет права сорвать НАЧАЛО прохождения: телеметрия — аналитика, и её потеря
+ * не должна стоить участнику попытки.
+ */
+async function resolveSnapshotId(testId: string | null, version: unknown): Promise<string | null> {
+  const parsed = parseTestVersion(
+    version === undefined || version === null ? null : String(version),
+  );
+  if (!testId || parsed === null) return null;
+
+  try {
+    const snapshot = await storage.getSnapshotByVersion(testId, parsed);
+    if (snapshot) return snapshot.id;
+    logger.warn(
+      `PRD-56: версия ${parsed} теста ${testId} не найдена — прохождение без версии`,
+      "scorm",
+    );
+  } catch (error) {
+    logger.warn("PRD-56: снимок версии не прочитан — " + (error as Error).message, "scorm");
+  }
+  return null;
+}
+
+/**
+ * Карта «тема -> вариант» из тела запроса (FR-18).
+ *
+ * Тело приходит из LMS-окружения, которым мы не управляем, поэтому читается защитно: не
+ * объект, массив или значения не-строки — значит вариантов нет. Пустая карта пишется как
+ * `null`: у теста без вариантов их и правда нет.
+ */
+/**
+ * Учётная запись по идентификатору обучающегося в LMS (PRD-54 BR-54-31, BR-54-33).
+ *
+ * `null` — совпадения нет либо идентификатор не пришёл: прохождение остаётся несвязанным, как
+ * было до этой работы. Ошибка поиска тоже даёт `null`: телеметрия — поток из чужой LMS, и ронять
+ * приём прохождения из-за недоступной сверки нельзя, данные о нём важнее связи с человеком.
+ */
+async function linkedUserId(learnerId: unknown): Promise<string | null> {
+  if (typeof learnerId !== "string" || !learnerId.trim()) return null;
+  try {
+    const user = await storage.getUserByLmsLearnerId(learnerId);
+    return user?.id ?? null;
+  } catch (error) {
+    logger.warn("Связывание прохождения по learner_id не выполнено — " + (error as Error).message, "scorm");
+    return null;
+  }
+}
+
+function readDeliveredForms(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const out: Record<string, string> = {};
+  for (const [topicId, formId] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof formId === "string" && formId !== "") out[topicId] = formId;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Значения шкал прохождения — «ключ -> число» (FR-21).
+ *
+ * Та же колонка и та же форма, что у импорта выгрузки (PRD-54): у одной величины не должно
+ * оказаться двух представлений. Нечисловое значение отбрасывается — шкала измеряется числом.
+ */
+function readScaleValues(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Значения показателей прохождения — «имя -> строка» (FR-21).
+ *
+ * Строкой, а не числом: показатель бывает и числом, и кодом исхода, и выгрузка хранит его так же.
+ */
+function readVariableValues(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === "object") continue;
+    out[name] = String(value);
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 // ============================================
 // Rate limiting (in-memory)
@@ -103,20 +206,51 @@ router.post("/scorm-telemetry/start", async (req: Request, res: Response) => {
     let attempt = await storage.getScormAttemptBySession(packageId, sessionId, attemptNumber);
     
     if (!attempt) {
+      // PRD-56 FR-19a/FR-18: версия публикации и выданные варианты известны ровно в начале
+      // попытки — пакет сообщает их вместе со стартом, как и состав выдачи (PRD-55).
+      const snapshotId = await resolveSnapshotId(pkg.testId, data?.publicationVersion);
+      const formsJson = readDeliveredForms(data?.deliveredForms);
+
       // Создаём новую попытку
       attempt = await storage.createScormAttempt({
         id: crypto.randomUUID(),
         packageId: pkg.id,
         sessionId,
         attemptNumber,
+        // PRD-54 BR-54-31: прохождение связывается с учётной записью по идентификатору
+        // обучающегося в LMS. До этого телеметрия не связывалась ВООБЩЕ: один человек,
+        // прошедший тест в LMS и попавший в выгрузку, считался двумя участниками, и номер
+        // попытки их не склеивал — связывать было нечем.
+        //
+        // Псевдоним здесь не считается и считаться не может: подразделения и должности
+        // рантайм LMS не сообщает, а `learner_id` строго лучше — он не меняется ни при
+        // переводе человека, ни при смене секрета инстанса.
+        userId: await linkedUserId(data?.lmsUserId),
         lmsUserId: data?.lmsUserId || null,
         lmsUserName: data?.lmsUserName || null,
         lmsUserEmail: data?.lmsUserEmail || null,
         lmsUserOrg: data?.lmsUserOrg || null,
+        snapshotId,
+        formsJson,
         startedAt: new Date(),
         lastActivityAt: new Date(),
       });
       logger.info(`New attempt created: ${attempt.id} #${attemptNumber} session=${sessionId} pkg=${packageId}`, "scorm");
+
+      // PRD-55 (FR-01/FR-07): единственное место, где сервер узнаёт СОСТАВ выданной формы —
+      // `answer` описывает отвеченное, а экспозиция это показ. Инкремент привязан к СОЗДАНИЮ
+      // прохождения: продолжение той же попытки счётчик не двигает. Пакеты, собранные до
+      // появления поля, его не шлют — по ним экспозиция просто не считается.
+      const deliveredIds: string[] = Array.isArray(data?.deliveredQuestionIds)
+        ? data.deliveredQuestionIds.filter((id: unknown): id is string => typeof id === "string")
+        : [];
+      if (pkg.testId && deliveredIds.length > 0) {
+        try {
+          await storage.recordDeliveries(deliveredIds, pkg.testId, new Date());
+        } catch (error) {
+          logger.warn("PRD-55: выдача заданий не записана — " + (error as Error).message, "scorm");
+        }
+      }
     } else {
       await storage.updateScormAttempt(attempt.id, { lastActivityAt: new Date() });
       logger.info(`Attempt resumed: ${attempt.id} #${attemptNumber} session=${sessionId}`, "scorm");
@@ -186,6 +320,9 @@ router.post("/scorm-telemetry/answer", async (req: Request, res: Response) => {
       itemsJson: data.items || null,
       levelIndex: data.levelIndex ?? null,
       levelName: data.levelName || null,
+      // Время на задании: пакеты, выданные до измерения, поля не шлют вовсе — тогда NULL,
+      // потому что ноль означал бы «ответил мгновенно».
+      latencyMs: typeof data.latencyMs === "number" && data.latencyMs > 0 ? Math.round(data.latencyMs) : null,
       answeredAt: new Date(),
     });
     
@@ -245,6 +382,11 @@ router.post("/scorm-telemetry/finish", async (req: Request, res: Response) => {
       correctAnswers: data?.correctAnswers || 0,
       achievedLevelsJson: data?.achievedLevels || null,
       failedTopicCoursesJson: data?.failedTopicCourses || null,
+      // PRD-56 FR-21: шкалы и показатели прохождения. Колонки те же, что заполняет импорт
+      // выгрузки (PRD-54): до этого живая телеметрия их не сообщала вовсе, и профиль по
+      // шкалам не видел ни одного прохождения из LMS.
+      scalesJson: readScaleValues(data?.scales),
+      variablesJson: readVariableValues(data?.variables),
     });
     
     logger.info(`Attempt finished: ${attempt.id} #${attemptNumber} percent=${data?.percent}% passed=${data?.passed}`, "scorm");

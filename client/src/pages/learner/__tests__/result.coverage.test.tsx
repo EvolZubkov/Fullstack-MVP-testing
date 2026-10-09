@@ -15,7 +15,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const { navigateSpy, queryState, authState } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
@@ -58,11 +59,30 @@ vi.mock("@/components/template-screen", () => ({
       <button data-testid="ts-finish" onClick={() => props.onAction && props.onAction("results-finish")}>
         finish
       </button>
+      <button data-testid="ts-next" onClick={() => props.onAction && props.onAction("results-next")}>
+        next
+      </button>
+    </div>
+  ),
+}));
+
+// Контентная страница за «Итогами теста»: двойник показывает, какая страница открыта и
+// с какой подписью кнопки, и отдаёт её «Далее».
+vi.mock("../template-content-screen", () => ({
+  TemplateContentScreen: (props: any) => (
+    <div data-testid="content-screen">
+      <span data-testid="cs-page">{props.page.id}</span>
+      <button data-testid="cs-next" onClick={props.onNext}>{props.nextLabel ?? "Далее"}</button>
+      {props.onBack && <button data-testid="cs-back" onClick={props.onBack}>Назад</button>}
     </div>
   ),
 }));
 
 import ResultPage from "../result";
+
+/** Components under test push notifications, and the ui-kit hook needs a provider. */
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+  rtlRender(ui, { wrapper: ToastProvider });
 
 const renderPayload = (over: Record<string, unknown> = {}) => ({
   layout: '<div data-slot="x"></div>',
@@ -224,6 +244,51 @@ describe("<ResultPage /> templated surface", () => {
     fireEvent.click(screen.getByTestId("ts-restart"));
     fireEvent.click(screen.getByTestId("ts-noop")); // unrelated action → no-op
     expect(navigateSpy).not.toHaveBeenCalled();
+  });
+
+  // Страницы, поставленные автором ЗА «Итогами теста», веб не показывал вовсе: экран итогов
+  // живёт на своём маршруте, а прохождение к этому моменту закончено. Теперь «Далее» итогов
+  // ведёт к ним, как в пакете, а последняя закрывает прохождение.
+  it("walks the pages after the results on «Далее» and finishes on the last one", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ layout: "<div></div>" }) });
+    vi.stubGlobal("fetch", fetchSpy);
+    queryState.value = {
+      isLoading: false,
+      error: null,
+      data: fullAttempt({ postResultsPages: [{ id: "how-to-read" }, { id: "contacts" }] }),
+    };
+    render(<ResultPage />);
+    fireEvent.click(screen.getByTestId("ts-next"));
+    expect(await screen.findByTestId("content-screen")).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith("/api/tests/test-1/screen-template/content", { credentials: "include" });
+    expect(screen.getByTestId("cs-page").textContent).toBe("how-to-read");
+    expect(screen.getByTestId("cs-next").textContent).toBe("Далее");
+    fireEvent.click(screen.getByTestId("cs-next"));
+    expect(screen.getByTestId("cs-page").textContent).toBe("contacts");
+    expect(screen.getByTestId("cs-next").textContent).toBe("Завершить тест");
+    fireEvent.click(screen.getByTestId("cs-next"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner");
+    vi.unstubAllGlobals();
+  });
+
+  it("«Назад» steps back through those pages and from the first one to the results screen", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ layout: "<div></div>" }) }));
+    queryState.value = {
+      isLoading: false,
+      error: null,
+      data: fullAttempt({ postResultsPages: [{ id: "how-to-read" }, { id: "contacts" }] }),
+    };
+    render(<ResultPage />);
+    fireEvent.click(screen.getByTestId("ts-next"));
+    await screen.findByTestId("content-screen");
+    fireEvent.click(screen.getByTestId("cs-next"));
+    expect(screen.getByTestId("cs-page").textContent).toBe("contacts");
+    fireEvent.click(screen.getByTestId("cs-back"));
+    expect(screen.getByTestId("cs-page").textContent).toBe("how-to-read");
+    fireEvent.click(screen.getByTestId("cs-back"));
+    expect(screen.getByTestId("template-screen")).toBeInTheDocument();
+    expect(navigateSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it("paints no surface colour of its own — the scene owns its background", () => {

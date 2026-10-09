@@ -21,14 +21,15 @@
  */
 export const PREVIEW_EMBED_CSS = `
 <style id="prd1-preview-embed-overrides">
-  /* DS brand typeface (RostelecomBasis) - @font-face declarations are scoped
-     per-document, so even though the host loads them via vendor/university-rt.css,
-     the iframe is a separate document and needs its own registration. Files live
-     in client/public/fonts/ and are served from the same origin as this iframe. */
-  @font-face { font-family: 'RostelecomBasis'; src: url('/fonts/RostelecomBasis-Light.woff2') format('woff2'),   url('/fonts/RostelecomBasis-Light.woff') format('woff'),   url('/fonts/RostelecomBasis-Light.otf') format('opentype');   font-weight: 300; font-style: normal; font-display: swap; }
-  @font-face { font-family: 'RostelecomBasis'; src: url('/fonts/RostelecomBasis-Regular.woff2') format('woff2'), url('/fonts/RostelecomBasis-Regular.woff') format('woff'), url('/fonts/RostelecomBasis-Regular.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; }
-  @font-face { font-family: 'RostelecomBasis'; src: url('/fonts/RostelecomBasis-Medium.woff2') format('woff2'),  url('/fonts/RostelecomBasis-Medium.woff') format('woff'),  url('/fonts/RostelecomBasis-Medium.otf') format('opentype');  font-weight: 500; font-style: normal; font-display: swap; }
-  @font-face { font-family: 'RostelecomBasis'; src: url('/fonts/RostelecomBasis-Bold.woff2') format('woff2'),    url('/fonts/RostelecomBasis-Bold.woff') format('woff'),    url('/fonts/RostelecomBasis-Bold.otf') format('opentype');    font-weight: 700; font-style: normal; font-display: swap; }
+  /* DS base typeface (Roboto) - @font-face declarations are scoped per-document,
+     so even though the host loads them via vendor/skillum-ds.css, the iframe is a
+     separate document and needs its own registration. The variable woff2 files live
+     in client/public/fonts/ and are served from the same origin as this iframe;
+     one file per unicode subset covers the whole 100-900 weight scale. */
+  @font-face { font-family: 'Roboto'; src: url('/fonts/Roboto-latin.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+  @font-face { font-family: 'Roboto'; src: url('/fonts/Roboto-latin-ext.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+  @font-face { font-family: 'Roboto'; src: url('/fonts/Roboto-cyrillic.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+  @font-face { font-family: 'Roboto'; src: url('/fonts/Roboto-cyrillic-ext.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
   html, body { background: transparent !important; height: 100% !important; min-height: 0 !important; overflow: hidden !important; width: 100% !important; max-width: none !important; display: block !important; }
   /* Drop the standalone shell's flex layout: hidden chrome (.pv-sidebar / .pv-main)
      would otherwise leave .pv-overlay as a content-sized flex item (~860px),
@@ -46,7 +47,7 @@ export const PREVIEW_EMBED_CSS = `
   .pv-stage { flex-shrink: 0 !important; max-height: none !important; }
   .pv-stage-wrap { overflow-y: auto !important; }
   /* Align rail typography with the host DS font stack. */
-  .pv-nav { font-family: 'RostelecomBasis', 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important; }
+  .pv-nav { font-family: 'Roboto', 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif !important; }
 </style>
 `;
 

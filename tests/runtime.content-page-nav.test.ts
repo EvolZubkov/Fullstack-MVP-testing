@@ -176,6 +176,76 @@ describe("Runtime post-results pages — navigation on a custom footer", () => {
     expect(btn.onclick).toBe(g.finishAndClose);
   });
 
+  /** Screen with both directions in the layout's own footer. */
+  function mountScreenWithBack() {
+    const app = document.createElement("div");
+    app.id = "app";
+    app.innerHTML =
+      '<div class="gallery"><div data-slot="page-content"></div>' +
+      '<div class="gallery__nav"><button data-nav="prev">Назад</button>' +
+      '<button data-nav="next">Далее</button></div></div>';
+    document.body.appendChild(app);
+    return app;
+  }
+
+  // «Назад» на странице «Как читать отчёт» уводил к ПОСЛЕДНЕМУ ВОПРОСУ: renderContentPage
+  // привязывает его к журналу прохождения, а тот кончается вопросом (отладчик, 2026-09-24).
+  it("«Назад» on the first page returns to the results screen, not to the last question", () => {
+    const g = globalThis as any;
+    g.state = {
+      phase: "question",
+      currentIndex: 12,
+      postResultsPages: [{ id: "how-to-read" }],
+      templateManifest: {},
+    };
+    g.enterPostResults();
+    expect(g.state.phase).toBe("postResults");
+    const app = mountScreenWithBack();
+    g.renderPostResults();
+
+    (app.querySelector('[data-nav="prev"]') as HTMLButtonElement).click();
+
+    // The results screen is drawn from exactly the state it was left in.
+    expect(g.state.phase).toBe("question");
+    expect(g.state.currentIndex).toBe(12);
+    expect(g.render).toHaveBeenCalled();
+  });
+
+  it("«Назад» further down the chain steps to the previous post-results page", () => {
+    const g = globalThis as any;
+    g.state = {
+      phase: "postResults",
+      postResultsIndex: 1,
+      postResultsReturn: { phase: "question", currentIndex: 12 },
+      postResultsPages: [{ id: "p1" }, { id: "p2" }],
+      templateManifest: {},
+    };
+    const app = mountScreenWithBack();
+    g.renderPostResults();
+
+    (app.querySelector('[data-nav="prev"]') as HTMLButtonElement).click();
+
+    expect(g.state.phase).toBe("postResults");
+    expect(g.state.postResultsIndex).toBe(0);
+  });
+
+  it("withdraws «Назад» on the first page when the author hid the results screen", () => {
+    const g = globalThis as any;
+    g.screenHidden = (kind: string) => kind === "results";
+    g.state = {
+      phase: "question",
+      currentIndex: 12,
+      postResultsPages: [{ id: "p1" }],
+      templateManifest: {},
+    };
+    g.enterPostResults();
+    const app = mountScreenWithBack();
+    g.renderPostResults();
+
+    expect((app.querySelector('[data-nav="prev"]') as HTMLElement).style.display).toBe("none");
+    delete g.screenHidden;
+  });
+
   it("still rewrites the shipped `.navigation` footer wholesale", () => {
     const g = globalThis as any;
     g.state = {

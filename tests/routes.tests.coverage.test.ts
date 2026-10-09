@@ -7,7 +7,7 @@
  *   session-injecting middleware) is copied from tests/routes.tests.test.ts and
  *   extended with the access/owner/scope storage methods those branches touch.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import session from "express-session";
@@ -31,6 +31,14 @@ const {
     deleteTest: vi.fn(),
     patchTestStatus: vi.fn(),
     getMigrationHealth: vi.fn(),
+    // PRD-51: маршрут читает документ отчёта. Здесь он не предмет проверки —
+    // пустой список означает «документ по умолчанию шаблона».
+    listReportBlocks: vi.fn().mockResolvedValue([]),
+    // PRD-52: счётчик открытых комментариев считается на весь список сразу.
+    countOpenReviewCommentsByTests: vi.fn().mockResolvedValue({}),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSections: vi.fn(),
     getTopics: vi.fn(),
     getUsers: vi.fn().mockResolvedValue([]),
@@ -122,6 +130,7 @@ vi.mock("../server/services/test-settings", async (importOriginal) => {
 });
 
 import testsRouter from "../server/routes/tests";
+import { config } from "../server/config";
 import { ScormBuildError } from "../server/scorm/build-export-data";
 import { FlowPolicyValidationError } from "../server/services/flow-policy-validator";
 
@@ -644,6 +653,35 @@ describe("DELETE /api/tests/:id — error branch", () => {
   });
 });
 
+// ─── GET /:id/export/options (Э5) ─────────────────────────────────────────────
+describe("GET /api/tests/:id/export/options", () => {
+  let app: express.Express;
+  beforeEach(() => {
+    resetDefaults();
+    app = makeApp();
+  });
+
+  it("a draft: no published version, telemetry of the draft", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "draft", telemetryEnabled: true });
+    const res = await asAdmin(request(app).get("/api/tests/test1/export/options"));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ published: null, telemetry: { draft: true, published: null } });
+  });
+
+  it("a published test: the snapshot version and the telemetry of each version", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "published", telemetryEnabled: false });
+    storageMock.getLatestSnapshot.mockResolvedValue({
+      id: "snap", version: 4, publishedAt: "2026-09-28T10:00:00.000Z",
+      contentJson: { test: { telemetryEnabled: true } },
+    });
+    const res = await asAdmin(request(app).get("/api/tests/test1/export/options"));
+    expect(res.body).toEqual({
+      published: { version: 4, publishedAt: "2026-09-28T10:00:00.000Z" },
+      telemetry: { draft: false, published: true },
+    });
+  });
+});
+
 // ─── GET /:id/export/scorm ────────────────────────────────────────────────────
 describe("GET /api/tests/:id/export/scorm", () => {
   let app: express.Express;
@@ -653,6 +691,21 @@ describe("GET /api/tests/:id/export/scorm", () => {
     buildExportMock.mockResolvedValue({ test: { id: "test1", title: "My Test", mode: "standard" } });
     generateScormMock.mockResolvedValue(Buffer.from("PKzip-bytes"));
     app = makeApp();
+  });
+
+  it("Э5: ?source passes the chosen version to the build; a bad value is 400", async () => {
+    const draft = await asAdmin(request(app).get("/api/tests/test1/export/scorm?source=draft"));
+    expect(draft.status).toBe(200);
+    expect(buildExportMock).toHaveBeenLastCalledWith("test1", { source: "export", version: "draft" });
+
+    const bad = await asAdmin(request(app).get("/api/tests/test1/export/scorm?source=old"));
+    expect(bad.status).toBe(400);
+  });
+
+  it("Э5: 409 when the published version is asked for and there is none", async () => {
+    buildExportMock.mockRejectedValue(new ScormBuildError("Тест не опубликован", 409));
+    const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm?source=published"));
+    expect(res.status).toBe(409);
   });
 
   it("404 when the build reports the test is missing", async () => {
@@ -684,12 +737,57 @@ describe("GET /api/tests/:id/export/scorm", () => {
     expect(storageMock.createScormPackage).not.toHaveBeenCalled();
   });
 
-  it("200 creates a scorm_package record when telemetry=true", async () => {
+  it("ignores ?telemetry=true when the test's setting is off", async () => {
+    // Раньше телеметрию включал только параметр запроса, который интерфейс не передавал;
+    // теперь решает настройка теста, и параметр не читается вовсе.
     const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm?telemetry=true"));
     expect(res.status).toBe(200);
-    expect(storageMock.createScormPackage).toHaveBeenCalledTimes(1);
-    const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: { enabled: boolean } | null }];
-    expect(payload.telemetry?.enabled).toBe(true);
+    expect(storageMock.createScormPackage).not.toHaveBeenCalled();
+    const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: unknown }];
+    expect(payload.telemetry).toBeNull();
+  });
+
+  describe("telemetry enabled in the test settings", () => {
+    const saved = { ...config.scorm, appUrl: config.server.appUrl };
+    beforeEach(() => {
+      buildExportMock.mockResolvedValue({
+        test: { id: "test1", title: "My Test", mode: "standard", telemetryEnabled: true },
+      });
+    });
+    afterEach(() => {
+      config.scorm.telemetryBaseUrl = saved.telemetryBaseUrl;
+      config.server.appUrl = saved.appUrl;
+    });
+
+    it("bakes the address from the system configuration", async () => {
+      config.scorm.telemetryBaseUrl = "https://telemetry.example";
+      config.server.appUrl = "https://app.example";
+      const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm"));
+      expect(res.status).toBe(200);
+      expect(storageMock.createScormPackage).toHaveBeenCalledTimes(1);
+      const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: { enabled: boolean; apiBaseUrl: string } | null }];
+      expect(payload.telemetry?.enabled).toBe(true);
+      expect(payload.telemetry?.apiBaseUrl).toBe("https://telemetry.example");
+    });
+
+    it("falls back to server.appUrl when the telemetry address is empty", async () => {
+      config.scorm.telemetryBaseUrl = "";
+      config.server.appUrl = "https://app.example";
+      const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm"));
+      expect(res.status).toBe(200);
+      const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: { apiBaseUrl: string } | null }];
+      expect(payload.telemetry?.apiBaseUrl).toBe("https://app.example");
+    });
+
+    it("422 and no package record when no address is configured at all", async () => {
+      config.scorm.telemetryBaseUrl = "";
+      config.server.appUrl = "";
+      const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm"));
+      expect(res.status).toBe(422);
+      expect(res.body.field).toBe("telemetryBaseUrl");
+      expect(storageMock.createScormPackage).not.toHaveBeenCalled();
+      expect(generateScormMock).not.toHaveBeenCalled();
+    });
   });
 });
 

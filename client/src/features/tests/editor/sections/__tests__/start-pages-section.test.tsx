@@ -3,19 +3,28 @@
  * @description Tests for the «Структура» tab section (closeout of PRD-1 §4).
  *
  * Coverage:
- *   - flowMode banner, empty state, create-mode notice, no stub
+ *   - flowMode banner, empty state, no stub
+ *   - режим создания: системные узлы ПРЕДСКАЗАНЫ общим планировщиком, а сохранение
+ *     подставляет им настоящие идентификаторы и создаёт авторские страницы
  *   - Kind-aware layout: start → «До теста», results → «После теста», questions →
  *     one row per topic; PRD-19 обзор (review) + итоги раздела (section-results)
  *     system nodes per section (no legacy per-topic intro/summary)
  *   - Author info pages: add (variant modal), inline edit, reorder, delete
  *   - Required-field + missing-template warnings
- *   - «Сменить вариант» on system rows (enabled when >1 variant, replace-variant)
+ *   - «Сменить макет» on system rows (enabled when >1 variant, replace-variant)
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StructureSection, reorderByDrop, insertIndexFor } from "../start-pages-section";
+import {
+  StructureSection,
+  reorderByDrop,
+  insertIndexFor,
+  SettingControl,
+  showsSetting,
+} from "../start-pages-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
+import { useContentPages, type UseContentPagesResult } from "../../use-content-pages";
 import { defaultRetakePolicy } from "../../test-editor.mappers";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -77,12 +86,12 @@ const TEMPLATE = {
       },
       { key: "intro.hero", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "Заголовок" }] },
       { key: "summary.result", label: "Итог: результат", kind: "summary", placeholders: [] },
-      // PRD-19 section-boundary system nodes. One review variant → «Сменить вариант»
+      // PRD-19 section-boundary system nodes. One review variant → «Сменить макет»
       // disabled on the обзор; two section-results variants → enabled on the итоги node.
       { key: "review.standard", label: "Обзор: стандартный", kind: "review", placeholders: [] },
       { key: "section-results.result", label: "Итог: результат", kind: "section-results", placeholders: [] },
       { key: "section-results.ring", label: "Итог: кольцо", kind: "section-results", placeholders: [] },
-      // One questions variant → «Сменить вариант» disabled.
+      // One questions variant → «Сменить макет» disabled.
       { key: "question.standard", label: "Стандартный макет вопроса", kind: "questions", placeholders: [] },
     ],
   },
@@ -98,6 +107,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     basic: {
       title: "Sample",
       description: "",
+      descriptionFormat: "plain",
       status: "draft",
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
@@ -106,7 +116,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: true, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -175,6 +185,9 @@ function buildPage(over: Partial<RawPage> = {}): RawPage {
     ...over,
   };
 }
+
+/** Ссылка на хук харнеса режима создания — чтобы дёргать его из теста. */
+let createHarnessContent: UseContentPagesResult | null = null;
 
 // ─── Stateful fetch mock ────────────────────────────────────────────────────────
 
@@ -246,11 +259,22 @@ function installApi(initialPages: RawPage[]) {
   return spies;
 }
 
-function renderSection(model: TestEditorModel, opts?: { readOnly?: boolean }) {
+function renderSection(
+  model: TestEditorModel,
+  opts?: {
+    readOnly?: boolean;
+    updateModel?: (updater: (model: TestEditorModel) => TestEditorModel) => void;
+  },
+) {
   const client = makeQueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <StructureSection model={model} testId={TEST_ID} readOnly={opts?.readOnly} />
+      <StructureSection
+        model={model}
+        testId={TEST_ID}
+        readOnly={opts?.readOnly}
+        updateModel={opts?.updateModel}
+      />
     </QueryClientProvider>,
   );
 }
@@ -262,9 +286,11 @@ afterEach(() => vi.unstubAllGlobals());
 describe("<StructureSection /> — flow mode + lifecycle", () => {
   beforeEach(() => installApi([]));
 
-  it("shows the current flowMode in the banner", () => {
+  it("режим не пересказывается полосой над полотном", () => {
+    // Сценарий выбирают полем на этом же экране, выше. Полоса «Режим: …» повторяла
+    // выбранное значение и отодвигала полотно структуры вниз.
     renderSection(baseModel({ flowMode: "router_by_topics" }));
-    expect(screen.getByTestId("structure-mode-banner")).toHaveTextContent("Через страницу-маршрутизатор");
+    expect(screen.queryByTestId("structure-mode-banner")).toBeNull();
   });
 
   it("shows the empty state when there are no sections", async () => {
@@ -272,14 +298,112 @@ describe("<StructureSection /> — flow mode + lifecycle", () => {
     await waitFor(() => expect(screen.getByTestId("structure-empty")).toBeInTheDocument());
   });
 
-  it("shows the create-mode notice when testId is undefined", () => {
+
+  // ── Режим создания: структура настраивается до первого сохранения ──────────
+  //
+  // Системные узлы ПРЕДСКАЗЫВАЮТСЯ общим планировщиком (`shared/content-pages`) —
+  // тем же, которым сервер разложит их в транзакции создания. Поэтому автор видит
+  // перед сохранением ровно то, что получит.
+
+  function CreateHarness({ model }: { model: TestEditorModel }) {
+    const content = useContentPages(undefined, "default", {
+      flowMode: model.flowMode,
+      topicIds: model.sections.map((s) => s.topicId),
+    });
+    createHarnessContent = content;
+    return <StructureSection model={model} content={content} />;
+  }
+
+  function renderCreate(model: TestEditorModel) {
     const client = makeQueryClient();
-    render(
+    return render(
       <QueryClientProvider client={client}>
-        <StructureSection model={baseModel()} />
+        <CreateHarness model={model} />
       </QueryClientProvider>,
     );
-    expect(screen.getByTestId("structure-create-notice")).toBeInTheDocument();
+  }
+
+  it("рисует предсказанные системные узлы без сохранённого теста", async () => {
+    renderCreate(baseModel({ sections: [buildSection()] }));
+    // «Сначала сохраните черновик» больше нет — есть полотно структуры.
+    await waitFor(() =>
+      expect(screen.getByTestId("structure-system-start")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("structure-create-notice")).toBeNull();
+    expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-zone-after-test")).toBeInTheDocument();
+    // linear_flat: один плоский узел вопросов, без узлов границ раздела.
+    expect(screen.getByTestId("structure-flat-questions-row")).toBeInTheDocument();
+  });
+
+  it("состав узлов следует за сценарием: по темам появляются узлы раздела", async () => {
+    renderCreate(baseModel({ flowMode: "linear_by_topics", sections: [buildSection()] }));
+    // Ждать надо ПРЕДСКАЗАННЫЙ узел: строка вопросов рисуется из состава теста и
+    // появляется до того, как планировщик отдал страницы.
+    await waitFor(() =>
+      expect(screen.getByTestId("structure-system-intro-top-1")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("structure-questions-row-top-1")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-system-section-results-top-1")).toBeInTheDocument();
+  });
+
+  it("сохранение подставляет узлам настоящие идентификаторы и создаёт авторские страницы", async () => {
+    // Сервер УЖЕ разложил системные строки в транзакции INSERT — сохранение читает
+    // их и сопоставляет с предсказанными по паре «вид + тема».
+    const real = [
+      buildPage({ id: "real-start", testId: "te-new", kind: "start", type: "info", mode: "template", position: "before", templateKey: "start.standard", valuesJson: {} }),
+      buildPage({ id: "real-results", testId: "te-new", kind: "results", type: "summary", mode: "template", position: "after", templateKey: "results.standard", valuesJson: {} }),
+      buildPage({ id: "real-review", testId: "te-new", kind: "review", type: "info", mode: "template", position: "after", templateKey: "review.standard", valuesJson: {} }),
+      buildPage({ id: "real-questions", testId: "te-new", kind: "questions", type: "info", mode: "template", position: "before_topic", templateKey: "question.standard", valuesJson: {} }),
+    ];
+    const calls: Array<{ method: string; url: string; body?: any }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        const body = init?.body ? JSON.parse(init.body as string) : undefined;
+        calls.push({ method, url, body });
+        if (url === "/api/templates/default") return jsonResponse(TEMPLATE);
+        if (url.startsWith("/api/tests/te-new/content-pages") && method === "GET") return jsonResponse(real);
+        // Маршруты несут `?templateId=…` — сверяем по началу адреса, иначе POST
+        // уходит в общую ветку и созданная страница возвращается без идентификатора.
+        if (url.startsWith("/api/tests/te-new/content-pages?") && method === "POST") {
+          return jsonResponse(buildPage({ ...body, id: "real-author" }), 201);
+        }
+        if (url.startsWith("/api/tests/te-new/content-pages/reorder")) return jsonResponse({ ok: true });
+        return jsonResponse({ ok: true });
+      }),
+    );
+
+    renderCreate(baseModel({ sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-start")).toBeInTheDocument());
+
+    // Авторская страница «до теста» — пока только в черновике.
+    await createHarnessContent!.create({
+      position: "before",
+      topicId: null,
+      mode: "template",
+      type: "info",
+      templateKey: "info.text",
+      valuesJson: { values: { title: "Памятка" } },
+    });
+    await waitFor(() => expect(createHarnessContent!.isDirty).toBe(true));
+
+    await createHarnessContent!.commit("te-new");
+
+    const posted = calls.filter(
+      (c) => c.method === "POST" && c.url.startsWith("/api/tests/te-new/content-pages?"),
+    );
+    expect(posted).toHaveLength(1);
+    expect(posted[0].body).toMatchObject({ templateKey: "info.text", position: "before" });
+    // Ни одна системная строка не создана заново и не удалена: они СОПОСТАВЛЕНЫ.
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    const reorder = calls.find((c) => c.url.includes("/reorder"));
+    expect(reorder).toBeDefined();
+    const ids = (reorder!.body as Array<{ id: string }>).map((r) => r.id);
+    expect(ids).toContain("real-start");
+    expect(ids).toContain("real-author");
+    expect(ids.some((id) => id.startsWith("draft-"))).toBe(false);
   });
 
   it("no longer renders the «next step» stub (feature is live)", async () => {
@@ -381,7 +505,7 @@ describe("<StructureSection /> — kind-aware layout", () => {
     expect(screen.queryByTestId("structure-system-summary-t1")).toBeNull();
   });
 
-  it("PRD-19 FR-05a: showSectionResults OFF hides the «Итоги раздела» node; «Обзор раздела» stays", async () => {
+  it("PRD-19 FR-05a: showSectionResults OFF marks the «Итоги раздела» node hidden instead of dropping it", async () => {
     installApi([
       buildPage({ id: "pg-rv", kind: "review", position: "after", topicId: null, templateKey: "review.standard", valuesJson: { values: {} } }),
       buildPage({ id: "pg-sr", kind: "section-results", position: "after", topicId: null, templateKey: "section-results.result", valuesJson: { values: {} } }),
@@ -390,12 +514,41 @@ describe("<StructureSection /> — kind-aware layout", () => {
     renderSection(baseModel({
       flowMode: "linear_by_topics",
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
-      runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: false, skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+      runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowFreeSectionNavigation: false, allowAnswerChange: false, showSectionResults: false, skipReviewWhenComplete: false, closeSectionOnLeave: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false, lmsAttemptResult: "best" as const },
     }));
     await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
-    // The section-results node is gated out (FR-05a), but «Обзор раздела» stays.
+    // Решение владельца 2026-09-20: выключенный экран НЕ исчезает из полотна — он
+    // гаснет и несёт пометку. Исчезнувшая строка не давала автору понять ни что экран
+    // в тесте есть, ни где он включается.
     expect(screen.getByTestId("structure-review-slot-t1")).toBeInTheDocument();
-    expect(screen.queryByTestId("structure-system-section-results-t1")).toBeNull();
+    const row = screen.getByTestId("structure-system-section-results-t1");
+    expect(row).toBeInTheDocument();
+    expect(row).toHaveAttribute("data-hidden", "true");
+    // Статус несёт пиктограмма в заголовке строки, а не чип в подписях.
+    expect(
+      within(row).getByTestId("structure-system-section-results-t1-hidden-ico"),
+    ).toBeInTheDocument();
+  });
+
+  it("скрытие «Итогов раздела» из меню строки выключает настройку теста", async () => {
+    installApi([
+      buildPage({ id: "pg-sr", kind: "section-results", position: "after", topicId: null, templateKey: "section-results.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
+    ]);
+    const updateModel = vi.fn();
+    const model = baseModel({
+      flowMode: "linear_by_topics",
+      sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
+    });
+    renderSection(model, { updateModel });
+    await waitFor(() => expect(screen.getByTestId("structure-system-section-results-t1")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-system-section-results-t1-actions"));
+    fireEvent.click(await screen.findByTestId("structure-system-section-results-t1-visibility"));
+    // Второй правды нет: пункт полотна пишет в ту же настройку, что и переключатель
+    // «Показывать итоги раздела» на «Обратной связи и итогах».
+    expect(updateModel).toHaveBeenCalled();
+    const updater = updateModel.mock.calls[0][0] as (m: typeof model) => typeof model;
+    expect(updater(model).runtime.showSectionResults).toBe(false);
   });
 });
 
@@ -574,8 +727,11 @@ describe("<StructureSection /> — delete flow", () => {
   });
 });
 
-describe("<StructureSection /> — inline preview command", () => {
-  it("puts a preview button BEFORE the actions menu on author and system rows", async () => {
+describe("<StructureSection /> — preview command", () => {
+  // Решение владельца 2026-09-20: кнопки-глазка в строке больше нет. У скрытой карточки
+  // рядом оказывались два глаза — знак «скрыт» и команда «посмотреть», — и строка
+  // читалась двусмысленно. Предпросмотр остался командой меню.
+  it("leaves no inline eye button on author and system rows", async () => {
     installApi([
       buildPage({ id: "pg-start", kind: "start", position: "before", topicId: null, templateKey: "start.standard", valuesJson: { values: {} } }),
       buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Страница" } } }),
@@ -583,41 +739,66 @@ describe("<StructureSection /> — inline preview command", () => {
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
 
-    for (const [preview, actions] of [
-      ["structure-page-preview-inline-pg-1", "structure-page-actions-pg-1"],
-      ["structure-system-start-preview-inline", "structure-system-start-actions"],
-    ]) {
-      const eye = screen.getByTestId(preview);
-      const menu = screen.getByTestId(actions);
-      expect(eye).toBeInTheDocument();
-      // DOCUMENT_POSITION_FOLLOWING: the menu comes after the eye.
-      expect(eye.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
+    expect(screen.queryByTestId("structure-page-preview-inline-pg-1")).toBeNull();
+    expect(screen.queryByTestId("structure-system-start-preview-inline")).toBeNull();
+    expect(screen.getByTestId("structure-page-actions-pg-1")).toBeInTheDocument();
   });
 
-  it("opens the page preview without going through the menu", async () => {
+  it("opens the page preview from the row menu", async () => {
     installApi([
       buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Страница" } } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByTestId("structure-page-preview-inline-pg-1"));
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-1"));
+    fireEvent.click(await screen.findByTestId("structure-page-preview-pg-1"));
 
     expect(await screen.findByTestId("page-preview-modal")).toBeInTheDocument();
   });
 
-  // A published test hides the whole actions menu, so before this the author had no
-  // way to look at a page at all. Preview changes nothing, so it stays available.
-  it("keeps the preview available on a published (read-only) test", async () => {
+  // Решение владельца 2026-09-20: скрыть можно ЛЮБУЮ карточку, кроме блока вопросов и
+  // маршрутизатора. Авторская страница хранит это признаком самой страницы — в отличие
+  // от «Итогов раздела», у которых настройка теста появилась раньше.
+  it("скрывает авторскую страницу из её меню", async () => {
+    installApi([
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Памятка" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-1"));
+    fireEvent.click(await screen.findByTestId("structure-page-visibility-pg-1"));
+
+    // Правка ложится в черновик, как и любая другая: на сервер её уносит общая
+    // «Сохранить» ящика. Строка при этом сразу читается как скрытая.
+    await waitFor(() =>
+      expect(screen.getByTestId("structure-page-row-pg-1")).toHaveAttribute("data-hidden", "true"),
+    );
+    expect(screen.getByTestId("structure-page-hidden-ico-pg-1")).toBeInTheDocument();
+  });
+
+  it("у блока вопросов пункт скрытия погашен", async () => {
+    installApi([
+      buildPage({ id: "pg-q", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_by_topics", sections: [buildSection({ topicId: "t1" })] }));
+    await waitFor(() => expect(screen.getByTestId("structure-questions-row-t1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-questions-row-t1-actions"));
+    expect(await screen.findByTestId("structure-questions-row-t1-visibility")).toBeDisabled();
+  });
+
+  // PRD-7 G19: в режиме без авторских контролов строка не предлагает действий вовсе.
+  it("renders no row actions in the read-only mode (PRD-7 G19)", async () => {
     installApi([
       buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Страница" } } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }), { readOnly: true });
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
 
-    expect(screen.getByTestId("structure-page-preview-inline-pg-1")).toBeInTheDocument();
     expect(screen.queryByTestId("structure-page-actions-pg-1")).toBeNull();
+    expect(screen.queryByTestId("structure-page-preview-inline-pg-1")).toBeNull();
   });
 });
 
@@ -640,7 +821,7 @@ describe("<StructureSection /> — warnings", () => {
     await waitFor(() => expect(screen.getByTestId("structure-page-required-pg-req")).toBeInTheDocument());
   });
 
-  it("shows the «Доступно вариантов» hint on an info page when the template offers several", async () => {
+  it("shows the «Доступно макетов» hint on an info page when the template offers several", async () => {
     // TEMPLATE declares 4 info variants (info.text/title/empty + gallery.card) → the
     // author info row surfaces the hint, symmetric with the system row.
     installApi([
@@ -648,12 +829,12 @@ describe("<StructureSection /> — warnings", () => {
     ]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
-    expect(screen.getByTestId("structure-page-pg-info-variant-hint")).toHaveTextContent("Доступно вариантов: 4");
+    expect(screen.getByTestId("structure-page-pg-info-variant-hint")).toHaveTextContent("Доступно макетов: 4");
   });
 });
 
 describe("<StructureSection /> — switch variant of a system page", () => {
-  it("section-results node has >1 variant → «Сменить вариант» applies the new variant to the local draft", async () => {
+  it("section-results node has >1 variant → «Сменить макет» applies the new variant to the local draft", async () => {
     const spies = installApi([
       buildPage({ id: "pg-sr", kind: "section-results", position: "after", topicId: null, templateKey: "section-results.result", valuesJson: { values: {} } }),
       buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
@@ -678,7 +859,7 @@ describe("<StructureSection /> — switch variant of a system page", () => {
     expect(spies.replaceVariant).not.toHaveBeenCalled();
   });
 
-  it("questions has a single variant → no hint, «Сменить вариант» disabled", async () => {
+  it("questions has a single variant → no hint, «Сменить макет» disabled", async () => {
     installApi([
       buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
     ]);
@@ -689,7 +870,7 @@ describe("<StructureSection /> — switch variant of a system page", () => {
       }),
     );
     await waitFor(() => expect(screen.getByTestId("structure-questions-row-t1")).toBeInTheDocument());
-    // No «Доступно вариантов» hint label and no «Единственный вариант» chip.
+    // No «Доступно макетов» hint label and no «Единственный вариант» chip.
     expect(screen.queryByTestId("structure-questions-row-t1-variant-hint")).toBeNull();
     expect(screen.getByTestId("structure-questions-row-t1")).not.toHaveTextContent("Единственный вариант");
     // The command exists but is disabled — clicking it does not open the modal.
@@ -789,7 +970,7 @@ describe("<StructureSection /> — replace-variant search + diff", () => {
     expect(diff).toHaveTextContent("Текущие настройки страницы будут потеряны");
     expect(diff).toHaveTextContent("Заголовок:");
     expect(diff).toHaveTextContent("Текст:");
-    expect(diff).toHaveTextContent("У нового варианта нет редактируемых полей");
+    expect(diff).toHaveTextContent("У нового макета нет редактируемых полей");
   });
 
   it("does not show diff-block when switching back to current variant", async () => {
@@ -801,5 +982,70 @@ describe("<StructureSection /> — replace-variant search + diff", () => {
     // Modal opens with the page's current variant pre-selected → no diff.
     await waitFor(() => expect(screen.getByTestId("structure-replace-search")).toBeInTheDocument());
     expect(screen.queryByTestId("structure-replace-diff")).toBeNull();
+  });
+});
+
+// ─── PRD-22 §11: подзаголовок раздела ─────────────────────────────────────────
+
+describe("SettingControl — тумблер и умолчание манифеста (PRD-22 FR-45)", () => {
+  /** Обязательные пропсы веток, которых тумблер не читает. */
+  const REST: { sequenceIds: string[]; sequenceTotal: number } = { sequenceIds: [], sequenceTotal: 0 };
+
+  it("незаданное значение показывается по умолчанию манифеста", () => {
+    render(
+      <SettingControl
+        setting={{ key: "sectionSubtitleShown", type: "boolean", label: "Показывать", default: true }}
+        value={undefined}
+        onChange={vi.fn()}
+        {...REST}
+        testId="s-shown"
+      />,
+    );
+
+    expect(screen.getByTestId("s-shown")).toBeChecked();
+  });
+
+  it("явное «выключено» умолчанием не перебивается", () => {
+    render(
+      <SettingControl
+        setting={{ key: "sectionSubtitleShown", type: "boolean", label: "Показывать", default: true }}
+        value={false}
+        onChange={vi.fn()}
+        {...REST}
+        testId="s-off"
+      />,
+    );
+
+    expect(screen.getByTestId("s-off")).not.toBeChecked();
+  });
+
+  it("без объявленного умолчания тумблер выключен", () => {
+    render(
+      <SettingControl
+        setting={{ key: "flag", type: "boolean", label: "Флаг" }}
+        value={undefined}
+        onChange={vi.fn()}
+        {...REST}
+        testId="s-flag"
+      />,
+    );
+
+    expect(screen.getByTestId("s-flag")).not.toBeChecked();
+  });
+});
+
+describe("showsSetting — зависимые настройки (PRD-22 FR-44)", () => {
+  const subtitle = { key: "sectionSubtitle", type: "text", label: "Подзаголовок раздела" };
+
+  it("поле формулировки скрыто при выключенном тумблере", () => {
+    expect(showsSetting({ sectionSubtitleShown: false })(subtitle)).toBe(false);
+  });
+
+  it("поле формулировки показано при включённом тумблере", () => {
+    expect(showsSetting({ sectionSubtitleShown: true })(subtitle)).toBe(true);
+  });
+
+  it("поле формулировки показано, пока тумблер не задан", () => {
+    expect(showsSetting({})(subtitle)).toBe(true);
   });
 });

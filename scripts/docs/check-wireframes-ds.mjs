@@ -5,13 +5,17 @@ import { join, relative } from 'node:path';
  * @module check-wireframes-ds
  *
  * Lint gate for `docs/wireframes/*` ensuring product wireframes use only
- * UniversityRT Design System primitives (BEM classes `ou-*`, tokens
- * `var(--ou-*)`). The gate covers four categories of violations:
+ * Skillum Design System primitives (BEM classes `ou-*`, tokens
+ * `var(--ou-*)`). The gate covers five categories of violations:
  *   1. Legacy class tokens (e.g. `btn`, `drawer-header`, `sidebar`).
  *   2. Raw color literals inside `<style>` blocks and standalone CSS.
  *   3. Direct length units (`px`, `rem`, `em`) inside `<style>` blocks
  *      and standalone CSS (excluding zero values).
  *   4. Legacy class selectors inside scanned CSS files.
+ *   5. Invented `ou-*` classes: a class the design system, the project layer and
+ *      the ui-kit components all fail to own. A wireframe drawn with one cannot
+ *      be implemented literally — the developer invents markup or substitutes a
+ *      component, and both are drift from an approved drawing.
  *
  * Optional `--strict-inline` flag additionally scans inline `style="..."`
  * attributes; whitelisted via `data-wf-demo` on the carrying element.
@@ -24,8 +28,14 @@ const args = new Set(process.argv.slice(2));
 const STRICT_INLINE = args.has('--strict-inline');
 
 const ignore = new Set([
-  join(wireframesDir, 'ds', 'university-rt.css'),
+  join(wireframesDir, 'ds', 'skillum-ds.css'),
   join(wireframesDir, 'approved', 'prd7-shared.css'),
+  // Эскиз ПЕЧАТНОГО ДОКУMЕНТА, а не экрана. Отчёт по контракту рендерится вне
+  // дизайн-системы, в служебном контейнере со своим CSS (PRD-27 §6.3), и его цвета —
+  // значения ШАБЛОНА, снятые с референса заказчика, а не токены ДС. Ровно так же
+  // устроен и настоящий `styles/report.css`. Требовать здесь токены значило бы
+  // требовать того, чего продукт в этом месте не делает.
+  join(wireframesDir, 'prd51-certification-report.html'),
 ]);
 // All reference / legacy documents live under docs/wireframes/legacy/ and are
 // skipped wholesale. Stage 5 of docs/wireframes-ds-fix-plan.md moved
@@ -205,6 +215,51 @@ function inDemoRange(ranges, index) {
   return false;
 }
 
+/**
+ * Every `ou-*` class the product actually owns: declared in the design-system stylesheet,
+ * declared in the project layer, or emitted by a ui-kit component that carries no style rule
+ * of its own (`ou-tabs__label`, `ou-iconbtn__ico` and friends are real markup with no CSS).
+ *
+ * Why this is collected from three places rather than the stylesheet alone: checking only the
+ * stylesheet flags a component's structural spans as invented, and a linter that cries wolf on
+ * correct wireframes gets switched off. Returns null when a source is missing, and the check
+ * is then skipped — failing open is right for a heuristic that would otherwise report every
+ * class in the repository as unknown.
+ */
+function collectKnownOuClasses() {
+  const sources = [
+    join(wireframesDir, 'ds', 'skillum-ds.css'),
+    join(root, 'client', 'src', 'styles', 'tb-components.css'),
+  ];
+  const known = new Set();
+  const harvest = (text) => {
+    for (const m of text.matchAll(/(ou-[A-Za-z0-9_-]+)/g)) known.add(m[1]);
+  };
+  // NOTE: `walk()` above filters by `includeExt` (.html/.css) and would silently skip
+  // every component source, which is how the first version of this check reported
+  // `ou-tabs__label` and `ou-iconbtn__ico` — real markup emitted by Tabs and IconButton —
+  // as invented. Component sources need their own walk.
+  const walkSources = (dir, acc = []) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walkSources(full, acc);
+      else if (full.endsWith('.ts') || full.endsWith('.tsx')) acc.push(full);
+    }
+    return acc;
+  };
+  try {
+    for (const file of sources) harvest(readFileSync(file, 'utf8'));
+    for (const file of walkSources(join(root, 'vendor', 'ui-kit', 'src'))) {
+      harvest(readFileSync(file, 'utf8'));
+    }
+  } catch {
+    return null;
+  }
+  return known.size ? known : null;
+}
+
+const knownOuClasses = collectKnownOuClasses();
+
 const violations = [];
 const files = walk(wireframesDir);
 
@@ -215,6 +270,8 @@ for (const file of files) {
   const isCss = file.endsWith('.css');
 
   // ── 1. Legacy class tokens in HTML class="..." attributes ─────────────────
+  /** Invented `ou-*` classes of THIS file: class -> first line and number of uses. */
+  const unknownClassUses = new Map();
   if (isHtml) {
     for (const match of text.matchAll(/class="([^"]+)"/g)) {
       const tokens = match[1].split(/\s+/).filter(Boolean);
@@ -222,7 +279,26 @@ for (const file of files) {
         if (legacyClassTokens.includes(token)) {
           violations.push(`${rel}:${lineOf(text, match.index)} legacy class ".${token}"`);
         }
+        // ── 5. Invented design-system classes ─────────────────────────────────
+        // A wireframe that draws with an `ou-*` class the design system does not own
+        // cannot be implemented literally: the developer either invents markup or
+        // silently substitutes another component, and both count as drift from an
+        // approved drawing. Caught here so the drawing is fixed and re-approved
+        // instead of the code guessing.
+        //
+        // Reported once per file per class, with the first line and the number of
+        // uses. One invented class used 199 times is ONE thing to decide about, and
+        // 199 identical lines would bury the other categories.
+        if (knownOuClasses && token.startsWith('ou-') && !knownOuClasses.has(token)) {
+          const seen = unknownClassUses.get(token);
+          if (seen) seen.count += 1;
+          else unknownClassUses.set(token, { line: lineOf(text, match.index), count: 1 });
+        }
       }
+    }
+    for (const [token, { line, count }] of unknownClassUses) {
+      const times = count > 1 ? `, использований ${count}` : '';
+      violations.push(`${rel}:${line} unknown DS class ".${token}"${times}`);
     }
   }
 

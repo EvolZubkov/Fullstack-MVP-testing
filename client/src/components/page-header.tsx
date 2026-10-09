@@ -1,4 +1,4 @@
-import { Box, Cluster, Text } from "@universityrt/ui-kit";
+import { Box, Cluster, Text } from "@skillum/ui-kit";
 
 interface PageHeaderProps {
   title: string;

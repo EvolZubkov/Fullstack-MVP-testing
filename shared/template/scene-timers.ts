@@ -15,15 +15,19 @@
  * document in one case and the shadow tree in the other.
  */
 
+import { formatCountdown } from "./duration";
+
 /** Seconds left at which a display starts reading as critical. */
 export const TIMER_WARN_AT = 60;
 
-/** `M:SS` — the format both hosts print (negative time clamps to zero). */
+/**
+ * The countdown text both hosts print. Kept as a named export of this module
+ * (its callers address it here), but the format itself lives in the ONE duration
+ * module — `M:SS`, growing an hour and then a day part as the remainder does,
+ * because a multi-day limit used to print as «20160:00».
+ */
 export function formatTimerValue(seconds: number): string {
-  const total = seconds > 0 ? seconds : 0;
-  const mins = Math.floor(total / 60);
-  const secs = total % 60;
-  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  return formatCountdown(seconds);
 }
 
 /** Countdown state of a screen; `null` = that countdown is not running. */

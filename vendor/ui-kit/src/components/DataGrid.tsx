@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { cn, cssStyleClass } from '../utils';
 import type { SortDir, TableAlign } from './Table';
 
@@ -9,12 +9,24 @@ export interface DataGridColumn<T> {
   width?: string | number;
   align?: TableAlign;
   sortable?: boolean;
-  /** Сделать столбец числовым (правое выравнивание, моно-цифры). */
+  /**
+   * Сделать столбец числовым (моно-цифры; без `align` — правое выравнивание).
+   * Явный `align` важнее: числовой столбец по центру — `numeric` + `align: 'center'`.
+   */
   numeric?: boolean;
   /** Зафиксировать столбец слева (sticky). */
   frozen?: boolean;
   /** Кастомный экстрактор значения для сортировки/поиска. */
   accessor?: (row: T) => string | number | undefined;
+}
+
+/**
+ * Выравнивание столбца: явное `align`, иначе числа — вправо, остальное — влево.
+ * Заголовок и значения столбца выравниваются ОДИНАКОВО: заголовок, оторванный от своих чисел
+ * на ширину колонки, читается как подпись соседнего столбца.
+ */
+function columnAlign<T>(c: DataGridColumn<T>): TableAlign {
+  return c.align ?? (c.numeric ? 'right' : 'left');
 }
 
 export interface DataGridProps<T> extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect' | 'title'> {
@@ -48,17 +60,75 @@ export interface DataGridProps<T> extends Omit<React.HTMLAttributes<HTMLDivEleme
   expandable?: boolean;
   /** Render содержимого раскрытой строки. */
   renderExpanded?: (row: T, index: number) => React.ReactNode;
+  /**
+   * Какие строки раскрываются. Без предиката раскрываются все.
+   *
+   * Строка, на которой предикат ложен, не получает шеврона вовсе — ячейка
+   * остаётся пустой, чтобы колонки соседних строк не разъезжались. Это про
+   * строки, под которыми нечего показать: раскрытие в пустоту читается как
+   * обещание, которого стол не держит.
+   */
+  canExpand?: (row: T, index: number) => boolean;
+
+  /**
+   * Строку РАЗВЕРНУЛИ. Вызывается только на открытии, не на закрытии.
+   *
+   * Нужен содержимому, которое грузится по требованию: состояние раскрытия держит сам стол,
+   * и без этого события у вызывающего нет места, где начать загрузку. В `renderExpanded`
+   * этого делать нельзя — он вызывается на каждой перерисовке.
+   */
+  onRowExpand?: (row: T, index: number) => void;
+
+  /**
+   * Ленивая подгрузка вместо страниц: есть ли ещё строки за последней показанной.
+   *
+   * Пока он задан, постраничность не рисуется — два способа двигаться по одному списку
+   * противоречат друг другу, и подвал должен говорить что-то одно.
+   */
+  hasMore?: boolean;
+  /** Сколько строк подходит под условия всего — знаменатель «показано N из M». */
+  total?: number;
+  /** Идёт загрузка следующей порции: повторный запрос не отправляется. */
+  loadingMore?: boolean;
+  /** Запросить следующую порцию — зовётся, когда хвост списка показался на экране. */
+  onLoadMore?: () => void;
 
   /** Пагинация. */
   page?: number;
   pageSize?: number;
-  total?: number;
   onPageChange?: (page: number) => void;
   pageSizeOptions?: number[];
   onPageSizeChange?: (size: number) => void;
 
   /** Сообщение пустого состояния. */
   emptyMessage?: React.ReactNode;
+
+  /**
+   * Стол занимает экран: потолок прокрутки считается от вьюпорта, а не от умолчания в 540px.
+   *
+   * Для стола, который и есть содержимое страницы (реестр, журнал): иначе строки листаются в
+   * окошке, под которым остаётся пустой экран. Столу ВНУТРИ страницы, рядом с другими
+   * блоками, этот режим не нужен — там окошко и есть верное поведение.
+   */
+  fill?: boolean;
+
+  /**
+   * Open the row itself. The row gets `is-clickable` (pointer cursor), the way
+   * `Table` already does it, so a grid whose rows lead somewhere does not have to
+   * spend a column on a link.
+   *
+   * Clicks coming from the control cells (expand chevron, selection checkbox) and
+   * from anything interactive inside a cell — a button, a link, an input — are the
+   * cell's own and never reach here: opening the row out from under a button the
+   * user actually pressed is the bug this guard exists for.
+   */
+  onRowClick?: (row: T, index: number) => void;
+}
+
+/** Whether the click landed on something that handles it itself. */
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target : null;
+  return !!el?.closest('button, a, input, select, textarea, label, [role="button"], .ou-grid__control-cell');
 }
 
 const SortIcon: React.FC<{ dir?: SortDir; active?: boolean }> = ({ dir, active }) => (
@@ -91,16 +161,101 @@ export function DataGrid<T>({
   query, onQueryChange, searchPlaceholder = 'Поиск',
   sortKey, sortDir, onSort,
   selectable, selected = [], onSelectChange, bulkActions,
-  expandable, renderExpanded,
+  expandable, renderExpanded, canExpand, onRowExpand,
   page, pageSize, total, onPageChange, pageSizeOptions, onPageSizeChange,
+  hasMore, loadingMore, onLoadMore,
   emptyMessage = 'Нет данных',
+  fill,
+  onRowClick,
   className, style, ...rest
 }: DataGridProps<T>) {
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  const scrollArea = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Точный потолок стола в режиме `fill`: от его фактического верха до низа окна.
+   *
+   * CSS один этого не умеет. Вычесть из высоты окна фиксированную величину — значит угадать
+   * высоту всего, что стоит выше: шапки, вкладок, заголовка карточки, панели фильтра с чипами,
+   * которых бывает одна строка, а бывает три. Промах в любую сторону виден сразу: стол либо
+   * не достаёт до низа экрана, либо вылезает за него и страница получает ВТОРУЮ прокрутку —
+   * ту самую, из-за которой закреплённая шапка перестаёт держаться.
+   *
+   * Если над столом высокий блок и места до низа окна меньше минимума, стол берёт высоту видимой
+   * области прокрутки — страница докручивается до него, а не держит окошко в пару строк.
+   *
+   * Замер повторяется при изменении размера окна и при перекладке страницы. CSS-правило
+   * `.ou-grid--fill` остаётся запасным: оно работает там, где скрипта нет вовсе (эскизы).
+   */
+  useEffect(() => {
+    const area = scrollArea.current;
+    if (!fill || !area || typeof window === 'undefined') return;
+
+    /** Запас снизу: нижнее поле карточки и воздух страницы под ней (48 px давали 2 px второй прокрутки). */
+    const GAP = 56;
+
+    /** Меньше этого стол в окне не сжимается: окошко в пару строк хуже прокрутки страницы. */
+    const MIN = 240;
+
+    /** Ближайший прокручиваемый предок — видимая область, в которой стоит стол. */
+    const scrollParent = (): HTMLElement | null => {
+      for (let el = area.parentElement; el; el = el.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el;
+      }
+      return null;
+    };
+
+    const apply = () => {
+      const top = area.getBoundingClientRect().top + window.scrollY;
+      const footer = area.nextElementSibling as HTMLElement | null;
+      const below = footer ? footer.getBoundingClientRect().height : 0;
+      const room = window.innerHeight - top - below - GAP;
+      if (room >= MIN) {
+        area.style.maxHeight = `${room}px`;
+        return;
+      }
+      // Над столом стоит высокий блок (сводка, предупреждения), и до низа окна места нет. Тогда
+      // окошко в 240 px давало две прокрутки сразу — страницы и стола. Вместо него стол берёт
+      // высоту видимой области: страница докручивается до стола, и дальше он занимает экран.
+      const parent = scrollParent();
+      const viewport = parent ? parent.clientHeight : window.innerHeight;
+      area.style.maxHeight = `${Math.max(viewport - below - GAP, MIN)}px`;
+    };
+
+    apply();
+    window.addEventListener('resize', apply);
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(apply);
+    if (observer && area.parentElement) observer.observe(area.parentElement);
+
+    return () => {
+      window.removeEventListener('resize', apply);
+      observer?.disconnect();
+    };
+  }, [fill, rows.length]);
+
+  // Хвост списка виден — значит пора за следующей порцией. Наблюдатель не заводится, когда
+  // догружать нечего или запрос уже в пути: иначе одна прокрутка выстреливает несколько раз.
+  useEffect(() => {
+    if (!hasMore || !onLoadMore || loadingMore) return;
+    const target = sentinel.current;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) onLoadMore();
+    }, { root: target.closest('.ou-grid__scroll') });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, onLoadMore, rows.length]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggleExpand = (id: string) => {
+  const toggleExpand = (id: string, row: T, index: number) => {
     setExpanded(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else {
+        next.add(id);
+        onRowExpand?.(row, index);
+      }
       return next;
     });
   };
@@ -131,30 +286,43 @@ export function DataGrid<T>({
   const lastFrozen = frozenIndices.length ? frozenIndices[frozenIndices.length - 1] : -1;
 
   const totalRows = total ?? rows.length;
-  const showPager = page !== undefined && pageSize !== undefined && onPageChange !== undefined;
+  const showPager = hasMore === undefined
+    && page !== undefined && pageSize !== undefined && onPageChange !== undefined;
   const totalPages = showPager ? Math.max(1, Math.ceil(totalRows / pageSize!)) : 1;
 
+  /**
+   * Счётчик — спутник заголовка, а не самостоятельный блок: без заголовка, поиска и своих
+   * кнопок над таблицей осталось бы одно число, которое читателю не к чему отнести (сколько
+   * чего и из скольких — это говорят подвал и подзаголовок карточки).
+   */
+  const showToolbar = Boolean(title || onQueryChange || toolbarExtra);
+
   return (
-    <div className={cn('ou-grid', className, cssStyleClass(style, 'ou-grid-sx'))} {...rest}>
+    <div
+      className={cn('ou-grid', fill && 'ou-grid--fill', className, cssStyleClass(style, 'ou-grid-sx'))}
+      {...rest}
+    >
       {/* Toolbar */}
-      <div className="ou-grid__toolbar">
-        {title && <span className="ou-grid__toolbar-title">{title}</span>}
-        <span className="ou-grid__toolbar-count">{totalRows}</span>
-        <span className="ou-grid__toolbar-spacer" />
-        {onQueryChange && (
-          <div className="ou-grid__search">
-            <SearchIcon />
-            <input
-              type="text"
-              placeholder={searchPlaceholder}
-              value={query ?? ''}
-              onChange={(e) => onQueryChange(e.target.value)}
-              aria-label={searchPlaceholder}
-            />
-          </div>
-        )}
-        {toolbarExtra}
-      </div>
+      {showToolbar && (
+        <div className="ou-grid__toolbar">
+          {title && <span className="ou-grid__toolbar-title">{title}</span>}
+          <span className="ou-grid__toolbar-count">{totalRows}</span>
+          <span className="ou-grid__toolbar-spacer" />
+          {onQueryChange && (
+            <div className="ou-grid__search">
+              <SearchIcon />
+              <input
+                type="text"
+                placeholder={searchPlaceholder}
+                value={query ?? ''}
+                onChange={(e) => onQueryChange(e.target.value)}
+                aria-label={searchPlaceholder}
+              />
+            </div>
+          )}
+          {toolbarExtra}
+        </div>
+      )}
 
       {/* Bulk bar */}
       {selectable && selected.length > 0 && (
@@ -168,7 +336,7 @@ export function DataGrid<T>({
         </div>
       )}
 
-      <div className="ou-grid__scroll">
+      <div className="ou-grid__scroll" ref={scrollArea}>
         <table className="ou-grid__table">
           <thead>
             <tr>
@@ -193,11 +361,18 @@ export function DataGrid<T>({
                   className={cn(
                     c.frozen && 'col-stick',
                     i === lastFrozen && 'col-stick--shadow',
-                    cssStyleClass({ width: c.width, textAlign: c.align ?? 'left' }, 'ou-grid-cell'),
+                    cssStyleClass({ width: c.width, textAlign: columnAlign(c) }, 'ou-grid-cell'),
                   )}
                 >
+                  {/* Ячейка заголовка — гибкий ряд: `text-align` её не двигает, поэтому
+                      выравнивание передаётся модификатором. */}
                   <div
-                    className={cn('ou-grid__th', sortKey === c.key && 'is-sorted', c.sortable && 'is-sortable')}
+                    className={cn(
+                      'ou-grid__th',
+                      columnAlign(c) !== 'left' && `ou-grid__th--${columnAlign(c)}`,
+                      sortKey === c.key && 'is-sorted',
+                      c.sortable && 'is-sortable',
+                    )}
                     onClick={() => onClickHeader(c)}
                   >
                     {c.header}
@@ -218,19 +393,27 @@ export function DataGrid<T>({
             ) : rows.map((row, idx) => {
               const id = rowKey(row);
               const isSel = selected.includes(id);
-              const isExp = expanded.has(id);
+              const canExp = expandable ? (canExpand ? canExpand(row, idx) : true) : false;
+              const isExp = canExp && expanded.has(id);
               return (
                 <React.Fragment key={id}>
-                  <tr className={cn(isSel && 'is-selected')}>
+                  <tr
+                    className={cn(isSel && 'is-selected', onRowClick && 'is-clickable')}
+                    onClick={onRowClick
+                      ? (e) => { if (!isInteractiveTarget(e.target)) onRowClick(row, idx); }
+                      : undefined}
+                  >
                     {expandable && (
                       <td className="ou-grid__control-cell">
-                        <button
-                          type="button"
-                          className={cn('ou-grid__expand-btn', isExp && 'is-open')}
-                          aria-label={isExp ? 'Свернуть' : 'Развернуть'}
-                          {...(isExp ? { 'aria-expanded': 'true' as const } : { 'aria-expanded': 'false' as const })}
-                          onClick={() => toggleExpand(id)}
-                        ><ExpandChev /></button>
+                        {canExp && (
+                          <button
+                            type="button"
+                            className={cn('ou-grid__expand-btn', isExp && 'is-open')}
+                            aria-label={isExp ? 'Свернуть' : 'Развернуть'}
+                            {...(isExp ? { 'aria-expanded': 'true' as const } : { 'aria-expanded': 'false' as const })}
+                            onClick={() => toggleExpand(id, row, idx)}
+                          ><ExpandChev /></button>
+                        )}
                       </td>
                     )}
                     {selectable && (
@@ -251,9 +434,11 @@ export function DataGrid<T>({
                         key={c.key}
                         className={cn(
                           c.numeric && 'is-numeric',
+                          // Явное выравнивание перебивает правое у `is-numeric`.
+                          c.align && `is-align-${c.align}`,
                           c.frozen && 'col-stick',
                           i === lastFrozen && 'col-stick--shadow',
-                          cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-grid-cell'),
+                          cssStyleClass({ textAlign: columnAlign(c) }, 'ou-grid-cell'),
                         )}
                       >
                         {c.render
@@ -262,7 +447,7 @@ export function DataGrid<T>({
                       </td>
                     ))}
                   </tr>
-                  {expandable && isExp && renderExpanded && (
+                  {isExp && renderExpanded && (
                     <tr className="ou-grid__expanded">
                       <td colSpan={columns.length + (selectable ? 1 : 0) + 1}>
                         <div className="ou-grid__expanded-inner">
@@ -276,7 +461,20 @@ export function DataGrid<T>({
             })}
           </tbody>
         </table>
+        {/*
+          Хвост для наблюдателя — последний элемент ПРОКРУЧИВАЕМОЙ области. Положенный
+          снаружи, он попадает в видимую часть сразу и запускает догрузку до конца списка.
+        */}
+        {hasMore && <div ref={sentinel} className="ou-grid__sentinel" aria-hidden="true" />}
       </div>
+
+      {/* Подвал ленивого списка: сколько показано из скольких. */}
+      {hasMore !== undefined && (
+        <div className="ou-grid__footer">
+          <span>Показано {rows.length}{total === undefined ? '' : ` из ${total}`}</span>
+          <span>{loadingMore ? 'Загружаем следующие…' : hasMore ? 'Следующие подгружаются при прокрутке' : ''}</span>
+        </div>
+      )}
 
       {/* Footer / pagination */}
       {showPager && (

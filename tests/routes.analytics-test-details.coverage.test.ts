@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
+import { observationsDouble } from "./helpers/observations-double";
 import express from "express";
 import session from "express-session";
 
@@ -19,12 +20,19 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTest: vi.fn(),
-    getAllAttempts: vi.fn(),
+    getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); },
+    // PRD-56 FR-33: страница теста читает прохождения через выборку DAL.
+    selectObservations: vi.fn(),
+    // PRD-56 FR-25: ответы прохождений из LMS — часть выборки страницы теста.
+    selectAnswersForTest: vi.fn().mockResolvedValue([]),
     getQuestionsByIds: vi.fn().mockResolvedValue([]),
     getTopics: vi.fn().mockResolvedValue([]),
     // PRD-15 block D: effective-scoring chain sources (no overrides by default).
     getTestSections: vi.fn().mockResolvedValue([]),
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
+    // PRD-56 FR-21: признак «у теста есть шкалы» для вкладки «Шкалы».
+    getScales: vi.fn().mockResolvedValue([]),
+    getResultVariables: vi.fn().mockResolvedValue([]),
     // Object-level scope resolution (author owner/grant paths).
     getTestGrantForUser: vi.fn().mockResolvedValue(undefined),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
@@ -64,6 +72,7 @@ const daysAgo = (n: number) => new Date(now.getTime() - n * 86400000);
 let app: express.Express;
 beforeEach(() => {
   vi.clearAllMocks();
+  storageMock.selectObservations.mockImplementation(observationsDouble(storageMock as never));
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getQuestionsByIds.mockResolvedValue([]);
   storageMock.getTopics.mockResolvedValue([]);
@@ -112,56 +121,69 @@ describe("GET /:testId — scope & error branches", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Topic stats: passed / failed / neither, alt field names, adaptive levelIndex
 // ─────────────────────────────────────────────────────────────────────────────
-describe("GET /:testId — topic stats rollups", () => {
-  it("classifies passed/failed/neither and honours alt field names", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "T", mode: "standard", ownerId: null });
-    const a1 = {
-      id: "a1", testId: "test1", userId: "u1",
+describe("GET /:testId — разрезы по темам", () => {
+  it("считает долю верных по ответам, а взятие порога — по прохождениям", async () => {
+    // PRD-56 FR-14a: две разные единицы счёта. Тема из двух вопросов с порогом 75 %:
+    // оба участника берут по одному — доля верных 50 %, тему не взял никто.
+    storageMock.getTest.mockResolvedValue({
+      id: "test1", title: "T", mode: "standard", ownerId: null,
+      overallPassRuleJson: { type: "percent", value: 70 },
+    });
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "s1", testId: "test1", topicId: "t1", topicPassRuleJson: { source: "custom", type: "percent", value: 75 } },
+    ]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Право" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([
+      { id: "q1", prompt: "В1", type: "single", topicId: "t1", difficulty: 50, tags: ["Антикоррупция"], correctJson: { correctIndex: 0 } },
+      { id: "q2", prompt: "В2", type: "single", topicId: "t1", difficulty: 50, tags: [], correctJson: { correctIndex: 0 } },
+    ]);
+    const attempt = (id: string, answers: Record<string, number>) => ({
+      id, testId: "test1", userId: id,
       startedAt: daysAgo(1), finishedAt: now,
-      variantJson: { sections: [] },
-      resultJson: {
-        overallPercent: 60, totalEarnedPoints: 6, totalPossiblePoints: 10, overallPassed: true,
-        topicResults: [{ topicId: "t1", topicName: "T1", total: 2, correct: 1, earnedPoints: 5, possiblePoints: 10, passed: true }],
-      },
-    };
-    const a2 = {
-      id: "a2", testId: "test1", userId: "u2",
-      startedAt: daysAgo(1), finishedAt: now,
-      variantJson: { sections: [] },
-      resultJson: {
-        overallPercent: 30, overallPassed: false,
-        topicResults: [
-          { topicId: "t1", topicName: "T1", total: 2, correct: 0, earnedPoints: 0, possiblePoints: 10, passed: false },
-          // neither passed nor achievedLevelIndex -> passRate null, possiblePoints 0 -> avgPercent 0
-          { topicId: "t2", topicName: "T2", total: 1, correct: 0, earnedPoints: 0, possiblePoints: 0 },
-          // alt field names + achievedLevelIndex set -> passedCount branch
-          { topicId: "t3", topicName: "T3", totalQuestionsAnswered: 3, totalCorrect: 2, earnedPoints: 2, possiblePoints: 4, achievedLevelIndex: 1 },
-          // achievedLevelIndex explicitly null -> failedCount branch
-          { topicId: "t4", topicName: "T4", total: 1, correct: 0, earnedPoints: 0, possiblePoints: 2, achievedLevelIndex: null },
-        ],
-      },
-    };
-    // Completed attempt whose result carries NO topicResults -> topic loop `continue`.
-    const a3 = {
-      id: "a3", testId: "test1", userId: "u3",
-      startedAt: daysAgo(1), finishedAt: now,
-      variantJson: { sections: [] },
-      resultJson: { overallPercent: 50, overallPassed: false },
-    };
-    storageMock.getAllAttempts.mockResolvedValue([a1, a2, a3]);
-    storageMock.getTopics.mockResolvedValue([]);
+      variantJson: { sections: [{ questionIds: ["q1", "q2"] }] },
+      answersJson: answers,
+      resultJson: { overallPercent: 50, overallPassed: false, totalPossiblePoints: 2, totalEarnedPoints: 1 },
+    });
+    storageMock.getAllAttempts.mockResolvedValue([
+      attempt("a1", { q1: 0, q2: 1 }),
+      attempt("a2", { q1: 1, q2: 0 }),
+    ]);
 
     const res = await asAuthor(request(app).get("/api/analytics/test1"));
+
     expect(res.status).toBe(200);
-    const byId = Object.fromEntries(res.body.topicStats.map((t: any) => [t.topicId, t]));
-    expect(byId.t1.passRate).toBe(50);           // 1 passed + 1 failed
-    expect(byId.t1.totalAnswers).toBe(4);
-    expect(byId.t2.passRate).toBeNull();          // no passed/failed classification
-    expect(byId.t2.avgPercent).toBe(0);           // possiblePoints 0 -> 0 branch
-    expect(byId.t3.passRate).toBe(100);           // achievedLevelIndex set
-    expect(byId.t3.totalAnswers).toBe(3);         // totalQuestionsAnswered alt field
-    expect(byId.t3.correctAnswers).toBe(2);       // totalCorrect alt field
-    expect(byId.t4.passRate).toBe(0);             // achievedLevelIndex null -> failed
+    const topic = res.body.topicStats.find((t: any) => t.topicId === "t1");
+    expect(topic).toMatchObject({
+      correctShare: 50, passedShare: 0, thresholdPercent: 75, inSample: 2,
+    });
+  });
+
+  it("показывает подтемы внутри темы и наследует им её порог", async () => {
+    storageMock.getTest.mockResolvedValue({
+      id: "test1", title: "T", mode: "standard", ownerId: null,
+      overallPassRuleJson: { type: "percent", value: 70 },
+    });
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "s1", testId: "test1", topicId: "t1", topicPassRuleJson: { source: "inherit_overall" } },
+    ]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Право" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([
+      { id: "q1", prompt: "В1", type: "single", topicId: "t1", difficulty: 50, tags: ["Антикоррупция"], correctJson: { correctIndex: 0 } },
+    ]);
+    storageMock.getAllAttempts.mockResolvedValue([{
+      id: "a1", testId: "test1", userId: "u1",
+      startedAt: daysAgo(1), finishedAt: now,
+      variantJson: { sections: [{ questionIds: ["q1"] }] },
+      answersJson: { q1: 0 },
+      resultJson: { overallPercent: 100, overallPassed: true, totalPossiblePoints: 1, totalEarnedPoints: 1 },
+    }]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/test1"));
+
+    const topic = res.body.topicStats.find((t: any) => t.topicId === "t1");
+    expect(topic.subtopics).toEqual([
+      expect.objectContaining({ name: "Антикоррупция", correctShare: 100, thresholdPercent: 70 }),
+    ]);
   });
 });
 
@@ -187,17 +209,17 @@ describe("GET /:testId — question stats branches", () => {
     const res = await asAuthor(request(app).get("/api/analytics/test1"));
     expect(res.status).toBe(200);
     expect(res.body.questionStats).toHaveLength(1); // qGhost skipped
-    expect(res.body.questionStats[0].difficulty).toBe(50); // null difficulty -> 50 default
+    expect(res.body.questionStats[0].difficulty).toBeNull(); // Э4а: незаданная сложность — null, не 50
     expect(res.body.questionStats[0].correctAnswers).toBe(0); // wrong answer
     expect(res.body.questionStats[0].correctPercent).toBe(0);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Daily trends & duration filters
+// Динамика сдаваемости и длительность
 // ─────────────────────────────────────────────────────────────────────────────
-describe("GET /:testId — daily trends & duration", () => {
-  it("excludes null-finish and >30-day-old attempts, counts durations only when timestamps present", async () => {
+describe("GET /:testId — динамика и длительность", () => {
+  it("держит в линии все месяцы, а в длительности — только прохождения с обеими отметками", async () => {
     storageMock.getTest.mockResolvedValue({ id: "test1", title: "T", mode: "standard", ownerId: null });
     const recent = {
       id: "r", testId: "test1", userId: "u1",
@@ -212,7 +234,7 @@ describe("GET /:testId — daily trends & duration", () => {
       variantJson: { sections: [] },
       resultJson: { overallPercent: 40, overallPassed: false, topicResults: [] },
     };
-    // Old finished attempt -> excluded from trends by the 30-day window.
+    // Прохождение прошлого месяца: в помесячной линии у него СВОЯ точка (FR-13).
     const old = {
       id: "o", testId: "test1", userId: "u3",
       startedAt: daysAgo(41), finishedAt: daysAgo(40),
@@ -231,7 +253,12 @@ describe("GET /:testId — daily trends & duration", () => {
     expect(res.status).toBe(200);
     expect(res.body.summary.totalAttempts).toBe(4);
     expect(res.body.summary.completedAttempts).toBe(3);
-    expect(res.body.dailyTrends).toHaveLength(1); // only `recent`
+    // PRD-56 FR-13: линия помесячная, окна в тридцать дней у неё нет — старое прохождение
+    // не исчезает, а даёт точку своего месяца. В точку идут ВСЕ прохождения месяца, включая
+    // незавершённые: они показывают, сколько людей за тест брались.
+    expect(res.body.passTrend.length).toBeGreaterThanOrEqual(1);
+    const trendTotal = res.body.passTrend.reduce((sum: number, p: any) => sum + p.attempts, 0);
+    expect(trendTotal).toBe(4);
     expect(res.body.summary.avgDuration).toBeGreaterThan(0); // only `recent` had both timestamps
   });
 });

@@ -30,7 +30,10 @@ import {
 } from "@shared/draw/feasibility";
 import { tagKey } from "@shared/tags";
 import { storage, type TestUsageRef } from "../storage";
+import { availableOf, excludedFromDelivery } from "./delivery-pool";
 import type { Question, TestSection } from "@shared/schema";
+import { isSimulation } from "@shared/questions/question-type";
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 
 /** Describes the proposed change for the formula-loss pass (E-6). */
 interface TagMutation {
@@ -242,6 +245,18 @@ async function buildRequirements(
 }
 
 /**
+ * PRD-56 FR-17a: задания, исключённые из выдачи ЭТОГО теста.
+ *
+ * Пул темы для проверки выполнимости обязан их терять: иначе публикация разрешит тест,
+ * который выдать нельзя («выдать 5 из 5», где пятое задание автор снял), и ошибка вскроется
+ * не здесь, а у участника на старте попытки. Правило — общее с профилем экспозиции и списком
+ * «Качество вопросов» (`delivery-pool`): третьего определения пула не заводится.
+ */
+async function excludedFromDeliveryOf(testId: string): Promise<Set<string>> {
+  return excludedFromDelivery(await storage.getTestQuestionScoring(testId));
+}
+
+/**
  * Per-test difficulty overrides (block D, FR-34): questionId -> effective
  * difficulty for this test. Null when the test overrides nothing — the core
  * then reads the questions' base difficulty.
@@ -255,14 +270,53 @@ async function difficultyOverridesOf(testId: string): Promise<Record<string, num
   return Object.keys(map).length > 0 ? map : null;
 }
 
+/**
+ * «Сценарий в ИС»: пункты-сценарии на теме, которые после изменения останутся без сценария.
+ *
+ * Пункт выдаёт сценарий своей темы-банка: случайный — из всех её сценариев, фиксированный —
+ * свой. Опустевшая тема или удалённый фиксированный сценарий оставляют участнику карточку хаба,
+ * которую нечем пройти. Находки идут той же политикой, что остальные: опубликованный тест
+ * блокирует изменение, черновик предупреждает.
+ *
+ * @param topicId Тема, которую меняют.
+ * @param removed Вопросы темы, которые уйдут.
+ */
+async function scenarioItemFindings(topicId: string, removed: ReadonlySet<string>): Promise<TestFeasibility[]> {
+  const items = await storage.getTestScenariosByTopic(topicId);
+  if (items.length === 0) return [];
+  const remaining = (await storage.getQuestionsByTopic(topicId))
+    .filter((q) => isSimulation(q.type) && !removed.has(q.id))
+    .map((q) => q.id);
+  const findings: TestFeasibility[] = [];
+  for (const item of items) {
+    const empty = item.questionId ? !remaining.includes(item.questionId) : remaining.length === 0;
+    if (!empty) continue;
+    const test = await storage.getTest(item.testId);
+    if (!test) continue;
+    const topic = await storage.getTopic(topicId);
+    findings.push({
+      testId: test.id,
+      title: test.title,
+      status: test.status ?? undefined,
+      ownerId: test.ownerId,
+      issues: [{ kind: "scenario_item_empty", itemTitle: item.title?.trim() || topic?.name || "Сценарий" }],
+    });
+  }
+  return findings;
+}
+
 /** Feasibility of deleting a whole topic: the pool empties, all questions go. */
 export async function assessTopicDeletion(topicId: string): Promise<FeasibilityAssessment> {
   const questions = await storage.getQuestionsByTopic(topicId);
   const removedIds = questions.map((q) => q.id);
   const tests = await buildRequirements(topicId, removedIds, { includeTopicPages: true });
-  if (tests.length === 0) return EMPTY_ASSESSMENT;
+  const scenarioFindings = await scenarioItemFindings(topicId, new Set(removedIds));
+  if (tests.length === 0 && scenarioFindings.length === 0) return EMPTY_ASSESSMENT;
   await attachFormulaLoss(tests, { deletedTopicIds: new Set([topicId]) });
-  return applyPolicy(checkDrawFeasibility({ pool: [], removedQuestionIds: removedIds, tests }));
+  return applyPolicy(mergeByTest([
+    ...(tests.length ? checkDrawFeasibility({ pool: [], removedQuestionIds: removedIds, tests }) : []),
+    ...scenarioFindings,
+  ]));
 }
 
 /**
@@ -288,6 +342,7 @@ export async function assessQuestionsRemoval(
     const pool = (await storage.getQuestionsByTopic(topicId))
       .filter((q) => !removed.has(q.id))
       .map(toPoolQuestion);
+    results.push(...(await scenarioItemFindings(topicId, removed)));
     const tests = await buildRequirements(topicId, removedInTopic);
     if (tests.length === 0) continue;
     await attachFormulaLoss(tests, { removedQuestionIds: removed });
@@ -312,7 +367,16 @@ export interface PublishCheckFinding {
  * levels must be satisfiable right now. Advisory issues are filtered out:
  * only hard shortfalls should stop a publication.
  */
-export async function assessTestPublish(testId: string): Promise<PublishCheckFinding[]> {
+export async function assessTestPublish(
+  testId: string,
+  /**
+   * PRD-56 FR-17b: задания, которые ЕЩЁ не исключены, но будут — окно подтверждения и сама
+   * ручка исключения спрашивают о БУДУЩЕМ состоянии. Передать их сюда честнее, чем записать
+   * признак в базу и откатить: между записью и откатом чужая попытка стартует с пулом,
+   * которого автор не утверждал.
+   */
+  alsoExcludedQuestionIds: readonly string[] = [],
+): Promise<PublishCheckFinding[]> {
   const test = await storage.getTest(testId);
   if (!test) return [];
   const sections = await storage.getTestSections(testId);
@@ -320,9 +384,14 @@ export async function assessTestPublish(testId: string): Promise<PublishCheckFin
   // effective difficulty the delivery will use.
   const difficultyOverrides =
     test.mode === "adaptive" ? await difficultyOverridesOf(testId) : null;
+  const excluded = await excludedFromDeliveryOf(testId);
+  for (const questionId of alsoExcludedQuestionIds) excluded.add(questionId);
   const findings: PublishCheckFinding[] = [];
   for (const section of sections) {
-    const pool = (await storage.getQuestionsByTopic(section.topicId)).map(toPoolQuestion);
+    // Доступный банк раздела — тот же, из которого отбирает старт попытки (`delivery-pool`);
+    // варианты и уровни ядро проверяет поверх него само.
+    const pool = availableOf(await storage.getQuestionsByTopic(section.topicId), excluded)
+      .map(toPoolQuestion);
     const adaptive =
       test.mode === "adaptive" ? await storage.getAdaptiveLevels(testId, section.topicId) : [];
     const results = checkDrawFeasibility({
@@ -364,6 +433,21 @@ export async function assessTestPublish(testId: string): Promise<PublishCheckFin
       });
     }
   }
+  // «Сценарий в ИС»: пункт, которому выдать нечего, — тест «Сценарий» или пункт роутера. Пул тот
+  // же, что берёт старт попытки: сценарии темы-банка (или фиксированный) без снятых с выдачи.
+  const scenarioRelevant = test.mode === "scenario" || resolveFlowPolicy(test.flowPolicyJson).mode === "router_by_topics";
+  const items = scenarioRelevant ? await storage.getTestScenarios(testId) : [];
+  for (const item of test.mode === "scenario" ? items.slice(0, 1) : items) {
+    const pool = availableOf(await storage.getQuestionsByTopic(item.topicId), excluded)
+      .filter((q) => isSimulation(q.type) && (!item.questionId || q.id === item.questionId));
+    if (pool.length > 0) continue;
+    const topic = await storage.getTopic(item.topicId);
+    findings.push({
+      topicId: item.topicId,
+      topicName: topic?.name ?? "Unknown",
+      issues: [{ kind: "scenario_item_empty", itemTitle: item.title?.trim() || topic?.name || "Сценарий" }],
+    });
+  }
   return findings;
 }
 
@@ -375,7 +459,8 @@ export async function assessTestPublish(testId: string): Promise<PublishCheckFin
  */
 export async function assessQuestionChange(
   questionId: string,
-  next: { tags?: string[]; difficulty?: number },
+  // `difficulty: null` — сложность СНИМАЕТСЯ («Не задано», PRD-16 FR-10); отсутствие — не меняется.
+  next: { tags?: string[]; difficulty?: number | null },
 ): Promise<FeasibilityAssessment> {
   const question = await storage.getQuestion(questionId);
   if (!question) return EMPTY_ASSESSMENT;
@@ -384,7 +469,7 @@ export async function assessQuestionChange(
       ? {
           id: q.id,
           tags: next.tags ?? q.tags ?? [],
-          difficulty: next.difficulty ?? q.difficulty,
+          difficulty: next.difficulty !== undefined ? next.difficulty : q.difficulty,
         }
       : toPoolQuestion(q),
   );

@@ -91,6 +91,26 @@ describe("retakePolicySchema — PRD-31 attemptInterval", () => {
   });
 });
 
+describe("retakePolicySchema — lmsCourseName", () => {
+  const base = { enabled: true, cooldownPeriodDays: 30 };
+
+  it("keeps the WebTutor course name, trimmed", () => {
+    const p = retakePolicySchema.parse({ ...base, lmsCourseName: "  Курс (предфинальный тест) " });
+    expect(p.lmsCourseName).toBe("Курс (предфинальный тест)");
+  });
+
+  it("drops a blank name, so the test title stays the one to match", () => {
+    expect(retakePolicySchema.parse({ ...base, lmsCourseName: "   " }).lmsCourseName).toBeUndefined();
+    expect(retakePolicySchema.parse({ ...base, lmsCourseName: "" }).lmsCourseName).toBeUndefined();
+    expect(retakePolicySchema.parse(base).lmsCourseName).toBeUndefined();
+  });
+
+  it("rejects a name longer than 500 characters", () => {
+    expect(() => retakePolicySchema.parse({ ...base, lmsCourseName: "а".repeat(501) })).toThrow();
+    expect(() => retakePolicySchema.parse({ ...base, lmsCourseName: "а".repeat(500) })).not.toThrow();
+  });
+});
+
 describe("retakePolicySchema — PRD-40 cooldownByOutcome", () => {
   it("defaults cooldownByOutcome to false and does not require the split fields", () => {
     const p = retakePolicySchema.parse({ enabled: true, cooldownPeriodDays: 30 });

@@ -1,11 +1,12 @@
 import { Router } from "express";
+import { isSimulation } from "@shared/questions/question-type";
 import crypto from "node:crypto";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema, designSettingsSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, breakdownDisplaySchema, breakdownFeedbackSchema, breakdownInterpretationSchema, interpretationSchema, sectionGroupsSchema, questionScoringSchema, designSettingsSchema, simScoringSettingsSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
@@ -18,18 +19,26 @@ import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope, canGrantAccess } from "../services/test-access";
 import { visibleTopic } from "../services/topic-access";
 import { assessTestPublish } from "../services/draw-feasibility";
-import { createTestSnapshot, getPublicationState } from "../services/test-snapshot";
+import { assessBreakdownPublish } from "../services/breakdown-warnings";
+import {
+  createTestSnapshot,
+  getPublicationState,
+  publishedSnapshotOf,
+  type ExportVersion,
+  type TestSnapshotContent,
+} from "../services/test-snapshot";
 import { countUnmappedPages } from "../services/page-variant-audit";
 import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { DEFAULT_TEMPLATE_ID } from "../services/template-rebind";
 import { logger } from "../logger";
-import { appBaseUrl } from "../config";
+import { telemetryBaseUrl } from "../config";
 import {
   testSettingsService,
   VersionConflictError,
   type SectionPayload,
+  type ScenarioPayload,
   type AdaptiveTopicPayload,
 } from "../services/test-settings";
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
@@ -58,6 +67,20 @@ const sectionBodySchema = z
     // keys, so without this the editor's saved form set is silently dropped before
     // it reaches the storage layer (200 OK, but nothing persisted). null = legacy draw.
     formSetJson: formSetSchema.nullish(),
+    // PRD-50 FR-50: тексты подтем. В `insertTestSectionSchema` эта схема не объявлена
+    // (там она ссылалась бы на `feedbackContentSchema` до его объявления), поэтому
+    // проверяет её ЗАПИСЬ — здесь. Без строки Zod срезал бы ключ, и автор получил бы
+    // бодрое 200 без сохранённого текста, ровно как было бы с `formSetJson`.
+    breakdownFeedbackJson: breakdownFeedbackSchema.nullish(),
+    // Толкования: переопределение текста ТЕМЫ этим тестом и текст каждой подтемы. Должны
+    // стоять здесь по той же причине, что и строка выше: неперечисленный ключ Zod срезает,
+    // и автор получил бы 200 без сохранённого текста.
+    interpretationJson: interpretationSchema.nullish(),
+    breakdownInterpretationJson: breakdownInterpretationSchema.nullish(),
+    // PRD-50 FR-11: the group this section belongs to. MUST be listed here for the same
+    // reason as formSetJson above — an unlisted key is stripped, and the author's choice
+    // of block would never reach the column. null = no group (FR-25).
+    groupKey: z.string().trim().min(1).max(64).nullish(),
     // PRD-15 block D (FR-31): per-section default price; null = inherit test.
     defaultPoints: z.number().int().min(0).nullable().optional(),
     // PRD-30 FR-02/FR-18: the topic's OVERRIDE of the test-wide order; null =
@@ -82,9 +105,57 @@ const sectionBodySchema = z
     }
   });
 
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста (`test_scenarios`). Принадлежность вопроса теме и его
+ * тип проверяет {@link scenarioItemsError} — схеме для этого нужна база.
+ */
+const scenarioBodySchema = z.object({
+  // Идентификатор существующего пункта: ключ `scenario:<id>` живёт в порядке пунктов, правилах
+  // разблокировки и попытках, и пересоздание строки с новым id оборвало бы все эти ссылки.
+  id: z.string().uuid().optional(),
+  topicId: z.string().min(1),
+  questionId: z.string().min(1).nullable().optional(),
+  title: z.string().max(200).nullable().optional(),
+  required: z.boolean().optional(),
+  timeLimitMinutes: z.number().int().positive().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
+  // Группа тем, в которой стоит пункт роутера (как `group_key` раздела).
+  groupKey: z.string().min(1).nullable().optional(),
+  // Балл по умолчанию для сценариев пункта (как у раздела темы); null — по тесту.
+  defaultPoints: z.number().int().min(0).nullable().optional(),
+  // Техдолг №8: правило прохождения пункта — как `topicPassRuleJson` раздела темы.
+  passRuleJson: z.unknown().optional(),
+});
+
+/**
+ * Пункты-сценарии, которые нельзя сохранить: фиксированный сценарий не из своей темы или не
+ * сценарий. Число пунктов не ограничивается: тест «Сценарий» выдаёт первый, а остальные — пункты
+ * роутера, которые смена режима обязана сохранить (FR-40).
+ *
+ * @returns Текст ошибки или `null`.
+ */
+async function scenarioItemsError(
+  _mode: string | undefined,
+  scenarios: Array<z.infer<typeof scenarioBodySchema>> | undefined,
+): Promise<string | null> {
+  if (!scenarios) return null;
+  for (const item of scenarios) {
+    if (!item.questionId) continue;
+    const question = await storage.getQuestion(item.questionId);
+    if (!question || question.topicId !== item.topicId || !isSimulation(question.type)) {
+      return "Фиксированный сценарий должен быть сценарием из выбранной темы";
+    }
+  }
+  return null;
+}
+
 const testBodyBaseSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
   description: z.string().nullable().optional(),
+  // PRD-59 FR-02. MUST be listed here: an unlisted key is stripped by zod and
+  // silently lost — the editor would show the mode switching and the save doing
+  // nothing.
+  descriptionFormat: z.enum(["plain", "richText", "html"]).optional(),
   overallPassRuleJson: passRuleSchema.optional(),
   // «Тест пройден, если» — how the overall rule and the topic gates combine into
   // the verdict (docs/architecture/test-settings-parameter-structure.md §3.4).
@@ -100,15 +171,25 @@ const testBodyBaseSchema = z.object({
     .optional(),
   webhookUrl: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
   sections: z.array(sectionBodySchema).optional(),
+  // «Сценарий в ИС»: пункты-сценарии. ОБЯЗАН быть в схеме: неописанный ключ zod срезает молча.
+  scenarios: z.array(scenarioBodySchema).optional(),
   showCorrectAnswers: z.boolean().optional(),
   // PRD-19 (Блок A): правила навигации/завершения.
   allowReturnToUnanswered: z.boolean().optional(),
+  // PRD-19 (FR-11a): свободная навигация внутри раздела; имеет смысл только вместе с
+  // возвратом к неотвеченным (FR-11c) — зависимость держит редактор, как и для
+  // «изменять ответ».
+  allowFreeSectionNavigation: z.boolean().optional(),
   allowAnswerChange: z.boolean().optional(),
   // PRD-43: independent of allowReturnToUnanswered.
   quickAdvance: z.boolean().optional(),
   showSectionResults: z.boolean().optional(),
   // Обзор при полностью отвеченном объёме — авторское решение, см. `review-gate`.
   skipReviewWhenComplete: z.boolean().optional(),
+  // PRD-67: leaving a started section with a time limit closes it (see schema).
+  closeSectionOnLeave: z.boolean().optional(),
+  // Что SCORM-пакет отдаёт в LMS при нескольких попытках (в вебе не применяется).
+  lmsAttemptResult: z.enum(["best", "last"]).optional(),
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection: z.boolean().optional(),
   // PRD-30 FR-16: the test-wide delivery order (the topics' default).
@@ -119,7 +200,7 @@ const testBodyBaseSchema = z.object({
   maxAttempts: z.number().int().positive().nullable().optional(),
   startPageContent: z.string().nullable().optional(),
   feedback: z.string().nullable().optional(),
-  mode: z.enum(["standard", "adaptive"]).optional(),
+  mode: z.enum(["standard", "adaptive", "scenario"]).optional(),
   showDifficultyLevel: z.boolean().optional(),
   adaptiveSettings: z.array(z.unknown()).optional(),
   // PRD-7 new fields
@@ -132,19 +213,62 @@ const testBodyBaseSchema = z.object({
   // PRD-27: выбранный вариант отчёта и значения его полей, по режиму теста.
   reportSettingsJson: reportSettingsSchema.nullish(),
   introJson: testIntroSchema.nullish(),
+  // PRD-50 FR-13: subtotal-by-key display setting; null = hidden (system default).
+  breakdownDisplayJson: breakdownDisplaySchema.nullish(),
+  // PRD-50 FR-53: учитывать ли подтемы в вердикте темы. Отсутствие = не трогать
+  // сохранённое; умолчание колонки (`false`) = поведение до §16.
+  breakdownGateEnabled: z.boolean().optional(),
+  // PRD-50 FR-11: named groups of sections; null/empty = today's flat list (FR-27).
+  sectionGroupsJson: sectionGroupsSchema.nullish(),
   // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
   defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
+  // «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию; null — системные умолчания.
+  simScoringJson: simScoringSettingsSchema.nullable().optional(),
 
   /** Destination folder for create (PRD-7 §5.5 — FAB folder-pick modal). */
   folderId: z.string().nullable().optional(),
 });
 
-const createTestBodySchema = testBodyBaseSchema.refine(
-  (b) => !!b.title,
-  { message: "Title is required", path: ["title"] },
-);
+const createTestBodySchema = testBodyBaseSchema
+  .extend({
+    /**
+     * Оформление, выбранное ДО первого сохранения: автор указывает шаблон прямо в
+     * форме создания, и выбор обязан доехать до INSERT. Системные страницы теста
+     * раскладывает та же транзакция (`_reconcileSystemPages`) и связывает их с
+     * шаблоном — приняв выбор позже, мы связали бы их со «Стандартным» и заставили
+     * автора пересопоставлять страницы сразу после создания.
+     *
+     * Принимается ТОЛЬКО идентификатор шаблона. Параметры, палитры и надписи живут в
+     * `PUT /api/tests/:id/design`, где их проверяют против манифеста; второй путь их
+     * записи означал бы вторую, неизбежно расходящуюся валидацию.
+     */
+    designSettingsJson: z.object({ templateId: z.string().min(1) }).optional(),
+  })
+  .refine(
+    (b) => !!b.title,
+    { message: "Title is required", path: ["title"] },
+  );
 
-const updateTestBodySchema = testBodyBaseSchema;
+/**
+ * PRD-51: ДОКУМЕНТ ОТЧЁТА в теле сохранения. Ключ объявлен ЯВНО: незаявленный zod
+ * срезает молча — ровно так однажды пропадала настройка «Тест пройден, если» на каждом
+ * сохранении (см. комментарий у `passDecisionPolicy`).
+ *
+ * `sortOrder` здесь НЕТ намеренно: порядок выводится из позиции в массиве. Приняв его от
+ * клиента, сервер получил бы второй источник истины о порядке, и спорить с ними было бы
+ * нечем.
+ */
+const reportBlockBodySchema = z.object({
+  block: z.string().min(1),
+  templateKey: z.string().nullable().optional(),
+  enabled: z.boolean().optional(),
+  values: z.record(z.string(), z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+});
+
+const updateTestBodySchema = testBodyBaseSchema.extend({
+  reportBlocks: z.array(reportBlockBodySchema).optional(),
+});
 
 /** Converts a ZodError to the structured `fields` array per decisions.md §5.4. */
 function zodToFields(err: z.ZodError) {
@@ -281,7 +405,22 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   // for the editor's status indicator and the «Опубликовать изменения» action.
   const publication = await getPublicationState(test.id);
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements, questionScoring, publication };
+  // PRD-51: документ отчёта — ОБЕ ветви режима. Редактор правит ветвь текущего режима, но
+  // хранятся обе: тест, переключённый на адаптивный и обратно, не должен терять собранный
+  // документ (та же схема, что у `report_settings_json`).
+  const reportBlocks = {
+    standard: await storage.listReportBlocks(test.id, "standard"),
+    adaptive: await storage.listReportBlocks(test.id, "adaptive"),
+  };
+
+  // «Сценарий в ИС»: пункты-сценарии лежат при тесте в любом режиме — переключение режима их
+  // не стирает (FR-40), — а действуют только в режиме «Сценарий» (и в роутере, этап Э3).
+  const scenarios = (await storage.getTestScenarios(test.id)).map((item) => ({
+    ...item,
+    topicName: topicMap.get(item.topicId)?.name || "Unknown",
+  }));
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, scenarios, resultVariables, scales, measurements, questionScoring, publication, reportBlocks };
 }
 
 // GET /api/tests - Список тестов
@@ -315,6 +454,11 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
     // longer declares. Audited for the whole page of the list at once — see the
     // service note on why this is not a per-test query.
     const unmappedPages = await countUnmappedPages(visibleTests, storage);
+
+    // PRD-52 FR-32: сколько у теста открытых комментариев рецензентов. Считается на
+    // ВЕСЬ список одним запросом, а не на строку: список рисуется целиком, и запрос
+    // на карточку превратил бы его в десятки обращений ради одного числа.
+    const openComments = await storage.countOpenReviewCommentsByTests(visibleTests.map((t) => t.id));
 
     const testsWithSections = await Promise.all(
       visibleTests.map(async (test) => {
@@ -373,6 +517,7 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
           adaptiveSettings,
           publication,
           unmappedPageCount: unmappedPages.get(test.id) ?? 0,
+          openReviewComments: openComments[test.id] ?? 0,
         };
       })
     );
@@ -612,16 +757,21 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
     const {
       title,
       description,
+      descriptionFormat,
       overallPassRuleJson,
       passDecisionPolicy,
       webhookUrl,
       sections,
+      scenarios,
       showCorrectAnswers,
       allowReturnToUnanswered,
+      allowFreeSectionNavigation,
       allowAnswerChange,
       quickAdvance,
       showSectionResults,
       skipReviewWhenComplete,
+      closeSectionOnLeave,
+      lmsAttemptResult,
       copyProtection,
       protectionWatermark,
       protectionHideOnBlur,
@@ -641,18 +791,27 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       retakePolicyJson,
       reportSettingsJson,
       introJson,
+      breakdownDisplayJson,
+      breakdownGateEnabled,
+      sectionGroupsJson,
       defaultQuestionPoints,
+      simScoringJson,
+      designSettingsJson,
       folderId,
     } = parsed.data;
 
-    // For standard mode, sections are required
-    if (mode !== "adaptive" && (!sections || sections.length === 0)) {
+    // For standard mode, sections are required. A «Сценарий» test has none: its content is
+    // the scenario item.
+    if (mode !== "adaptive" && mode !== "scenario" && (!sections || sections.length === 0)) {
       return res.status(400).json({ error: "Sections are required for standard tests" });
     }
+    const scenarioError = await scenarioItemsError(mode, scenarios);
+    if (scenarioError) return res.status(422).json({ error: scenarioError, field: "scenarios" });
 
     // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
     const referencedTopics = [
       ...(sections ?? []).map((s) => s.topicId),
+      ...(scenarios ?? []).map((s) => s.topicId),
       ...((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId),
     ];
     const invisible = await firstInvisibleTopic(
@@ -668,10 +827,34 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       });
     }
 
+    // Выбранный шаблон проверяется ровно тем же правилом, что и в `PUT /:id/design`:
+    // он должен существовать и быть активным. Версия и версия контракта штампуются
+    // здесь же — иначе тест родился бы с оформлением без версии, и редактор никогда
+    // не смог бы сказать, что шаблон с тех пор перезалили.
+    let designSettings: Record<string, unknown> | undefined;
+    if (designSettingsJson) {
+      const [template] = await db
+        .select()
+        .from(templates)
+        .where(and(eq(templates.id, designSettingsJson.templateId), eq(templates.isActive, true)));
+      if (!template) {
+        return res.status(422).json({ error: "Template not found or inactive", field: "templateId" });
+      }
+      designSettings = {
+        templateId: template.id,
+        templateVersion: template.version,
+        templateApiVersion: template.templateApiVersion,
+        // Параметров у нового теста нет по определению: их правят на вкладке
+        // «Оформление» уже существующего теста.
+        params: {},
+      };
+    }
+
     const test = await testSettingsService.create({
       test: {
         title: title!,
         description,
+        descriptionFormat,
         overallPassRuleJson: overallPassRuleJson ?? { type: "percent" as const, value: 70 },
         passDecisionPolicy,
         webhookUrl: webhookUrl || null,
@@ -679,10 +862,13 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         published,
         showCorrectAnswers,
         allowReturnToUnanswered,
+        allowFreeSectionNavigation,
         allowAnswerChange,
         quickAdvance,
         showSectionResults,
         skipReviewWhenComplete,
+        closeSectionOnLeave,
+        lmsAttemptResult,
         copyProtection,
         protectionWatermark,
         protectionHideOnBlur,
@@ -699,7 +885,12 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         retakePolicyJson: retakePolicyJson ?? null,
         reportSettingsJson: reportSettingsJson ?? null,
         introJson: introJson ?? null,
+        breakdownDisplayJson: breakdownDisplayJson ?? null,
+        breakdownGateEnabled,
+        sectionGroupsJson: sectionGroupsJson ?? null,
         defaultQuestionPoints: defaultQuestionPoints ?? null,
+        simScoringJson: simScoringJson ?? null,
+        designSettingsJson: designSettings,
         folderId: folderId ?? null,
         // PRD-13: creator owns the test atomically in the INSERT (the post-insert
         // setTestOwner below is now a redundant safety net).
@@ -709,6 +900,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       adaptiveSettings: mode === "adaptive"
         ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined)
         : undefined,
+      scenarios: scenarios as ScenarioPayload[] | undefined,
     });
 
     // PRD-13: the creator becomes the test owner.
@@ -741,6 +933,28 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
     }
     logger.error("Create test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to create test" });
+  }
+});
+
+// GET /api/tests/:id/feasibility — выполнимость выдачи ТЕКУЩЕГО состояния теста.
+//
+// PRD-15 FR-05: сервис выполнимости обязан работать на всех путях изменения, и для
+// черновика его политика — предупреждение без блокировки. Авторская правка самой
+// лестницы была единственным путём мимо этой проверки: уровень с диапазоном
+// сложности, под который в теме нет ни одного вопроса, сохранялся молча и подавал
+// голос только на публикации (FR-06, `409 publish_infeasible`) — а до неё прогон
+// вставал на «Вопрос 1 из 0», и автор не знал, почему.
+//
+// Тот же `assessTestPublish`, что закрывает публикацию: одна проверка, один язык
+// находок. Только чтение — ничего не блокирует и ничего не меняет.
+router.get("/:id/feasibility", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    res.json({ findings: await assessTestPublish(req.params.id) });
+  } catch (error) {
+    logger.error("GET feasibility error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to assess feasibility" });
   }
 });
 
@@ -1034,18 +1248,24 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
     }
 
     const {
+      reportBlocks,
       title,
       description,
+      descriptionFormat,
       overallPassRuleJson,
       passDecisionPolicy,
       webhookUrl,
       sections,
+      scenarios,
       showCorrectAnswers,
       allowReturnToUnanswered,
+      allowFreeSectionNavigation,
       allowAnswerChange,
       quickAdvance,
       showSectionResults,
       skipReviewWhenComplete,
+      closeSectionOnLeave,
+      lmsAttemptResult,
       copyProtection,
       protectionWatermark,
       protectionHideOnBlur,
@@ -1065,7 +1285,11 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       retakePolicyJson,
       reportSettingsJson,
       introJson,
+      breakdownDisplayJson,
+      breakdownGateEnabled,
+      sectionGroupsJson,
       defaultQuestionPoints,
+      simScoringJson,
     } = parsed.data;
 
     const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
@@ -1075,14 +1299,19 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
     // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
     // FR-25 derived in-context read: topics already referenced by this test are
     // exempt, so a soft grant revoke does not block re-saving an existing test.
+    const scenarioError = await scenarioItemsError(mode, scenarios);
+    if (scenarioError) return res.status(422).json({ error: scenarioError, field: "scenarios" });
+
     const referencedTopics = [
       ...(mode === "standard" ? (sections ?? []).map((s) => s.topicId) : []),
+      ...(scenarios ?? []).map((s) => s.topicId),
       ...(mode === "adaptive"
         ? ((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId)
         : []),
     ];
     const existingSections = await storage.getTestSections(req.params.id);
-    const exempt = new Set(existingSections.map((s) => s.topicId));
+    const existingScenarios = await storage.getTestScenarios(req.params.id);
+    const exempt = new Set([...existingSections, ...existingScenarios].map((s) => s.topicId));
     const invisible = await firstInvisibleTopic(
       req.effectiveRoles ?? [],
       req.currentUser?.id ?? "",
@@ -1101,15 +1330,19 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       test: {
         title,
         description,
+        descriptionFormat,
         overallPassRuleJson,
         passDecisionPolicy,
-        webhookUrl: webhookUrl ?? undefined,
+        webhookUrl,
         showCorrectAnswers,
         allowReturnToUnanswered,
+        allowFreeSectionNavigation,
         allowAnswerChange,
         quickAdvance,
         showSectionResults,
         skipReviewWhenComplete,
+        closeSectionOnLeave,
+        lmsAttemptResult,
         copyProtection,
         protectionWatermark,
         protectionHideOnBlur,
@@ -1123,17 +1356,43 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         status,
         published,
         telemetryEnabled,
-        feedbackJson: feedbackJson ?? undefined,
-        flowPolicyJson: flowPolicyJson ?? undefined,
-        retakePolicyJson: retakePolicyJson ?? undefined,
-        reportSettingsJson: reportSettingsJson ?? undefined,
-        introJson: introJson ?? undefined,
+        // Настраиваемые поля идут ВЕРБАТИМ, без `?? undefined`. Два состояния, которые
+        // тело запроса различает, значат разное, и схлопывать их нельзя:
+        //   поля нет   -> `undefined` -> колонка не участвует в UPDATE, значение прежнее;
+        //   прислали null -> колонка становится NULL, то есть настройка СНЯТА.
+        // `?? undefined` переводил второе в первое, и снять настройку через API было
+        // нельзя вовсе: сервер отвечал 200, а колонка держала прежнее значение. Редактор
+        // шлёт `null` именно как «снято» — так он выключает кулдаун
+        // (`retakePolicyJson: enabled ? … : null`), удаляет последний блок разделов,
+        // стирает вводные тексты и настройки отчёта. Автор снимал галку, видел
+        // «Сохранено» и получал её обратно после перезагрузки.
+        //
+        // Схема это различие уже хранит (`.nullish()` / `.nullable().optional()`), а
+        // Drizzle выбрасывает из `.set()` только `undefined` — значит достаточно ничего
+        // не терять по дороге. Импорт книги сюда не попадает: он кладёт ключ в патч
+        // ТОЛЬКО когда лист несёт данные (`workbook-import.ts`), и `null` в смысле
+        // «не трогай» не шлёт.
+        feedbackJson,
+        flowPolicyJson,
+        retakePolicyJson,
+        reportSettingsJson,
+        introJson,
+        breakdownDisplayJson,
+        breakdownGateEnabled,
+        sectionGroupsJson,
         defaultQuestionPoints,
+        simScoringJson,
       },
+      // PRD-51: документ отчёта уходит службе как есть — она заменит его в той же
+      // транзакции, что и остальной ящик, и сама выведет порядок из позиции.
+      reportBlocks,
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
       // sections come from the adaptive levels instead.
       sections: mode === "standard" ? (sections as SectionPayload[] | undefined) : undefined,
       adaptiveSettings: mode === "adaptive" ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined) : undefined,
+      // «Сценарий в ИС»: пункты-сценарии сохраняются в ЛЮБОМ режиме, как пришли: тест «Сценарий»
+      // выдаёт первый, роутер — все, и смена режима не теряет ни одного (FR-40).
+      scenarios: scenarios as ScenarioPayload[] | undefined,
       expectedVersion,
     });
 
@@ -1246,7 +1505,20 @@ router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope
       await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
     }
 
-    res.json(updated);
+    // PRD-50 FR-45 - FR-47: предупреждения, а не запреты. Считаются ПОСЛЕ успешной
+    // публикации и снимка: они ни на что не влияют, кроме того, что автор о них узнаёт.
+    // The publication itself has ALREADY succeeded above, so a failure to gather advisory
+    // notes must not turn that success into a 500 for the author: it is swallowed, logged
+    // and the response stays exactly what it was before this PRD.
+    let breakdownWarnings: Awaited<ReturnType<typeof assessBreakdownPublish>> = [];
+    if (status === "published") {
+      try {
+        breakdownWarnings = await assessBreakdownPublish(req.params.id);
+      } catch (error) {
+        logger.error("breakdown publish warnings failed: " + (error as Error).message, "tests");
+      }
+    }
+    res.json(breakdownWarnings.length > 0 ? { ...updated, breakdownWarnings } : updated);
   } catch (error) {
     logger.error("PATCH status error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to update test status" });
@@ -1307,6 +1579,20 @@ router.post("/:id/restore", requirePermission("tests.publish"), requireTestScope
   }
 });
 
+// GET /api/tests/:id/delete-impact - Что удалится вместе с тестом (PRD-15 FR-07a): числа для
+// окна удаления. Тот же гейт, что у самого удаления: спрашивать о последствиях имеет смысл тому,
+// кто может удалить.
+router.get("/:id/delete-impact", requirePermission("tests.delete"), requireTestScope("delete"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    res.json(await storage.getTestDeleteImpact(req.params.id));
+  } catch (error) {
+    logger.error("Delete impact error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to count what the deletion takes" });
+  }
+});
+
 // DELETE /api/tests/:id - Удалить тест (требует подтверждения точного названия, PRD-7 §5.2)
 router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delete"), async (req, res) => {
   try {
@@ -1350,23 +1636,71 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
 });
 
 // GET /api/tests/:id/export/scorm - Экспорт SCORM
+/**
+ * Version an export asks for (stage E5, owner decision Р7): `?source=published|draft`.
+ *
+ * @returns the version; `undefined` when absent (the snapshot-aware default); `null` when invalid
+ */
+function exportVersionOf(value: unknown): ExportVersion | undefined | null {
+  if (value === undefined || value === "") return undefined;
+  return value === "published" || value === "draft" ? value : null;
+}
+
+/**
+ * GET /api/tests/:id/export/options — what the «Сохранить как…» window shows (stage E5):
+ * whether a published version exists and which, and whether telemetry is on in each version.
+ * Telemetry is shown, never overridden (owner decision Р8): it is a setting of the test.
+ */
+router.get("/:id/export/options", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const snapshot = await publishedSnapshotOf(test.id);
+    const content = snapshot?.contentJson as TestSnapshotContent | undefined;
+    res.json({
+      published: snapshot ? { version: snapshot.version, publishedAt: snapshot.publishedAt } : null,
+      telemetry: {
+        draft: test.telemetryEnabled === true,
+        published: content ? content.test.telemetryEnabled === true : null,
+      },
+    });
+  } catch (error) {
+    logger.error("Export options error: " + (error as Error).message, "scorm-export");
+    res.status(500).json({ error: "Failed to read export options" });
+  }
+});
+
 router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
+    const version = exportVersionOf(req.query.source);
+    if (version === null) return res.status(400).json({ error: "source: published или draft" });
     // Assemble the deliverable via the shared builder (NFR-18: the debug player
     // builds the SAME data the same way). Export uses the snapshot-aware source
     // (published → active snapshot, draft → live).
-    const data = await buildScormExportData(req.params.id, { source: "export" });
+    const data = await buildScormExportData(req.params.id, { source: "export", version });
     const test = data.test;
 
-    // Telemetry configuration (request-specific): an opt-in flag creates a
-    // scorm_package record so the in-LMS package can post back telemetry.
+    // Телеметрия включается НАСТРОЙКОЙ ТЕСТА («Интеграция» → «Отправлять телеметрию о
+    // прохождении»), а адрес приёма — настройка УСТАНОВКИ (`scorm.telemetryBaseUrl`). Параметр
+    // запроса `?telemetry=true` больше не читается: интерфейс его никогда не передавал, и
+    // настройка теста до этого не влияла на пакет вовсе. У опубликованного теста флаг берётся
+    // из той же редакции, из которой собирается пакет.
     let telemetryConfig = null;
-    const enableTelemetry = req.query.telemetry === "true";
+    const enableTelemetry = test.telemetryEnabled === true;
 
     if (enableTelemetry) {
+      const apiBaseUrl = telemetryBaseUrl();
+      if (!apiBaseUrl) {
+        // Без адреса пакет отправлял бы данные в никуда, а автор узнал бы об этом только по
+        // пустой аналитике. Отказ до записи `scorm_packages`: пакета, который никуда не шлёт,
+        // в реестре быть не должно.
+        return res.status(422).json({
+          error: "Телеметрия включена в настройках теста, но адрес приёма телеметрии не задан в конфигурации системы (scorm.telemetryBaseUrl или server.appUrl)",
+          field: "telemetryBaseUrl",
+        });
+      }
       const packageId = crypto.randomUUID();
       const secretKey = crypto.randomBytes(32).toString("hex");
-      const apiBaseUrl = appBaseUrl();
 
       // Create scorm_package record
       await storage.createScormPackage({
@@ -1458,10 +1792,22 @@ router.put(
       const question = await storage.getQuestion(req.params.questionId);
       if (!question) return res.status(404).json({ error: "Question not found" });
 
-      // The override only makes sense for a question of the test's own topics.
+      // The override only makes sense for a question of the test's own topics — or, for a
+      // scenario, of the bank topic of one of the test's scenario items.
       const sections = await storage.getTestSections(req.params.id);
-      if (!sections.some((s) => s.topicId === question.topicId)) {
+      const items = await storage.getTestScenarios(req.params.id);
+      if (!sections.some((s) => s.topicId === question.topicId) && !items.some((i) => i.topicId === question.topicId)) {
         return res.status(422).json({ error: "question_not_in_test", message: "Вопрос не входит в темы теста" });
+      }
+      // «Сценарий в ИС»: у сценария своя оценка — штрафы; способы PRD-10 к нему не применяются,
+      // а штрафы — ни к чему, кроме сценария.
+      if (scoringJson && (scoringJson.kind === "simulation") !== isSimulation(question.type)) {
+        return res.status(422).json({
+          error: "scoring_kind_mismatch",
+          message: isSimulation(question.type)
+            ? "Сценарий оценивается штрафами"
+            : "Штрафы сценария применяются только к сценарию",
+        });
       }
 
       if (points == null && scoringJson == null && difficulty == null) {

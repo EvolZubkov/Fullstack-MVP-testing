@@ -38,7 +38,7 @@ import {
   ModalDialog,
   SegmentedControl,
   Textarea,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import type { FeedbackAsset } from "../test-editor.types";
 
 // ─── Public types ────────────────────────────────────────────────────────────
@@ -79,6 +79,12 @@ export type FeedbackEditorModalProps = {
    * would be persisted nowhere and silently lost on save.
    */
   hideLinks?: boolean;
+  /**
+   * Метка поля текста. По умолчанию «Текст обратной связи» — то, чем эта модалка была
+   * всегда. Толкование правится ею же, но обратной связью НЕ является, и метка, зовущая
+   * его чужим именем, прямо противоречит тому, ради чего эти две сущности разделены.
+   */
+  textLabel?: string;
   onCancel: () => void;
   onSave: (value: FeedbackEditorValue) => void;
   /** Optional test id for the modal root. */
@@ -124,6 +130,7 @@ function toDraftAssets(assets: FeedbackAsset[]): DraftAsset[] {
 
 /** @public */
 export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
+  const textLabel = props.textLabel ?? "Текст обратной связи";
   const [draft, setDraft] = useState<DraftValue>(() => ({
     ...props.value,
     assets: toDraftAssets(props.value.assets),
@@ -296,7 +303,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         {draft.format === "richText" ? (
           /* richText: execCommand-based RTE toolbar + contenteditable area. */
           <div className="tb-feedback-editor__section">
-            <div className="tb-feedback-editor__sec-title">Текст обратной связи</div>
+            <div className="tb-feedback-editor__sec-title">{textLabel}</div>
             <div className="tb-rte">
               <div className="tb-rte__toolbar" role="toolbar" aria-label="Форматирование">
                 <button
@@ -337,7 +344,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                 contentEditable
                 role="textbox"
                 aria-multiline="true"
-                aria-label="Текст обратной связи"
+                aria-label={textLabel}
                 ref={rteRef}
                 onInput={() => {
                   if (rteRef.current) {
@@ -356,7 +363,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
               size="m"
               fullWidth
               rows={6}
-              label="Текст обратной связи"
+              label={textLabel}
               value={draft.text}
               placeholder={
                 draft.format === "html"

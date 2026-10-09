@@ -24,6 +24,7 @@ import { storage } from "../storage";
 import { sendAssignmentEmail } from "../email";
 import { mayReceiveAssignmentLink } from "./access";
 import type { User } from "@shared/schema";
+import type { RichTextFormat } from "@shared/template/rich-text";
 
 /** Default lifetime of an assignment access token when nothing else says otherwise. */
 const DEFAULT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -49,12 +50,18 @@ export function resolveAssignmentTokenExpiry(
 export interface DeliverAssignmentLinkOptions {
   /** The recipient, already resolved (used for the role check and the greeting). */
   user: Pick<User, "id" | "name" | "emailHash">;
-  /** The recipient's resolved (decrypted, if needed) e-mail address. */
-  email: string;
+  /**
+   * The recipient's resolved (decrypted, if needed) e-mail address. `null` — the account has none
+   * (PRD-54 BR-54-42, an imported external participant): there is nowhere to deliver, and the
+   * call ends without minting a token or sending anything.
+   */
+  email: string | null;
   assignmentId: string;
   testId: string;
   testTitle: string;
   testDescription?: string | null;
+  /** PRD-59: format of `testDescription`; absent = plain. */
+  testDescriptionFormat?: RichTextFormat | null;
   dueDate?: Date | null;
   /** Expiry for a newly-minted token; ignored when the link is withheld. */
   expiresAt: Date;
@@ -110,9 +117,16 @@ export async function deliverAssignmentLink(
   opts: DeliverAssignmentLinkOptions,
 ): Promise<DeliverAssignmentLinkResult> {
   const {
-    user, email, assignmentId, testId, testTitle, testDescription, dueDate, expiresAt,
+    user, email, assignmentId, testId, testTitle, testDescription, testDescriptionFormat, dueDate, expiresAt,
   } = opts;
   const revokeExisting = opts.revokeExisting ?? true;
+
+  // PRD-54 BR-54-42: no address, no letter — and no token either: a link minted for nobody would
+  // be a live credential that no one was meant to hold.
+  if (!email) {
+    logger.info(`Assignment link not sent: user ${user.id} has no email, test "${testTitle}"`, "assignments");
+    return { issued: false, delivered: false };
+  }
 
   if (!(await mayReceiveAssignmentLink(user))) {
     logger.info(
@@ -125,6 +139,7 @@ export async function deliverAssignmentLink(
       testId,
       testTitle,
       testDescription,
+      testDescriptionFormat,
       dueDate,
     });
     logger.info(`Assignment email sent to ${email} for test "${testTitle}"`, "assignments");
@@ -157,6 +172,7 @@ export async function deliverAssignmentLink(
     testId,
     testTitle,
     testDescription,
+    testDescriptionFormat,
     dueDate,
     magicLink,
   });

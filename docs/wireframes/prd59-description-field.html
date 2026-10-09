@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Wireframe: поле «Описание» с переключателем режимов ввода.
+      Файл: docs/wireframes/prd59-description-field.html
+      Источник решений: docs/specs/prd-59/test-description-formatting.md (FR-05 - FR-09),
+      план docs/plans/PLAN_PRD59_DESCRIPTION_FORMATTING.md, Задача 15.
+
+      Каркас ящика, шапка, вкладки и подвал взяты из утверждённого эскиза
+      docs/wireframes/approved/prd7-editor-drawer.html; раскладка подраздела «Основное» —
+      из docs/wireframes/editor-settings-target.html и из
+      client/src/features/tests/editor/sections/basic-settings-section.tsx.
+      Изменено ровно одно место: поле «Описание».
+
+      Состояния: s-plain, s-rich, s-html, s-long.
+    -->
+    <title>Wireframe PRD-59: поле «Описание» с режимами ввода</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      /* Modular grid: one step is --ou-space-1. Related elements are set apart by
+         1x, different ones by 4x, panel edges by 6x. Everything below uses
+         design-system tokens; no literal lengths. */
+
+      .wf-sprite { position: absolute; width: 0; height: 0; }
+
+      /* Sketch states: one frame each, switched by the meta navigation above. */
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+
+      /* In the product the drawer is a fixed overlay. Here it is laid out IN THE
+         PAGE FLOW so the notes under the sketch stay reachable — a fixed backdrop
+         would cover them and there would be nothing to scroll to. The size and the
+         looks of the drawer itself are untouched. */
+      .wf-state .ou-drawer-root { position: relative; inset: auto; height: 88vh; }
+
+      /* The tab content carries its own 6x padding (.tb-settings-content), so the
+         drawer body must not add a second one. */
+      .ou-drawer__body { padding: 0; }
+
+      /* Notes panel under the sketch — NOT part of the interface. */
+      /* Height of the description field: three lines to start, capped, scrolling inside
+         past the cap, and draggable taller by the author. Declared here because the DS
+         snapshot does not carry it yet — it lands in the component with the React work. */
+      .ou-rte__area,
+      .ou-rte__input {
+        min-height: 4.8em;
+        max-height: 16em;
+        overflow-y: auto;
+        resize: vertical;
+      }
+      .wf-notes {
+        max-width: var(--wf-size-900);
+        margin: var(--ou-space-6) auto var(--ou-space-9);
+        padding: var(--ou-space-6);
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-m);
+        font: var(--ou-text-body-s);
+        color: var(--ou-fg-default);
+      }
+      .wf-notes h2 { font: var(--ou-text-heading-s); margin: 0 0 var(--ou-space-4); }
+      .wf-notes h3 { font: var(--ou-text-body-m); font-weight: 600; margin: var(--ou-space-4) 0 var(--ou-space-1); }
+      .wf-notes p { margin: 0 0 var(--ou-space-1); }
+      .wf-notes ul { margin: 0; padding-left: var(--ou-space-5); }
+      .wf-notes li + li { margin-top: var(--ou-space-1); }
+      .wf-notes code {
+        font-family: var(--ou-font-family-mono);
+        background: var(--ou-bg-hover);
+        padding: 0 var(--ou-space-1);
+        border-radius: var(--ou-radius-xs);
+      }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+
+    <nav class="wf-nav" aria-label="Переключатель состояний">
+      <span class="wf-label">prd59 — Описание:</span>
+      <button class="wf-btn active" type="button" onclick="showState(this, 's-plain')">Простой текст</button>
+      <button class="wf-btn"        type="button" onclick="showState(this, 's-rich')">Форматированный</button>
+      <button class="wf-btn"        type="button" onclick="showState(this, 's-html')">HTML</button>
+      <button class="wf-btn"        type="button" onclick="showState(this, 's-long')">Длинное описание</button>
+      <button class="wf-btn"        type="button" onclick="toggleTheme(this)">Dark</button>
+      <button class="wf-btn"        type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <!-- ═══════════ STATE: s-plain — режим «Простой текст» ═══════════ -->
+    <div id="s-plain" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-plain">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 id="dt-plain" class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Основное</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оценка результата</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">О тесте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="plain-title">Название <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="plain-title" type="text" value="Основы информационной безопасности" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-rte ou-rte--full">
+                      <label class="ou-rte__lbl" for="plain-desc">Описание</label>
+                      <div class="ou-rte__bar">
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                          <button type="button" class="ou-seg__item is-active">Простой текст</button>
+                          <button type="button" class="ou-seg__item">Форматированный</button>
+                          <button type="button" class="ou-seg__item">HTML</button>
+                        </div>
+                      </div>
+                      <div class="ou-rte__box">
+                        <textarea class="ou-rte__input" id="plain-desc" rows="3">Курс о базовых правилах информационной безопасности: пароли, фишинг, работа со служебными документами.
+Тест проходят все сотрудники при выходе на работу и далее раз в год.</textarea>
+                      </div>
+                      <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Режим теста</label>
+                    <div class="ou-seg" role="group" aria-label="Режим теста">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Стандартный</span></button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Адаптивный</span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Интеграция</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="plain-webhook">Webhook URL</label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="plain-webhook" type="url" value="" placeholder="https://some-lms.example.ru/hooks/scorm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Отправлять телеметрию о прохождении</span></span>
+                    </label>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Лучшая попытка|Последняя попытка">
+                      <label class="ou-field__lbl" for="plain-lms">Результат для LMS при нескольких попытках</label>
+                      <button type="button" class="ou-field__box ou-select__trigger" id="plain-lms" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ou-select__value">Последняя попытка</span>
+                        <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-rich — режим «Форматированный» ═══════════ -->
+    <div id="s-rich" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rich">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 id="dt-rich" class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Основное</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оценка результата</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">О тесте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="rich-title">Название <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="rich-title" type="text" value="Основы информационной безопасности" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-rte ou-rte--full">
+                      <label class="ou-rte__lbl" for="rich-desc">Описание</label>
+                      <div class="ou-rte__bar">
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                          <button type="button" class="ou-seg__item">Простой текст</button>
+                          <button type="button" class="ou-seg__item is-active">Форматированный</button>
+                          <button type="button" class="ou-seg__item">HTML</button>
+                        </div>
+                        <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Полужирный"><svg aria-hidden="true"><use href="#i-bold" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Курсив"><svg aria-hidden="true"><use href="#i-italic" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Зачёркнутый"><svg aria-hidden="true"><use href="#i-strikethrough" /></svg></button>
+                          <span class="ou-rte__tools-sep" aria-hidden="true"></span>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Маркированный список"><svg aria-hidden="true"><use href="#i-list" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Нумерованный список"><svg aria-hidden="true"><use href="#i-list-ordered" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Ссылка"><svg aria-hidden="true"><use href="#i-link" /></svg></button>
+                          <span class="ou-rte__tools-sep" aria-hidden="true"></span>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Очистить форматирование"><svg aria-hidden="true"><use href="#i-remove-formatting" /></svg></button>
+                        </div>
+                      </div>
+                      <div class="ou-rte__box">
+                        <div class="ou-rte__area" id="rich-desc" contenteditable="true" role="textbox" aria-multiline="true" style="min-height: 4.8em">
+                          <p>Курс о базовых правилах <strong>информационной безопасности</strong>: пароли, фишинг, работа со служебными документами.</p>
+                          <p>Тест проходят <em>все сотрудники</em> при выходе на работу и далее раз в год.</p>
+                        </div>
+                      </div>
+                      <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Режим теста</label>
+                    <div class="ou-seg" role="group" aria-label="Режим теста">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Стандартный</span></button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Адаптивный</span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Интеграция</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="rich-webhook">Webhook URL</label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="rich-webhook" type="url" value="" placeholder="https://some-lms.example.ru/hooks/scorm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Отправлять телеметрию о прохождении</span></span>
+                    </label>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Лучшая попытка|Последняя попытка">
+                      <label class="ou-field__lbl" for="rich-lms">Результат для LMS при нескольких попытках</label>
+                      <button type="button" class="ou-field__box ou-select__trigger" id="rich-lms" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ou-select__value">Последняя попытка</span>
+                        <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-html — режим «HTML» ═══════════ -->
+    <div id="s-html" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-html">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 id="dt-html" class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Основное</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оценка результата</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">О тесте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="html-title">Название <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="html-title" type="text" value="Основы информационной безопасности" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-rte ou-rte--full">
+                      <label class="ou-rte__lbl" for="html-desc">Описание</label>
+                      <div class="ou-rte__bar">
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                          <button type="button" class="ou-seg__item">Простой текст</button>
+                          <button type="button" class="ou-seg__item">Форматированный</button>
+                          <button type="button" class="ou-seg__item is-active">HTML</button>
+                        </div>
+                      </div>
+                      <div class="ou-rte__box">
+                        <textarea class="ou-rte__input ou-rte__input--code" id="html-desc" rows="3">&lt;p&gt;Курс о базовых правилах &lt;strong&gt;информационной безопасности&lt;/strong&gt;: пароли, фишинг, работа со служебными документами.&lt;/p&gt;
+&lt;p&gt;Тест проходят &lt;em&gt;все сотрудники&lt;/em&gt; при выходе на работу и далее раз в год.&lt;/p&gt;</textarea>
+                      </div>
+                      <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Режим теста</label>
+                    <div class="ou-seg" role="group" aria-label="Режим теста">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Стандартный</span></button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Адаптивный</span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Интеграция</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="html-webhook">Webhook URL</label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="html-webhook" type="url" value="" placeholder="https://some-lms.example.ru/hooks/scorm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Отправлять телеметрию о прохождении</span></span>
+                    </label>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Лучшая попытка|Последняя попытка">
+                      <label class="ou-field__lbl" for="html-lms">Результат для LMS при нескольких попытках</label>
+                      <button type="button" class="ou-field__box ou-select__trigger" id="html-lms" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ou-select__value">Последняя попытка</span>
+                        <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-long — длинное описание в режиме «Форматированный» ═══════════ -->
+    <div id="s-long" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-long">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 id="dt-long" class="ou-drawer__title">Основы информационной безопасности</h1>
+            </div>
+            <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Основное</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав и сценарий</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Правила прохождения</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оценка результата</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Обратная связь и итоги</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Комментарии</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">О тесте</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="long-title">Название <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="long-title" type="text" value="Основы информационной безопасности" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-rte ou-rte--full">
+                      <label class="ou-rte__lbl" for="long-desc">Описание</label>
+                      <div class="ou-rte__bar">
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                          <button type="button" class="ou-seg__item">Простой текст</button>
+                          <button type="button" class="ou-seg__item is-active">Форматированный</button>
+                          <button type="button" class="ou-seg__item">HTML</button>
+                        </div>
+                        <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Полужирный"><svg aria-hidden="true"><use href="#i-bold" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Курсив"><svg aria-hidden="true"><use href="#i-italic" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Зачёркнутый"><svg aria-hidden="true"><use href="#i-strikethrough" /></svg></button>
+                          <span class="ou-rte__tools-sep" aria-hidden="true"></span>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Маркированный список"><svg aria-hidden="true"><use href="#i-list" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Нумерованный список"><svg aria-hidden="true"><use href="#i-list-ordered" /></svg></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Ссылка"><svg aria-hidden="true"><use href="#i-link" /></svg></button>
+                          <span class="ou-rte__tools-sep" aria-hidden="true"></span>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Очистить форматирование"><svg aria-hidden="true"><use href="#i-remove-formatting" /></svg></button>
+                        </div>
+                      </div>
+                      <div class="ou-rte__box">
+                        <div class="ou-rte__area" id="long-desc" contenteditable="true" role="textbox" aria-multiline="true" style="min-height: 4.8em">
+                          <p>Курс о базовых правилах <strong>информационной безопасности</strong>: пароли, фишинг, работа со служебными документами и поведение при инциденте. Материал рассчитан на сотрудника без технической подготовки.</p>
+                          <p>После теста участник сможет:</p>
+                          <ul>
+                            <li>отличить фишинговое письмо от служебного;</li>
+                            <li>выбрать пароль, который не подбирается по словарю;</li>
+                            <li>сообщить об инциденте туда, где на него ответят.</li>
+                          </ul>
+                          <p>Проходить можно с телефона. Результат приходит сразу после
+                            последнего вопроса, повторная попытка доступна через сутки.</p>
+                        </div>
+                      </div>
+                      <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Режим теста</label>
+                    <div class="ou-seg" role="group" aria-label="Режим теста">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Стандартный</span></button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Адаптивный</span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Интеграция</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="long-webhook">Webhook URL</label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="long-webhook" type="url" value="" placeholder="https://some-lms.example.ru/hooks/scorm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Отправлять телеметрию о прохождении</span></span>
+                    </label>
+                  </div>
+
+                  <div class="ou-formfield">
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Лучшая попытка|Последняя попытка">
+                      <label class="ou-field__lbl" for="long-lms">Результат для LMS при нескольких попытках</label>
+                      <button type="button" class="ou-field__box ou-select__trigger" id="long-lms" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ou-select__value">Последняя попытка</span>
+                        <svg class="ou-select__chev" width="18" height="18" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Заметки к эскизу — ВНЕ эскизного фрейма, в интерфейс не переносятся.
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="wf-notes">
+      <h2>Заметки к эскизу</h2>
+
+      <h3>Что показано</h3>
+      <p>
+        Вкладка «Основное» ящика теста. Единственное отличие от сегодняшнего экрана —
+        поле «Описание»: вместо <code>Textarea</code> стоит <code>RichTextEditor</code> с
+        лентой режимов над полем (FR-05). Место поля в раскладке, подпись и подсказка
+        сохранены: оно по-прежнему между «Названием» и «Режимом теста».
+      </p>
+
+      <h3>Состояния</h3>
+      <ul>
+        <li><code>s-plain</code> — «Простой текст»: лента режимов, поле в три строки, панели форматирования нет.</li>
+        <li><code>s-rich</code> — «Форматированный»: лента, панель инструментов, область ввода с оформленным текстом (виден результат, а не теги).</li>
+        <li><code>s-html</code> — «HTML»: лента, поле моноширинным шрифтом с разметкой.</li>
+        <li><code>s-long</code> — то же поле, но автор написал много. Показывает не сам
+          текст, а ПОВЕДЕНИЕ ЯЩИКА: поле упёрлось в предел высоты и прокручивается внутри,
+          а «Режим теста» и «Сценарий» остались на месте. Сравнивать надо с состоянием
+          «Форматированный»: там поле в три строки.</li>
+      </ul>
+
+      <h3>Высота поля</h3>
+      <p>
+        Три строки — начальная высота, не потолок: поле растёт под содержимое до предела в
+        16em (около десяти строк), дальше прокручивается внутри себя. Подраздел за полем не
+        удлиняется, и до соседних контролов не приходится долистывать.
+      </p>
+      <p>
+        Уголок в правом нижнем углу поля тянется мышью — автор поднимает высоту сам, когда
+        правит большой текст и хочет видеть его целиком. Растягивание только вертикальное:
+        ширину задаёт раскладка ящика.
+      </p>
+      <p>
+        Число 16em предварительное и проверяется на приёмке. Правил высоты в снимке
+        дизайн-системы пока нет — в эскизе они объявлены поверх снимка, а в продукт уедут
+        вместе с правкой компонента.
+      </p>
+
+      <h3>Режимы</h3>
+      <ul>
+        <li>Три режима в порядке «Простой текст», «Форматированный», «HTML» (FR-06). Подписи взяты из <code>MODE_LABEL</code> компонента, не придуманы здесь.</li>
+        <li>В «Простом тексте» значение поля — исходник с настоящими переводами строк, а не экранированная разметка (FR-07). В эскизе это видно по второму абзацу: он начинается с новой строки.</li>
+        <li>Переключение режимов не теряет абзацы (FR-08) и выполняется молча, без подтверждения (FR-09) — отдельного диалога в эскизе нет намеренно.</li>
+      </ul>
+
+      <h3>Панель инструментов</h3>
+      <p>
+        Состав и порядок — из компонента: полужирный, курсив, зачёркнутый | маркированный
+        список, нумерованный список, ссылка | очистить форматирование. Разделители групп —
+        <code>ou-rte__tools-sep</code>. Пиктограммы сгенерированы из
+        <code>node_modules/lucide-react/dist/esm/icons/*.mjs</code> (lucide-react 1.45.0):
+        <code>bold</code>, <code>italic</code>, <code>strikethrough</code>, <code>list</code>,
+        <code>list-ordered</code>, <code>link</code>, <code>remove-formatting</code> — контуры
+        перенесены дословно и лежат в спрайте внизу файла.
+      </p>
+
+      <h3>Разметка</h3>
+      <p>
+        Поле рисуется классами <code>RichTextEditor</code>: <code>ou-rte</code>,
+        <code>ou-rte--full</code>, <code>ou-rte__lbl</code>, <code>ou-rte__bar</code>,
+        <code>ou-seg</code> + <code>ou-seg--s</code> + <code>ou-seg__item</code>,
+        <code>ou-rte__tools</code>, <code>ou-rte__tools-sep</code>, <code>ou-rte__box</code>,
+        <code>ou-rte__area</code>, <code>ou-rte__input</code>,
+        <code>ou-rte__input--code</code>, <code>ou-rte__msg</code>. Кнопки панели —
+        <code>ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s</code>, как в компоненте.
+        Поле сохраняет <code>data-testid="settings-description-input"</code>.
+      </p>
+
+      <h3>Расхождения и вопросы владельцу</h3>
+      <ul>
+        <li>
+          Модификатор размера <code>ou-rte--m</code>, который компонент добавляет сам, в
+          эскизе не проставлен: в снимке ДС такого правила нет, и линтер эскизов считает
+          класс выдуманным. На вид поля это не влияет.
+        </li>
+        <li>
+          У <code>Textarea</code> сегодня есть placeholder «Опишите цели теста и аудиторию»,
+          а у <code>RichTextEditor</code> свойства <code>placeholder</code> нет. В эскизе
+          этот текст показан подсказкой под полем (<code>ou-rte__msg</code>) — он виден
+          всегда, а не только у пустого поля. Второй вариант — завести placeholder в
+          компоненте. Нужно решение.
+        </li>
+        <li>
+          Панель инструментов и лента режимов стоят в одной строке
+          (<code>ou-rte__bar</code>, <code>justify-content: space-between</code>). На узком
+          ящике строка переносится по <code>flex-wrap</code> — горизонтальной прокрутки не
+          возникает.
+        </li>
+        <li>
+          Высота области ввода в «Форматированном» задана как <code>3 × 1.6em</code> —
+          столько же строк, сколько у сегодняшнего поля (<code>rows=3</code>). Компонент по
+          умолчанию берёт четыре; при подключении надо передать <code>rows={3}</code>.
+        </li>
+      </ul>
+    </section>
+
+    <svg class="wf-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <!-- Контуры lucide-react 1.45.0, перенесены из dist/esm/icons/*.mjs дословно.
+           Атрибуты обёртки — defaultAttributes.mjs: viewBox 0 0 24 24, fill none,
+           stroke currentColor, stroke-width 2, linecap / linejoin round. -->
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="i-bold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8" /></symbol>
+      <symbol id="i-italic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" x2="10" y1="4" y2="4" /><line x1="14" x2="5" y1="20" y2="20" /><line x1="15" x2="9" y1="4" y2="20" /></symbol>
+      <symbol id="i-strikethrough" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4" /><path d="M14 12a4 4 0 0 1 0 8H6" /><line x1="4" x2="20" y1="12" y2="12" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01" /><path d="M3 12h.01" /><path d="M3 19h.01" /><path d="M8 5h13" /><path d="M8 12h13" /><path d="M8 19h13" /></symbol>
+      <symbol id="i-list-ordered" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5h10" /><path d="M11 12h10" /><path d="M11 19h10" /><path d="M4 4h1v5" /><path d="M4 9h2" /><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></symbol>
+      <symbol id="i-remove-formatting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3" /><path d="M5 20h6" /><path d="M13 4 8 20" /><path d="m15 15 5 5" /><path d="m20 15-5 5" /></symbol>
+    </svg>
+
+    <script>
+      /**
+       * Meta navigation of the sketch: shows one state and marks its button.
+       * Not part of the product UI.
+       */
+      function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.id === id);
+        });
+        btn.closest('.wf-nav').querySelectorAll('button').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      }
+
+      /** Light / dark theme of the design system. */
+      function toggleTheme(btn) {
+        var body = document.body;
+        var isDark = body.classList.contains('ou--dark');
+        body.classList.toggle('ou--dark', !isDark);
+        body.classList.toggle('ou--light', isDark);
+        if (btn) {
+          btn.textContent = isDark ? 'Dark' : 'Light';
+          btn.classList.toggle('active', !isDark);
+        }
+      }
+
+      /** Normal / compact density of the design system. */
+      function toggleDensity(btn) {
+        var body = document.body;
+        var isCompact = body.classList.contains('ou--compact');
+        body.classList.toggle('ou--compact', !isCompact);
+        body.classList.toggle('ou--normal', isCompact);
+        if (btn) {
+          btn.textContent = isCompact ? 'Compact' : 'Normal';
+          btn.classList.toggle('active', !isCompact);
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -13,7 +13,7 @@
 примитивах дизайн-системы; выбор оболочки (авторская или учебная) делает тонкая обёртка маршрута.
 
 **Tech Stack:** TypeScript, Express, Drizzle ORM (PostgreSQL), React 19 + Wouter + React Query,
-`@universityrt/ui-kit`, Vitest + supertest, pglite для DAL-тестов.
+`@skillum/ui-kit`, Vitest + supertest, pglite для DAL-тестов.
 
 ---
 
@@ -64,7 +64,7 @@
 - `server/storage/topics-repository.ts`, `server/storage/questions-repository.ts` — точки обновления.
 - `server/storage/assignments-repository.ts`, `server/storage.ts` — метод `getAllAssignments`.
 - `server/routes/index.ts` — монтирование роутера.
-- `vendor/ui-kit/src/components/Layout.tsx` + обе копии `university-rt.css` — шаблон раскладки
+- `vendor/ui-kit/src/components/Layout.tsx` + обе копии `skillum-ds.css` — шаблон раскладки
   `main-aside` (в дизайн-системе такого примитива нет; локальный CSS вместо него запрещён).
 - `client/src/App.tsx` — маршрут `/`, удаление `homePath`/`HomeRedirect`.
 - `client/src/components/app-sidebar.tsx`, `client/src/pages/learner/layout.tsx` — пункт «Главная».
@@ -1794,7 +1794,7 @@ export function useHome() {
  * user to ignore the spot where real problems appear.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Stack, Tag, Text } from "@skillum/ui-kit";
 import type { AttentionItem } from "@shared/home/contract";
 
 export function AttentionPanel({ items }: { items: AttentionItem[] }) {
@@ -1832,7 +1832,7 @@ export function AttentionPanel({ items }: { items: AttentionItem[] }) {
  * actions the user may not perform, so this component never re-checks rights.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Stack } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Stack } from "@skillum/ui-kit";
 import type { QuickAction } from "@shared/home/contract";
 
 export function QuickActions({ actions }: { actions: QuickAction[] }) {
@@ -1865,7 +1865,7 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
  * screen renders, so the two never contradict each other.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Grid, Stack, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Grid, Stack, Text } from "@skillum/ui-kit";
 import type { AssignedTestItem } from "@shared/home/contract";
 
 export function AssignedTestsSection({ items, total }: { items: AssignedTestItem[]; total: number }) {
@@ -1923,7 +1923,7 @@ export function AssignedTestsSection({ items, total }: { items: AssignedTestItem
  * PRD-25 FR-08: the last three finished attempts, newest first.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Stack, Tag, Text } from "@skillum/ui-kit";
 import type { RecentResultItem } from "@shared/home/contract";
 
 export function RecentResultsSection({ items }: { items: RecentResultItem[] }) {
@@ -1976,7 +1976,7 @@ export function RecentResultsSection({ items }: { items: RecentResultItem[] }) {
  * to a user who may not export.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Grid, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Grid, Stack, Tag, Text } from "@skillum/ui-kit";
 import type { HomeTestStatus, MyTestItem } from "@shared/home/contract";
 
 const STATUS_LABEL: Record<HomeTestStatus, { label: string; tone: "neutral" | "success" | "warning" }> = {
@@ -2054,7 +2054,7 @@ export function MyTestsSection({ items, total }: { items: MyTestItem[]; total: n
  * with questions still floats to the top.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Cluster, EmptyState, Stack, Tag, Text } from "@skillum/ui-kit";
 import type { MyTopicItem } from "@shared/home/contract";
 
 export function MyTopicsSection({ items, total }: { items: MyTopicItem[]; total: number }) {
@@ -2105,7 +2105,7 @@ export function MyTopicsSection({ items, total }: { items: MyTopicItem[]; total:
  * PRD-25 FR-11: counters for the manager — is anything stalled.
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Cluster, Stack, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Cluster, Stack, Text } from "@skillum/ui-kit";
 
 export function PeopleSection({
   data,
@@ -2138,7 +2138,7 @@ export function PeopleSection({
  * duplicating them here was rejected explicitly (spec risk R-1).
  */
 import { Link } from "wouter";
-import { Button, Card, CardBody, CardHeader, Cluster, Stack, Text } from "@universityrt/ui-kit";
+import { Button, Card, CardBody, CardHeader, Cluster, Stack, Text } from "@skillum/ui-kit";
 
 export function SummaryStrip({
   data,
@@ -2171,7 +2171,7 @@ export function SummaryStrip({
  * PRD-25 FR-13: active template and documentation links. Documentation is served
  * by the API, so these are plain anchors, not SPA routes.
  */
-import { Card, CardBody, CardHeader, Stack, Text } from "@universityrt/ui-kit";
+import { Card, CardBody, CardHeader, Stack, Text } from "@skillum/ui-kit";
 
 export function MaterialsSection({
   data,
@@ -2215,7 +2215,7 @@ git commit -m "feat(prd-25): компоненты секций главной с
 - Create: `client/src/features/home/home-page.tsx`
 - Create: `client/src/features/home/__tests__/home-page.test.tsx`
 - Modify: `vendor/ui-kit/src/components/Layout.tsx:113-141` — шаблон `main-aside`
-- Modify: `vendor/ui-kit/css/university-rt.css`, `client/src/styles/vendor/university-rt.css` — обе копии
+- Modify: `vendor/ui-kit/css/skillum-ds.css`, `client/src/styles/vendor/skillum-ds.css` — обе копии
 
 - [ ] **Step 1: Написать падающий тест страницы**
 
@@ -2282,7 +2282,7 @@ npx vitest run client/src/features/home/__tests__/home-page.test.tsx
  * When the right column resolves to nothing — the pure-learner profile — the page
  * collapses to a single full-width column rather than leaving a dead gutter.
  */
-import { Box, Card, CardBody, EmptyState, Grid, Stack, Text } from "@universityrt/ui-kit";
+import { Box, Card, CardBody, EmptyState, Grid, Stack, Text } from "@skillum/ui-kit";
 import { PageHeader } from "@/components/page-header";
 import { LoadingState } from "@/components/loading-state";
 import { sectionData, sectionFailed } from "@shared/home/contract";
@@ -2402,12 +2402,12 @@ CSS-правило добавляется рядом с `.ou-lgrid--label-contro
 
 - [ ] **Step 5: Внести CSS в ОБЕ копии таблицы стилей**
 
-Файл `university-rt.css` существует в двух рабочих копиях: `vendor/ui-kit/css/university-rt.css` —
-источник, `client/src/styles/vendor/university-rt.css` — та, что реально грузится приложением. Правка
+Файл `skillum-ds.css` существует в двух рабочих копиях: `vendor/ui-kit/css/skillum-ds.css` —
+источник, `client/src/styles/vendor/skillum-ds.css` — та, что реально грузится приложением. Правка
 только в одну даёт «в сторибуке работает, в приложении нет». Проверить, что правило попало в обе:
 
 ```bash
-grep -rn "ou-lgrid--main-aside" vendor/ui-kit/css/university-rt.css client/src/styles/vendor/university-rt.css
+grep -rn "ou-lgrid--main-aside" vendor/ui-kit/css/skillum-ds.css client/src/styles/vendor/skillum-ds.css
 ```
 
 Ожидаемо: по совпадению в каждом файле.
@@ -2424,7 +2424,7 @@ npm run check
 - [ ] **Step 7: Commit**
 
 ```bash
-git add client/src/features/home/ vendor/ui-kit/ client/src/styles/vendor/university-rt.css
+git add client/src/features/home/ vendor/ui-kit/ client/src/styles/vendor/skillum-ds.css
 git commit -m "feat(prd-25): раскладка домашней страницы и шаблон main-aside в ui-kit"
 ```
 

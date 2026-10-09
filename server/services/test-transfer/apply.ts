@@ -85,6 +85,7 @@ function indexPlanned(planned: TestSnapshotContent): Map<string, Map<string, Rec
     ["topic", rows(planned.topics ?? [])],
     ["question", rows(Object.values(planned.questionsByTopic ?? {}).flat())],
     ["section", rows(planned.sections ?? [])],
+    ["scenario", rows(planned.scenarios ?? [])],
     ["scale", rows(planned.scales ?? [])],
     ["measurement", rows(planned.measurements ?? [])],
     ["resultVariable", rows(planned.resultVariables ?? [])],

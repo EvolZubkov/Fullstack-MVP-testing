@@ -31,6 +31,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { PublishCheckFinding } from "@/features/content-protection/types";
 import {
   apiToEditorModel,
   editorModelToPayload,
@@ -38,27 +39,54 @@ import {
   mapEditorAdaptiveToPayload,
   mapEditorSectionsToPayload,
 } from "./test-editor.mappers";
-import { validateTestEditor } from "./test-editor.validation";
+import { validateTestEditor, type ValidationContext } from "./test-editor.validation";
+import { tagKey } from "@shared/tags";
+import { scenarioEntryKey } from "./sections/composition-items";
 import { saveResultVariables } from "./result-variables-api";
 import { saveScales, saveMeasurements } from "./scales-api";
 import { saveQuestionOverrides } from "./scoring-api";
+import { putDesign } from "./use-design-settings";
 import type {
   ScaleModel,
+  TestDesignDraft,
   TestEditorModel,
   ValidationResult,
 } from "./test-editor.types";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
-/** The primary tabs of the editor Drawer. */
+/**
+ * Вкладки ящика редактора — целевое дерево, принятое владельцем 2026-09-03
+ * (`docs/reports/AUDIT_TEST_EDITOR_SETTINGS.md`, эскизы `editor-settings-target.html`).
+ *
+ * Прежние семь вкладок резали настройки по трём несовместимым осям сразу — по предмету
+ * («Шкалы», «Показатели»), по этапу («Состав», «Структура») и по природе («Настройки»,
+ * «Оформление»), — и автор искал настройку перебором. Новые шесть режут по ОДНОМУ
+ * вопросу: о чём эта настройка.
+ *
+ *   - `main`        — что это за тест и как он отдаётся в LMS;
+ *   - `composition` — из чего он собран и в каком порядке идёт;
+ *   - `rules`       — по каким правилам проходится;
+ *   - `scoring`     — как считается результат;
+ *   - `feedback`    — что участник видит во время теста и после него;
+ *   - `design`      — как это выглядит.
+ *
+ * Ключи прежних вкладок переиспользованы там, где смысл совпал (`composition`, `scoring`,
+ * `design`), поэтому ссылки вида «открыть тест на вкладке X» продолжают работать.
+ */
 export type EditorTabKey =
+  | "main"
   | "composition"
-  | "settings"
-  | "design"
-  | "structure"
+  | "rules"
   | "scoring"
-  | "scales"
-  | "metrics";
+  | "feedback"
+  | "design"
+  /**
+   * PRD-52: комментарии рецензентов. Седьмая вкладка добавлена решением владельца
+   * 2026-09-03 поверх принятого дерева из шести: панель комментариев живёт в ящике
+   * редактора равноправно с окном прогона.
+   */
+  | "review";
 
 /** Aggregated status per tab — drives the `status-dot` indicator (FR-25b). */
 export type TabStatus = {
@@ -133,11 +161,29 @@ export type UseTestEditorResult = {
    */
   saveError: { status: number; message: string } | null;
   /**
+   * PRD-15 FR-05: чем текущее состояние теста мешает выдаче — прочитано после
+   * последнего успешного сохранения. Пустой список = помех нет. Предупреждение,
+   * а не запрет: сохранение уже прошло, публикацию сторожит своя проверка (FR-06).
+   */
+  feasibility: PublishCheckFinding[];
+  /**
+   * То же самое, но читаемое сразу после `save()`: сохранение закрывает ящик
+   * редактора, и состояние React к этому моменту ещё не перерисовано.
+   */
+  getFeasibility: () => PublishCheckFinding[];
+  /**
    * Set right after a successful create POST. The parent component watches
    * this to close the Drawer and (optionally) re-open it in edit mode.
    * Re-set to `null` by {@link consumeCreatedId} once handled.
    */
   createdId: string | null;
+  /**
+   * То же самое, но читаемое СРАЗУ после `save()`: черновик, набранный до создания
+   * теста, дописывают его собственные ресурсы, и адресату этих запросов нужен
+   * идентификатор до того, как React перерисует состояние. Тот же приём, что у
+   * {@link getFeasibility}.
+   */
+  getCreatedId: () => string | null;
   /** Apply a partial draft update; tracks dirty / validation reactively. */
   updateModel: (updater: (model: TestEditorModel) => TestEditorModel) => void;
   /**
@@ -169,21 +215,25 @@ const EMPTY_VALIDATION: ValidationResult = { errors: [], warnings: [] };
 const EMPTY_TAB_STATUS: TabStatus = { dirty: false, warning: false, error: false };
 
 /**
- * Map a validation issue field path to the tab that owns it (FR-25b). Falls
- * back to `composition` when the field cannot be attributed to a specific tab.
+ * Адрес поля в новом дереве вкладок (FR-25b): по какому ВОПРОСУ настройка, туда она и
+ * относится. Неопознанное поле уходит в «Состав и сценарий» — там живёт то, из чего тест
+ * собран, и промах виден автору сразу.
  */
 function tabOfField(field: string): EditorTabKey {
   if (field.startsWith("sections")) return "composition";
-  if (field.startsWith("adaptive")) return "settings";
-  if (field.startsWith("passRules")) return "settings";
-  if (field.startsWith("runtime")) return "settings";
-  if (field.startsWith("retakePolicy")) return "settings";
-  if (field.startsWith("basic")) return "settings";
-  if (field.startsWith("design")) return "design";
-  if (field.startsWith("flow") || field.startsWith("structure")) return "structure";
+  if (field.startsWith("adaptive")) return "composition";
+  if (field.startsWith("flow") || field.startsWith("structure")) return "composition";
+  // Правила оценки тем и цена ответа — это «как считается результат».
+  if (field.startsWith("passRules")) return "scoring";
   if (field.startsWith("scoring")) return "scoring";
-  if (field.startsWith("scales")) return "scales";
-  if (field.startsWith("resultVariables")) return "metrics";
+  if (field.startsWith("scales")) return "scoring";
+  if (field.startsWith("resultVariables")) return "scoring";
+  // Ограничения попытки и повторного прохождения — «по каким правилам проходится».
+  if (field.startsWith("retakePolicy")) return "rules";
+  if (field.startsWith("runtime")) return "rules";
+  if (field.startsWith("design")) return "design";
+  // Название, описание, режим и интеграция с LMS.
+  if (field.startsWith("basic")) return "main";
   return "composition";
 }
 
@@ -193,13 +243,13 @@ function buildTabStatuses(
   validation: ValidationResult,
 ): Record<EditorTabKey, TabStatus> {
   const statuses: Record<EditorTabKey, TabStatus> = {
+    main: { ...EMPTY_TAB_STATUS },
     composition: { ...EMPTY_TAB_STATUS },
-    settings: { ...EMPTY_TAB_STATUS },
-    design: { ...EMPTY_TAB_STATUS },
-    structure: { ...EMPTY_TAB_STATUS },
+    rules: { ...EMPTY_TAB_STATUS },
     scoring: { ...EMPTY_TAB_STATUS },
-    scales: { ...EMPTY_TAB_STATUS },
-    metrics: { ...EMPTY_TAB_STATUS },
+    feedback: { ...EMPTY_TAB_STATUS },
+    design: { ...EMPTY_TAB_STATUS },
+    review: { ...EMPTY_TAB_STATUS },
   };
   for (const tab of dirtyTabs) statuses[tab].dirty = true;
   for (const issue of validation.errors) statuses[tabOfField(issue.field)].error = true;
@@ -233,30 +283,43 @@ function diffDirtyTabs(
   ) {
     dirty.add("scoring");
   }
-  if (
-    !shallowEqualJson(draft.basic, snapshot.basic) ||
-    !shallowEqualJson(draft.runtime, snapshot.runtime) ||
-    !shallowEqualJson(draft.passRules, snapshot.passRules) ||
-    !shallowEqualJson(draft.adaptive, snapshot.adaptive) ||
-    !shallowEqualJson(draft.retakePolicy, snapshot.retakePolicy) ||
-    draft.mode !== snapshot.mode
-  ) {
-    dirty.add("settings");
+  // «Основное»: чем тест является и как он отдаётся в LMS.
+  if (!shallowEqualJson(draft.basic, snapshot.basic) || draft.mode !== snapshot.mode) {
+    dirty.add("main");
   }
+  // «Правила прохождения»: показ по ходу и ограничения попыток.
   if (
+    !shallowEqualJson(draft.runtime, snapshot.runtime) ||
+    !shallowEqualJson(draft.retakePolicy, snapshot.retakePolicy)
+  ) {
+    dirty.add("rules");
+  }
+  // «Сценарий в ИС»: банк и выдача теста «Сценарий» — на вкладке «Задание» (ключ «Состава»).
+  if (!shallowEqualJson(draft.scenarioItems ?? [], snapshot.scenarioItems ?? [])) {
+    dirty.add("composition");
+  }
+  // «Состав и сценарий»: лестница адаптивного режима и сценарий прохождения.
+  if (
+    !shallowEqualJson(draft.adaptive, snapshot.adaptive) ||
     draft.flowMode !== snapshot.flowMode ||
     !shallowEqualJson(draft.flowSettings, snapshot.flowSettings)
   ) {
-    dirty.add("structure");
+    dirty.add("composition");
   }
-  if (!shallowEqualJson(draft.resultVariables, snapshot.resultVariables)) {
-    dirty.add("metrics");
-  }
+  // «Оценка результата»: вердикт, шкалы, показатели — вместе с ценой ответа выше.
   if (
+    !shallowEqualJson(draft.passRules, snapshot.passRules) ||
+    !shallowEqualJson(draft.resultVariables, snapshot.resultVariables) ||
     !shallowEqualJson(draft.scales, snapshot.scales) ||
     !shallowEqualJson(draft.measurements, snapshot.measurements)
   ) {
-    dirty.add("scales");
+    dirty.add("scoring");
+  }
+  // «Оформление»: набранное до первого сохранения. У существующего теста среза в
+  // модели нет ни у черновика, ни у снимка, и вкладка помечается своим черновиком
+  // (`useDesignSettings.isDirty`) — здесь ловится только режим создания.
+  if (!shallowEqualJson(draft.design, snapshot.design)) {
+    dirty.add("design");
   }
   return dirty;
 }
@@ -264,6 +327,26 @@ function diffDirtyTabs(
 /** Structural equality via JSON serialisation. Sufficient for plain editor data. */
 function shallowEqualJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Есть ли в черновике оформления что-то, кроме выбора шаблона. Сам выбор уже уехал
+ * телом создания (`editorModelToPayload`), и повторять его отдельным сохранением
+ * незачем — тест, которому задали только шаблон, не должен получать лишний запрос.
+ *
+ * `theme: "auto"` тоже не отступление: это значение по умолчанию, и у шаблона без
+ * объявленных палитр маршрут принимает ТОЛЬКО его.
+ */
+function hasDesignOverrides(design: TestDesignDraft): boolean {
+  return (
+    Object.keys(design.params ?? {}).length > 0 ||
+    (design.theme !== undefined && design.theme !== "auto") ||
+    Object.values(design.paramsByTheme ?? {}).some(
+      (values) => Object.keys(values ?? {}).length > 0,
+    ) ||
+    Object.keys(design.labels ?? {}).length > 0 ||
+    (design.resultsBlockOrder ?? []).length > 0
+  );
 }
 
 // ─── Fetch / mutate helpers ───────────────────────────────────────────────────
@@ -343,6 +426,20 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
   const sections = mapEditorSectionsToPayload(draft);
   const adaptive = mapEditorAdaptiveToPayload(draft);
   const payload: Record<string, unknown> = { ...test, sections };
+  // «Сценарий в ИС»: пункты-сценарии уходят всегда и целиком — тест «Сценарий» берёт первый,
+  // роутер все, а смена режима не должна терять ни одного (FR-40).
+  payload.scenarios = (draft.scenarioItems ?? []).map((item, index) => ({
+    // Стабильный id: на нём держится ключ пункта `scenario:<id>` в порядке и правилах роутера.
+    ...(item.id ? { id: item.id } : {}),
+    topicId: item.topicId,
+    questionId: item.questionId,
+    title: item.title?.trim() || null,
+    required: item.required !== false,
+    groupKey: item.groupKey ?? null,
+    defaultPoints: item.defaultPoints ?? null,
+    // Техдолг №8: порог пункта — из таблицы «Правила оценки тем и сценариев», как у темы.
+    passRuleJson: draft.passRules.byTopic[scenarioEntryKey(item, index)] ?? { source: "inherit_overall" },
+  }));
   if (adaptive) {
     payload.showDifficultyLevel = adaptive.showDifficultyLevel;
     payload.adaptiveSettings = adaptive.topics;
@@ -440,6 +537,33 @@ export function useTestEditor(
   // Debounced validation (NFR-18: 300 ms). Tracks the latest draft and emits a
   // ValidationResult only after the user pauses.
   const [validation, setValidation] = useState<ValidationResult>(EMPTY_VALIDATION);
+  /**
+   * Банк вопросов: сколько вопросов с каким ключом есть у каждой темы. Модель этого не
+   * знает, а часть проверок без этого невозможна — например, «квота больше, чем есть в
+   * банке» (контракт «Индикация проблем»: проблема обязана быть в общем контуре, иначе
+   * секция считает её в одиночку и снаружи её никто не видит).
+   *
+   * Запрос тот же, что у вкладки «Состав», — React Query отдаёт его из кэша.
+   */
+  const questionsQuery = useQuery<{ id: string; topicId?: string | null; tags?: string[] }[]>({
+    queryKey: ["/api/questions"],
+    enabled: Boolean(draft),
+  });
+  const validationContext = useMemo<ValidationContext>(() => {
+    const rows = questionsQuery.data;
+    if (!rows) return {};
+    const available: Record<string, Record<string, number>> = {};
+    for (const q of rows) {
+      if (!q.topicId) continue;
+      const byTag = (available[q.topicId] ??= {});
+      for (const tag of q.tags ?? []) {
+        const key = tagKey(tag);
+        if (key) byTag[key] = (byTag[key] ?? 0) + 1;
+      }
+    }
+    return { availableByTopicAndTag: available };
+  }, [questionsQuery.data]);
+
   const validationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!draft) {
@@ -448,12 +572,12 @@ export function useTestEditor(
     }
     if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
     validationTimerRef.current = setTimeout(() => {
-      setValidation(validateTestEditor(draft));
+      setValidation(validateTestEditor(draft, validationContext));
     }, 300);
     return () => {
       if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
     };
-  }, [draft]);
+  }, [draft, validationContext]);
 
   // Aggregated dirty mask per tab (FR-25b).
   const isDirty = useMemo(() => {
@@ -464,13 +588,13 @@ export function useTestEditor(
   const tabStatuses = useMemo(() => {
     if (!draft || !snapshot) {
       return {
+        main: { ...EMPTY_TAB_STATUS },
         composition: { ...EMPTY_TAB_STATUS },
-        settings: { ...EMPTY_TAB_STATUS },
-        design: { ...EMPTY_TAB_STATUS },
-        structure: { ...EMPTY_TAB_STATUS },
+        rules: { ...EMPTY_TAB_STATUS },
         scoring: { ...EMPTY_TAB_STATUS },
-        scales: { ...EMPTY_TAB_STATUS },
-        metrics: { ...EMPTY_TAB_STATUS },
+        feedback: { ...EMPTY_TAB_STATUS },
+        design: { ...EMPTY_TAB_STATUS },
+        review: { ...EMPTY_TAB_STATUS },
       };
     }
     const dirty = diffDirtyTabs(draft, snapshot);
@@ -479,6 +603,31 @@ export function useTestEditor(
 
   // Mutation: PUT /api/tests/:id (edit) or POST /api/tests (create).
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+  /**
+   * PRD-15 FR-05: выполнимость выдачи ТЕКУЩЕГО состояния, прочитанная после
+   * успешного сохранения. Для черновика политика спеки — предупреждение без
+   * блокировки, поэтому это не мешает ни сохранить, ни закрыть редактор: автор
+   * просто узнаёт, что лестница не поедет, здесь, а не на публикации или на
+   * зависшем прогоне.
+   */
+  const [feasibility, setFeasibility] = useState<PublishCheckFinding[]>([]);
+
+  // Read through a ref as well as state: saving CLOSES the Drawer, so the caller
+  // reads the findings right after `save()` resolves — before React has re-rendered
+  // anything — and hands them to the list, which owns the surface that outlives the
+  // editor (the same advisory dialog the publication notes use).
+  const feasibilityRef = useRef<PublishCheckFinding[]>([]);
+  const refreshFeasibility = useCallback(async (testId: string) => {
+    try {
+      const res = await fetch(`/api/tests/${testId}/feasibility`, { credentials: "include" });
+      if (!res.ok) return;
+      const body = (await res.json()) as { findings?: PublishCheckFinding[] };
+      feasibilityRef.current = body.findings ?? [];
+      setFeasibility(feasibilityRef.current);
+    } catch {
+      // Advisory only: a failed check must never look like a failed save.
+    }
+  }, []);
   const [requiredFieldsMissing, setRequiredFieldsMissing] = useState<
     RequiredFieldsMissing[]
   >([]);
@@ -490,6 +639,7 @@ export function useTestEditor(
    */
   const [saveError, setSaveError] = useState<{ status: number; message: string } | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const createdIdRef = useRef<string | null>(null);
 
   // Reset transient save/conflict/required-field errors when switching tests.
   // The session-load effect above only resets draft/snapshot (and runs before
@@ -499,6 +649,10 @@ export function useTestEditor(
     setSaveError(null);
     setConflict(null);
     setRequiredFieldsMissing([]);
+    // И идентификатор созданного теста: он живёт ровно один сеанс создания. Иначе
+    // после неудачной дозаписи (тест создан, ящик закрыли) СЛЕДУЮЩЕЕ создание в той
+    // же папке дописалось бы в тот старый тест вместо своего.
+    createdIdRef.current = null;
   }, [sessionKey]);
 
   const mutation = useMutation({
@@ -516,6 +670,9 @@ export function useTestEditor(
       if (isEdit) {
         if (!editTestId) throw new Error("save: edit mode without testId");
         const saved = await putTest(editTestId, fullPayload);
+        // Awaited on purpose: the Drawer closes the moment `save()` resolves, and the
+        // findings have to be in hand BEFORE that, or nobody is left to show them.
+        await refreshFeasibility(editTestId);
         const varsChanged = !shallowEqualJson(draft.resultVariables, snapVars);
         const scalesChanged = !shallowEqualJson(draft.scales, snapScales);
         const measChanged = !shallowEqualJson(draft.measurements, snapMeas);
@@ -542,17 +699,63 @@ export function useTestEditor(
           questionScoring: draft.scoring.questionOverrides,
         };
       }
-      const created = await postTest(fullPayload);
-      const newId = (created as { id?: string } | null)?.id;
+      // ── Создание ────────────────────────────────────────────────────────────
+      //
+      // ПОВТОР ПОСЛЕ СБОЯ. Тест создаётся одним `POST`, а всё, что автор набрал до
+      // создания, дописывается следом отдельными запросами. Упади любой из них —
+      // мутация падает целиком, ящик остаётся открытым с ошибкой, а тест В БАЗЕ УЖЕ
+      // ЕСТЬ. Пока повтор шёл тем же путём, второе «Сохранить» создавало ВТОРОЙ тест,
+      // и автор получал дубль вместо исправления.
+      //
+      // Поэтому идентификатор запоминается СРАЗУ после успешного `POST`, до любой
+      // дозаписи: пока он есть, создание больше не повторяется — тело уходит `PUT`'ом
+      // по этому идентификатору, а дозапись прогоняется заново. Ссылка обнуляется при
+      // смене сеанса редактора (закрыли ящик — следующее создание начинается чисто).
+      const retryId = createdIdRef.current;
+      let created: unknown;
+      let newId: string | undefined;
+      if (retryId) {
+        // Версия читается перед записью: у теста, которого ещё никто не видел,
+        // разойтись ей не с кем, а правки, сделанные ПОСЛЕ неудачной попытки, так не
+        // теряются (иначе повтор молча откатил бы их к состоянию первой попытки).
+        const current = (await fetchTest(retryId)) as { version?: number };
+        created = await putTest(retryId, {
+          ...fullPayload,
+          expectedVersion: current.version ?? fullPayload.expectedVersion,
+        });
+        newId = retryId;
+      } else {
+        created = await postTest(fullPayload);
+        newId = (created as { id?: string } | null)?.id;
+        if (newId) createdIdRef.current = newId;
+      }
+      // Черновик не требует сохранения, чтобы его настроить: всё, что автор набрал до
+      // создания, дописывается СРАЗУ ПОСЛЕ INSERT — теми же маршрутами, какими это
+      // правится у существующего теста. Показатели, шкалы и измерения жили так всегда;
+      // переопределения оценки и оформление встали в тот же ряд.
+      const designOverrides =
+        draft.design && hasDesignOverrides(draft.design) ? draft.design : null;
+      const overrides = draft.scoring.questionOverrides;
       const hasChildren =
-        draft.resultVariables.length > 0 || draft.scales.length > 0 || draft.measurements.length > 0;
+        draft.resultVariables.length > 0 ||
+        draft.scales.length > 0 ||
+        draft.measurements.length > 0 ||
+        overrides.length > 0 ||
+        designOverrides !== null;
       if (newId && hasChildren) {
+        // Снимок пустой и на повторе: дозапись идёт по тем же маршрутам, что у
+        // существующего теста, и они перезаписывают своё состояние целиком —
+        // повторный прогон приводит к тому же результату, что удачный первый.
         if (draft.resultVariables.length > 0) await saveResultVariables(newId, draft.resultVariables, []);
         if (draft.scales.length > 0) await saveScales(newId, draft.scales, []);
         if (draft.measurements.length > 0) {
           const keyToId = await resolveScaleKeyToId(newId, draft.scales, true);
           await saveMeasurements(newId, draft.measurements, [], keyToId);
         }
+        // PRD-15 блок D: цена и градация отдельных вопросов. Снимок пустой — у только
+        // что созданного теста переопределений нет, поэтому сверять не с чем.
+        if (overrides.length > 0) await saveQuestionOverrides(newId, overrides, []);
+        if (designOverrides) await putDesign(newId, designOverrides);
         return fetchTest(newId);
       }
       return {
@@ -579,6 +782,7 @@ export function useTestEditor(
         queryClient.setQueryData(["/api/tests", editTestId], data);
       } else if (newId) {
         queryClient.setQueryData(["/api/tests", newId], data);
+        createdIdRef.current = newId;
         setCreatedId(newId);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
@@ -664,6 +868,10 @@ export function useTestEditor(
 
   const consumeCreatedId = useCallback(() => {
     setCreatedId(null);
+    // Ссылку здесь НЕ трогаем. Её читает дозапись структуры уже после того, как
+    // мутация выставила `createdId` и этот обработчик отработал эффектом; обнулив её
+    // тут, мы бы устроили гонку, в которой структура нового теста уходит в никуда.
+    // Сеанс создания закрывает ссылку сам — при смене `sessionKey`.
   }, []);
 
   const resultMode: UseTestEditorResult["mode"] = options
@@ -684,7 +892,10 @@ export function useTestEditor(
     conflict,
     requiredFieldsMissing,
     saveError,
+    feasibility,
+    getFeasibility: () => feasibilityRef.current,
     createdId,
+    getCreatedId: () => createdIdRef.current,
     updateModel,
     save,
     reset,

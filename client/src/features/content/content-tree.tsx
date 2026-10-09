@@ -19,25 +19,32 @@
  * deletes/moves pass the PRD-15 content guard. Matches the approved wireframe
  * docs/wireframes/approved/content-bank-explorer.html.
  *
+ * Deep link `?questionId=<id>` (see {@link module:features/content/question-link}):
+ * analytics diagnoses a question, but the fix happens in its topic. Once the data
+ * is loaded the tree expands the question's folder path and topic, scrolls the row
+ * into view and opens the same {@link QuestionEditorDrawer} the ⋯ «Редактировать»
+ * action opens. It acts once and then strips the param from the address.
+ *
  * Performance: the per-topic filtered question lists are memoized (one pass per
  * data/filter change, not per render); free-text search is debounced; filters
  * apply in a batch on «Применить» (the tree does not re-filter on each facet
  * toggle). Row virtualization is a planned follow-up for very large banks. See
  * docs/PLAN_content_axis_implementation.md.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// Навигация без хука: дерево живёт и на подменённом `window.location` (выгрузка в Excel в тестах).
+import { navigate } from "wouter/use-browser-location";
 import {
+  BarChart3,
   Bookmark,
+  Braces,
   CheckSquare,
   ChevronDown,
   ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
   CircleDot,
   Copy,
   Download,
-  Filter,
   Folder as FolderIcon,
   FolderPlus,
   Image as ImageIcon,
@@ -45,6 +52,7 @@ import {
   ListOrdered,
   ThermometerSun,
   SlidersHorizontal,
+  TextCursorInput,
   MoreHorizontal,
   Move,
   Pencil,
@@ -53,13 +61,14 @@ import {
   Trash2,
   Unplug,
   type LucideIcon,
+  MonitorPlay,
+  Pilcrow,
 } from "lucide-react";
-import { Button, Checkbox, Chip, Cluster, Input, Label, ModalDialog, Select, Stack, Text } from "@universityrt/ui-kit";
+import { Button, Checkbox, FilterBar, Input, Label, ModalDialog, SegmentedControl, Select, Stack, Tag, Text, useToast } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { TruncatedLabel } from "@/components/truncated-label";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Folder, Question, Topic } from "@shared/schema";
@@ -80,11 +89,34 @@ import {
   EMPTY_FILTER,
   filterCount,
   MEDIA_OPTS,
+  readContentFilter,
+  contentFilterOf,
+  writeContentFilter,
   SCOPE_OPTS,
   TYPE_OPTS,
   type ContentFilterValue,
   type MediaBucket,
 } from "@/features/content/content-filters";
+import { questionFromSearch, searchWithoutQuestion } from "@/features/content/question-link";
+import {
+  matchesStates,
+  overexposureSub,
+  reviewSub,
+  STATE_OPTS,
+  totalsOf,
+  type BankQuestionQuality,
+  type QualityTotals,
+} from "@/features/content/bank-quality";
+import { TermHint } from "@/features/analytics/test/term-hint";
+import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
+import { currentHref, stateForDive, trailOf } from "@/features/analytics/levels/trail";
+import { FoldAllButtons, type SectionFold } from "@/features/tests/editor/sections/section-fold";
+import { stableKey, useListFilters } from "@/features/saved-filters/use-list-filters";
+
+/** PRD-70 FR-20: набор колонок дерева — «Содержание» (как было) или «Качество». */
+type ColumnSet = "content" | "quality";
+/** Параметр адреса, в котором помнится набор колонок — как вкладка на уровне теста. */
+const VIEW_PARAM = "view";
 
 /** Open ⋯-menu (one at a time across the whole tree). */
 type OpenMenu = { kind: "folder" | "topic" | "question"; id: string } | null;
@@ -138,8 +170,9 @@ function MenuItem({ icon, danger, onClick, children, testId }: {
 }
 
 import type { QuestionType } from "@shared/questions/question-type";
+import { questionLabel } from "@shared/questions/question-label";
 
-const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun, allocation: SlidersHorizontal };
+const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun, allocation: SlidersHorizontal, short: TextCursorInput, blanks: Braces, long: Pilcrow, simulation: MonitorPlay };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,
   multiple: t.questions.multipleChoice,
@@ -147,13 +180,19 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   ranking: t.questions.ranking,
   scale: t.questions.scaleChoice,
   allocation: t.questions.allocation,
+  short: t.questions.shortAnswer,
+  blanks: t.questions.blanks,
+  long: t.questions.longAnswer,
+  simulation: t.questions.simulation,
 };
 
 const depthClass = (depth: number): string => `ct-d${Math.min(depth, 6)}`;
 
 /** Pure facet predicate (filter is the applied value). */
-function facetMatch(q: Question, f: ContentFilterValue): boolean {
+function facetMatch(q: Question, f: ContentFilterValue, quality: ReadonlyMap<string, BankQuestionQuality>): boolean {
   if (f.types.length && !f.types.includes(q.type as QuestionType)) return false;
+  // PRD-70 FR-23: «Состояние» — по качеству вопроса в тестах читателя.
+  if (!matchesStates(quality.get(q.id), f.states)) return false;
   // PRD-16 FR-13: difficulty interval 0–100 / «Не задана» (null = «не задано»).
   if (f.diffUnset) {
     if (q.difficulty != null) return false;
@@ -219,6 +258,29 @@ interface UserLite {
   email?: string | null;
 }
 
+/** Раскрытие и прокрутка дерева в состоянии записи истории. */
+interface TreeSnapshot {
+  collapsedFolders?: string[];
+  expandedTopics?: string[];
+  scrollTop?: number;
+}
+
+/** Ключ снимка дерева в состоянии записи. */
+const TREE_KEY = "ctTree";
+
+/** Снимок дерева текущей записи; нет — дерево открывается как обычно. */
+function savedTree(): TreeSnapshot | null {
+  if (typeof window === "undefined") return null;
+  const value = (window.history.state as Record<string, unknown> | null)?.[TREE_KEY];
+  return value && typeof value === "object" ? value as TreeSnapshot : null;
+}
+
+/** Дописать снимок дерева в состояние текущей записи, не трогая остального. */
+function rememberTree(patch: TreeSnapshot): void {
+  const state = (window.history.state ?? {}) as Record<string, unknown>;
+  window.history.replaceState({ ...state, [TREE_KEY]: { ...(savedTree() ?? {}), ...patch } }, "", window.location.href);
+}
+
 export function ContentTree() {
   const { user, can } = useAuth();
   const userId = user?.id ?? "";
@@ -227,19 +289,63 @@ export function ContentTree() {
   const { data: topics = [], isLoading: loadingTopics } = useQuery<Topic[]>({ queryKey: ["/api/topics"] });
   const { data: questions = [], isLoading: loadingQuestions } = useQuery<Question[]>({ queryKey: ["/api/questions"] });
   const { data: users = [] } = useQuery<UserLite[]>({ queryKey: ["/api/users"], enabled: can("users.read") });
+  // PRD-70 FR-14: качество вопросов по тестам читателя — из аналитики, поэтому только с правом на неё.
+  const canAnalytics = can("analytics.read");
+  const { data: bankQualityData } = useQuery<{ questions: BankQuestionQuality[] }>({
+    queryKey: ["/api/analytics/bank/quality"],
+    enabled: canAnalytics,
+  });
+  const qualityById = useMemo(
+    () => new Map((bankQualityData?.questions ?? []).map((q) => [q.questionId, q])),
+    [bankQualityData],
+  );
+  const [columnSet, setColumnSetState] = useState<ColumnSet>(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get(VIEW_PARAM) === "quality" ? "quality" : "content",
+  );
+  /** Сменить набор колонок и запомнить его в адресе (FR-20). */
+  function setColumnSet(next: ColumnSet) {
+    setColumnSetState(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "quality") params.set(VIEW_PARAM, "quality");
+    else params.delete(VIEW_PARAM);
+    const search = params.toString();
+    window.history.replaceState(window.history.state, "", window.location.pathname + (search ? `?${search}` : "") + window.location.hash);
+  }
+  const quality = canAnalytics && columnSet === "quality";
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
-  const [filter, setFilter] = useState<ContentFilterValue>(EMPTY_FILTER); // applied
-  const [draft, setDraft] = useState<ContentFilterValue>(EMPTY_FILTER); // edited in the panel
+  // Возврат (замечание владельца 2026-10-05): условия фильтра живут в адресе, раскрытие дерева и
+  // прокрутка — в состоянии записи истории. Крошка «Темы и вопросы» и «Назад» браузера приводят на
+  // тот же отбор и то же место дерева, с которого ушли вглубь.
+  const [filter, setFilter] = useState<ContentFilterValue>(() =>
+    typeof window === "undefined" ? EMPTY_FILTER : readContentFilter(window.location.search)); // applied
+  const [draft, setDraft] = useState<ContentFilterValue>(filter); // edited in the panel
   const [filterOpen, setFilterOpen] = useState(false);
-  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
-  const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set());
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set(savedTree()?.collapsedFolders ?? []));
+  const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set(savedTree()?.expandedTopics ?? []));
+  const treeRef = useRef<HTMLDivElement>(null);
+
+  // Условия фильтра — в адрес, без новой записи истории: это та же страница.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    writeContentFilter(filter, params);
+    const search = params.toString();
+    const href = window.location.pathname + (search ? `?${search}` : "") + window.location.hash;
+    if (href !== window.location.pathname + window.location.search + window.location.hash) {
+      window.history.replaceState(window.history.state, "", href);
+    }
+  }, [filter]);
+  // Раскрытие — в состояние записи: с ним на неё и вернутся.
+  useEffect(() => {
+    rememberTree({ collapsedFolders: [...collapsedFolders], expandedTopics: [...expandedTopics] });
+  }, [collapsedFolders, expandedTopics]);
   // PRD-16: inline read-only preview of a question (expand a question row).
   const [expandedQuestions, setExpandedQuestions] = useState<ReadonlySet<string>>(() => new Set());
 
   // ── Phase 3: interaction layer (⋯-menus, FAB, drawers, move pickers, bulk) ──
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const contentGuard = useContentGuard();
   const isAdmin = can("topics.owner.change");
@@ -269,11 +375,11 @@ export function ContentTree() {
     queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
     queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
   };
-  const onMutError = () => toast({ variant: "destructive", title: t.common.error });
+  const onMutError = () => toast({ tone: "error", title: t.common.error });
 
   const duplicateQuestionMut = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/questions/${id}/duplicate`),
-    onSuccess: () => { invalidateAll(); toast({ title: t.questions.duplicated }); },
+    onSuccess: () => { invalidateAll(); toast({ tone: "success", title: t.questions.duplicated }); },
     onError: onMutError,
   });
   // Topic/folder deletion is guarded (single topic → content guard; folder →
@@ -300,7 +406,7 @@ export function ContentTree() {
       for (const id of ids) await apiRequest("PUT", `/api/questions/${id}`, { topicId });
     },
     onSuccess: () => { invalidateAll(); setMoveQ(null); setSelected(new Set()); },
-    onError: () => toast({ variant: "destructive", title: t.common.error, description: "Не удалось переместить (возможно, затронуты опубликованные тесты)." }),
+    onError: () => toast({ tone: "error", title: t.common.error, description: "Не удалось переместить (возможно, затронуты опубликованные тесты)." }),
   });
 
   // Delete a question through the PRD-15 content guard (dry-run -> warn/block 409).
@@ -348,6 +454,82 @@ export function ContentTree() {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [menu, fabOpen]);
+
+  // Deep link from analytics: `?questionId=<id>`. Analytics only diagnoses a
+  // question («сильные ошибаются чаще»); the author fixes it here, in its topic.
+  // Read once on mount; handled once the tree data has loaded, then the param is
+  // stripped so a reload / «Назад» does not reopen a drawer the author closed.
+  const [linkedQuestionId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : questionFromSearch(window.location.search),
+  );
+  const linkHandled = useRef(false);
+  const [scrollToQuestionId, setScrollToQuestionId] = useState<string | null>(null);
+  const dataLoading = loadingFolders || loadingTopics || loadingQuestions;
+  useEffect(() => {
+    if (!linkedQuestionId || linkHandled.current || dataLoading) return;
+    linkHandled.current = true;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + searchWithoutQuestion(window.location.search) + window.location.hash,
+    );
+    const q = questions.find((x) => x.id === linkedQuestionId);
+    if (!q) {
+      // Deleted, or outside this author's topic scope: say so, do not block.
+      toast({ tone: "success", title: "Вопрос не найден", description: "Он удалён или недоступен вам." });
+      return;
+    }
+    // Expand the folder path (folders start open, but the user may have collapsed
+    // some) and the question's topic — filters are untouched: on a fresh
+    // navigation they are empty, so the row is visible.
+    const topic = topics.find((tp) => tp.id === q.topicId);
+    const ancestors = new Set<string>();
+    const parentOf = new Map(folders.map((f) => [f.id, f.parentId ?? null] as const));
+    for (let fid = topic?.folderId ?? null; fid && !ancestors.has(fid); fid = parentOf.get(fid) ?? null) ancestors.add(fid);
+    if (ancestors.size > 0) {
+      setCollapsedFolders((prev) => new Set(Array.from(prev).filter((id) => !ancestors.has(id))));
+    }
+    setExpandedTopics((prev) => new Set(prev).add(q.topicId));
+    setScrollToQuestionId(q.id);
+    setEditorTarget({ question: q });
+  }, [linkedQuestionId, dataLoading, questions, topics, folders, toast]);
+
+  // Прокрутка дерева: вернуть, когда дерево отрисовано, и запоминать по ходу.
+  const scrollRestored = useRef(false);
+  useEffect(() => {
+    if (dataLoading || scrollRestored.current) return;
+    scrollRestored.current = true;
+    const top = savedTree()?.scrollTop;
+    if (top && treeRef.current) treeRef.current.scrollTop = top;
+  }, [dataLoading]);
+  useEffect(() => {
+    const el = treeRef.current;
+    if (!el) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => rememberTree({ scrollTop: el.scrollTop }), 150);
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => { clearTimeout(timer); el.removeEventListener("scroll", onScroll); };
+  }, [dataLoading]);
+
+  /** «Статистика» вопроса: переход вглубь с путём — крошка «Темы и вопросы» вернёт сюда. */
+  function openStatistics(questionId: string) {
+    const target = bankQuestionHref(questionId);
+    navigate(target, {
+      state: stateForDive(trailOf(window.history.state), { label: t.content.title, href: currentHref(), state: window.history.state }, target),
+    });
+  }
+
+  // Scroll the linked question's row into view once it has rendered.
+  useEffect(() => {
+    if (!scrollToQuestionId) return;
+    const row = Array.from(document.querySelectorAll<HTMLElement>("[data-question-id]"))
+      .find((el) => el.dataset.questionId === scrollToQuestionId);
+    row?.scrollIntoView?.({ block: "center" });
+    setScrollToQuestionId(null);
+  }, [scrollToQuestionId]);
 
   const questionsByTopic = useMemo(() => {
     const map = new Map<string, Question[]>();
@@ -449,19 +631,19 @@ export function ContentTree() {
 
   const query = debouncedSearch.trim().toLowerCase();
   const searching = query.length > 0;
-  const facetsActive = filter.types.length > 0 || diffActive(filter) || filter.tags.length > 0 || filter.media.length > 0 || filter.author !== "";
+  const facetsActive = filter.types.length > 0 || diffActive(filter) || filter.tags.length > 0 || filter.media.length > 0 || filter.author !== "" || filter.states.length > 0;
   const contentActive = facetsActive || searching;
 
   // Memoized per-topic filtered question lists — one pass per data/filter change.
   const shownByTopic = useMemo(() => {
     const map = new Map<string, Question[]>();
     for (const topic of topics) {
-      let qs = (questionsByTopic.get(topic.id) ?? []).filter((q) => facetMatch(q, filter));
-      if (searching && !textIncludes(topic.name, query)) qs = qs.filter((q) => textIncludes(q.prompt, query));
+      let qs = (questionsByTopic.get(topic.id) ?? []).filter((q) => facetMatch(q, filter, qualityById));
+      if (searching && !textIncludes(topic.name, query)) qs = qs.filter((q) => textIncludes(questionLabel(q), query) || textIncludes(q.prompt, query));
       map.set(topic.id, qs);
     }
     return map;
-  }, [topics, questionsByTopic, filter, query, searching]);
+  }, [topics, questionsByTopic, filter, query, searching, qualityById]);
 
   function topicInScope(topic: Topic): boolean {
     switch (filter.scope) {
@@ -495,10 +677,48 @@ export function ContentTree() {
   function expandAll() { setCollapsedFolders(new Set()); setExpandedTopics(new Set(topics.map((tp) => tp.id))); }
   function collapseAll() { setCollapsedFolders(new Set(folders.map((f) => f.id))); setExpandedTopics(new Set()); }
 
-  function openFilters() { setDraft(filter); setFilterOpen(true); }
+  // The panel edits a draft of what is applied; closing it without «Применить» drops the draft
+  // (PRD-70 FR-74), so every opening starts from the applied filter.
+  function toggleFilters() { if (!filterOpen) setDraft(filter); setFilterOpen(!filterOpen); }
   function applyFilters() { setFilter(draft); setFilterOpen(false); }
+  /** «Сбросить» of the panel: clears the draft only. */
+  function resetDraft() { setDraft(EMPTY_FILTER); }
+  /** «Сбросить фильтры» of the bar: clears what is applied. */
   function resetFilters() { setDraft(EMPTY_FILTER); setFilter(EMPTY_FILTER); }
   function commitFilter(next: ContentFilterValue) { setFilter(next); setDraft(next); }
+  // Сохранённые фильтры банка (решение владельца 2026-10-05): сохранить в ряду условий,
+  // применить и удалить — из «Сохранённых».
+  const savedFilters = useListFilters({ scope: "content", current: filter, apply: commitFilter, normalize: contentFilterOf, keyOf: stableKey });
+
+  // PRD-70 FR-21, FR-22: суммы качества темы и папки — количества вопросов, у «Тестов» — разные тесты.
+  const topicQuality = (topicId: string): QualityTotals =>
+    totalsOf((questionsByTopic.get(topicId) ?? []).map((q) => q.id), qualityById);
+  const folderQuality = (folderId: string): QualityTotals =>
+    totalsOf(topicsUnderFolder(folderId).flatMap((tid) => (questionsByTopic.get(tid) ?? []).map((q) => q.id)), qualityById);
+  /** Число колонки: ноль — приглушённо, как в эскизе. */
+  const countCell = (n: number) => (n === 0 ? <span className="ct-zero">0</span> : n);
+  /** Ячейки набора «Качество» для темы и папки. */
+  const totalsCells = (totals: QualityTotals) => (
+    <>
+      <div className="ct-cell">{countCell(totals.review)}</div>
+      <div className="ct-cell">{countCell(totals.overexposed)}</div>
+      <div className="ct-cell">{countCell(totals.never)}</div>
+      <div className="ct-cell">{countCell(totals.tests)}</div>
+    </>
+  );
+  /** Метка «N на ревизии» у темы и папки в наборе «Содержание». */
+  const reviewCountTag = (totals: QualityTotals) =>
+    canAnalytics && totals.review > 0 ? <Tag tone="warning" size="s">{totals.review} на ревизии</Tag> : null;
+
+  // FR-24: «Развернуть все / Свернуть все» — та же пара ДС, что в редакторе и профиле экспозиции.
+  const treeFold: SectionFold = {
+    isOpen: () => true,
+    toggle: () => {},
+    expandAll,
+    collapseAll,
+    anyCollapsed: collapsedFolders.size > 0 || expandedTopics.size < topics.length,
+    allCollapsed: collapsedFolders.size >= folders.length && expandedTopics.size === 0,
+  };
 
   const rows: React.ReactNode[] = [];
 
@@ -518,11 +738,16 @@ export function ContentTree() {
           <span className="ct-twist">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-ico ct-ico--topic"><Bookmark size={16} /></span>
           <span className="ct-name__label">{topic.name}</span>
+          {!quality && reviewCountTag(topicQuality(topic.id))}
         </div>
-        <div className="ct-owner">{ownerLabel(topic.ownerId ?? null)}</div>
-        <div className="ct-cell" />
-        <div className="ct-cell" />
-        <div className="ct-cell">{contentActive ? `${shown.length} / ${total}` : `${total}`}</div>
+        {quality ? totalsCells(topicQuality(topic.id)) : (
+          <>
+            <div className="ct-owner">{ownerLabel(topic.ownerId ?? null)}</div>
+            <div className="ct-cell" />
+            <div className="ct-cell" />
+            <div className="ct-cell">{contentActive ? `${shown.length} / ${total}` : `${total}`}</div>
+          </>
+        )}
         <RowActions open={menuOpen} label={t.content.actionsTopic} onToggle={() => setMenu(menuOpen ? null : { kind: "topic", id: topic.id })}>
           {can("questions.manage") && <MenuItem icon={<Plus size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: null, defaultTopicId: topic.id }); }} testId={`ct-topic-addq-${topic.id}`}>{t.content.addQuestion}</MenuItem>}
           {can("questions.importExport") && <MenuItem icon={<Download size={16} />} onClick={() => { setMenu(null); exportTopicsToExcel([topic.id]); }} testId={`ct-topic-export-${topic.id}`}>{t.content.exportToExcel}</MenuItem>}
@@ -536,6 +761,32 @@ export function ContentTree() {
     if (open) for (const q of shown) pushQuestion(q, depth + 1);
   }
 
+  /** Ячейки набора «Качество» у вопроса: признак, переэкспонированность, «не выдавался», тестов. */
+  function questionQualityCells(item: BankQuestionQuality | undefined) {
+    return (
+      <>
+        <div className="ct-cell">
+          {item?.review ? (
+            <>
+              <Tag tone={item.review.tone === "info" ? "neutral" : item.review.tone} size="s">{item.review.title}</Tag>
+              <span className="ct-cell-sub">{reviewSub(item.review)}</span>
+            </>
+          ) : null}
+        </div>
+        <div className="ct-cell">
+          {item?.overexposure ? (
+            <>
+              <Tag tone="warning" size="s">чаще ожидаемого</Tag>
+              <span className="ct-cell-sub">{overexposureSub(item.overexposure)}</span>
+            </>
+          ) : null}
+        </div>
+        <div className="ct-cell">{item?.neverDelivered ? <Tag tone="neutral" size="s">не выдавался</Tag> : null}</div>
+        <div className="ct-cell">{countCell(item?.testIds.length ?? 0)}</div>
+      </>
+    );
+  }
+
   function pushQuestion(q: Question, depth: number) {
     const type = q.type as QuestionType;
     const Icon = TYPE_ICON[type] ?? CircleDot;
@@ -543,24 +794,40 @@ export function ContentTree() {
     const isSel = selected.has(q.id);
     const qOpen = expandedQuestions.has(q.id);
     rows.push(
-      <div key={`q-${q.id}`} className={`ct-row ct-row--q ${depthClass(depth)}${isSel ? " is-selected" : ""}${qOpen ? " is-open" : ""}`} onClick={() => toggleQuestion(q.id)} role="button" tabIndex={0}>
+      <div key={`q-${q.id}`} data-question-id={q.id} className={`ct-row ct-row--q ${depthClass(depth)}${isSel ? " is-selected" : ""}${qOpen ? " is-open" : ""}`} onClick={() => toggleQuestion(q.id)} role="button" tabIndex={0}>
         <div className="ct-name">
           <span className="ct-qcheck" onClick={(e) => e.stopPropagation()}>
             <Checkbox checked={isSel} onChange={() => toggleSelected(q.id)} aria-label={t.content.selectQuestion} />
           </span>
           <span className="ct-twist">{qOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-qtype" title={TYPE_LABEL[type]}><Icon size={16} /></span>
-          <TruncatedLabel className="ct-name__label" text={q.prompt} />
+          <TruncatedLabel className="ct-name__label" text={questionLabel(q)} />
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
+          {/* FR-21: метка «на ревизии» ведёт на статистику вопроса банка. */}
+          {!quality && canAnalytics && qualityById.get(q.id)?.review ? (
+            <a
+              className="ou-link-reset"
+              href={bankQuestionHref(q.id)}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); openStatistics(q.id); }}
+            >
+              <Tag tone="warning" size="s">на ревизии</Tag>
+            </a>
+          ) : null}
         </div>
-        <div className="ct-owner" />
-        <div className="ct-cell">
-          {q.orderIndex != null ? q.orderIndex : <span className="ct-na">{t.content.orderIndexNotSet}</span>}
-        </div>
-        <div className="ct-cell">{q.difficulty != null ? q.difficulty : <span className="ct-na">{t.questions.difficultyNotSet}</span>}</div>
-        <div className="ct-cell" />
+        {quality ? questionQualityCells(qualityById.get(q.id)) : (
+          <>
+            <div className="ct-owner" />
+            <div className="ct-cell">
+              {q.orderIndex != null ? q.orderIndex : <span className="ct-na">{t.content.orderIndexNotSet}</span>}
+            </div>
+            <div className="ct-cell">{q.difficulty != null ? q.difficulty : <span className="ct-na">{t.questions.difficultyNotSet}</span>}</div>
+            <div className="ct-cell" />
+          </>
+        )}
         <RowActions open={menuOpen} label={t.content.actionsQuestion} onToggle={() => setMenu(menuOpen ? null : { kind: "question", id: q.id })}>
           <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: q }); }} testId={`ct-q-edit-${q.id}`}>{t.content.editQuestion}</MenuItem>
+          {/* PRD-70 FR-25: статистика вопроса по всем тестам читателя. */}
+          {canAnalytics && <MenuItem icon={<BarChart3 size={16} />} onClick={() => { setMenu(null); openStatistics(q.id); }} testId={`ct-q-stats-${q.id}`}>Статистика</MenuItem>}
           {can("questions.manage") && <MenuItem icon={<Copy size={16} />} onClick={() => { setMenu(null); duplicateQuestionMut.mutate(q.id); }}>{t.questions.duplicate}</MenuItem>}
           {can("questions.manage") && <MenuItem icon={<Move size={16} />} onClick={() => { setMenu(null); setMoveQ({ ids: [q.id], topicId: q.topicId }); }}>{t.content.moveQuestionToTopic}</MenuItem>}
           {can("questions.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); deleteQuestion(q); }}>{t.content.deleteSelected}</MenuItem>}
@@ -592,11 +859,16 @@ export function ContentTree() {
           <span className="ct-ico"><FolderIcon size={16} /></span>
           <span className="ct-name__label">{folder.name}</span>
           <span className="ct-foldercount">{countsLabel(totals)}</span>
+          {!quality && reviewCountTag(folderQuality(folder.id))}
         </div>
-        <div className="ct-owner" />
-        <div className="ct-cell" />
-        <div className="ct-cell" />
-        <div className="ct-cell" />
+        {quality ? totalsCells(folderQuality(folder.id)) : (
+          <>
+            <div className="ct-owner" />
+            <div className="ct-cell" />
+            <div className="ct-cell" />
+            <div className="ct-cell" />
+          </>
+        )}
         <RowActions open={menuOpen} label={t.content.actionsFolder} onToggle={() => setMenu(menuOpen ? null : { kind: "folder", id: folder.id })}>
           {can("topics.manage") && <MenuItem icon={<Plus size={16} />} onClick={() => { setMenu(null); setTopicTab("props"); setTopicTarget({ mode: "create", folderId: folder.id }); }}>{t.content.addTopicHere}</MenuItem>}
           {can("folders.manage") && <MenuItem icon={<FolderPlus size={16} />} onClick={() => { setMenu(null); setNewFolder({ parentId: folder.id, name: "" }); }}>{t.content.addSubfolder}</MenuItem>}
@@ -623,6 +895,7 @@ export function ContentTree() {
   for (const m of filter.media) chips.push({ key: `m-${m}`, label: `Медиа: ${MEDIA_OPTS.find((o) => o.value === m)?.label}`, remove: () => commitFilter({ ...filter, media: filter.media.filter((x) => x !== m) }) });
   if (filter.author) chips.push({ key: "a", label: `Владелец: ${authorOptions.find((o) => o.value === filter.author)?.label ?? filter.author}`, remove: () => commitFilter({ ...filter, author: "" }) });
   if (filter.scope !== "all") chips.push({ key: "s", label: `Область: ${SCOPE_OPTS.find((o) => o.value === filter.scope)?.label}`, remove: () => commitFilter({ ...filter, scope: "all" }) });
+  for (const st of filter.states) chips.push({ key: `st-${st}`, label: `Состояние: ${STATE_OPTS.find((o) => o.value === st)?.label.toLowerCase()}`, remove: () => commitFilter({ ...filter, states: filter.states.filter((x) => x !== st) }) });
 
   // Result note when filtering.
   let foundQ = 0;
@@ -634,32 +907,48 @@ export function ContentTree() {
     }
   }
 
-  const isLoading = loadingFolders || loadingTopics || loadingQuestions;
+  const isLoading = dataLoading;
   const activeCount = filterCount(filter);
 
   return (
     <div className="tb-content-tree">
-      <div className="ct-toolbar">
-        <div className="ct-search">
-          <Input iconLeft={<Search size={16} />} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.content.searchPlaceholder} aria-label={t.content.searchPlaceholder} fullWidth />
-        </div>
-        <Button variant={filterOpen || activeCount > 0 ? "secondary" : "ghost"} leadingIcon={<Filter size={16} />} onClick={() => (filterOpen ? setFilterOpen(false) : openFilters())}>
-          {t.content.filters}{activeCount > 0 ? ` (${activeCount})` : ""}
-        </Button>
-        <span className="ct-spacer" />
-        <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
-        <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
-        {filterOpen && <ContentFilters value={draft} onChange={setDraft} onApply={applyFilters} onReset={resetFilters} tagOptions={tagOptions} authorOptions={authorOptions} />}
-      </div>
-
-      {chips.length > 0 && (
-        <div className="ct-chips">
-          <Cluster gap={2} wrap>
-            {chips.map((c) => <Chip key={c.key} size="s" onRemove={c.remove}>{c.label}</Chip>)}
-            <Button variant="ghost" size="s" onClick={resetFilters}>Очистить всё</Button>
-          </Cluster>
-        </div>
-      )}
+      <FilterBar
+        search={<Input size="s" iconLeft={<Search size={16} />} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.content.searchPlaceholder} aria-label={t.content.searchPlaceholder} fullWidth />}
+        count={activeCount}
+        applied={chips.map((c) => ({ id: c.key, label: c.label }))}
+        filterButtonRef={filterButtonRef}
+        filterOpen={filterOpen}
+        onOpenFilter={toggleFilters}
+        onRemove={(id) => chips.find((c) => c.key === id)?.remove()}
+        onReset={resetFilters}
+        {...savedFilters}
+        actions={(
+          <>
+            {canAnalytics && (
+              <SegmentedControl<ColumnSet>
+                size="s"
+                aria-label="Набор колонок"
+                value={columnSet}
+                onChange={setColumnSet}
+                items={[{ value: "content", label: "Содержание" }, { value: "quality", label: "Качество" }]}
+              />
+            )}
+            <FoldAllButtons fold={treeFold} testIdPrefix="ct" />
+          </>
+        )}
+      />
+      <ContentFilters
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorRef={filterButtonRef}
+        value={draft}
+        onChange={setDraft}
+        onApply={applyFilters}
+        onReset={resetDraft}
+        tagOptions={tagOptions}
+        authorOptions={authorOptions}
+        showStates={canAnalytics}
+      />
 
       {contentActive && !isLoading && (
         <div className="ct-filternote">Показано {foundQ} {plural(foundQ, "совпадение", "совпадения", "совпадений")} в {foundTopics} {plural(foundTopics, "теме", "темах", "темах")} · дерево автоматически раскрыто</div>
@@ -721,17 +1010,28 @@ export function ContentTree() {
       ) : topics.length === 0 ? (
         <div className="ct-empty"><Text tone="muted">{t.content.emptyTopics}</Text></div>
       ) : (
-        <div className="ct-tree" aria-label={t.content.title}>
-          <div className="ct-thead">
-            <div>{t.content.colName}</div>
-            <div>{t.content.colOwner}</div>
-            {/* PRD-30 FR-08: the bank is sorted by this index, so the number has
-                to be visible — otherwise the row order is unexplainable. */}
-            <div>{t.content.colOrderIndex}</div>
-            <div>{t.content.colDifficulty}</div>
-            <div>{t.content.colQuestions}</div>
-            <div />
-          </div>
+        <div ref={treeRef} className={`ct-tree${quality ? " ct-tree--quality" : ""}`} aria-label={t.content.title}>
+          {quality ? (
+            <div className="ct-thead">
+              <div>{t.content.colName}</div>
+              <div><TermHint entry="bankReview" /></div>
+              <div><TermHint entry="bankOverexposed" /></div>
+              <div><TermHint entry="bankNeverDelivered" /></div>
+              <div><TermHint entry="bankTests" /></div>
+              <div />
+            </div>
+          ) : (
+            <div className="ct-thead">
+              <div>{t.content.colName}</div>
+              <div>{t.content.colOwner}</div>
+              {/* PRD-30 FR-08: the bank is sorted by this index, so the number has
+                  to be visible — otherwise the row order is unexplainable. */}
+              <div>{t.content.colOrderIndex}</div>
+              <div>{t.content.colDifficulty}</div>
+              <div>{t.content.colQuestions}</div>
+              <div />
+            </div>
+          )}
           <div className="ct-rootrow">
             <span className="ct-ico"><FolderIcon size={16} /></span>
             {/* The bare «(N)» here silently meant QUESTIONS; the tree's totals now
@@ -789,6 +1089,7 @@ export function ContentTree() {
         tagSuggestions={tagOptions}
         onClose={() => setEditorTarget(null)}
         onSaved={invalidateAll}
+        onOpenStatistics={(questionId) => { setEditorTarget(null); openStatistics(questionId); }}
       />
 
       {/* Topic settings / access (create / edit) */}

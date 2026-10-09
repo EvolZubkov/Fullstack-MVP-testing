@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-51 — Отчёт как документ из блоков: карточка редактора
+    Файл: docs/wireframes/prd51-report-document.html
+
+    Показывает карточку «Отчёт о результатах» вкладки «Настройки», в которой автор
+    СОБИРАЕТ документ — тем же способом, что структуру теста.
+
+    Вкладка «Настройки» — это `ou-drawer__split`: рейл подразделов слева и панель
+    справа. Карточка отчёта живёт в подразделе «Основное», ПОСЛЕ карточек «Общая
+    обратная связь теста» и «Вводный текст» (см. `basic-settings-section.tsx`), и
+    показана здесь вместе с ними: место карточки без соседей не прочитать. Пятый
+    пункт рейла, «Адаптивный режим», у обычного теста не рисуется — так же его
+    прячет и код.
+
+    Состояния:
+      s-default      — документ: системные блоки, авторские страницы, разрыв листа
+      s-row-expanded — раскрытая строка авторской страницы с полями PRD-22
+      s-add-palette  — палитра добавления блока
+      s-readonly     — опубликованный тест
+
+    Разметка строк, кнопок-вставки и палитры взята ДОСЛОВНО из утверждённого эскиза
+    структуры (approved/prd7-structure-linear-flat.html и prd7-structure-linear-by-topics.html):
+    механика одна и та же, и своих классов здесь заводить нельзя — расхождение с
+    существующим экраном было бы дефектом, а не свободой.
+
+    Спека: docs/specs/prd-51/report-document-blocks.md §7.
+    Покрывает: FR-15 (строки документа), FR-16 (палитра), FR-17 (раскрытие и read-only),
+    FR-18 (предпросмотр), FR-09 (системный блок гасится, не удаляется).
+  -->
+  <title>PRD-51 — Отчёт: документ из блоков</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* Wireframe-only helpers */
+    .wf-tests-list { filter: blur(0.var(--wf-space-tiny)); opacity: 0.7; pointer-events: none; }
+    .test-card-stub { border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-m); background: var(--ou-bg-surface-2); padding: var(--wf-space-14) var(--ou-space-4); margin-bottom: var(--wf-space-10); display: flex; align-items: center; gap: var(--ou-space-3); }
+    .test-card-stub .test-card-title { font: var(--ou-text-body-m); font-weight: 600; flex: 1; }
+    body.has-active-shell .mobile-section { display: none; }
+
+    /* ─── Строка блока и кнопка-вставка: КОПИЯ правил эскиза структуры ───────── */
+    .page-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; }
+    .page-row__meta {
+      flex-basis: 100%;
+      display: flex; flex-wrap: wrap; gap: var(--wf-space-6);
+      padding-top: var(--wf-space-tiny);
+      margin-left: calc(var(--ou-space-4) + var(--ou-space-2));
+    }
+    .page-row__meta .ou-tag { display: inline-flex; align-items: center; gap: var(--wf-space-tiny); }
+    .page-row:hover { background: var(--ou-bg-hover); }
+    .page-row.dragging { opacity: 0.5; border: var(--wf-border-w) dashed var(--ou-border-default); background: var(--ou-bg-surface-3); }
+    .drag-handle { color: var(--ou-fg-muted); cursor: grab; display: flex; align-items: center; flex-shrink: 0; }
+    .page-variant-badge {
+      font: var(--ou-text-caption); font-weight: 600;
+      padding: var(--wf-space-half) var(--wf-space-6);
+      border-radius: var(--wf-space-1q); flex-shrink: 0;
+      background: var(--ou-bg-surface-3); color: var(--ou-fg-default);
+    }
+    .page-title { font: var(--ou-text-body-s); flex: 1; }
+    .page-actions { display: flex; align-items: center; gap: var(--ou-space-1); flex-shrink: 0; }
+    .page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+    .page-expand-toggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: var(--ou-space-5); height: var(--ou-space-5);
+      flex-shrink: 0; padding: 0; border: 0; background: transparent;
+      color: var(--ou-fg-muted); cursor: pointer; border-radius: var(--ou-radius-xs);
+      transition: transform var(--ou-motion-fast), background var(--ou-motion-fast);
+    }
+    .page-expand-toggle:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+    .page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
+    .page-row.is-expanded { background: var(--ou-bg-surface-2); border-bottom: var(--wf-border-w) dashed var(--ou-border-soft); }
+    .page-row-expand {
+      padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-4) var(--wf-space-14);
+      background: var(--ou-bg-surface-2);
+      border-bottom: var(--wf-border-w) dashed var(--ou-border-soft);
+    }
+    .page-row-expand .ou-formfield { margin-bottom: var(--ou-space-3); }
+    .page-row-expand .ou-formfield:last-child { margin-bottom: 0; }
+
+    .insert-row { display: flex; align-items: center; padding: var(--wf-space-1q) var(--wf-space-14); gap: 0; }
+    .insert-row-line { flex: 1; height: var(--wf-border-w); background: var(--ou-border-default); }
+    .insert-btn {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-caption); color: var(--ou-fg-muted); cursor: pointer;
+      padding: var(--wf-space-half) var(--ou-space-2); border-radius: var(--wf-space-10);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      background: var(--ou-bg-elevated); white-space: nowrap; flex-shrink: 0;
+      margin: 0 var(--wf-space-6);
+      opacity: .55; transition: opacity .12s ease-out, color .12s ease-out, border-color .12s ease-out;
+    }
+    .insert-btn:hover { background: var(--ou-accent-soft); }
+    .page-row:hover + .insert-row .insert-btn,
+    .page-row:focus-within + .insert-row .insert-btn,
+    .insert-row:has(+ .page-row:hover) .insert-btn,
+    .insert-row:has(+ .page-row:focus-within) .insert-btn,
+    .insert-row:hover .insert-btn,
+    .insert-row:focus-within .insert-btn {
+      opacity: 1;
+      color: var(--ou-accent-default);
+      border-color: var(--ou-accent-container-hover);
+    }
+
+    .zone-block { margin-bottom: var(--ou-space-3); border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m); overflow: hidden; }
+    .zone-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--wf-border-w) dashed var(--ou-border-default); }
+    .zone-block > .topic-body { padding: var(--ou-space-2) var(--ou-space-4); }
+    .topic-body { padding: var(--ou-space-1) 0; }
+
+    .variant-search { position: relative; margin-bottom: var(--ou-space-3); }
+    .variant-search__icon { position: absolute; left: var(--ou-space-3); top: 50%; transform: translateY(-50%); color: var(--ou-fg-muted); pointer-events: none; }
+    .variant-search__input {
+      width: 100%; height: var(--ou-size-control-m);
+      padding: 0 var(--ou-space-3) 0 var(--ou-space-7);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-input);
+      font: var(--ou-text-body-m); color: var(--ou-fg-default); outline: none;
+    }
+    .variant-search__input:focus { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+    .variant-list {
+      list-style: none; padding: var(--ou-space-1); margin: 0;
+      max-height: var(--wf-size-360); overflow-y: auto;
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-elevated);
+    }
+    .variant-list__item {
+      display: flex; align-items: flex-start; gap: var(--ou-space-3);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-radius: var(--ou-radius-xs); cursor: pointer;
+    }
+    .variant-list__item:hover { background: var(--ou-bg-hover); }
+    .variant-list__item.is-selected { background: var(--ou-accent-soft); }
+    .variant-list__item.is-selected .variant-list__name { color: var(--ou-accent-on-soft); font-weight: 600; }
+    .variant-list__name { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+    .variant-list__desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--wf-space-half); }
+    .variant-list__check { color: var(--ou-accent-default); flex-shrink: 0; margin-left: auto; opacity: 0; }
+    .variant-list__item.is-selected .variant-list__check { opacity: 1; }
+    .variant-group { font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); padding: var(--ou-space-2) var(--ou-space-3) var(--wf-space-tiny); }
+
+    /* Выключенный блок читается приглушённым названием — данные не печатаются,
+       но строка остаётся на своём месте в списке. */
+    .page-row.is-off .page-title,
+    .page-row.is-off .page-variant-badge { color: var(--ou-fg-muted); opacity: .65; }
+
+    /* Разрыв листа — не карточка и не страница: строка-разделитель. */
+    .page-row--break .page-title {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      color: var(--ou-fg-muted); font: var(--ou-text-caption);
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .page-row--break .page-title::after {
+      content: ""; flex: 1; height: var(--wf-border-w);
+      background: repeating-linear-gradient(90deg, var(--ou-border-default) 0 var(--wf-space-6), transparent var(--wf-space-6) var(--ou-space-3));
+    }
+
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+    /* Ящик и модал ДС прибиты `inset: 0`, а сверху стоит панель состояний эскиза.
+       Сдвигаем их на её высоту, иначе шапка ящика уезжает под панель и не читается. */
+    .wf-state > .ou-drawer-root,
+    .wf-state > .ou-modal-root {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<!-- ─── SVG sprite ─────────────────────────────────────────────────────────── -->
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x"          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-folder"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-question"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></symbol>
+  <symbol id="i-clipboard"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-chart"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="i-users"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-info"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-plus"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-trash"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-pencil"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-grip"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></symbol>
+  <symbol id="i-eye"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-check"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-layout"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-dots"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-scissors"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></symbol>
+  <symbol id="i-file-text"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></symbol>
+  <symbol id="i-lock"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+</svg>
+
+<!-- ─── Background page template ──────────────────────────────────────────── -->
+<template id="tpl-bg-page">
+  <div class="shell active wf-tests-list" aria-hidden="true">
+    <aside class="ou-side">
+      <div class="ou-side__brand"><div class="logo-box">TB</div><div class="brand-text">Test Builder</div></div>
+      <nav class="ou-side__nav">
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+        <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="ou-side__foot"><div class="user-row"><div class="avatar">АИ</div><div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div></div></div>
+    </aside>
+    <div class="main">
+      <div class="ou-shell__header"><span>Тесты</span><button class="ou-btn ou-btn--primary ou-btn--s" type="button">Новый тест</button></div>
+      <div class="content">
+        <div class="test-card-stub"><div class="test-card-title">Сертификация руководителей</div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div class="test-card-stub"><div class="test-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Отчёт: документ из блоков:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-default')">Документ</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-row-expanded')">Правка страницы</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-add-palette')">Добавить блок</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-readonly')">Опубликован</button>
+  <a class="wf-nav-link" href="prd51-certification-report.html">листы отчёта &rarr;</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleDensity(this)">Compact</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-default — документ теста: системные блоки, страницы, разрыв листа
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-default" class="wf-state shell active" data-state="default">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-doc-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-doc-title" class="ou-drawer__title">Сертификация руководителей</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <!-- Рейл подразделов вкладки «Настройки». Пятый пункт «Адаптивный режим»
+               у обычного теста НЕ рисуется — так же его прячет и код
+               (`visibleRailItems` в basic-settings-section). -->
+          <nav class="ou-drawer__rail" aria-label="Подразделы настроек">
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Основное</button>
+            <button type="button" class="ou-drawer__rail-item">Правила прохождения</button>
+            <button type="button" class="ou-drawer__rail-item">Ограничения</button>
+            <button type="button" class="ou-drawer__rail-item">Интеграция</button>
+          </nav>
+          <div class="tb-settings-content">
+            <!-- СОСЕДИ ПО ПАНЕЛИ. Карточка отчёта стоит не одна: выше неё в подразделе
+                 «Основное» идут обратная связь теста и вводный текст, и место карточки
+                 без них не прочитать. Поля «Название», «Описание» и «Сценарий
+                 прохождения», которые идут выше этих карточек, показаны в утверждённом
+                 эскизе approved/prd7-editor-settings-tab.html и здесь не дублируются. -->
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__head"><h2 class="ou-card__title">Общая обратная связь теста</h2></div>
+              <div class="ou-card__body">
+                <div class="tb-feedback-preview">
+                  <div class="tb-feedback-preview__head">
+                    <span class="tb-feedback-preview__snippet">Спасибо за прохождение теста. Результаты придут на вашу почту.</span>
+                    <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Редактировать обратную связь"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+                  </div>
+                </div>
+                <hr class="wf-sep">
+                <div class="ou-formfield">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать правильные ответы после прохождения</span></span></label>
+                </div>
+              </div>
+            </div>
+
+            <hr class="wf-sep">
+
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__head"><h2 class="ou-card__title">Вводный текст</h2></div>
+              <div class="ou-card__body">
+                <label class="ou-formfield__lbl">На экране итогов</label>
+                <div class="tb-feedback-preview">
+                  <div class="tb-feedback-preview__head">
+                    <span class="tb-feedback-preview__snippet">Ниже — ваш результат по каждому разделу.</span>
+                    <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Редактировать: Вводный текст на экране итогов"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+                  </div>
+                </div>
+                <hr class="wf-sep">
+                <div class="ou-formfield">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">В отчёте — тот же текст, что на экране итогов</span><span class="ou-switch-field__desc">Правится в одном месте. Выключите, чтобы задать отчёту своё вводное слово.</span></span></label>
+                </div>
+                <label class="ou-formfield__lbl">В отчёте</label>
+                <div class="tb-feedback-preview">
+                  <div class="tb-feedback-preview__head">
+                    <span class="tb-feedback-preview__snippet">Поздравляем с успешным прохождением тестирования!</span>
+                    <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Редактировать: Вводный текст в отчёте"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="wf-sep">
+
+        <div class="ou-card ou-card--outlined ou-card--sm">
+          <div class="ou-card__head"><h2 class="ou-card__title">Отчёт о результатах</h2></div>
+          <div class="ou-card__body">
+
+            <div class="ou-formfield">
+              <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Выдавать отчёт обучающемуся</span><span class="ou-switch-field__desc">Кнопка «Скачать отчёт» на экране результатов.</span></span></label>
+            </div>
+
+            <span class="wf-annot-wrap--block">
+              <div class="zone-block">
+                <div class="zone-header"><svg width="14" height="14"><use href="#i-file-text"/></svg> Документ</div>
+                <div class="topic-body">
+
+                  <div class="page-row">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-variant-badge">Тёмная карточка</span>
+                    <span class="page-title">Шапка документа</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                    <div class="page-actions">
+                      <label class="ou-switch ou-switch--s is-on" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-variant-badge">Обычный</span>
+                    <span class="page-title">Вводный блок</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                    <div class="page-actions">
+                      <label class="ou-switch ou-switch--s is-on" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Текст задаётся во вкладке «Настройки», блок «Вводный текст»</span>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row page-row--break">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-title"><svg width="12" height="12"><use href="#i-scissors"/></svg> Разрыв листа</span>
+                    <div class="page-actions">
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Удалить"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row is-off">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-variant-badge">Кольцо</span>
+                    <span class="page-title">Сводка баллов</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                    <div class="page-actions">
+                      <label class="ou-switch ou-switch--s" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-variant-badge">Карточки</span>
+                    <span class="page-title">Результаты по темам</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                    <div class="page-actions">
+                      <label class="ou-switch ou-switch--s is-on" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 2 варианта</span>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row page-row--break">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-title"><svg width="12" height="12"><use href="#i-scissors"/></svg> Разрыв листа</span>
+                    <div class="page-actions">
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Удалить"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <button class="page-expand-toggle" type="button" aria-label="Развернуть" aria-expanded="false" onclick="showState(null,'s-row-expanded')"><svg width="14" height="14"><use href="#i-chevron-right"/></svg></button>
+                    <span class="page-variant-badge">Заголовок и текст</span>
+                    <span class="page-title">О тесте</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">страница</span>
+                    <div class="page-actions">
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Предпросмотр блока"><svg width="13" height="13"><use href="#i-eye"/></svg></button>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <button class="page-expand-toggle" type="button" aria-label="Развернуть" aria-expanded="false"><svg width="14" height="14"><use href="#i-chevron-right"/></svg></button>
+                    <span class="page-variant-badge">Три колонки</span>
+                    <span class="page-title">Как читать отчёт</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">страница</span>
+                    <div class="page-actions">
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Предпросмотр блока"><svg width="13" height="13"><use href="#i-eye"/></svg></button>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-variant-badge">Список</span>
+                    <span class="page-title">Рекомендации</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                    <div class="page-actions">
+                      <label class="ou-switch ou-switch--s is-on" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button" onclick="showState(null,'s-add-palette')"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                  <div class="page-row is-off">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <span class="page-variant-badge">Полосы</span>
+                    <span class="page-title">Сводный разрез</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                    <div class="page-actions">
+                      <label class="ou-switch ou-switch--s" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--warning ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Добавлен шаблоном — включите, если нужен в документе</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+              <span class="wf-annot">FR-15, FR-16, FR-09</span>
+            </span>
+
+            <div class="ou-formfield">
+              <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Предпросмотр отчёта</button>
+            </div>
+
+          </div>
+        </div>
+
+
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button" disabled aria-disabled="true">Показать изменения</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button" disabled aria-disabled="true">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+  <div class="wf-notes">
+    <h2 class="wf-notes-title">Пояснения — Документ</h2>
+    <p class="wf-notes-intro">Карточка «Отчёт о результатах» вкладки «Настройки». Автор собирает документ тем же способом, что структуру теста.</p>
+    <table class="wf-notes-table">
+      <thead><tr><th>Элемент</th><th>Поведение</th></tr></thead>
+      <tbody>
+        <tr><td><code>.page-row</code> с тумблером</td><td>Системный блок: гасится, но не удаляется и остаётся на своём месте (FR-09). Выключенный читается приглушённым названием.</td></tr>
+        <tr><td><code>.page-row</code> с <code>.page-expand-toggle</code></td><td>Авторская страница: раскрывается вниз в поля варианта, удаляется через меню строки.</td></tr>
+        <tr><td><code>.page-row--break</code></td><td>Разрыв листа: следующий блок начинается с нового листа. Не раскладка, поэтому ни варианта, ни полей у него нет.</td></tr>
+        <tr><td><code>.drag-handle</code></td><td>Перетаскивание меняет порядок ЛЮБОЙ строки, включая системные: порядок документа принадлежит автору.</td></tr>
+        <tr><td><code>.insert-btn</code></td><td>Кнопка-вставка между строками, видна при наведении на соседнюю строку. Открывает палитру.</td></tr>
+        <tr><td><code>.page-variant-badge</code></td><td>Имя варианта шаблона для этого блока. Меняется пунктом «Сменить вариант» в меню строки; пункт отключён, когда вариант один.</td></tr>
+        <tr><td>Тег «Добавлен шаблоном»</td><td>Блок, появившийся в шаблоне после сборки документа, дописан в КОНЕЦ выключенным (§5.1): в середину чужого документа его молча не вставить, потерять — тоже нельзя.</td></tr>
+        <tr><td>Вводный блок</td><td>Строка есть, полей нет: текст живёт в своей колонке и правится в блоке «Вводный текст» той же вкладки. Строка управляет только МЕСТОМ текста в документе.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-row-expanded — раскрытая строка авторской страницы (поля PRD-22)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-row-expanded" class="wf-state shell" data-state="row-expanded">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-exp-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-exp-title" class="ou-drawer__title">Сертификация руководителей</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки <span class="status-dot dirty" aria-label="Несохранённые изменения" style="margin-left:var(--ou-space-1);display:inline-block;vertical-align:middle;width:8px;height:8px;border-radius:50%;background:var(--ou-accent-default);"></span></button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <!-- Рейл подразделов вкладки «Настройки». Пятый пункт «Адаптивный режим»
+               у обычного теста НЕ рисуется — так же его прячет и код
+               (`visibleRailItems` в basic-settings-section). -->
+          <nav class="ou-drawer__rail" aria-label="Подразделы настроек">
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Основное</button>
+            <button type="button" class="ou-drawer__rail-item">Правила прохождения</button>
+            <button type="button" class="ou-drawer__rail-item">Ограничения</button>
+            <button type="button" class="ou-drawer__rail-item">Интеграция</button>
+          </nav>
+          <div class="tb-settings-content">
+
+        <div class="ou-card ou-card--outlined ou-card--sm">
+          <div class="ou-card__head"><h2 class="ou-card__title">Отчёт о результатах</h2></div>
+          <div class="ou-card__body">
+            <div class="zone-block">
+              <div class="zone-header"><svg width="14" height="14"><use href="#i-file-text"/></svg> Документ</div>
+              <div class="topic-body">
+
+                <div class="page-row">
+                  <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                  <span class="page-variant-badge">Карточки</span>
+                  <span class="page-title">Результаты по темам</span>
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                  <div class="page-actions">
+                    <label class="ou-switch ou-switch--s is-on" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                    <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                  </div>
+                </div>
+                <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                <span class="wf-annot-wrap--block">
+                  <div class="page-row is-expanded">
+                    <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                    <button class="page-expand-toggle" type="button" aria-label="Свернуть" aria-expanded="true" onclick="showState(null,'s-default')"><svg width="14" height="14"><use href="#i-chevron-right"/></svg></button>
+                    <span class="page-variant-badge">Заголовок и текст</span>
+                    <span class="page-title">О тесте</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">страница</span>
+                    <div class="page-actions">
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Предпросмотр блока"><svg width="13" height="13"><use href="#i-eye"/></svg></button>
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="page-row-expand">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="blk-title-1">Заголовок</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="blk-title-1" type="text" value="О тесте"></div></div>
+                    </div>
+                    <div class="ou-rte ou-rte--m ou-rte--full">
+                      <label class="ou-rte__lbl" for="blk-body-1">Текст</label>
+                      <div class="ou-rte__bar">
+                        <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                          <button type="button" class="ou-seg__item">Простой текст</button>
+                          <button type="button" class="ou-seg__item is-active">Форматированный</button>
+                          <button type="button" class="ou-seg__item">HTML</button>
+                        </div>
+                        <div class="ou-rte__tools" role="toolbar" aria-label="Форматирование">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s is-active" aria-label="Полужирный"><b>Ж</b></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Курсив"><i>К</i></button>
+                          <span class="ou-rte__tools-sep" aria-hidden="true"></span>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Маркированный список">&bull;&#8212;</button>
+                        </div>
+                      </div>
+                      <div class="ou-rte__box">
+                        <div class="ou-rte__area" id="blk-body-1" role="textbox" aria-multiline="true" contenteditable="true" style="min-height:8em;">
+                          <p><b>Сертификационный тест для руководителей разработан в 2024 году.</b></p>
+                          <p>Тест был пропилотирован на выборке из более 230 руководителей разных сегментов и функций.</p>
+                          <p>На основе результатов пилотного тестирования проведён психометрический анализ теста, каждое задание проверено на качество.</p>
+                        </div>
+                      </div>
+                      <span class="ou-rte__msg">Форматированный режим показывает результат, а не разметку. Вставленный фрагмент нормализуется на месте.</span>
+                    </div>
+                  </div>
+                  <span class="wf-annot">FR-17, FR-05</span>
+                </span>
+                <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить блок</button><div class="insert-row-line"></div></div>
+
+                <div class="page-row">
+                  <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                  <span class="page-variant-badge">Список</span>
+                  <span class="page-title">Рекомендации</span>
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                  <div class="page-actions">
+                    <label class="ou-switch ou-switch--s is-on" aria-label="Показывать блок"><input class="ou-switch__input" type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label>
+                    <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            <div class="ou-formfield">
+              <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Предпросмотр отчёта</button>
+            </div>
+          </div>
+        </div>
+
+
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Показать изменения</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+  <div class="wf-notes">
+    <h2 class="wf-notes-title">Пояснения — Правка страницы</h2>
+    <p class="wf-notes-intro">Строка авторской страницы раскрывается вниз в поля своего варианта. Второго редактора текста в продукте не появляется.</p>
+    <table class="wf-notes-table">
+      <thead><tr><th>Элемент</th><th>Поведение</th></tr></thead>
+      <tbody>
+        <tr><td><code>.ou-rte</code> + <code>.ou-seg</code></td><td>Тот же контрол, которым автор правит поля контентной страницы. Режимы — «Простой текст», «Форматированный», «HTML»; какие из них доступны, решает ОБЪЯВЛЕННЫЙ шаблоном тип поля, и подняться выше него автор не может.</td></tr>
+        <tr><td>Состав полей</td><td>Задаёт вариант шаблона (<code>placeholders[]</code>). У варианта «Заголовок и текст» их два; у «Трёх колонок» — четыре.</td></tr>
+        <tr><td>Пустое значение</td><td>Область ничего не печатает. Если пусты все поля страницы, в документе не будет ни блока, ни отступа, ни листа (FR-13).</td></tr>
+        <tr><td>Вставка разметки</td><td>Нормализуется на месте: скрипты и обработчики удаляются, авторский <code>&lt;style&gt;</code> запирается в область поля. Ровно то же сервер делает при сохранении и при сборке пакета.</td></tr>
+        <tr><td>Точка «несохранено»</td><td>На вкладке «Настройки», как у остальных черновиков редактора. Кнопка «Сохранить» — одна на весь ящик.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-add-palette — палитра добавления блока
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-add-palette" class="wf-state shell" data-state="add-palette">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dt-pal-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h2 id="dt-pal-title" class="ou-modal__title">Добавить блок</h2>
+          <p class="ou-modal__desc">Блок встанет в документ на место, откуда вы его добавляете.</p>
+        </div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="variant-search">
+          <svg class="variant-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input class="variant-search__input" type="search" placeholder="Поиск блока…" aria-label="Поиск блока">
+        </div>
+        <span class="wf-annot-wrap--block">
+          <ul class="variant-list" role="listbox" aria-label="Блоки документа">
+            <li class="variant-group" role="presentation">Страницы</li>
+            <li class="variant-list__item is-selected" role="option" aria-selected="true" tabindex="0">
+              <div>
+                <div class="variant-list__name">Заголовок и текст</div>
+                <div class="variant-list__desc">Страница из заголовка и одного текстового блока.</div>
+              </div>
+              <svg class="variant-list__check" width="16" height="16"><use href="#i-check"/></svg>
+            </li>
+            <li class="variant-list__item" role="option" aria-selected="false" tabindex="0">
+              <div>
+                <div class="variant-list__name">Три колонки</div>
+                <div class="variant-list__desc">Заголовок и три колонки текста рядом.</div>
+              </div>
+              <svg class="variant-list__check" width="16" height="16"><use href="#i-check"/></svg>
+            </li>
+            <li class="variant-list__item" role="option" aria-selected="false" tabindex="0">
+              <div>
+                <div class="variant-list__name">Текст и картинка</div>
+                <div class="variant-list__desc">Текстовый блок с изображением справа.</div>
+              </div>
+              <svg class="variant-list__check" width="16" height="16"><use href="#i-check"/></svg>
+            </li>
+
+            <li class="variant-group" role="presentation">Служебное</li>
+            <li class="variant-list__item" role="option" aria-selected="false" tabindex="0">
+              <div>
+                <div class="variant-list__name">Разрыв листа</div>
+                <div class="variant-list__desc">Следующий блок начнётся с нового листа документа.</div>
+              </div>
+              <svg class="variant-list__check" width="16" height="16"><use href="#i-check"/></svg>
+            </li>
+
+            <li class="variant-group" role="presentation">Удалённые из документа</li>
+            <li class="variant-list__item" role="option" aria-selected="false" tabindex="0">
+              <div>
+                <div class="variant-list__name">Показатели</div>
+                <div class="variant-list__desc">Вернуть системный блок в документ.</div>
+              </div>
+              <svg class="variant-list__check" width="16" height="16"><use href="#i-check"/></svg>
+            </li>
+          </ul>
+          <span class="wf-annot">FR-16</span>
+        </span>
+      </div>
+      <footer class="ou-modal__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button" onclick="showState(null,'s-default')">Отмена</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button" onclick="showState(null,'s-default')">Добавить</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="wf-notes">
+    <h2 class="wf-notes-title">Пояснения — Добавить блок</h2>
+    <p class="wf-notes-intro">Палитра открывается кнопкой-вставкой между строками и предлагает три группы.</p>
+    <table class="wf-notes-table">
+      <thead><tr><th>Группа</th><th>Что в ней</th></tr></thead>
+      <tbody>
+        <tr><td>Страницы</td><td>Варианты вида <code>page</code>, объявленные активным шаблоном. Их состав — дело шаблона, а не продукта.</td></tr>
+        <tr><td>Служебное</td><td>Разрыв листа. Раскладки у него нет: это инструкция документу, а не блок содержимого.</td></tr>
+        <tr><td>Удалённые из документа</td><td>Системные блоки, которых сейчас нет в списке. Группа не показывается, когда таких нет — пустой заголовок ничего не сообщает.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-readonly — опубликованный тест: документ только для чтения
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-readonly" class="wf-state shell" data-state="readonly">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-ro-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-ro-title" class="ou-drawer__title">Сертификация руководителей</h1></div>
+        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <!-- Рейл подразделов вкладки «Настройки». Пятый пункт «Адаптивный режим»
+               у обычного теста НЕ рисуется — так же его прячет и код
+               (`visibleRailItems` в basic-settings-section). -->
+          <nav class="ou-drawer__rail" aria-label="Подразделы настроек">
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Основное</button>
+            <button type="button" class="ou-drawer__rail-item">Правила прохождения</button>
+            <button type="button" class="ou-drawer__rail-item">Ограничения</button>
+            <button type="button" class="ou-drawer__rail-item">Интеграция</button>
+          </nav>
+          <div class="tb-settings-content">
+
+        <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+          <span class="ou-banner__ico"><svg width="16" height="16"><use href="#i-lock"/></svg></span>
+          <div class="ou-banner__content">
+            <div class="ou-banner__title">Тест опубликован</div>
+            <div class="ou-banner__desc">Документ отчёта не редактируется. Снимите публикацию, чтобы изменить состав блоков.</div>
+          </div>
+        </div>
+
+        <div class="ou-card ou-card--outlined ou-card--sm">
+          <div class="ou-card__head"><h2 class="ou-card__title">Отчёт о результатах</h2></div>
+          <div class="ou-card__body">
+            <div class="ou-formfield">
+              <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-on is-disabled"><input class="ou-switch__input" type="checkbox" checked disabled /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Выдавать отчёт обучающемуся</span></span></label>
+            </div>
+            <div class="zone-block">
+              <div class="zone-header"><svg width="14" height="14"><use href="#i-file-text"/></svg> Документ</div>
+              <div class="topic-body">
+                <div class="page-row">
+                  <span class="page-icon"><svg width="14" height="14"><use href="#i-layout"/></svg></span>
+                  <span class="page-variant-badge">Тёмная карточка</span>
+                  <span class="page-title">Шапка документа</span>
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                </div>
+                <div class="page-row">
+                  <span class="page-icon"><svg width="14" height="14"><use href="#i-layout"/></svg></span>
+                  <span class="page-variant-badge">Карточки</span>
+                  <span class="page-title">Результаты по темам</span>
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">системный</span>
+                </div>
+                <div class="page-row page-row--break">
+                  <span class="page-title"><svg width="12" height="12"><use href="#i-scissors"/></svg> Разрыв листа</span>
+                </div>
+                <div class="page-row">
+                  <span class="page-icon"><svg width="14" height="14"><use href="#i-file-text"/></svg></span>
+                  <span class="page-variant-badge">Заголовок и текст</span>
+                  <span class="page-title">О тесте</span>
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">страница</span>
+                  <div class="page-actions">
+                    <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Предпросмотр блока"><svg width="13" height="13"><use href="#i-eye"/></svg></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="ou-formfield">
+              <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Предпросмотр отчёта</button>
+            </div>
+          </div>
+        </div>
+
+
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Закрыть</button>
+      </footer>
+    </aside>
+  </div>
+  <div class="wf-notes">
+    <h2 class="wf-notes-title">Пояснения — Опубликован</h2>
+    <p class="wf-notes-intro">Опубликованный тест документ не редактирует.</p>
+    <table class="wf-notes-table">
+      <thead><tr><th>Элемент</th><th>Поведение</th></tr></thead>
+      <tbody>
+        <tr><td>Ручка перетаскивания</td><td>Убрана: порядок не меняется. На её месте — иконка природы блока, чтобы строка не выглядела обрубленной.</td></tr>
+        <tr><td>Тумблеры и меню</td><td>Убраны. Остаётся предпросмотр блока: смотреть можно всегда.</td></tr>
+        <tr><td>Кнопки-вставки</td><td>Не рисуются вовсе: добавить нечего, а пустая направляющая обещала бы действие.</td></tr>
+        <tr><td>Предпросмотр отчёта</td><td>Доступен: автору важно видеть документ, который уносит слушатель.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!-- КАРТОЧКА НАЗВАНИЯ и ЗОНТИК стоят здесь, а не в шапке. В эталоне они идут ПОСЛЕ
+     вводного блока автора, и в шапке печатались бы до него — перенос менял бы порядок
+     документа. Уходят они в начало тем, а не в конец вводного блока: вводный блок
+     принадлежит автору, и вешать на него служебные узлы документа неправильно.
+     Следствие, которое автор увидит: выключив темы, он потеряет и название с зонтиком.
+     Для адаптивного отчёта это приемлемо — без тем документ пуст по существу. -->
+<section class="tb-report__card">
+  <div class="tb-report__title tb-report__title--solid" data-path="course.title"></div>
+</section>
+
+<!-- ЗОНТИК «Ваш результат» — та же надпись и то же место в иерархии, что на адаптивных
+     итогах: он покрывает темы, шкалы и показатели. Формулировку и показ задаёт автор
+     одним тумблером на все экраны; выключен — заголовка нет, разделы остаются. -->
+{{#if labels.results.heading}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.heading }}</div>{{/if}}
+
+<!-- ЗАГОЛОВКИ РАЗДЕЛОВ приходят словарём надписей (PRD-49) — те же ключи, что у обычного
+     отчёта и у экрана итогов: формулировка принадлежит тесту, а не режиму выдачи. Пустая
+     надпись означает «не печатать»: раздел остаётся, заголовка у него нет. -->
+{{#if report.hasTopics}}
+<section class="tb-report__card">
+  {{#if labels.results.topics}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.topics }}</div>{{/if}}
+  <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
+    {{#each result.topicResults}}
+    <div class="tb-report__topic tb-report__topic--level {{ achievedClass }}">
+      <div class="tb-report__topic-stripe"></div>
+      <div class="tb-report__topic-head">
+        <div class="tb-report__topic-name">{{ topicName }}</div>
+        <div class="tb-report__topic-level">{{ levelLabel }}</div>
+      </div>
+      {{#if hasCounts}}
+      <div class="tb-report__topic-counts">
+        <div>{{ answeredLabel }}</div>
+        <div>{{ correctLabel }}</div>
+      </div>
+      {{/if}}
+      {{#if hasFeedback}}<div class="tb-report__topic-fb tb-report__topic-fb--sep">{{ feedback }}</div>{{/if}}
+    </div>
+    {{/each}}
+  </div>
+</section>
+{{/if}}

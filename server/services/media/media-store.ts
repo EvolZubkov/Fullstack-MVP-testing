@@ -57,11 +57,35 @@ function checksumOf(filePath: string): Promise<string> {
 }
 
 /** Filesystem-backed store rooted at `root`. */
+/**
+ * Move a file into the store. A rename is atomic and cheap, but only within one filesystem: in a
+ * container the source often sits in `/tmp` (the image layer) while the root is a mounted volume,
+ * and the rename then fails with `EXDEV`. That is the case the scenario archive and the `.tbtest`
+ * import hit on the server — and never on a developer machine, where everything is one disk. Across
+ * filesystems the file is copied and the source removed.
+ */
+function moveFile(sourcePath: string, target: string): void {
+  try {
+    fs.renameSync(sourcePath, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+    fs.copyFileSync(sourcePath, target);
+    fs.rmSync(sourcePath, { force: true });
+  }
+}
+
 export function createFsMediaStore(root: string): MediaStore {
   const absRoot = path.resolve(root);
 
   /** Resolves a key inside the root, refusing anything that escapes it. */
   function resolveKey(storageKey: string): string {
+    // A Windows drive or UNC path is refused on EVERY platform. On POSIX `C:\…` is not
+    // absolute but a file name with backslashes, so the root check below would let it
+    // through there and refuse it only on Windows; a key never has that shape anyway
+    // (see `storageKeyFor`), and the store must not answer differently per OS.
+    if (path.win32.isAbsolute(storageKey)) {
+      throw new Error(`storage key resolves outside the media root: ${storageKey}`);
+    }
     const abs = path.resolve(absRoot, storageKey);
     const rootWithSep = absRoot.endsWith(path.sep) ? absRoot : absRoot + path.sep;
     if (abs !== absRoot && !abs.startsWith(rootWithSep)) {
@@ -81,7 +105,7 @@ export function createFsMediaStore(root: string): MediaStore {
         fs.rmSync(sourcePath, { force: true });
       } else {
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.renameSync(sourcePath, target);
+        moveFile(sourcePath, target);
       }
       return { storageKey, checksum, byteSize };
     },

@@ -20,6 +20,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { startImageForVariant } from "../shared/template/start-image";
+import { TEMPLATE_IDS, templateManifest } from "./helpers/template-roots";
 
 const manifestOf = (rel: string) =>
   JSON.parse(readFileSync(resolve(process.cwd(), rel), "utf8")) as {
@@ -48,10 +49,8 @@ function makeResolver(testData: unknown, tbTemplate: unknown, manifest?: unknown
 }
 
 describe("templates declare the start illustration as a page property", () => {
-  for (const rel of [
-    "server/scorm/templates/default/manifest.json",
-    "templates/certification/manifest.json",
-  ]) {
+  // Все три шаблона: свойство картинки объявляет каждый, иначе редактор не покажет поле.
+  for (const rel of TEMPLATE_IDS.map((id) => templateManifest(id))) {
     it(`${rel}: start.image-right offers an image property`, () => {
       const variant = (manifestOf(rel).contentTemplates ?? []).find((c) => c.key === "start.image-right");
       expect(variant, "the variant must exist").toBeTruthy();

@@ -106,6 +106,13 @@ describe("limits в конфигурации", () => {
     expect(config.limits.participantsImportMaxRows).toBe(500);
     expect(config.limits.passwordEmailsPerHour).toBe(3);
   });
+
+  // PRD-57 FR-28v: потолок длины короткого ответа. 250 — рекомендация SCORM 2004 для
+  // взаимодействия `fill-in`; поведение WebTutor на этом пределе ещё не измерено (#51),
+  // поэтому число живёт в настройках, а не в коде.
+  it("несёт системный потолок длины короткого ответа", () => {
+    expect(config.limits.shortAnswerMaxLength).toBe(250);
+  });
 });
 
 describe("потолок строк книги берётся из настроек", () => {

@@ -74,6 +74,20 @@ describe("buildMeasureView", () => {
     expect(ee().maxText).toBe("45");
   });
 
+  it("молчит о максимуме, когда автор его выключил", () => {
+    const v = ee({ showMax: false });
+    expect(v.maxText).toBe("");
+    expect(v.valueLabel).toBe("27");
+    // Домен остаётся при деле: он и дальше кладёт маркер и красит зоны — выключен
+    // ПОКАЗ числа, а не сама шкала.
+    expect(v.markerPercent).toBe(60);
+    expect(v.zones).toHaveLength(3);
+  });
+
+  it("печатает максимум, когда параметра нет вовсе", () => {
+    expect(ee({ showMax: undefined }).maxText).toBe("45");
+  });
+
   it("ставит засечки на края домена и начала интервалов", () => {
     expect(ee().marks).toEqual([
       { percent: 0, label: "0" },
@@ -331,12 +345,17 @@ describe("gradient_bar: шкала без уровней", () => {
     });
   }
 
-  it("рисует ОДНУ полосу во всю длину домена", () => {
+  it("заливает ОДНУ полосу от начала домена до значения", () => {
     const view = style();
     expect(view.renderKind).toBe("gradient_bar");
     expect(view.zones).toHaveLength(1);
     expect(view.zones[0].leftPercent).toBe(0);
-    expect(view.zones[0].widthPercent).toBe(100);
+    // 40 из 0..98 — столбик градусника занимает 40.8 %, остальное остаётся дорожкой.
+    expect(view.zones[0].widthPercent).toBeCloseTo(40.8, 1);
+  });
+
+  it("заливает всю длину, когда значение стоит на верхнем краю домена", () => {
+    expect(style({ value: 98 }).zones[0].widthPercent).toBe(100);
   });
 
   it("ставит маркер по положению значения в домене", () => {

@@ -8,6 +8,8 @@
  * `sort_order` (error, guarantees an acyclic indicator graph — scoring-model
  * §10.9), `scaleById` resolves to warnings while scales are unavailable (Этап A),
  * and `countScales` level arguments that fall outside a scale's band levels warn.
+ * PRD-50 FR-36: a `tag("<section>::<key>")` composite key checks its section part
+ * strictly and its key part as a warning.
  */
 
 import {
@@ -19,6 +21,7 @@ import {
   FormulaSyntaxError,
 } from "./types";
 import { parse } from "./parser";
+import { parseGroupThreshold } from "./scale-group";
 
 /** Infer a coarse return type from the AST shape. `unknown` skips type checking. */
 function inferType(node: Ast): ValueType | "unknown" {
@@ -41,6 +44,9 @@ function inferType(node: Ast): ValueType | "unknown" {
     case "scaleRank":
       // `key`/`label` are strings, the rest numbers — the same split the accessor uses.
       return node.prop === "key" || node.prop === "label" ? "string" : "number";
+    case "scaleGroup":
+      // `code` — строка-набор, `count`/`max` — числа. Тот же раскол, что у ранга.
+      return node.prop === "code" ? "string" : "number";
     case "var":
       return "unknown";
     case "unary":
@@ -117,6 +123,24 @@ export function validate(
       if (n.fn === "sectionById" && refs.sectionKeys && !refs.sectionKeys.has(n.arg)) {
         errors.push({ code: "unknown-section", message: `Неизвестная секция «${n.arg}»` });
       }
+      if (n.fn === "tag" && n.arg.includes("::")) {
+        // PRD-50 FR-36: composite key «<section>::<key>». The section part is checked
+        // strictly — a typo there yields an eternal zero; the key itself only warns,
+        // since it may well have been added to the questions afterwards. Split on the
+        // FIRST separator only: the section id never contains one, while a breakdown key
+        // may, and `split("::")[1]` would then check a truncated key.
+        // Checked against `refs.scopeKeys`, NOT `refs.sectionKeys` — see the JSDoc on
+        // `ValidationRefs.scopeKeys` for why the two must stay independent.
+        const sep = n.arg.indexOf("::");
+        const scopeKey = n.arg.slice(0, sep);
+        const tagKey = n.arg.slice(sep + 2);
+        if (refs.scopeKeys && !refs.scopeKeys.has(scopeKey)) {
+          errors.push({ code: "unknown-section", message: `Неизвестная секция «${scopeKey}»` });
+        }
+        if (refs.tagKeys && refs.tagKeys.size > 0 && !refs.tagKeys.has(tagKey)) {
+          warnings.push({ code: "tag-unresolved", message: `Ключ «${tagKey}» не найден в вопросах теста` });
+        }
+      }
       if (n.fn === "scaleById") {
         const known = refs.scaleKeys && refs.scaleKeys.size > 0 && refs.scaleKeys.has(n.arg);
         if (!known) {
@@ -160,6 +184,52 @@ export function validate(
         warnings.push({
           code: "scale-rank-key",
           message: "Ключи шкал должны совпадать с кодами исходов показателя",
+        });
+      }
+    }
+    if (n.type === "scaleGroup") {
+      if (n.keys.length < 2) {
+        errors.push({
+          code: "scale-group-small",
+          message: "В группе профиля нужны хотя бы две шкалы",
+        });
+      }
+      const threshold = parseGroupThreshold(n.threshold);
+      if (threshold === null) {
+        errors.push({
+          code: "scale-group-threshold",
+          message: "Порог верхней зоны — неотрицательное число или строка вида «10%»",
+        });
+      }
+      if (refs.scaleKeys && refs.scaleKeys.size > 0) {
+        for (const key of n.keys) {
+          if (!refs.scaleKeys.has(key)) {
+            errors.push({ code: "unknown-scale", message: `Неизвестная шкала «${key}»` });
+          }
+        }
+      }
+      // Абсолютный порог на группе с разной нормализацией сравнивает несопоставимые величины:
+      // у одной шкалы «5» это пять баллов, у другой — пять процентов. Долевой порог от этого
+      // свободен, поэтому предупреждение только для абсолютного.
+      if (threshold?.kind === "abs" && refs.scaleNormalizations) {
+        const modes = new Set(
+          n.keys.map((key) => refs.scaleNormalizations?.[key]).filter((mode): mode is string => !!mode),
+        );
+        if (modes.size > 1) {
+          warnings.push({
+            code: "scale-group-normalization",
+            message:
+              "Шкалы группы нормализованы по-разному: порог в баллах сравнивает несопоставимые" +
+              " величины. Задайте порог долей от максимума",
+          });
+        }
+      }
+      if (n.prop === "code") {
+        // Проверить, что коды исходов покрывают все наборы, здесь нельзя: коды приходят из
+        // ДАННЫХ показателя, а не из формулы. Отсюда подсказка, а не ошибка — как у `topScale`.
+        warnings.push({
+          code: "scale-group-code",
+          message: "Коды исходов должны быть наборами ключей шкал через «+»",
         });
       }
     }

@@ -19,6 +19,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { chooseQuestionType } from "./helpers/question-type";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Question, Topic } from "@shared/schema";
 
@@ -32,7 +33,10 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 // Capture toast calls so the destructive guard toasts (base64 / unsupported /
 // upload failure) can be asserted.
 const toastMock = vi.hoisted(() => vi.fn());
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastMock, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
 
@@ -205,7 +209,7 @@ describe("<QuestionEditorDrawer /> — media type inference & preview", () => {
 describe("<QuestionEditorDrawer /> — matching builder", () => {
   it("edits a right-column cell (updateRight)", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Соответствие" }));
+    chooseQuestionType("Соответствие");
 
     const right0 = screen.getByTestId("input-matching-right-0") as HTMLInputElement;
     fireEvent.change(right0, { target: { value: "Мяу" } });
@@ -214,7 +218,7 @@ describe("<QuestionEditorDrawer /> — matching builder", () => {
 
   it("auto-links a left cell once, then skips when it already owns a pair", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Соответствие" }));
+    chooseQuestionType("Соответствие");
 
     const left0 = screen.getByTestId("input-matching-left-0") as HTMLInputElement;
     // First edit creates the {left:0,right:0} pair (auto-link true branch)…
@@ -336,7 +340,7 @@ describe("<QuestionEditorDrawer /> — option removal & type switching", () => {
 
   it("remaps multiple-choice correct indices when a middle option is removed", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Несколько ответов" }));
+    chooseQuestionType("Несколько ответов");
     // Carried [0] from single; also mark option 3 (index 2) → [0, 2].
     fireEvent.click(screen.getByRole("checkbox", { name: "Вариант ответа 3" }));
     // Delete option 2 (index 1): [0,2] → filter 1 out → map i>1?i-1 → [0,1].
@@ -348,24 +352,24 @@ describe("<QuestionEditorDrawer /> — option removal & type switching", () => {
   it("carries the single correct index into multiple choice (prev === single)", () => {
     renderDrawer();
     fireEvent.click(screen.getByRole("radio", { name: "Правильный ответ 3" }));
-    fireEvent.click(screen.getByRole("button", { name: "Несколько ответов" }));
+    chooseQuestionType("Несколько ответов");
     expect(screen.getByRole("checkbox", { name: "Вариант ответа 3" })).toBeChecked();
   });
 
   it("carries the first multiple index back into single choice (prev === multiple)", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Несколько ответов" }));
+    chooseQuestionType("Несколько ответов");
     // Reset carried [0] → select only index 2.
     fireEvent.click(screen.getByRole("checkbox", { name: "Вариант ответа 1" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Вариант ответа 3" }));
-    fireEvent.click(screen.getByRole("button", { name: "Один ответ" }));
+    chooseQuestionType("Один ответ");
     expect(screen.getByRole("radio", { name: "Правильный ответ 3" })).toBeChecked();
   });
 
   it("falls back to index 0 switching from ranking to single (prev neither)", () => {
     renderDrawer();
-    fireEvent.click(screen.getByRole("button", { name: "Ранжирование" }));
-    fireEvent.click(screen.getByRole("button", { name: "Один ответ" }));
+    chooseQuestionType("Ранжирование");
+    chooseQuestionType("Один ответ");
     expect(screen.getByRole("radio", { name: "Правильный ответ 1" })).toBeChecked();
   });
 });
@@ -375,7 +379,7 @@ describe("<QuestionEditorDrawer /> — option removal & type switching", () => {
 describe("<QuestionEditorDrawer /> — create save builds per-type payload", () => {
   it("POSTs a multiple-choice payload with correctIndices", async () => {
     const { onSaved } = renderDrawer({ defaultTopicId: "t1" });
-    fireEvent.click(screen.getByRole("button", { name: "Несколько ответов" }));
+    chooseQuestionType("Несколько ответов");
     fireEvent.change(screen.getByTestId("input-question-prompt"), { target: { value: "Чётные?" } });
     fireEvent.change(screen.getByTestId("input-multi-option-0"), { target: { value: "Два" } });
     fireEvent.change(screen.getByTestId("input-multi-option-1"), { target: { value: "Четыре" } });
@@ -393,7 +397,7 @@ describe("<QuestionEditorDrawer /> — create save builds per-type payload", () 
 
   it("POSTs a matching payload with left/right columns and pairs", async () => {
     const { onSaved } = renderDrawer({ defaultTopicId: "t1" });
-    fireEvent.click(screen.getByRole("button", { name: "Соответствие" }));
+    chooseQuestionType("Соответствие");
     fireEvent.change(screen.getByTestId("input-question-prompt"), { target: { value: "Сопоставьте" } });
     // Filling the first left cell auto-links pair {0,0}.
     fireEvent.change(screen.getByTestId("input-matching-left-0"), { target: { value: "Кошка" } });
@@ -413,7 +417,7 @@ describe("<QuestionEditorDrawer /> — create save builds per-type payload", () 
 
   it("POSTs a ranking payload with a derived correctOrder", async () => {
     const { onSaved } = renderDrawer({ defaultTopicId: "t1" });
-    fireEvent.click(screen.getByRole("button", { name: "Ранжирование" }));
+    chooseQuestionType("Ранжирование");
     fireEvent.change(screen.getByTestId("input-question-prompt"), { target: { value: "Порядок" } });
     fireEvent.change(screen.getByTestId("input-ranking-0"), { target: { value: "Один" } });
     fireEvent.change(screen.getByTestId("input-ranking-1"), { target: { value: "Два" } });
@@ -441,7 +445,7 @@ describe("<QuestionEditorDrawer /> — create save builds per-type payload", () 
     fireEvent.click(submit);
 
     await waitFor(() =>
-      expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
   });
 });

@@ -6,7 +6,10 @@
  * section (see `GET /api/admin/templates/docs/:doc`).
  *
  * Pipeline: Markdown -> HTML (markdown-it, inline print CSS) -> PDF (headless
- * Chrome `--print-to-pdf`). No network, no emoji. Chrome is located via
+ * Chrome `--print-to-pdf`). Headings get GitHub-compatible `id` anchors so the
+ * hand-written tables of contents stay clickable inside the PDF (without them
+ * Chrome has no destination to link to and the entries render as dead text).
+ * No network, no emoji. Chrome is located via
  * `DOCS_PDF_CHROME` / `CHROME_BIN` or a small list of common install paths, so the
  * script stays portable across machines. Run with `npm run docs:pdf`.
  *
@@ -89,6 +92,24 @@ const PRINT_CSS = `
 `;
 
 /**
+ * GitHub-compatible heading slug: lower-case the text, drop every character
+ * that is neither a letter/digit nor space, hyphen or underscore (dots,
+ * guillemets, em dashes, backticks), then turn spaces into hyphens. Cyrillic
+ * letters survive, so the anchors written by hand in the guides
+ * (`#3-тема--папка-для-вопросов`) match the generated ids one for one.
+ *
+ * @param {string} text - raw heading text.
+ * @returns {string} the anchor id.
+ */
+function slugify(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} \-_]/gu, "")
+    .replace(/ /g, "-");
+}
+
+/**
  * Render one Markdown file into a full, self-contained HTML document string.
  *
  * Relative image paths are rewritten to absolute `file://` URLs against
@@ -108,11 +129,48 @@ function renderHtml(markdown, title, baseDir) {
     }
     return renderImage(tokens, idx, options, env, self);
   };
+  // Heading anchors: markdown-it emits bare <h2>, so `#section` links have
+  // nowhere to land. Ids are the destinations Chrome turns into in-PDF links.
+  const ids = new Set();
+  const seen = new Map();
+  const renderToken = (tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options);
+  const renderHeadingOpen = md.renderer.rules.heading_open || renderToken;
+  md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
+    const base = slugify(tokens[idx + 1]?.content || "");
+    if (base) {
+      const n = seen.get(base) || 0;
+      seen.set(base, n + 1);
+      const id = n ? `${base}-${n}` : base;
+      tokens[idx].attrSet("id", id);
+      ids.add(id);
+    }
+    return renderHeadingOpen(tokens, idx, options, env, self);
+  };
+  // Same-document link targets, collected to report a table of contents that
+  // silently stopped matching its headings.
+  const fragments = [];
+  const renderLinkOpen = md.renderer.rules.link_open || renderToken;
+  md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    const href = tokens[idx].attrGet("href") || "";
+    if (href.startsWith("#")) fragments.push(decodeFragment(href.slice(1)));
+    return renderLinkOpen(tokens, idx, options, env, self);
+  };
   const body = md.render(markdown);
-  return `<!doctype html>
+  const missing = [...new Set(fragments)].filter((f) => !ids.has(f));
+  const html = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>${PRINT_CSS}</style></head>
 <body>${body}</body></html>`;
+  return { html, missing };
+}
+
+/** markdown-it percent-encodes link hrefs; heading ids stay raw UTF-8. */
+function decodeFragment(fragment) {
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
 }
 
 function escapeHtml(s) {
@@ -139,7 +197,17 @@ function main() {
     // Timestamp of the previous build, if any: the only reliable proof that this
     // run actually replaced the file (see the check after Chrome exits).
     const mtimeBefore = existsSync(doc.out) ? statSync(doc.out).mtimeMs : 0;
-    const html = renderHtml(readFileSync(doc.src, "utf8"), doc.title, path.dirname(doc.src));
+    const { html, missing } = renderHtml(
+      readFileSync(doc.src, "utf8"),
+      doc.title,
+      path.dirname(doc.src),
+    );
+    if (missing.length) {
+      console.warn(
+        `ВНИМАНИЕ  ${path.relative(REPO_ROOT, doc.src)}: ссылки без заголовка-цели (${missing.length}): ` +
+          missing.join(", "),
+      );
+    }
     const tmpHtml = doc.out.replace(/\.pdf$/, ".tmp.html");
     writeFileSync(tmpHtml, html, "utf8");
     // A throwaway profile dir avoids clobbering the user's Chrome session.

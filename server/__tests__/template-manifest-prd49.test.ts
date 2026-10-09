@@ -82,9 +82,11 @@ describe("validateLabelDeclarations", () => {
 });
 
 /**
- * The 15 keys the results screens and their recommendations block need (PRD-49 spec §3
- * table). Order is not asserted — the manifest is free to group them however it likes;
- * only presence and a non-empty `default` matter here.
+ * The 20 keys the results screens and their recommendations block need (PRD-49 spec §3
+ * table + PRD-50 FR-34's topic-verdict and group-counter wording). Order is not asserted
+ * — the manifest is free to group them however it likes; only presence and a non-empty
+ * `default` matter here (see {@link EMPTY_DEFAULT_ALLOWED} for the one deliberate
+ * exception).
  */
 const EXPECTED_KEYS = [
   "results.heading",
@@ -93,6 +95,7 @@ const EXPECTED_KEYS = [
   "results.scales",
   "results.indicators",
   "results.topics",
+  "results.breakdown",
   "recommendations.courses",
   "recommendations.events",
   "recommendations.assets",
@@ -101,8 +104,20 @@ const EXPECTED_KEYS = [
   "facts.points",
   "topic.correct",
   "topic.points",
+  "topic.verdict.passed",
+  "topic.verdict.failed",
+  "topic.verdict.unknown",
+  "group.counter",
   "section.eyebrow",
 ];
+
+/**
+ * PRD-50 FR-34: `topic.verdict.unknown` is the one label ALLOWED an empty `default`. Every
+ * other label prints something whenever it renders at all; this one is the exception on
+ * purpose — a topic with no pronounced verdict shows NO tag today, and a non-empty default
+ * would change that for every test that never opens this field.
+ */
+const EMPTY_DEFAULT_ALLOWED = new Set(["topic.verdict.unknown"]);
 
 interface LabelDecl {
   key: string;
@@ -117,11 +132,12 @@ const manifest = JSON.parse(
 ) as { labels?: LabelDecl[]; resultsBlockOrder?: Record<string, string[]> };
 
 describe("манифест «Стандартного»: объявление надписей (PRD-49)", () => {
-  it("объявляет все 15 ключей с непустым default", () => {
+  it("объявляет все 20 ключей, с непустым default кроме заявленного исключения", () => {
     const declared = manifest.labels ?? [];
     expect(declared.map((d) => d.key).sort()).toEqual([...EXPECTED_KEYS].sort());
     for (const decl of declared) {
       expect(typeof decl.default, decl.key).toBe("string");
+      if (EMPTY_DEFAULT_ALLOWED.has(decl.key)) continue;
       expect(decl.default.length, decl.key).toBeGreaterThan(0);
     }
   });
@@ -134,9 +150,13 @@ describe("манифест «Стандартного»: объявление н
     // Состав у экранов разный, а не только порядок: на адаптивных итогах сводки баллов
     // нет и никогда не было (в макете нет ни `hideScoreSummary`, ни блока сводки), и
     // отсутствие ключа `summary` в списке — это и есть «на этом экране сводки не бывает».
+    // PRD-50 FR-28: `breakdown` замыкает ОБА экрана — сводный разрез читается после
+    // разделов, из которых он сведён. На адаптивных итогах (Э5) он печатается тем же
+    // блоком `{{#if isBreakdown}}`, что и на обычных, поэтому ключ объявлен и здесь;
+    // вложенных полос там по-прежнему нет — только сводные.
     expect(manifest.resultsBlockOrder).toEqual({
-      default: ["summary", "scales", "indicators", "topics"],
-      "results.adaptive": ["topics", "scales", "indicators"],
+      default: ["summary", "scales", "indicators", "topics", "breakdown"],
+      "results.adaptive": ["topics", "scales", "indicators", "breakdown"],
     });
   });
 });

@@ -529,12 +529,14 @@ describe("POST /api/questions/import — error branches", () => {
     expect(res.body.error).toMatch(/file required/i);
   });
 
-  it("500 when the uploaded buffer is not a valid workbook", async () => {
+  // A buffer that is not a workbook is a CLIENT error: the reader yields no worksheet and
+  // the route answers 400 «Failed to read file» instead of crashing into the 500 branch.
+  it("400 when the uploaded buffer is not a valid workbook", async () => {
     const garbage = Buffer.from("not an xlsx file at all");
     const res = await asAuthor(
       request(app).post("/api/questions/import").attach("file", garbage, "broken.xlsx"),
     );
-    expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/failed to import/i);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/failed to read file/i);
   });
 });

@@ -77,17 +77,50 @@
     return after.preResults;
   }
 
+  /**
+   * Исходы пунктов, какими их читает хаб: зафиксированный при возврате признак «пройден»
+   * (`state.sectionPassed`, техдолг №8) поверх результатов экранов итогов раздела. Признак свежее:
+   * повторный прогон сценария меняет исход, а экран итогов раздела мог и не показываться.
+   */
+  function hubSectionResults() {
+    var out = {};
+    var shown = state.sectionResults || {};
+    Object.keys(shown).forEach(function (key) { out[key] = shown[key]; });
+    var frozen = state.sectionPassed || {};
+    Object.keys(frozen).forEach(function (key) { out[key] = { passed: frozen[key] }; });
+    return out;
+  }
+
+  /**
+   * Зафиксировать, пройден ли пункт, — при КАЖДОМ возврате в хаб из завершённого пункта.
+   * Без этого «Открывается после успешного прохождения» и политика «все обязательные пройдены»
+   * видели исход только там, где тест показывает итоги раздела. Адаптивную тему оценивает движок:
+   * его результат уже лежит в `sectionResults`. Пункт без порога — `null`: его нельзя не пройти.
+   */
+  function freezeSectionPass(topicId) {
+    if (!topicId) return;
+    var passed = null;
+    if (TEST_DATA.mode === "adaptive") {
+      var adaptive = (state.sectionResults || {})[topicId];
+      passed = adaptive && typeof adaptive.passed === "boolean" ? adaptive.passed : null;
+    } else if (typeof buildSectionResult === "function") {
+      var built = buildSectionResult(topicId);
+      passed = built && typeof built.passed === "boolean" ? built.passed : null;
+    }
+    if (!state.sectionPassed) state.sectionPassed = {};
+    state.sectionPassed[topicId] = passed;
+  }
+
   /** The hub state the shared rules read (topic states + frozen results + policy). */
   function hubState() {
     return {
       topicStates: state.routerTopicStates || {},
-      sectionResults: state.sectionResults || {},
+      sectionResults: hubSectionResults(),
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
-      // PRD-19: a completed section's card shows its pass/fail only when the test
-      // reveals section results; otherwise the hub keeps it a neutral «Завершена».
-      showSectionResults: TEST_DATA.showSectionResults !== false,
+      // Техдолг №7: «менять ответ» разрешает пройти завершённый пункт-сценарий заново.
+      rerunScenarios: !!TEST_DATA.allowAnswerChange,
     };
   }
 
@@ -136,7 +169,15 @@
     if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
     var hub = document.createElement("div");
     hub.className = "router-hub";
-    hub.innerHTML = TBTemplate.buildRouterHubHtml(TEST_DATA.sections || [], hubState(), {
+    // A card states how many questions the learner WILL answer — this run's delivery, not the
+    // configured draw (owner's decision 2026-10-08, host parity Г1; `deliveredQuestionCount`).
+    var hubSections = (TEST_DATA.sections || []).map(function (s) {
+      var copy = {};
+      for (var k in s) copy[k] = s[k];
+      copy.drawCount = typeof deliveredQuestionCount === "function" ? deliveredQuestionCount(s) : s.drawCount;
+      return copy;
+    });
+    hub.innerHTML = TBTemplate.buildRouterHubHtml(hubSections, hubState(), {
       deadline: TEST_DATA.deadline || null,
     });
     host.appendChild(hub);
@@ -148,7 +189,14 @@
         var action = el.getAttribute("data-action") || "";
         if (action.indexOf("router-select:") === 0) {
           var topicId = action.slice("router-select:".length);
-          el.onclick = function () { selectRouterTopic(topicId); };
+          el.onclick = function () {
+            // «Сценарий в ИС»: полный экран браузер даёт только в самом щелчке — позже,
+            // после отрисовки плеера, просьба опоздала бы. Ключ пункта — `scenario:<id>`.
+            if (topicId.indexOf("scenario:") === 0 && typeof TBSimRun !== "undefined") {
+              TBSimRun.requestFullscreen();
+            }
+            selectRouterTopic(topicId);
+          };
         } else if (action === "router-finish") {
           el.onclick = finishRouter;
         }
@@ -224,7 +272,17 @@
    */
   function selectRouterTopic(topicId) {
     if (!isRouterMode()) return;
-    if (state.routerTopicStates[topicId] === "completed") return;
+    if (state.routerTopicStates[topicId] === "completed") {
+      // Техдолг №7: завершённый пункт-сценарий проходится заново, если тест разрешает менять
+      // ответ; плеер получает разрешение на ОДИН повторный прогон этого пункта.
+      var rerun = topicId.indexOf("scenario:") === 0 && !!TEST_DATA.allowAnswerChange
+        && typeof TBSimRun !== "undefined";
+      if (!rerun) return;
+      TBSimRun.allowRerun(topicId);
+      // Исход прежнего прогона больше не действует: его зафиксирует возврат из нового.
+      if (state.sectionPassed) delete state.sectionPassed[topicId];
+      if (state.sectionResults) delete state.sectionResults[topicId];
+    }
     // Record the router hub on the nav route BEFORE mutating state, so the
     // topic's «Назад» (section-intro / first page) returns to the hub instead of
     // dead-ending at the rebuilt chunk's index 0. Captures the clean hub state
@@ -236,18 +294,21 @@
     // hooks (e.g. transition animations).
     emitRouterEvent("router:sectionSelected", { topicId: topicId });
 
-    // PRD-4 v1.1 §3.2 (Phase 4e): start the per-section timer on entry.
-    // Stopped by returnFromTopic (normal completion) or by the timer's
-    // own expiry handler. Sections without a custom limit (null/inherit_test)
-    // skip startSectionTimer's no-op early return.
+    // PRD-4 v1.1 §3.2 (Phase 4e): таймер раздела СТАНДАРТНОГО режима здесь НЕ
+    // запускается. Выбор темы в хабе ведёт на её первую страницу — заставку раздела,
+    // условия, инструкцию, — а отсчёт лимита начинается там, где начинаются вопросы:
+    // его заводит `maybeUpdateSectionTimer` на первом вопросе чанка (contentFlow.js).
+    // Пуск отсюда списывал с лимита чтение заставки, которая сама же этот лимит и
+    // объявляет.
+    //
+    // Адаптивная ветка ниже — исключение по устройству: она не идёт через
+    // `pageSequence`, движок забирает отрисовку себе, и запустить отсчёт больше
+    // негде. Сессия и ЕСТЬ блок вопросов темы, так что момент пуска тот же.
     var section = (TEST_DATA.sections || []).find(function (s) {
       return s.topicId === topicId;
     });
-    if (
-      section &&
-      section.timeLimitMinutes &&
-      typeof startSectionTimer === "function"
-    ) {
+    var startSectionCountdown = function () {
+      if (!section || !section.timeLimitMinutes || typeof startSectionTimer !== "function") return;
       startSectionTimer(topicId, section.timeLimitMinutes, function () {
         // On expiry mark the topic completed (with whatever was answered)
         // and return to the router. The completion still feeds the
@@ -256,7 +317,7 @@
         // populated it.
         returnFromTopic();
       });
-    }
+    };
 
     // PRD-4 v1.1 §4.7: adaptive + router_by_topics — launch a single-topic
     // adaptive session via the AdaptiveSession wrapper. On completion
@@ -267,6 +328,7 @@
       typeof AdaptiveSession !== "undefined" &&
       AdaptiveSession.runAdaptiveSession
     ) {
+      startSectionCountdown();
       var ok = AdaptiveSession.runAdaptiveSession(topicId, function (topicResult) {
         // topicResult is the adaptive engine's per-topic entry:
         // { topicId, topicName, finalLevelIndex, finalLevelName,
@@ -280,6 +342,9 @@
         returnFromTopic();
       });
       if (!ok) {
+        // Сессия не поднялась — отсчёт, заведённый под неё, снимается: дальше идёт
+        // обычный чанк, и таймер там заведёт первый вопрос, как в стандартном режиме.
+        if (typeof stopSectionTimer === "function") stopSectionTimer();
         // Defensive: strict gating (Phase 1 L2/L3) should prevent this,
         // but if a malformed package reaches the runtime, fall back to a
         // standard topic chunk so the learner can still navigate.
@@ -318,6 +383,7 @@
     var topicId = state.currentRouterTopic;
     if (topicId) {
       state.routerTopicStates[topicId] = "completed";
+      freezeSectionPass(topicId);
     }
     state.currentRouterTopic = null;
     // PRD-4 v1.1 §3.2 / Phase 4f — checkpoint the sectional state on
@@ -357,15 +423,10 @@
     var idx = (typeof pageIndex === "number" && pageIndex >= 0 && pageIndex < chunk.length)
       ? pageIndex : 0;
     state.currentPageIndex = idx;
-    // Section timers are not persisted (PRD-4 §3.2): restart fresh on re-entry.
-    var section = (TEST_DATA.sections || []).find(function (s) {
-      return s.topicId === topicId;
-    });
-    if (section && section.timeLimitMinutes && typeof startSectionTimer === "function") {
-      startSectionTimer(topicId, section.timeLimitMinutes, function () {
-        returnFromTopic();
-      });
-    }
+    // Отсчёт раздела здесь тоже не заводится: возврат в тему ведёт на ту страницу, где
+    // участник её оставил, и если это заставка или страница до вопросов — считать нечего.
+    // Таймер поднимет `maybeUpdateSectionTimer` на первом вопросе, а остаток он возьмёт из
+    // сохранённого бюджета раздела (`sectionBudget`), поэтому возврат не покупает времени.
     if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
     if (typeof render === "function") render();
     return true;
@@ -409,7 +470,15 @@
     if (!isRouterMode()) return false;
     if (typeof stopSectionTimer === "function") stopSectionTimer();
     var topicId = state.currentRouterTopic;
-    if (topicId && state.routerTopicStates[topicId] === "inProgress") {
+    // PRD-67 (FR-09): leaving a STARTED section under «Закрывать раздел при выходе» closes
+    // it — it goes back to the hub «Пройдена», not «Не начата». A section left before its
+    // first question was never opened, so it stays re-enterable as before.
+    if (typeof leaveOpenSection === "function") leaveOpenSection();
+    var closed = topicId && typeof isSectionClosedByLeave === "function" && isSectionClosedByLeave(topicId);
+    if (closed) {
+      state.routerTopicStates[topicId] = "completed";
+      freezeSectionPass(topicId);
+    } else if (topicId && state.routerTopicStates[topicId] === "inProgress") {
       delete state.routerTopicStates[topicId];
     }
     state.currentRouterTopic = null;

@@ -29,6 +29,13 @@ const CloseIcon = () => (
   </svg>
 );
 
+/**
+ * Открытые ящики, слушающие Escape, в порядке появления. Последний — верхний.
+ * Модульный список, а не контекст: вложенный ящик нередко рендерится порталом из
+ * другого поддерева, и общий родитель у них не гарантирован.
+ */
+const escStack: object[] = [];
+
 export const Drawer = forwardRef<HTMLDivElement, DrawerProps>(
   ({
     open, onClose, side = 'right', size = 'narrow',
@@ -46,11 +53,29 @@ export const Drawer = forwardRef<HTMLDivElement, DrawerProps>(
       return () => { document.body.style.overflow = prev; };
     }, [open]);
 
+    // Escape достаётся ВЕРХНЕМУ ящику стека, а не всем сразу.
+    //
+    // Обработчик висит на документе, поэтому вложенные ящики (редактор вопроса
+    // поверх ящика теста) слышали клавишу оба и закрывались вместе — человек терял
+    // и правку, и место в списке под ней. Стек ведётся модульным списком: ящик
+    // встаёт в него на открытии и отвечает на Escape, только пока он последний.
+    // Ящик с `closeOnEsc={false}` в стеке не участвует вовсе — иначе он молча
+    // съедал бы клавишу у того, кто под ним.
     useEffect(() => {
       if (!open || !closeOnEsc) return;
-      const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+      const entry = {};
+      escStack.push(entry);
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key !== 'Escape') return;
+        if (escStack[escStack.length - 1] !== entry) return;
+        onClose();
+      };
       document.addEventListener('keydown', onKey);
-      return () => document.removeEventListener('keydown', onKey);
+      return () => {
+        document.removeEventListener('keydown', onKey);
+        const i = escStack.indexOf(entry);
+        if (i >= 0) escStack.splice(i, 1);
+      };
     }, [open, closeOnEsc, onClose]);
 
     if (!open) return null;

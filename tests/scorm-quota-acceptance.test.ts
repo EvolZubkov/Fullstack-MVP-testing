@@ -94,14 +94,21 @@ function buildFixture() {
   };
 }
 
-/** Random Fisher-Yates — the runtime's real shuffle is also random. */
-function rngShuffle<T>(a: T[]): T[] {
+/**
+ * Random pick of `k` — the runtime's real selection is random too.
+ *
+ * PRD-55 (FR-24): `drawSection` takes a PICK, not a shuffle, and honouring `k` here is the
+ * whole point. A stand-in that ignored it would hand the entire pool back, the quota check
+ * below would see three questions where the blueprint asks for two, and the failure would
+ * read like a broken draw engine rather than a stale test.
+ */
+function rngPick<T>(a: T[], k: number): T[] {
   const arr = a.slice();
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  return arr;
+  return arr.slice(0, k);
 }
 
 interface RuntimeQuestion { id: string; tags?: string[] }
@@ -109,7 +116,7 @@ type DrawSectionFn = (
   questions: RuntimeQuestion[],
   drawCount: number,
   blueprint: unknown,
-  shuffle: <T>(a: T[]) => T[],
+  pick: <T>(pool: T[], k: number) => T[],
 ) => { selected: RuntimeQuestion[]; warnings: unknown[] };
 
 describe("SCORM package — PRD-11 draw quotas at runtime", () => {
@@ -159,7 +166,7 @@ describe("SCORM package — PRD-11 draw quotas at runtime", () => {
     const tagOf = (id: string) => (questions.find((q) => q.id === id)?.tags ?? []).map(tagKey);
 
     for (let run = 0; run < 200; run++) {
-      const { selected, warnings } = portDraw(questions, DRAW_COUNT, blueprint, rngShuffle);
+      const { selected, warnings } = portDraw(questions, DRAW_COUNT, blueprint, rngPick);
       const ids = selected.map((q) => q.id);
 
       // No duplicates, total == drawCount, all from the pool.

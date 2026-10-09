@@ -3,7 +3,7 @@
  * @description Author/admin user-management page (PRD-13): a searchable/filterable
  * user table with create/edit drawers, reset-password / reset-attempts / deactivate
  * dialogs and a bulk CSV/Excel import wizard. Rendered entirely with the
- * UniversityRT design system — layout via Stack/Cluster/Grid/Box, typography via
+ * Skillum design system — layout via Stack/Cluster/Grid/Box, typography via
  * Text, data via the DS Table/Tag/Select/Checkbox/Drawer/ModalDialog primitives
  * (no raw utility classes).
  */
@@ -31,7 +31,9 @@ import {
   Cluster,
   Drawer,
   EmptyState,
-  Grid,
+  FilterBar,
+  FilterPanel,
+  FilterPanelGroup,
   IconButton,
   Input,
   Label,
@@ -48,17 +50,24 @@ import {
   Text,
   type TableColumn,
   type Tone,
-} from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+  useToast,
+} from "@skillum/ui-kit";
 import { t } from "@/lib/i18n";
 import { RolePicker } from "@/components/role-picker";
 import { useAuth } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/roles";
 import { ROLE_PRIORITY, type Role } from "@shared/access";
+import { foldOrgValues, orgValueKey, type OrgField, type OrgValueCount } from "@shared/org-fields";
+import { OrgFieldControl } from "@/features/users/org-field-control";
+import { importableCount, useUsersBulkImport } from "@/features/users/bulk-import/use-users-bulk-import";
+import { UsersBulkPreview, UsersBulkResult } from "@/features/users/bulk-import/users-bulk-preview";
+import { plural } from "@/features/import/file-meta";
+import { mergeShape, stableKey, useListFilters } from "@/features/saved-filters/use-list-filters";
 
 interface User {
   id: string;
-  email: string;
+  /** `null` — an external participant created by an LMS export import (PRD-54 BR-54-42). */
+  email: string | null;
   name: string | null;
   /** Effective stored roles (PRD-13 multi-role). */
   roles?: string[];
@@ -68,12 +77,61 @@ interface User {
    * link. Absent on legacy responses, which is the same as `false`.
    */
   isExternal?: boolean;
+  /**
+   * PRD-54: ключ, по которому импорт выгрузок LMS находит этого человека. Задаётся руками;
+   * отсутствует у тех, кого через выгрузки не опознают.
+   */
+  externalKey?: string | null;
+  /** PRD-54 BR-54-31: идентификатор в LMS (`cmi.learner_id`), по нему связывается телеметрия. */
+  lmsLearnerId?: string | null;
+  /** План оргструктуры: оргполя профиля — оси срезов аналитики. */
+  organization?: string | null;
+  unit?: string | null;
+  position?: string | null;
   status: "pending" | "active" | "inactive";
   mustChangePassword: boolean;
   gdprConsent: boolean;
   lastLoginAt: string | null;
   expiresAt: string | null;
   createdAt: string;
+}
+
+/**
+ * A linking key another account already holds — the server's 409 with the
+ * field it concerns. Carried as its own type so the drawer shows the message at
+ * that field instead of a generic «failed to save» toast.
+ */
+class LinkingKeyConflict extends Error {
+  constructor(readonly field: "lmsLearnerId" | "externalKey", message: string) {
+    super(message);
+    this.name = "LinkingKeyConflict";
+  }
+}
+
+/** Throw the right error for a refused user save. */
+async function refusalOf(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409 && (body.field === "lmsLearnerId" || body.field === "externalKey")) {
+    return new LinkingKeyConflict(body.field, body.error ?? fallback);
+  }
+  return new Error(body.error || fallback);
+}
+
+/** Filter value meaning «the field is empty» (the «Не указано» option). */
+const ORG_NONE = "__none__";
+
+/** Conditions of the users list: `all` means the field does not narrow it. */
+type UsersFilter = { role: string; status: string; kind: string } & Record<OrgField, string>;
+
+const EMPTY_USERS_FILTER: UsersFilter = {
+  role: "all", status: "all", kind: "all", organization: "all", unit: "all", position: "all",
+};
+
+/** Does `value` pass an org filter (`all`, {@link ORG_NONE} or a comparison key)? */
+function matchesOrgFilter(filter: string, value: string | null | undefined): boolean {
+  if (filter === "all") return true;
+  const key = orgValueKey(value);
+  return filter === ORG_NONE ? key === null : key === filter;
 }
 
 interface UserAttemptsSummary {
@@ -85,7 +143,7 @@ interface UserAttemptsSummary {
 }
 
 export default function UsersPage() {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
   /** Acting user's effective roles, drives the role-assignment ceiling (WF-1). */
@@ -96,6 +154,22 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   /** PRD-28: kind of account — `all` | `staff` | `external`. */
   const [kindFilter, setKindFilter] = useState<string>("all");
+  /**
+   * Org-structure filters: `all`, {@link ORG_NONE} or the comparison key of a
+   * value — so «ОТДЕЛ ПРОДАЖ» and «Отдел продаж» are one choice (plan Р-4).
+   */
+  const [orgFilters, setOrgFilters] = useState<Record<OrgField, string>>({
+    organization: "all", unit: "all", position: "all",
+  });
+  /**
+   * PRD-70 FR-76: the six lists moved from the row into the filter panel. The panel edits a
+   * draft and applies it on «Применить», like every filter form of the product.
+   */
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const [filterDraft, setFilterDraft] = useState<UsersFilter>(EMPTY_USERS_FILTER);
+  /** A linking key the server refused, shown at its field until it is edited. */
+  const [keyConflict, setKeyConflict] = useState<LinkingKeyConflict | null>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -114,6 +188,17 @@ export default function UsersPage() {
     mustChangePassword: true,
     expiresAt: "",
     /**
+     * PRD-54: внешний ключ для связывания импортированных прохождений. Заведение принимает его
+     * наравне с правкой (BR-54-28), поэтому поле есть в обоих ящиках.
+     */
+    externalKey: "",
+    /** PRD-54 BR-54-31: идентификатор в LMS. */
+    lmsLearnerId: "",
+    /** План оргструктуры: выбор из существующих значений или создание (Р-3). */
+    organization: "",
+    unit: "",
+    position: "",
+    /**
      * PRD-28 FR-08: create the account as an external participant. The three
      * things such an account cannot have — a password, a wider role set and an
      * invitation letter — are put out in the form and left out of the request:
@@ -129,24 +214,22 @@ export default function UsersPage() {
   });
   const [newPassword, setNewPassword] = useState("");
 
-  // Bulk import state
-  type PreviewRow = {
-    idx: number; email: string; name: string | null; role: string;
-    groupName: string | null; groupId: string | null; groupFound: boolean;
-    status: "new" | "duplicate" | "error"; error?: string; existingId?: string;
-    duplicateAction?: "skip" | "update";
-  };
+  // Bulk import: the state is shared with the «Импорт» section (E6), the dialog only frames it.
+  const bulk = useUsersBulkImport();
   const [isBulkOpen, setIsBulkOpen] = useState(false);
-  const [bulkStep, setBulkStep] = useState<"upload" | "preview" | "done">("upload");
-  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
-  const [sendInvites, setSendInvites] = useState(true);
-  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; invitesSent: number; errors: string[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
+  });
+
+  // Org-structure values in use — the choices of the profile fields (plan Р-3).
+  // Asked for only while a drawer is open: the list itself folds its own values.
+  const { data: orgValues } = useQuery<Record<OrgField, OrgValueCount[]>>({
+    queryKey: ["/api/users/org-values"],
+    enabled: isCreateOpen || isEditOpen,
   });
 
   // Fetch user attempts summary for reset dialog
@@ -161,12 +244,19 @@ export default function UsersPage() {
       // An external participant is created by what the request LEAVES OUT: the
       // server refuses a body that asks for a password, a wider role set or an
       // invitation letter alongside the flag, rather than dropping them quietly.
+      // The org fields and linking keys are allowed for both kinds: a contractor
+      // also works in some unit, and may be found by an LMS export.
       const payload = data.isExternal
         ? {
           email: data.email,
           name: data.name,
           expiresAt: data.expiresAt,
           isExternal: true,
+          organization: data.organization,
+          unit: data.unit,
+          position: data.position,
+          lmsLearnerId: data.lmsLearnerId,
+          externalKey: data.externalKey,
         }
         : data;
       const res = await fetch("/api/users", {
@@ -175,31 +265,33 @@ export default function UsersPage() {
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to create user");
-      }
+      if (!res.ok) throw await refusalOf(res, "Failed to create user");
       return res.json() as Promise<{ inviteSent?: boolean }>;
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsCreateOpen(false);
       resetForm();
-      toast({ title: t.users.userCreated, description: t.users.userCreatedDescription });
+      toast({ tone: "success", title: t.users.userCreated, description: t.users.userCreatedDescription });
       // The account exists either way, so this is a second, weaker signal: the
       // letter that WAS asked for never left (SMTP off — the link is in the
       // server log, and the row menu can re-send it).
       if (variables.sendInvite && !data.inviteSent) {
         toast({
-          variant: "warning",
+          tone: "warning",
           title: t.users.inviteNotSent,
           description: t.users.inviteNotSentDescription,
         });
       }
     },
     onError: (error: Error) => {
+      // A taken key is shown at its field, where it is fixed, not in a toast.
+      if (error instanceof LinkingKeyConflict) {
+        setKeyConflict(error);
+        return;
+      }
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: error.message === "User with this email already exists"
           ? t.users.emailAlreadyExists
@@ -208,47 +300,11 @@ export default function UsersPage() {
     },
   });
 
-  // Bulk preview mutation
-  const bulkPreviewMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/users/bulk-preview", { method: "POST", credentials: "include", body: fd });
-      if (!res.ok) throw new Error((await res.json()).error || "Parse error");
-      return res.json() as Promise<PreviewRow[]>;
-    },
-    onSuccess: (rows) => {
-      setPreviewRows(rows.map(r => ({ ...r, duplicateAction: "skip" })));
-      setBulkStep("preview");
-    },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
-  });
-
-  const bulkImportMutation = useMutation({
-    mutationFn: async ({ rows, sendInvites }: { rows: PreviewRow[]; sendInvites: boolean }) => {
-      const res = await fetch("/api/users/bulk-import", {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows, sendInvites }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Import error");
-      return res.json();
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      setImportResult(result);
-      setBulkStep("done");
-    },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка импорта", description: e.message }),
-  });
-
-  const handleBulkFile = (file: File) => bulkPreviewMutation.mutate(file);
+  const handleBulkFile = (file: File) => bulk.preview(file);
 
   const handleBulkClose = () => {
     setIsBulkOpen(false);
-    setBulkStep("upload");
-    setPreviewRows([]);
-    setImportResult(null);
+    bulk.reset();
   };
 
   // Update user mutation
@@ -260,10 +316,7 @@ export default function UsersPage() {
         credentials: "include",
         body: JSON.stringify(data),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update user");
-      }
+      if (!res.ok) throw await refusalOf(res, "Failed to update user");
       // Roles are managed through a dedicated endpoint (PRD-13, ceiling-checked).
       if (roles) {
         const rolesRes = await fetch(`/api/users/${id}/roles`, {
@@ -284,11 +337,15 @@ export default function UsersPage() {
       setIsEditOpen(false);
       setSelectedUser(null);
       resetForm();
-      toast({ title: t.users.userUpdated, description: t.users.userUpdatedDescription });
+      toast({ tone: "success", title: t.users.userUpdated, description: t.users.userUpdatedDescription });
     },
     onError: (error: Error) => {
+      if (error instanceof LinkingKeyConflict) {
+        setKeyConflict(error);
+        return;
+      }
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: error.message === "User with this email already exists"
           ? t.users.emailAlreadyExists
@@ -311,10 +368,10 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsDeactivateOpen(false);
       setSelectedUser(null);
-      toast({ title: t.users.userDeactivated, description: t.users.userDeactivatedDescription });
+      toast({ tone: "success", title: t.users.userDeactivated, description: t.users.userDeactivatedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToDeactivate });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToDeactivate });
     },
   });
 
@@ -330,10 +387,10 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: t.users.userActivated, description: t.users.userActivatedDescription });
+      toast({ tone: "success", title: t.users.userActivated, description: t.users.userActivatedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToActivate });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToActivate });
     },
   });
 
@@ -354,10 +411,10 @@ export default function UsersPage() {
       setIsResetPasswordOpen(false);
       setSelectedUser(null);
       setNewPassword("");
-      toast({ title: t.users.passwordReset, description: t.users.passwordResetDescription });
+      toast({ tone: "success", title: t.users.passwordReset, description: t.users.passwordResetDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToResetPassword });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToResetPassword });
     },
   });
 
@@ -375,17 +432,17 @@ export default function UsersPage() {
     },
     onSuccess: (data) => {
       if (data.sent) {
-        toast({ title: t.users.inviteSent, description: t.users.inviteSentDescription });
+        toast({ tone: "success", title: t.users.inviteSent, description: t.users.inviteSentDescription });
       } else {
         toast({
-          variant: "warning",
+          tone: "warning",
           title: t.users.inviteNotSent,
           description: t.users.inviteNotSentDescription,
         });
       }
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToSendInvite });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToSendInvite });
     },
   });
 
@@ -404,18 +461,18 @@ export default function UsersPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       if (data.sent) {
-        toast({ title: "Учётная запись штатная", description: "Приглашение задать пароль отправлено." });
+        toast({ tone: "success", title: "Учётная запись штатная", description: "Приглашение задать пароль отправлено." });
       } else {
         // The account has changed kind either way; only the letter is missing.
         toast({
-          variant: "warning",
+          tone: "warning",
           title: "Учётная запись штатная",
           description: t.users.inviteNotSentDescription,
         });
       }
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось перевести в штатные" });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось перевести в штатные" });
     },
   });
 
@@ -434,10 +491,10 @@ export default function UsersPage() {
     onSuccess: () => {
       refetchAttempts();
       setSelectedTestForReset(null);
-      toast({ title: "Попытки сброшены", description: "Попытки пользователя успешно сброшены" });
+      toast({ tone: "success", title: "Попытки сброшены", description: "Попытки пользователя успешно сброшены" });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось сбросить попытки" });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось сбросить попытки" });
     },
   });
 
@@ -449,9 +506,15 @@ export default function UsersPage() {
       roles: ["learner"],
       mustChangePassword: true,
       expiresAt: "",
+      externalKey: "",
+      lmsLearnerId: "",
+      organization: "",
+      unit: "",
+      position: "",
       isExternal: false,
       sendInvite: true,
     });
+    setKeyConflict(null);
   };
 
   const generatePassword = () => {
@@ -466,12 +529,17 @@ export default function UsersPage() {
   const openEditDialog = (user: User) => {
     setSelectedUser(user);
     setFormData({
-      email: user.email,
+      email: user.email ?? "",
       name: user.name || "",
       password: "",
       roles: user.roles ?? [],
       mustChangePassword: user.mustChangePassword,
       expiresAt: user.expiresAt ? user.expiresAt.split("T")[0] : "",
+      externalKey: user.externalKey ?? "",
+      lmsLearnerId: user.lmsLearnerId ?? "",
+      organization: user.organization ?? "",
+      unit: user.unit ?? "",
+      position: user.position ?? "",
       // Read-only here: the kind of an account is decided at creation, and the
       // only change of it is «Сделать штатным» in the row menu (PRD-28 FR-05).
       isExternal: user.isExternal ?? false,
@@ -479,6 +547,7 @@ export default function UsersPage() {
       // and an existing pending account is re-invited from the row menu.
       sendInvite: false,
     });
+    setKeyConflict(null);
     setIsEditOpen(true);
   };
 
@@ -502,14 +571,98 @@ export default function UsersPage() {
   // Filter users
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
-      user.email.toLowerCase().includes(search.toLowerCase()) ||
+      (user.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (user.name && user.name.toLowerCase().includes(search.toLowerCase()));
     const matchesRole = roleFilter === "all" || (user.roles ?? []).includes(roleFilter);
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
     const matchesKind =
       kindFilter === "all" || (kindFilter === "external") === Boolean(user.isExternal);
-    return matchesSearch && matchesRole && matchesStatus && matchesKind;
+    const matchesOrg = matchesOrgFilter(orgFilters.organization, user.organization)
+      && matchesOrgFilter(orgFilters.unit, user.unit)
+      && matchesOrgFilter(orgFilters.position, user.position);
+    return matchesSearch && matchesRole && matchesStatus && matchesKind && matchesOrg;
   });
+
+  /**
+   * Options of an org filter: the values the list holds, spellings folded
+   * (plan Р-4), plus «Не указано» for the empty ones. Built from the list itself,
+   * not the dictionary — a filter offering a value no one in the list has would
+   * only ever produce an empty table.
+   */
+  const orgFilterOptions = (field: OrgField, allLabel: string, noneLabel: string) => [
+    { value: "all", label: allLabel },
+    ...foldOrgValues(users.map((u) => ({ value: u[field] ?? "", users: 1, attempts: 0 })))
+      .map((entry) => ({ value: orgValueKey(entry.value) ?? "", label: entry.value, searchText: entry.value })),
+    { value: ORG_NONE, label: noneLabel },
+  ];
+
+  /** The fields of the filter panel, in the order of the former row (composition unchanged). */
+  const usersFilterFields: Array<{
+    key: keyof UsersFilter;
+    title: string;
+    options: Array<{ value: string; label: string; searchText?: string }>;
+    searchable?: boolean;
+  }> = [
+    {
+      key: "role",
+      title: t.users.filterByRole,
+      options: [
+        { value: "all", label: t.users.allRoles },
+        ...ROLE_PRIORITY.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
+      ],
+    },
+    {
+      key: "status",
+      title: t.users.filterByStatus,
+      options: [
+        { value: "all", label: t.users.allStatuses },
+        { value: "active", label: t.users.active },
+        { value: "inactive", label: t.users.inactive },
+        { value: "pending", label: t.users.pending },
+      ],
+    },
+    // PRD-28: kind of account.
+    {
+      key: "kind",
+      title: "Вид учётной записи",
+      options: [
+        { value: "all", label: "Все виды" },
+        { value: "staff", label: "Штатные" },
+        { value: "external", label: "Внешние участники" },
+      ],
+    },
+    // Org-structure plan: searchable — a company may have hundreds of units.
+    { key: "organization", title: "Организация", options: orgFilterOptions("organization", "Все организации", "Не указана"), searchable: true },
+    { key: "unit", title: "Подразделение", options: orgFilterOptions("unit", "Все подразделения", "Не указано"), searchable: true },
+    { key: "position", title: "Должность", options: orgFilterOptions("position", "Все должности", "Не указана"), searchable: true },
+  ];
+
+  const appliedFilter: UsersFilter = {
+    role: roleFilter, status: statusFilter, kind: kindFilter, ...orgFilters,
+  };
+  const applyUsersFilter = (next: UsersFilter) => {
+    setRoleFilter(next.role);
+    setStatusFilter(next.status);
+    setKindFilter(next.kind);
+    setOrgFilters({ organization: next.organization, unit: next.unit, position: next.position });
+  };
+  // Сохранённые фильтры «Пользователей» (решение владельца 2026-10-05): сохранить в ряду условий,
+  // применить и удалить — из «Сохранённых». Значения полей — строки; незнакомое значение просто
+  // ничего не отберёт, а чип назовёт его как есть.
+  const savedFilters = useListFilters({
+    scope: "users",
+    current: appliedFilter,
+    apply: applyUsersFilter,
+    normalize: (conditions) => mergeShape(EMPTY_USERS_FILTER, conditions),
+    keyOf: stableKey,
+  });
+  /** Chips of what is applied: «Поле: значение», one per field narrowed from «all». */
+  const filterChips = usersFilterFields
+    .filter((field) => appliedFilter[field.key] !== "all")
+    .map((field) => ({
+      key: field.key,
+      label: `${field.title}: ${field.options.find((o) => o.value === appliedFilter[field.key])?.label ?? appliedFilter[field.key]}`,
+    }));
 
   const getStatusBadge = (status: string) => {
     const tone: Tone =
@@ -558,12 +711,32 @@ export default function UsersPage() {
       // almost-empty column would eat width the list needs elsewhere.
       render: (u) => (
         <Cluster gap={2} wrap={false}>
-          <Text variant="body-s" weight="medium">{u.email}</Text>
+          {/* PRD-54 BR-54-42: an imported external participant has no address at all. */}
+          {u.email
+            ? <Text variant="body-s" weight="medium">{u.email}</Text>
+            : <Text variant="body-s" tone="muted">—</Text>}
           {u.isExternal && <Tag tone="info" size="s">Внешний</Tag>}
         </Cluster>
       ),
     },
-    { key: "name", header: t.users.name, render: (u) => <Text variant="body-s">{u.name || "—"}</Text> },
+    {
+      key: "name",
+      header: t.users.name,
+      // Org-structure plan: unit and position ride under the name as a muted
+      // line instead of columns of their own. Two more columns did not fit next to
+      // the sidebar at 1440 px — the DS table clips, and «Создан» with the row menu
+      // went past the edge (owner's decision 2026-09-28). The organisation is in
+      // the filter and the profile; in most installations it is one for everyone.
+      render: (u) => {
+        const place = [u.unit, u.position].filter(Boolean).join(" · ");
+        return (
+          <Stack gap={1}>
+            <Text variant="body-s">{u.name || "—"}</Text>
+            {place && <Text variant="body-xs" tone="muted">{place}</Text>}
+          </Stack>
+        );
+      },
+    },
     { key: "roles", header: t.users.role, render: (u) => renderRoleBadges(u.roles) },
     { key: "status", header: t.users.status, render: (u) => getStatusBadge(u.status) },
     { key: "lastLogin", header: t.users.lastLogin, render: (u) => <Text variant="body-s" tone="muted">{formatDate(u.lastLoginAt)}</Text> },
@@ -607,10 +780,13 @@ export default function UsersPage() {
           {u.isExternal && (
             <>
               <MenuDivider />
+              {/* PRD-54 BR-54-42: the conversion mails a password-setup link, so an
+                  account without email cannot take it until an address is set. */}
               <MenuItem
                 icon={<UserCheck size={16} />}
                 title="Сделать штатным"
-                meta="Уйдёт приглашение задать пароль"
+                meta={u.email ? "Уйдёт приглашение задать пароль" : "Сначала задайте почту"}
+                disabled={!u.email}
                 onClick={() => promoteUserMutation.mutate(u.id)}
               />
             </>
@@ -637,7 +813,7 @@ export default function UsersPage() {
   }
 
   const bulkFooter =
-    bulkStep === "upload" ? (
+    bulk.step === "upload" ? (
       <Cluster justify="between" full>
         <a href="/api/users/bulk-template" download>
           <Cluster gap={1}>
@@ -647,80 +823,80 @@ export default function UsersPage() {
         </a>
         <Button variant="secondary" onClick={handleBulkClose}>Отмена</Button>
       </Cluster>
-    ) : bulkStep === "preview" ? (
+    ) : bulk.step === "preview" ? (
       <>
-        <Button variant="secondary" onClick={() => setBulkStep("upload")}>Назад</Button>
+        <Button variant="secondary" onClick={() => bulk.setStep("upload")}>Назад</Button>
         <Button
-          onClick={() => bulkImportMutation.mutate({ rows: previewRows, sendInvites })}
-          disabled={previewRows.filter((r) => r.status !== "error").length === 0}
-          loading={bulkImportMutation.isPending}
+          onClick={bulk.runImport}
+          disabled={importableCount(bulk.rows) === 0}
+          loading={bulk.importing}
         >
-          Импортировать ({previewRows.filter((r) => r.status !== "error").length} строк)
+          Импортировать ({plural(importableCount(bulk.rows), ["строка", "строки", "строк"])})
         </Button>
       </>
     ) : (
       <Button onClick={handleBulkClose}>Закрыть</Button>
     );
 
-  // ── Bulk preview table columns ──
-  const previewColumns: TableColumn<PreviewRow>[] = [
-    { key: "email", header: "Email", render: (row) => <Text variant="mono-s">{row.email}</Text> },
-    { key: "name", header: "Имя", render: (row) => <Text variant="body-s" tone="muted">{row.name || "—"}</Text> },
-    { key: "role", header: "Роль", render: (row) => <Tag variant="outline" size="s">{row.role}</Tag> },
-    {
-      key: "group",
-      header: "Группа",
-      render: (row) =>
-        row.groupName ? (
-          <Tag
-            size="s"
-            tone={row.groupFound ? "success" : "error"}
-            title={row.groupFound ? undefined : "Группа не найдена — будет пропущена"}
-          >
-            {row.groupName}{!row.groupFound && " ⚠"}
-          </Tag>
-        ) : (
-          <Text variant="body-xs" tone="muted">—</Text>
-        ),
-    },
-    {
-      key: "status",
-      header: "Статус",
-      render: (row) => (
-        <>
-          {row.status === "new" && <Text variant="body-xs" weight="medium" tone="success">Новый</Text>}
-          {row.status === "duplicate" && <Text variant="body-xs" weight="medium" tone="warning">Дубль</Text>}
-          {row.status === "error" && <Text variant="body-xs" weight="medium" tone="error" title={row.error}>Ошибка</Text>}
-        </>
-      ),
-    },
-    {
-      key: "action",
-      header: "Действие",
-      width: "160px",
-      render: (row) => (
-        <>
-          {row.status === "duplicate" && (
-            <Select<NonNullable<PreviewRow["duplicateAction"]>>
-              size="s"
-              fullWidth
-              aria-label="Действие для дубля"
-              value={row.duplicateAction}
-              onChange={(value) => setPreviewRows(prev => prev.map(r =>
-                r.idx === row.idx ? { ...r, duplicateAction: value } : r
-              ))}
-              options={[
-                { value: "skip", label: "Пропустить" },
-                { value: "update", label: "Обновить" },
-              ]}
-            />
-          )}
-          {row.status === "new" && <Text variant="body-xs" tone="muted">Создать</Text>}
-          {row.status === "error" && <Text variant="body-xs" tone="muted">Пропустить</Text>}
-        </>
-      ),
-    },
-  ];
+  // ── Org-structure fields and linking keys: the same in both drawers ──
+  // Org fields go right after the name (everyone has them); the linking keys
+  // close the form, where «Внешний ключ» already stood — few people need them.
+  const orgFieldControls = (
+    <>
+      <OrgFieldControl
+        label="Организация"
+        value={formData.organization}
+        options={orgValues?.organization ?? []}
+        onChange={(organization) => setFormData((d) => ({ ...d, organization }))}
+        placeholder="Не указана"
+      />
+      <OrgFieldControl
+        label="Подразделение"
+        value={formData.unit}
+        options={orgValues?.unit ?? []}
+        onChange={(unit) => setFormData((d) => ({ ...d, unit }))}
+      />
+      <OrgFieldControl
+        label="Должность"
+        value={formData.position}
+        options={orgValues?.position ?? []}
+        onChange={(position) => setFormData((d) => ({ ...d, position }))}
+        placeholder="Не указана"
+      />
+    </>
+  );
+
+  /** The refusal of a taken key, while the value that caused it is still in the field. */
+  const conflictAt = (field: LinkingKeyConflict["field"]) =>
+    keyConflict?.field === field ? keyConflict.message : undefined;
+
+  const linkingKeyInputs = (
+    <>
+      <Input
+        label="Идентификатор в LMS"
+        hint="По нему прохождения из LMS находят этого человека. Пустое поле — связи нет."
+        error={conflictAt("lmsLearnerId")}
+        fullWidth
+        value={formData.lmsLearnerId}
+        onChange={(e) => {
+          setFormData({ ...formData, lmsLearnerId: e.target.value });
+          if (keyConflict?.field === "lmsLearnerId") setKeyConflict(null);
+        }}
+      />
+      {/* PRD-54: связывание импортированных прохождений. */}
+      <Input
+        label="Внешний ключ"
+        hint="По нему импорт выгрузок LMS находит этого человека. Пустое поле — связи нет."
+        error={conflictAt("externalKey")}
+        fullWidth
+        value={formData.externalKey}
+        onChange={(e) => {
+          setFormData({ ...formData, externalKey: e.target.value });
+          if (keyConflict?.field === "externalKey") setKeyConflict(null);
+        }}
+      />
+    </>
+  );
 
   return (
     <Stack gap={6}>
@@ -739,49 +915,51 @@ export default function UsersPage() {
         </Cluster>
       </Cluster>
 
-      {/* Filters */}
-      <Cluster gap={4} align="end">
-        <Stack grow>
+      {/* Filters — DS FilterBar and its FilterPanel (PRD-70 FR-70, FR-76). */}
+      <FilterBar
+        search={(
           <Input
+            size="s"
             iconLeft={<Search size={16} />}
             placeholder={t.users.searchPlaceholder}
+            aria-label={t.users.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             fullWidth
           />
-        </Stack>
-        <Select
-          value={roleFilter}
-          onChange={setRoleFilter}
-          placeholder={t.users.filterByRole}
-          options={[
-            { value: "all", label: t.users.allRoles },
-            ...ROLE_PRIORITY.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
-          ]}
-        />
-        <Select
-          value={statusFilter}
-          onChange={setStatusFilter}
-          placeholder={t.users.filterByStatus}
-          options={[
-            { value: "all", label: t.users.allStatuses },
-            { value: "active", label: t.users.active },
-            { value: "inactive", label: t.users.inactive },
-            { value: "pending", label: t.users.pending },
-          ]}
-        />
-        {/* PRD-28: вид учётной записи — четвёртый фильтр существующего ряда. */}
-        <Select
-          value={kindFilter}
-          onChange={setKindFilter}
-          aria-label="Вид учётной записи"
-          options={[
-            { value: "all", label: "Все виды" },
-            { value: "staff", label: "Штатные" },
-            { value: "external", label: "Внешние участники" },
-          ]}
-        />
-      </Cluster>
+        )}
+        count={filterChips.length}
+        applied={filterChips.map((chip) => ({ id: chip.key, label: chip.label }))}
+        filterButtonRef={filterButtonRef}
+        filterOpen={filterOpen}
+        onOpenFilter={() => {
+          if (!filterOpen) setFilterDraft(appliedFilter);
+          setFilterOpen(!filterOpen);
+        }}
+        onRemove={(id) => applyUsersFilter({ ...appliedFilter, [id]: "all" })}
+        onReset={() => applyUsersFilter(EMPTY_USERS_FILTER)}
+        {...savedFilters}
+      />
+      <FilterPanel
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorRef={filterButtonRef}
+        onReset={() => setFilterDraft(EMPTY_USERS_FILTER)}
+        onApply={() => { applyUsersFilter(filterDraft); setFilterOpen(false); }}
+      >
+        {usersFilterFields.map((field) => (
+          <FilterPanelGroup key={field.key} title={field.title}>
+            <Select
+              value={filterDraft[field.key]}
+              onChange={(value) => setFilterDraft((draft) => ({ ...draft, [field.key]: value }))}
+              aria-label={field.title}
+              searchable={field.searchable}
+              options={field.options}
+              fullWidth
+            />
+          </FilterPanelGroup>
+        ))}
+      </FilterPanel>
 
       {/* Users Table */}
       {filteredUsers.length === 0 ? (
@@ -838,6 +1016,7 @@ export default function UsersPage() {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="Иван Иванов"
           />
+          {orgFieldControls}
           {/* PRD-28 FR-08: the kind of the account. Ticking it puts out
               everything an account without a password cannot have — the DS has
               no group-disable, so each control carries its own `disabled`. */}
@@ -916,6 +1095,7 @@ export default function UsersPage() {
             value={formData.expiresAt}
             onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
           />
+          {linkingKeyInputs}
         </Stack>
       </Drawer>
 
@@ -938,11 +1118,19 @@ export default function UsersPage() {
                     name: formData.name || undefined,
                     mustChangePassword: formData.mustChangePassword,
                     expiresAt: formData.expiresAt || undefined,
+                    // Always sent, empty included: the server tells «not sent» (keep)
+                    // from «sent empty» (clear), and the form edits them both ways.
+                    externalKey: formData.externalKey,
+                    lmsLearnerId: formData.lmsLearnerId,
+                    organization: formData.organization,
+                    unit: formData.unit,
+                    position: formData.position,
                   },
                   roles: formData.roles,
                 })
               }
-              disabled={!formData.email || formData.roles.length === 0}
+              // An account without email (PRD-54 BR-54-42) may be saved without one.
+              disabled={(!formData.email && Boolean(selectedUser?.email)) || formData.roles.length === 0}
               loading={updateUserMutation.isPending}
             >
               {t.common.save}
@@ -953,7 +1141,7 @@ export default function UsersPage() {
         <Stack gap={4}>
           <Input
             label={t.users.email}
-            required
+            required={Boolean(selectedUser?.email)}
             type="email"
             fullWidth
             value={formData.email}
@@ -965,6 +1153,7 @@ export default function UsersPage() {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
+          {orgFieldControls}
           <Stack gap={2}>
             <Label required>Роли</Label>
             <RolePicker
@@ -986,6 +1175,7 @@ export default function UsersPage() {
             value={formData.expiresAt}
             onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
           />
+          {linkingKeyInputs}
         </Stack>
       </Drawer>
 
@@ -1032,7 +1222,7 @@ export default function UsersPage() {
         open={isResetAttemptsOpen}
         onClose={() => setIsResetAttemptsOpen(false)}
         title="Сбросить попытки"
-        description={`Выберите тест для сброса попыток пользователя ${selectedUser?.email ?? ""}`}
+        description={`Выберите тест для сброса попыток пользователя ${selectedUser?.email ?? selectedUser?.name ?? ""}`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setIsResetAttemptsOpen(false)}>{t.common.cancel}</Button>
@@ -1114,19 +1304,19 @@ export default function UsersPage() {
         onClose={handleBulkClose}
         size="xl"
         title={
-          bulkStep === "upload" ? "Массовая загрузка пользователей"
-            : bulkStep === "preview" ? `Предпросмотр: ${previewRows.length} строк`
+          bulk.step === "upload" ? "Массовая загрузка пользователей"
+            : bulk.step === "preview" ? `Предпросмотр: ${plural(bulk.rows.length, ["строка", "строки", "строк"])}`
               : "Импорт завершён"
         }
         description={
-          bulkStep === "upload" ? "Загрузите файл CSV или Excel. Обязательные колонки: email. Необязательные: name, role (learner/author)."
-            : bulkStep === "preview" ? "Проверьте данные перед импортом. Для дублей выберите действие."
+          bulk.step === "upload" ? "Загрузите файл CSV или Excel. Обязательная колонка: email. Необязательные: name, role (learner/author), group, external_key, organization, unit, position, lms_learner_id."
+            : bulk.step === "preview" ? "Проверьте данные перед импортом. Для дублей выберите действие."
               : undefined
         }
         footer={bulkFooter}
       >
         {/* Step: Upload */}
-        {bulkStep === "upload" && (
+        {bulk.step === "upload" && (
           <Box
             border
             radius="l"
@@ -1143,7 +1333,7 @@ export default function UsersPage() {
               if (file) handleBulkFile(file);
             }}
           >
-            {bulkPreviewMutation.isPending ? (
+            {bulk.previewing ? (
               <Stack align="center" gap={2}>
                 <Spinner size="l" />
                 <Text as="p" variant="body-s" tone="muted">Анализируем файл...</Text>
@@ -1152,13 +1342,13 @@ export default function UsersPage() {
               <Stack align="center" gap={2}>
                 <FileSpreadsheet size={40} color="var(--ou-fg-muted)" />
                 <Text as="p" weight="medium">Перетащите файл или нажмите для выбора</Text>
-                <Text as="p" variant="body-s" tone="muted">CSV, XLSX, XLS — до 500 строк</Text>
+                <Text as="p" variant="body-s" tone="muted">CSV, XLSX — до 500 строк</Text>
               </Stack>
             )}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx"
               style={{ display: "none" }}
               aria-label="Файл для импорта пользователей"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBulkFile(f); }}
@@ -1166,79 +1356,8 @@ export default function UsersPage() {
           </Box>
         )}
 
-        {/* Step: Preview */}
-        {bulkStep === "preview" && (
-          <Stack gap={4}>
-            {/* Summary */}
-            <Cluster gap={3}>
-              <Cluster gap={1}>
-                <Tag tone="success" dot size="s">Новых: {previewRows.filter(r => r.status === "new").length}</Tag>
-              </Cluster>
-              <Cluster gap={1}>
-                <Tag tone="warning" dot size="s">Дублей: {previewRows.filter(r => r.status === "duplicate").length}</Tag>
-              </Cluster>
-              <Cluster gap={1}>
-                <Tag tone="error" dot size="s">Ошибок: {previewRows.filter(r => r.status === "error").length}</Tag>
-              </Cluster>
-            </Cluster>
-
-            {/* Preview table */}
-            <Box border radius="m">
-              <ScrollArea maxH="md">
-                <Table columns={previewColumns} rows={previewRows} rowKey={(row) => String(row.idx)} />
-              </ScrollArea>
-            </Box>
-
-            {/* Send invites toggle */}
-            <Checkbox
-              label="Отправить письма-приглашения с ссылкой для установки пароля"
-              checked={sendInvites}
-              onChange={(e) => setSendInvites(e.target.checked)}
-            />
-          </Stack>
-        )}
-
-        {/* Step: Done */}
-        {bulkStep === "done" && importResult && (
-          <Stack gap={4}>
-            <Grid cols={4} gap={3}>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="success">{importResult.created}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Создано</Text>
-                </Stack>
-              </Box>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="info">{importResult.updated}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Обновлено</Text>
-                </Stack>
-              </Box>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="muted">{importResult.skipped}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Пропущено</Text>
-                </Stack>
-              </Box>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="accent">{importResult.invitesSent}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Писем отправлено</Text>
-                </Stack>
-              </Box>
-            </Grid>
-            {importResult.errors.length > 0 && (
-              <Box border radius="m" pad={3}>
-                <Stack gap={1}>
-                  <Text as="p" variant="body-s" weight="medium" tone="error">Ошибки:</Text>
-                  {importResult.errors.map((e, i) => (
-                    <Text as="p" key={i} variant="body-xs" tone="muted">{e}</Text>
-                  ))}
-                </Stack>
-              </Box>
-            )}
-          </Stack>
-        )}
+        {bulk.step === "preview" && <UsersBulkPreview bulk={bulk} />}
+        {bulk.step === "done" && bulk.result && <UsersBulkResult result={bulk.result} />}
       </ModalDialog>
     </Stack>
   );

@@ -141,6 +141,35 @@
     return out;
   }
 
+  /**
+   * PRD-49: надписи экрана итогов, разрешённые из ОБЪЯВЛЕНИЙ шаблона (`manifest.labels[]`).
+   *
+   * Предпросмотр показывает шаблон таким, каким его получит автор, ещё НЕ трогавший
+   * надписи, — значит берутся умолчания манифеста, и только они: своих значений у
+   * предпросмотра нет, тест сюда не участвует. Дерево, а не плоская карта: DSL режет путь
+   * по точкам, и `{{ labels.topic.correct }}` до ключа `"topic.correct"` иначе не дойдёт.
+   *
+   * Без этого слоты карточки темы, которые с PRD-49 гейтятся своей надписью, в
+   * предпросмотре просто исчезали бы — надписи нет, значит и слота нет.
+   *
+   * @returns {Object} Дерево надписей для контекста DSL.
+   */
+  function buildLabelsTree() {
+    var tree = {};
+    (manifest.labels || []).forEach(function (decl) {
+      if (!decl || !decl.key) return;
+      var text = (decl.defaults && decl.defaults.results) || decl.default || "";
+      var parts = String(decl.key).split(".");
+      var node = tree;
+      for (var i = 0; i < parts.length - 1; i++) {
+        if (typeof node[parts[i]] !== "object" || node[parts[i]] === null) node[parts[i]] = {};
+        node = node[parts[i]];
+      }
+      node[parts[parts.length - 1]] = text;
+    });
+    return tree;
+  }
+
   /** Builds the data object for DSL rendering (merges course + runtime + params). */
   function buildDslData() {
     var course  = demoData.course  || {};
@@ -162,6 +191,7 @@
       progress: runtime.progress || {},
       state:    state,
       params:   expandParams(demoData.params || paramDefaults()),
+      labels:   buildLabelsTree(),
       sections: sections,
       nav: {
         submitAnswerLabel: "Принять ответ",
@@ -1098,14 +1128,27 @@
    * data-theme on the document root (Авто removes it → the template follows the
    * host prefers-color-scheme). Only the previewed template (theme.css) reacts;
    * the preview chrome stays neutral.
+   *
+   * The scene reads its theme from TWO places — `data-theme` (the template's own
+   * theme.css) and the DS classes `.ou--light` / `.ou--dark` (the design system the
+   * template is built on) — so the toggle has to move both, or half the scene
+   * switches and half stays. Авто restores whatever the runtime resolved at load
+   * (`applyDsThemeClass`: the author's pin, else the template's themes, else dark).
    */
   function wireThemeToggle() {
     var group = document.getElementById("pv-theme");
     if (!group) return;
+    var root = document.documentElement;
+    var dsAuto = root.classList.contains("ou--light")
+      ? "ou--light"
+      : root.classList.contains("ou--dark") ? "ou--dark" : "";
     function apply(mode) {
       var el = document.documentElement;
       if (mode === "light" || mode === "dark") el.setAttribute("data-theme", mode);
       else el.removeAttribute("data-theme");
+      el.classList.remove("ou--light", "ou--dark");
+      var dsClass = mode === "light" ? "ou--light" : mode === "dark" ? "ou--dark" : dsAuto;
+      if (dsClass) el.classList.add(dsClass);
       var btns = group.querySelectorAll(".pv-theme-btn");
       Array.prototype.forEach.call(btns, function (b) {
         b.classList.toggle("pv-theme-active", b.getAttribute("data-theme-set") === mode);

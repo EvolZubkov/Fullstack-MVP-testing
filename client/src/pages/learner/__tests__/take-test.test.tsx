@@ -31,8 +31,9 @@ vi.mock("wouter", () => ({
   useLocation: () => ["/learner/test/test-1", navigateSpy],
 }));
 
-vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: toastSpy }),
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
 }));
 
 vi.mock("@/lib/auth", () => ({ useAuth: () => authState }));
@@ -284,7 +285,7 @@ describe("<TakeTestPage /> init", () => {
     vi.stubGlobal("fetch", fn);
     render(<TakeTestPage />);
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner"));
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" }));
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" }));
   });
 
   it("navigates back when the requested test id is not in the list", async () => {
@@ -534,7 +535,7 @@ describe("<TakeTestPage /> start gates", () => {
     await renderReportStart({ result: jsonRes({ report: null, reportRender: null }) });
     fireEvent.click(screen.getByTestId("ts-download-report"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(downloadReportSpy).not.toHaveBeenCalled();
   });

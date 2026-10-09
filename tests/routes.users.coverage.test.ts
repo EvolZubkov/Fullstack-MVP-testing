@@ -468,12 +468,14 @@ describe("POST /api/users/bulk-preview — edge branches", () => {
     expect(res.body.error).toMatch(/500/);
   });
 
-  it("returns 500 when the uploaded file cannot be parsed", async () => {
+  // Unparseable upload is a CLIENT error: the reader yields no worksheet and the route
+  // answers 400 «Failed to read file» rather than falling into the 500 branch.
+  it("returns 400 when the uploaded file cannot be parsed", async () => {
     const res = await asAuthor(request(makeApp())
       .post("/api/users/bulk-preview")
       .attach("file", Buffer.from("this is not a spreadsheet"), "users.xlsx"));
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Failed to parse file");
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Failed to read file");
   });
 });
 

@@ -32,13 +32,21 @@ import {
   renderMatching,
   renderScale,
   renderAllocation,
+  renderBlanksPrompt,
+  renderLongAnswer,
+  renderShortAnswer,
   questionHint,
   answerTexts,
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
 import { attachAllocation } from "@shared/template/allocation-dom";
+import { hasBlanks } from "@shared/questions/question-type";
+import { attachShortAnswer } from "@shared/template/short-answer-dom";
+import type { BlankRuleSet } from "@shared/questions/blanks-render";
 import { allocationSpec, seedAllocation } from "@shared/questions/allocation";
-import { distributesBudget } from "@shared/questions/question-type";
+import { distributesBudget, isOpenText, isSimulation, isTextEntry } from "@shared/questions/question-type";
+import { renderSimCover, simCoverShot, simCoverState, SIM_OPEN_ACTION } from "@shared/sim/cover";
+import type { Scenario } from "@shared/sim/contract";
 import { questionFont, optionFont } from "@shared/template/fit-font";
 import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import type { SceneTimersState } from "@shared/template/scene-timers";
@@ -104,7 +112,19 @@ function interactionHtml(
   shuffleMapping: ShuffleMapping | undefined,
   poolOrder: number[],
   review?: ReviewCorrect,
+  sim?: { retake: boolean; readonly: boolean },
 ): string {
+  // «Сценарий в ИС» в обычном разделе (техдолг №5): на месте ответа — обложка со скриншотом первой
+  // сцены и «Пройти»; сам прогон хост играет на весь экран (`onSimOpen`). Разметка — общая с пакетом.
+  if (isSimulation(question.type)) {
+    const scenario = (question.dataJson as { scenario?: Scenario } | null)?.scenario ?? null;
+    return renderSimCover({
+      state: simCoverState(answer),
+      shotUrl: simCoverShot(scenario),
+      retake: sim?.retake ?? false,
+      readonly: sim?.readonly ?? review !== undefined,
+    });
+  }
   const arr = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
   if (question.type === "ranking") return renderRanking(question, answer, arr, review);
   if (question.type === "matching") {
@@ -117,7 +137,40 @@ function interactionHtml(
   // PRD-44: у распределения нет разметки верности — `review` здесь означает «только
   // чтение», а не «показать правильный ответ», которого у типа не существует.
   if (distributesBudget(question.type)) return renderAllocation(question, answer, review !== undefined, arr);
+  // PRD-57 §6.5: у текстового ввода нет ни вариантов, ни разметки верности — эталон
+  // участнику не показывается, а `review` означает «только чтение».
+  // PRD-57 §5: развёрнутый ответ — многострочное поле без эталона и без разметки верности.
+  if (isOpenText(question.type)) {
+    return renderLongAnswer(question, answer, { readonly: review !== undefined });
+  }
+  if (isTextEntry(question.type)) {
+    const rules = (question.correctJson ?? {}) as { answerKind?: string; unit?: string };
+    return renderShortAnswer(question, answer, {
+      numeric: rules.answerKind === "number",
+      unit: rules.unit,
+      readonly: review !== undefined,
+    });
+  }
   return renderSingleChoice(question, answer, arr, review);
+}
+
+/**
+ * Разметка текста задания.
+ *
+ * PRD-57 FR-03a: когда в тексте есть листинг, сервер присылает ГОТОВУЮ разметку с
+ * подсветкой — библиотека подсветки серверная и в браузер не едет. Во всех остальных
+ * случаях текст рисуется здесь, как и раньше.
+ */
+function promptHtml(question: { prompt: string; promptHtml?: string }): string {
+  return typeof question.promptHtml === "string" && question.promptHtml !== ""
+    ? question.promptHtml
+    : renderInlineMarkdown(question.prompt);
+}
+
+/** Наборы правил пропусков задания — из того же `correct_json`, что и у прочих типов. */
+function blanksOf(question: { correctJson?: unknown }): BlankRuleSet[] {
+  const key = (question.correctJson ?? {}) as { blanks?: BlankRuleSet[] };
+  return Array.isArray(key.blanks) ? key.blanks : [];
 }
 
 export interface TemplateQuestionScreenProps {
@@ -127,6 +180,7 @@ export interface TemplateQuestionScreenProps {
     theme?: { background: string; foreground: string };
     /** Per-test design-param CSS-var overrides (PRD-7 branding); applied on the shadow host. */
     cssVars?: Record<string, string>;
+    dataAttrs?: Record<string, string>;
     /** PRD-23: per-theme colour overrides, printed as CSS. */
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
@@ -179,6 +233,13 @@ export interface TemplateQuestionScreenProps {
   onNavigateToQuestion?: (index: number) => void;
   /** PRD-34 (FR-30): protection decision for the question screen, from the shared builder. */
   protection?: ProtectionSpec;
+  /**
+   * «Сценарий в ИС» в обычном разделе: тест разрешает менять ответ — на обложке завершённого
+   * сценария есть «Пройти заново».
+   */
+  simRetake?: boolean;
+  /** «Пройти» / «Пройти заново» на обложке сценария: хост открывает окно правил и плеер. */
+  onSimOpen?: () => void;
 }
 
 export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
@@ -207,19 +268,36 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
   const onAnswerRef = useRef(onAnswer);
   onAnswerRef.current = onAnswer;
 
-  const attachHostInputs = useCallback(
-    (shadow: ShadowRoot) =>
-      attachAllocation(shadow as never, {
-        getSpec: () =>
-          distributesBudget(questionRef.current.type)
-            ? allocationSpec(questionRef.current.dataJson)
-            : null,
-        getAnswer: () => answerRef.current,
-        onCommit: (next) => onAnswerRef.current(next),
-        isLocked: () => lockedRef.current === true,
-      }),
-    [],
-  );
+  const attachHostInputs = useCallback((shadow: ShadowRoot) => {
+    const detachAllocation = attachAllocation(shadow as never, {
+      getSpec: () =>
+        distributesBudget(questionRef.current.type)
+          ? allocationSpec(questionRef.current.dataJson)
+          : null,
+      getAnswer: () => answerRef.current,
+      onCommit: (next) => onAnswerRef.current(next),
+      isLocked: () => lockedRef.current === true,
+    });
+    // PRD-57 §6.5: поле ответа меняется на каждом нажатии, поэтому подписка своя, а не
+    // через делегат щелчка. Ответ уходит СЫРОЙ строкой — нормализация живёт в сравнении.
+    const detachShortAnswer = attachShortAnswer(shadow as never, {
+      getAnswer: () => (typeof answerRef.current === "string" ? answerRef.current : ""),
+      setAnswer: (value) => onAnswerRef.current(value),
+      // PRD-57 FR-24: ответ задания с пропусками — словарь «имя пропуска → набранное».
+      setBlank: (id, value) => {
+        const current = answerRef.current;
+        const map = current && typeof current === "object" && !Array.isArray(current)
+          ? (current as Record<string, string>)
+          : {};
+        onAnswerRef.current({ ...map, [id]: value });
+      },
+      isLocked: () => lockedRef.current === true,
+    });
+    return () => {
+      detachAllocation();
+      detachShortAnswer();
+    };
+  }, []);
 
   // Предзаполнение минимумом (FR-30): вопрос с ненулевым минимумом стартует со
   // значениями, а не с нулями, иначе учащийся распределит весь бюджет и застрянет с
@@ -232,19 +310,57 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question.id]);
 
+  /**
+   * PRD-57 §6.5 / §5 / FR-24: ответ, которым рисуется ТЕКСТОВОЕ поле.
+   *
+   * Экран управляемый: набранное уходит наверх и возвращается пропсом. У вариантов
+   * выбора это безобидно, а у поля ввода — нет: значение стоит в разметке слота,
+   * поэтому каждое нажатие пересобирало сцену, поле подменялось новым узлом, и фокус
+   * пропадал. Приёмка 2026-09-20 показала итог: участник набирал по одному символу на
+   * щелчок. Значение поля дальше ведёт САМ БРАУЗЕР — сцена узнаёт о нём подпиской
+   * (`attachShortAnswer`), а в разметку оно попадает только при смене вопроса, в
+   * разборе и когда ответ заперт: там поле не набирают, а читают.
+   *
+   * Это та же причина, по которой пакет собирает экран вопроса ОДИН раз, а признак
+   * «ожидается число» ставится на месте, а не перерисовкой (см. `short-answer-dom`).
+   */
+  const typedField = isTextEntry(question.type) || isOpenText(question.type) || hasBlanks(question.type);
+  const readOnlyNow = props.reviewMode === true || props.locked === true;
+  const renderAnswerRef = useRef<{ questionId: string; answer: unknown }>({
+    questionId: question.id,
+    answer,
+  });
+  if (!typedField || readOnlyNow || renderAnswerRef.current.questionId !== question.id) {
+    renderAnswerRef.current = { questionId: question.id, answer };
+  }
+  const renderAnswer = renderAnswerRef.current.answer;
+
   const css = `${tpl.css}\n#q-progress-fill{width:${Math.round(progressPercent)}%}`;
   const slots = {
     // Inline, not block: the prompt renders into the scene's `<h2>` heading, and a
     // paragraph inside it would be invalid. The SCORM twin fills the same slot
     // through the same renderer, so the two hosts show identical markup.
-    "question-text": renderInlineMarkdown(question.prompt),
+    // PRD-57 FR-24: у задания с пропусками поля стоят ВНУТРИ текста, а блок ответа
+    // пуст. Порядок обязателен: сначала разметка, потом подстановка полей — иначе поле
+    // окажется внутри кода или ссылки.
+    "question-text": hasBlanks(question.type)
+      ? renderBlanksPrompt(promptHtml(question), {
+        mode: props.reviewMode ? "answer" : "input",
+        blanks: blanksOf(question),
+        answer: renderAnswer && typeof renderAnswer === "object" && !Array.isArray(renderAnswer)
+          ? (renderAnswer as Record<string, string>)
+          : undefined,
+        readonly: props.reviewMode === true,
+      })
+      : promptHtml(question),
     "question-media": renderQuestionMedia(question),
     "question-interaction": interactionHtml(
       question,
-      answer,
+      renderAnswer,
       shuffleMapping,
       poolOrder,
       props.reviewMode ? props.correctAnswer : undefined,
+      { retake: props.simRetake === true, readonly: props.locked === true || props.reviewMode === true },
     ),
     "question-feedback": props.feedbackHtml ?? "",
   };
@@ -299,10 +415,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         layout={tpl.layout}
         css={css}
         cssVars={tpl.cssVars}
+        dataAttrs={tpl.dataAttrs}
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
         themed={tpl.themed}
-        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type, question), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
+        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type, question), questionFont: questionFont(question.prompt, (question as { promptFormat?: unknown }).promptFormat), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
         slots={slots}
         timers={props.timers}
         onShadowReady={attachHostInputs}
@@ -321,6 +438,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
             return;
           }
           if (props.locked) return; // read-only while feedback is shown
+          // «Сценарий в ИС»: «Пройти» и «Пройти заново» — открыть окно правил и затем плеер.
+          if (action === SIM_OPEN_ACTION) {
+            props.onSimOpen?.();
+            return;
+          }
           if (action.startsWith("select:")) {
             const i = Number(action.slice("select:".length));
             if (!Number.isNaN(i)) onAnswer(nextAnswer(question, answer, i));

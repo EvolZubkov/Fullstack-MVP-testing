@@ -14,8 +14,8 @@ import {
   Separator,
   Stack,
   Text,
-} from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+  useToast,
+} from "@skillum/ui-kit";
 import { useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { loginSchema, type LoginData } from "@shared/schema";
@@ -23,8 +23,8 @@ import { t } from "@/lib/i18n";
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
-  const { login } = useAuth();
-  const { toast } = useToast();
+  const { login, logout } = useAuth();
+  const { push: toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginData>({
@@ -36,20 +36,31 @@ export default function LoginPage() {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      const success = await login(data.email, data.password);
-      if (success) {
-        toast({ title: t.auth.welcomeBack, description: t.auth.loginSuccess });
+      const outcome = await login(data.email, data.password);
+      if (outcome === "ok") {
+        toast({ tone: "success", title: t.auth.welcomeBack, description: t.auth.loginSuccess });
         navigate("/");
+      } else if (outcome === "link-scope") {
+        // The session still carries an invitation link, and a link admits nothing
+        // outside its test — the sign-in included. Ending it here turns a dead end
+        // into a second attempt that works, instead of a password the person is
+        // told is wrong while it is right.
+        await logout();
+        toast({
+          tone: "error",
+          title: t.auth.loginFailed,
+          description: t.auth.linkScopeBlocksLogin,
+        });
       } else {
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.auth.loginFailed,
           description: t.auth.invalidCredentials,
         });
       }
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.auth.somethingWentWrong,
       });

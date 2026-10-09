@@ -9,7 +9,7 @@
  * scrollable body and footer with `Сохранить` + `Показать изменения` popover
  * (FR-25a / FR-25c) and the close confirmation modal (FR-05 / FR-05a).
  *
- * Components: leans on `@universityrt/ui-kit` for `Tabs`, `Tag`, `IconButton`,
+ * Components: leans on `@skillum/ui-kit` for `Tabs`, `Tag`, `IconButton`,
  * `Button`, `EmptyState` and the two `ModalDialog`s (close confirm / version
  * conflict). The Drawer shell itself stays as manual `.ou-drawer*` markup
  * because the ui-kit `Drawer` does not support a tabs row between the head
@@ -28,7 +28,7 @@ import {
   useState,
 } from "react";
 import type * as React from "react";
-import { AlertTriangle, Loader2, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, X, XCircle } from "lucide-react";
 import {
   Banner,
   Button,
@@ -38,8 +38,9 @@ import {
   Tag,
   Tabs,
   type TabItem,
-} from "@universityrt/ui-kit";
-import { useQueryClient } from "@tanstack/react-query";
+  useToast,
+} from "@skillum/ui-kit";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useTestEditor,
   type EditorTabKey,
@@ -48,18 +49,26 @@ import {
   type UseTestEditorResult,
 } from "./use-test-editor";
 import { apiToEditorModel, type ApiTestResponse } from "./test-editor.mappers";
-import type { TestEditorModel } from "./test-editor.types";
-import { buildFieldErrorIndex } from "./field-errors";
+import type { TestEditorModel, ValidationIssue } from "./test-editor.types";
+import { buildFieldErrorIndex, buildIssueLevel, REVEAL_EVENT } from "./field-errors";
 import { useDesignSettings } from "./use-design-settings";
 import { useContentPages, hasStructureErrors, hasStructureWarnings } from "./use-content-pages";
-import { useToast } from "@/hooks/use-toast";
-import { CompositionSection } from "./sections/topics-structure-section";
-import { SettingsSection } from "./sections/basic-settings-section";
+import {
+  CompositionTab,
+  FeedbackTab,
+  MainTab,
+  RulesTab,
+  ScoringTab,
+} from "./sections/editor-tabs";
 import { DesignSection } from "./sections/design-section";
-import { StructureSection } from "./sections/start-pages-section";
-import { ResultVariablesSection } from "./sections/result-variables-section";
-import { ScalesSection } from "./sections/scales-section";
-import { ScoringSection } from "./sections/scoring-section";
+import { ScenarioTaskSection } from "./sections/scenario-task-section";
+import { describeFeasibilityState } from "@/features/content-protection/issue-text";
+import { ReviewPanel } from "../review/review-panel";
+import type { ReviewAnchorItem } from "../review/review-comment-form";
+import { useReviewComments } from "../review/use-review-comments";
+import { QuestionEditorDrawer } from "@/features/questions/question-editor-drawer";
+import type { Question, Topic } from "@shared/schema";
+import { useOptionalAuth } from "@/lib/auth";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -77,11 +86,31 @@ export type TestEditorProps = {
   /** Invoked when the user closes the Drawer (or the close confirmation). */
   onClose: () => void;
   /**
+   * Тест создан «Применить»-ем. Ящик при этом НЕ закрывается: автор продолжает
+   * работу с уже созданным тестом, поэтому владелец состояния обязан переключить
+   * ящик из режима создания в режим правки этого идентификатора.
+   *
+   * Не передан — ящик закрывается, как раньше.
+   */
+  onCreated?: (testId: string) => void;
+  /**
    * Tab to open on. Lets a caller send the author straight to the work that
    * prompted the opening — the tests list points at «Структура» for a test whose
-   * pages need mapping (PRD-22, plan Э6). Defaults to «Состав».
+   * pages need mapping (PRD-22, plan Э6). Defaults to «Основное».
    */
   initialTab?: EditorTabKey;
+  /**
+   * PRD-52: ветка комментариев, раскрываемая по ссылке `?review=<id>`. Ящик её не
+   * ищет — просто передаёт панели, которая раскроет и подсветит нужную.
+   */
+  focusReviewThreadId?: string;
+  /**
+   * Замечания выполнимости выдачи, прочитанные после успешного сохранения
+   * (PRD-15 FR-05). Показывать их ВНУТРИ ящика нельзя: сохранение его закрывает,
+   * — поэтому строки уходят наверх, списку тестов, в тот же advisory-диалог, что
+   * и замечания публикации.
+   */
+  onFeasibilityNotes?: (notes: string[]) => void;
 };
 
 export type TestEditorViewProps = {
@@ -91,43 +120,118 @@ export type TestEditorViewProps = {
   onClose: () => void;
   /** Editor state (typically the result of {@link useTestEditor}). */
   editor: UseTestEditorResult;
-  /** Tab to open on; defaults to «Состав». See {@link TestEditorProps.initialTab}. */
+  /** Tab to open on; defaults to «Основное». See {@link TestEditorProps.initialTab}. */
   initialTab?: EditorTabKey;
-};
-
-const TAB_ORDER: EditorTabKey[] = [
-  "composition",
-  "settings",
-  "design",
-  "structure",
-  "scoring",
-  "scales",
-  "metrics",
-];
-
-const TAB_LABELS: Record<EditorTabKey, string> = {
-  composition: "Состав",
-  settings: "Настройки",
-  design: "Оформление",
-  structure: "Структура",
-  scoring: "Оценка",
-  scales: "Шкалы",
-  metrics: "Показатели",
+  /** См. {@link TestEditorProps.focusReviewThreadId}. */
+  focusReviewThreadId?: string;
+  /** See {@link TestEditorProps.onFeasibilityNotes}. */
+  onFeasibilityNotes?: (notes: string[]) => void;
 };
 
 /**
- * Maps a {@link ValidationIssue} `field` path to the editor tab that renders it
- * (FR-20c anchor navigation). `sections*` live in the Состав tab; everything
- * else (`basic.*`, `passRules.*`, `adaptive.*`) is edited in the Настройки tab.
+ * Порядок вкладок ящика (план «перестройка настроек редактора теста», §3.1). Вкладка
+ * отвечает на ОДИН вопрос автора и идёт в том порядке, в каком он их задаёт: что это
+ * за тест -> из чего собран -> как идёт -> как оценивается -> что видит участник ->
+ * как выглядит -> что о нём сказали коллеги.
+ */
+const TAB_ORDER: EditorTabKey[] = [
+  "main",
+  "composition",
+  "rules",
+  "scoring",
+  "feedback",
+  "design",
+  "review",
+];
+
+const TAB_LABELS: Record<EditorTabKey, string> = {
+  main: "Основное",
+  composition: "Состав и сценарий",
+  rules: "Правила прохождения",
+  scoring: "Оценка результата",
+  feedback: "Обратная связь и итоги",
+  design: "Оформление",
+  review: "Комментарии",
+};
+
+/**
+ * Адрес поля с ошибкой: в какой вкладке его искать (FR-20c). После перестройки ящика
+ * адреса другие — состав и сценарий в одной вкладке, вердикт уехал к оценке, — поэтому
+ * карта переписана целиком, а не дополнена.
  */
 function tabForField(field: string): EditorTabKey {
   if (field === "sections" || field.startsWith("sections[") || field.startsWith("sections.")) {
     return "composition";
   }
-  if (field.startsWith("scoring")) return "scoring";
-  if (field.startsWith("scales")) return "scales";
-  if (field.startsWith("resultVariables")) return "metrics";
-  return "settings";
+  if (field === "flowMode" || field.startsWith("adaptive")) return "composition";
+  // «Сценарий в ИС»: банк сценариев — на вкладке «Задание» (ключ той же вкладки).
+  if (field === "scenario" || field.startsWith("scenarioItems[")) return "composition";
+  if (field.startsWith("scoring") || field.startsWith("passRules")) return "scoring";
+  if (field.startsWith("scales") || field.startsWith("resultVariables")) return "scoring";
+  if (field.startsWith("retakePolicy") || field.startsWith("runtime")) return "rules";
+  return "main";
+}
+
+/**
+ * Русское склонение слова «поле» при числе (2 поля, 5 полей).
+ */
+function pluralFields(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return "полей";
+  const mod10 = n % 10;
+  if (mod10 === 1) return "поле";
+  if (mod10 >= 2 && mod10 <= 4) return "поля";
+  return "полей";
+}
+
+/**
+ * Строка баннера, называющая САМУ проблему: сообщение первой находки плюс хвост
+ * «Ещё N полей» — остальные автор увидит на месте, когда исправит эту.
+ *
+ * Перечислять все сообщения нельзя: их бывает десяток, и баннер вытеснил бы форму.
+ * Молчать тоже нельзя — контракт «Индикация проблем» требует от баннера «сколько
+ * проблем И В ЧЁМ ОНИ», а до этого он печатал только число.
+ *
+ * @param issues - Находки одного уровня (ошибки или предупреждения).
+ * @param fieldCount - Сколько РАЗНЫХ адресов они занимают (то же число, что в заголовке).
+ * @returns Готовая строка или `null`, если находок нет.
+ */
+function summarizeIssues(issues: ValidationIssue[], fieldCount: number): string | null {
+  const first = issues[0];
+  if (!first) return null;
+  const rest = Math.max(0, fieldCount - 1);
+  return rest === 0 ? first.message : `${first.message} Ещё ${rest} ${pluralFields(rest)}.`;
+}
+
+/**
+ * Ближайший якорь `[data-field]` к адресу `field`: точное совпадение, иначе самый
+ * ДЛИННЫЙ путь-предок.
+ *
+ * Длина решает потому, что адреса вложены друг в друга: у темы есть и общий
+ * `sections` (кнопка «Добавить тему»), и `sections[0]` (карточка), и
+ * `sections[0].drawCount` (поле). Прежний отбор брал первый подходящий в порядке
+ * DOM, а кнопка добавления стоит ВЫШЕ карточек — поэтому переход к ошибке внутри
+ * темы приводил автора к добавлению новой темы.
+ *
+ * @param root - Корень ящика редактора.
+ * @param field - Адрес поля из находки проверки.
+ * @returns Элемент-якорь или `null`, если подходящего адреса в DOM нет.
+ */
+function findFieldAnchor(root: HTMLElement, field: string): HTMLElement | null {
+  const exact = root.querySelector<HTMLElement>(`[data-field="${field}"]`);
+  if (exact) return exact;
+  let best: HTMLElement | null = null;
+  let bestLength = -1;
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-field]"))) {
+    const f = el.dataset.field;
+    if (f === undefined) continue;
+    if (!(field.startsWith(`${f}.`) || field.startsWith(`${f}[`))) continue;
+    if (f.length > bestLength) {
+      best = el;
+      bestLength = f.length;
+    }
+  }
+  return best;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -147,14 +251,28 @@ export function TestEditor(props: TestEditorProps): React.JSX.Element | null {
   }, [open, createMode, testId]);
   const editor = useTestEditor(options);
 
+  const { onCreated } = props;
   useEffect(() => {
-    if (editor.createdId !== null) {
-      editor.consumeCreatedId();
-      onClose();
-    }
-  }, [editor.createdId, editor, onClose]);
+    if (editor.createdId === null) return;
+    const id = editor.createdId;
+    editor.consumeCreatedId();
+    // «Применить» создало тест и ящик не закрывает: работу продолжают с СОЗДАННЫМ
+    // тестом, а для этого владелец состояния переводит ящик в режим правки. Без
+    // обработчика поведение прежнее — закрыть.
+    if (onCreated) onCreated(id);
+    else onClose();
+  }, [editor.createdId, editor, onClose, onCreated]);
 
-  return <TestEditorView open={open} onClose={onClose} editor={editor} initialTab={props.initialTab} />;
+  return (
+    <TestEditorView
+      open={open}
+      onClose={onClose}
+      editor={editor}
+      initialTab={props.initialTab}
+      focusReviewThreadId={props.focusReviewThreadId}
+      onFeasibilityNotes={props.onFeasibilityNotes}
+    />
+  );
 }
 
 /**
@@ -164,16 +282,73 @@ export function TestEditor(props: TestEditorProps): React.JSX.Element | null {
  */
 export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | null {
   const { open, onClose, editor } = props;
-  const [activeTab, setActiveTab] = useState<EditorTabKey>(props.initialTab ?? "composition");
+  /**
+   * Вкладка по умолчанию — «Основное» (решение владельца 2026-09-22; открытый вопрос
+   * приёмки эскизов, раздел A). Она отвечает на первый вопрос автора — что это за тест, —
+   * и держит обязательное название. Пока ящик открывался на «Составе и сценарии», новый
+   * тест встречал автора баннером «Название обязательно» и единственной видимой точкой у
+   * «Состава»: поле, о котором шла речь, лежало на соседней вкладке.
+   */
+  const [activeTab, setActiveTab] = useState<EditorTabKey>(props.initialTab ?? "main");
+  /**
+   * PRD-52 FR-28: вопрос, открытый по переходу из комментария. Ящик редактора
+   * вопроса монтируется ТОЛЬКО когда открыт: он тянет за собой охрану контента и
+   * свои запросы, и держать его в ящике теста всё время — плата за то, что нужно
+   * в редком случае.
+   */
+  const [reviewQuestionId, setReviewQuestionId] = useState<string | null>(null);
+  /**
+   * «Вопросы теста» → «Добавить вопрос»: тема нового вопроса. Тот же ящик вопроса, что
+   * в «Темах и вопросах», в режиме создания; монтируется только пока открыт.
+   */
+  const [newQuestionTopicId, setNewQuestionTopicId] = useState<string | null>(null);
+  const questionDrawerOpen = Boolean(reviewQuestionId) || Boolean(newQuestionTopicId);
+  const reviewQuestions = useQuery<Question[]>({
+    queryKey: ["/api/questions"],
+    // Нужны в двух местах: открыть карточку вопроса по якорю и предложить вопросы
+    // раздела во втором поле формы комментария. Второе — сразу на вкладке.
+    enabled: questionDrawerOpen || activeTab === "review",
+  });
+  const reviewTopics = useQuery<Topic[]>({
+    queryKey: ["/api/topics"],
+    enabled: questionDrawerOpen,
+  });
+  // Подсказки подтем для ящика вопроса — как в «Темах и вопросах»: все теги банка.
+  const tagSuggestions = useMemo(
+    () =>
+      questionDrawerOpen
+        ? [...new Set((reviewQuestions.data ?? []).flatMap((q) => q.tags ?? []))].sort()
+        : [],
+    [questionDrawerOpen, reviewQuestions.data],
+  );
+  const reviewQuestion = reviewQuestionId
+    ? (reviewQuestions.data ?? []).find((q) => q.id === reviewQuestionId) ?? null
+    : null;
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
 
   // Hoist design hook here so the unified drawer footer «Сохранить» drives
   // both the test-settings PUT and the design-settings PUT in a single
   // action (per wireframe prd7-design-tab.html — single footer save).
-  const design = useDesignSettings(editor.model?.id);
+  //
+  // В режиме создания теста ещё нет, поэтому хук получает привязку к черновику
+  // редактора: набранное оформление хранится ТАМ и уезжает вместе с созданием
+  // (`templateId` — телом создания, остальное — сразу после INSERT). Сам хук работает
+  // как обычно: тянет манифест и правит этот черновик, так что панели не знают, в
+  // каком режиме их открыли.
+  const design = useDesignSettings(
+    editor.model?.id,
+    editor.mode === "create" && editor.model
+      ? {
+          draft: editor.model.design ?? { templateId: "default", params: {} },
+          onChange: (next) => editor.updateModel((m) => ({ ...m, design: next })),
+        }
+      : undefined,
+  );
 
-  const { toast } = useToast();
+  const { push: toast } = useToast();
+  // PRD-52: свои комментарии подписываются «Вы» — панель отличает их по идентификатору.
+  const auth = useOptionalAuth();
 
   // Hoist content-pages here too so the «Структура» section shares one hook
   // instance with the drawer — letting the tab reflect content-page warnings
@@ -181,7 +356,20 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   // Pass the «Оформление» DRAFT template id so the variant catalogue (and the
   // «Сменить вариант» / add-page options) follows the in-progress template
   // selection immediately, before the design is saved.
-  const contentPages = useContentPages(editor.model?.id, design.draft.templateId);
+  // В режиме создания страниц ещё нет: хук получает план — сценарий и темы, — и
+  // ПРЕДСКАЗЫВАЕТ системные узлы тем же планировщиком, которым сервер разложит их в
+  // транзакции создания. Автор настраивает структуру сразу, а сохранение дописывает
+  // её по настоящим идентификаторам.
+  const contentPages = useContentPages(
+    editor.model?.id,
+    design.draft.templateId,
+    editor.mode === "create" && editor.model
+      ? {
+          flowMode: editor.model.flowMode,
+          topicIds: editor.model.sections.map((s) => s.topicId),
+        }
+      : undefined,
+  );
   // Required-empty in any author page → Save is blocked (error).
   // templateKeyMissing → status-dot warning only (does not block Save).
   const structureErr = useMemo(
@@ -201,16 +389,16 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   // The Drawer stays mounted between openings, so the initial tab has to be
   // re-applied on each open — otherwise only the very first opening honours it.
   useEffect(() => {
-    if (open) setActiveTab(props.initialTab ?? "composition");
+    if (open) setActiveTab(props.initialTab ?? "main");
   }, [open, props.initialTab]);
 
   useEffect(() => {
     if (!open) return;
     const handle = window.setTimeout(() => {
-      const firstTab = drawerRef.current?.querySelector<HTMLButtonElement>(
-        '[role="tab"]',
-      );
-      firstTab?.focus();
+      // NFR-19: фокус уходит в ТЕЛО ящика. На первой вкладке он читался как «вы
+      // здесь», и стрелки листали вкладки вместо прокрутки содержимого.
+      const body = drawerRef.current?.querySelector<HTMLElement>(".ou-drawer__body");
+      body?.focus();
     }, 0);
     return () => window.clearTimeout(handle);
   }, [open]);
@@ -276,6 +464,25 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     () => new Set(editor.validation.errors.map((e) => e.field)).size,
     [editor.validation.errors],
   );
+  // Предупреждения считаются отдельно: у них своя строка и свой переход. Сливать их
+  // с ошибками в один баннер нельзя — автор перестанет понимать, что держит сохранение
+  // (контракт «Индикация проблем», правило про два баннера).
+  const warningFieldCount = useMemo(
+    () => new Set(editor.validation.warnings.map((w) => w.field)).size,
+    [editor.validation.warnings],
+  );
+
+  // Контракт «Индикация проблем»: баннер говорит, СКОЛЬКО проблем и В ЧЁМ ОНИ.
+  // Один счётчик оставлял автора ни с чем, когда виноватое поле лежит в свёрнутой
+  // карточке: на экране «Поля с ошибками: 1» и ни одной пометки.
+  const errorSummary = useMemo(
+    () => summarizeIssues(editor.validation.errors, errorFieldCount),
+    [editor.validation.errors, errorFieldCount],
+  );
+  const warningSummary = useMemo(
+    () => summarizeIssues(editor.validation.warnings, warningFieldCount),
+    [editor.validation.warnings, warningFieldCount],
+  );
 
   // FR-20c: per-field error index passed to every section so the exact
   // offending control is marked invalid (not just the tab badge / banner).
@@ -284,31 +491,77 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     [editor.validation.errors],
   );
 
+  // Уровень проблемы по адресу — для точек на пунктах рейла: точка показывает ХУДШИЙ
+  // уровень внутри подраздела, а индекс ошибок знает только ошибки.
+  const issueLevel = useMemo(
+    () => buildIssueLevel([...editor.validation.errors, ...editor.validation.warnings]),
+    [editor.validation.errors, editor.validation.warnings],
+  );
+
   /**
    * FR-20c: switch to the tab owning `field`, then scroll/focus the matching
    * input. Anchors are `data-field` attributes on the section formfields; an
-   * exact match wins, otherwise the nearest ancestor path (for nested array
-   * fields) is used. Focus lands on the first focusable control inside it.
+   * exact match wins, otherwise the CLOSEST ancestor path (see
+   * {@link findFieldAnchor}). Focus lands on the first focusable control inside it.
+   *
+   * Карточку, внутри которой лежит адрес, переход РАСКРЫВАЕТ: тело свёрнутой карточки
+   * не смонтировано, поэтому ни точного якоря, ни сообщения об ошибке в DOM нет, и
+   * автор приезжал к молчащей карточке (а до якоря на самой карточке — и вовсе к
+   * кнопке «Добавить тему»: общий адрес `sections` висит на ней).
    */
   const goToError = useCallback((field: string) => {
     setActiveTab(tabForField(field));
+    /**
+     * Прокрутить к якорю и поставить фокус на его поле.
+     *
+     * @returns `false` — поле ещё скрыто (браузер не принимает фокус на невидимом
+     * элементе), значит раскрытие карточки не доехало и попытку надо повторить.
+     */
+    const land = (anchor: HTMLElement): boolean => {
+      anchor.scrollIntoView?.({ block: "center" });
+      // Поле вперёд кнопок: у числового поля DS первыми в разметке идут стрелки
+      // «Уменьшить»/«Увеличить», и фокус доставался им — автор приезжал к ошибке,
+      // а под курсором оказывалось действие, меняющее значение.
+      const control = anchor.matches("input, textarea, select, button, [tabindex]")
+        ? anchor
+        : anchor.querySelector<HTMLElement>("input, textarea, select") ??
+          anchor.querySelector<HTMLElement>("button, [tabindex]");
+      control?.focus();
+      const landed = control == null || document.activeElement === control;
+      // Программный `focus()` не считается «видимым» фокусом: `:focus-visible` браузер
+      // ставит по клавиатуре, а не по вызову из кода, — и после перехода поле выглядит
+      // ровно как соседние. Кольцо ставим сами и снимаем, когда поле покинут; на
+      // неудавшейся попытке не ставим вовсе — снять его было бы уже нечем.
+      const box = anchor.matches(".ou-field, .ou-textarea, .ou-select")
+        ? anchor
+        : anchor.querySelector<HTMLElement>(".ou-field, .ou-textarea, .ou-select");
+      if (box && landed) {
+        box.classList.add("is-focused");
+        control?.addEventListener("blur", () => box.classList.remove("is-focused"), { once: true });
+      }
+      return landed;
+    };
     // Defer to the next macrotask so the freshly-activated tab has rendered.
     window.setTimeout(() => {
       const root = drawerRef.current;
       if (!root) return;
-      let anchor = root.querySelector<HTMLElement>(`[data-field="${field}"]`);
-      if (!anchor) {
-        anchor = Array.from(root.querySelectorAll<HTMLElement>("[data-field]")).find((el) => {
-          const f = el.dataset.field;
-          return f !== undefined && (field === f || field.startsWith(`${f}.`) || field.startsWith(`${f}[`));
-        }) ?? null;
-      }
+      const anchor = findFieldAnchor(root, field);
       if (!anchor) return;
-      anchor.scrollIntoView?.({ block: "center" });
-      const control = anchor.matches("input, textarea, select, button, [tabindex]")
-        ? anchor
-        : anchor.querySelector<HTMLElement>("input, textarea, select, button, [tabindex]");
-      control?.focus();
+      // Сначала просим раскрыться всё, внутри чего лежит адрес. Событие ВСПЛЫВАЕТ,
+      // поэтому вложенность разбирается сама: каждая свёрнутая карточка на пути
+      // слышит его и открывается. Угадывать это по DOM нельзя — тело свёрнутой
+      // карточки остаётся в разметке (её прячет CSS), так что и «точный» якорь
+      // находится, и фокус на нём молча не встаёт: автор приезжал в никуда.
+      anchor.dispatchEvent(new CustomEvent(REVEAL_EVENT, { bubbles: true }));
+      // Раскрытие доезжает не мгновенно, а пока карточка закрыта, поле не принимает
+      // фокус. Пробуем несколько кадров подряд и сдаёмся, чтобы не крутиться вечно.
+      const tryLand = (attempt: number) => {
+        const root2 = drawerRef.current;
+        if (!root2) return;
+        if (land(findFieldAnchor(root2, field) ?? anchor)) return;
+        if (attempt < 5) window.setTimeout(() => tryLand(attempt + 1), 32);
+      };
+      tryLand(0);
     }, 0);
   }, []);
 
@@ -323,9 +576,14 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     // sources (test-settings draft, design draft, content-page mutations); the
     // toast confirms the user's action succeeded for whichever was dirty.
     const wasDirty = editor.isDirty || design.isDirty || contentPages.isDirty;
+    // Идентификатор только что созданного теста читается СРАЗУ после сохранения, без
+    // ожиданий между: дальше идут `await`, а ящик закрывается по появлению этого
+    // идентификатора, и между ними успевает встать перерисовка.
+    let createdId: string | null = null;
     if (editor.isDirty) {
       const ok = await editor.save();
       if (!ok) return false;
+      createdId = editor.getCreatedId();
     }
     if (design.isDirty) {
       await design.save();
@@ -333,15 +591,28 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     // Commit the «Структура» draft AFTER the design — so a template switch is
     // persisted first and the content pages validate/persist against it. On a
     // commit failure keep the drawer open (error surfaced via the structure banner).
+    //
+    // Идентификатор только что созданного теста читается СИНХРОННО (`getCreatedId`):
+    // до этого момента структура была предсказанием, и дописывать её надо по тому
+    // адресу, который вернуло создание, а не ждать перерисовки.
     if (contentPages.isDirty) {
       try {
-        await contentPages.commit();
+        await contentPages.commit(createdId ?? undefined);
       } catch {
+        // Тест уже создан, а дописать структуру не удалось: ящик всё равно закроется
+        // (его закрывает появление идентификатора), поэтому баннер внутри никто не
+        // увидит — говорим отдельно и называем, что делать.
+        if (createdId) {
+          toast({
+            tone: "success", title: "Тест создан, но структуру дописать не удалось",
+            description: "Откройте тест и сохраните структуру ещё раз.",
+          });
+        }
         return false;
       }
     }
     if (wasDirty) {
-      toast({ title: "Изменения сохранены" });
+      toast({ tone: "success", title: "Изменения сохранены" });
       // Refresh the tests list so its server-computed columns re-run — notably the
       // PRD-22 «недоступный вариант» mark (`unmappedPageCount`), which otherwise
       // kept its stale count after the author remapped the pages here.
@@ -350,7 +621,27 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     return true;
   }, [design, editor, contentPages, toast, queryClient]);
 
-  const handleSave = useCallback(async () => {
+  // PRD-15 FR-05: сохранили — и сразу сказали, если выдавать вопросы по этому
+  // составу нечем. Строки уходят наверх: ящик закрывается этим же обработчиком.
+  const reportFeasibility = useCallback(() => {
+    const findings = editor.getFeasibility();
+    if (findings.length === 0) return;
+    props.onFeasibilityNotes?.(
+      findings.map(
+        (finding) => `${finding.topicName}: ${finding.issues.map(describeFeasibilityState).join("; ")}`,
+      ),
+    );
+  }, [editor, props]);
+
+  /**
+   * «Применить» — записать набранное и ОСТАТЬСЯ в ящике. Закрытие — отдельное
+   * действие («Закрыть»), поэтому здесь его нет: автор применяет правки по ходу
+   * работы столько раз, сколько нужно.
+   *
+   * В режиме создания это же нажатие создаёт тест; ящик остаётся открытым и
+   * переключается на созданный (см. `onCreated`).
+   */
+  const handleApply = useCallback(async () => {
     if (saveDisabled) return;
     const ok = await saveAll();
     if (!ok) return;
@@ -362,14 +653,15 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
         editor.validation.warnings.length > 0,
       );
     }
-    onClose();
-  }, [saveAll, saveDisabled, onClose, editor.model?.id, editor.validation.warnings.length, queryClient]);
+    reportFeasibility();
+  }, [saveAll, saveDisabled, editor.model?.id, editor.validation.warnings.length, queryClient, reportFeasibility]);
 
   const handleSaveAndExit = useCallback(async () => {
     if (hasErrors) return;
     const ok = await saveAll();
     if (!ok) return;
     setCloseDialogOpen(false);
+    reportFeasibility();
     onClose();
   }, [hasErrors, onClose, saveAll]);
 
@@ -383,34 +675,82 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     onClose();
   }, [contentPages, design, editor, onClose]);
 
-  const statusTag = useMemo(() => deriveStatusTag(editor), [editor]);
+  const statusTag = useMemo(() => deriveStatusTag(editor, combinedDirty), [editor, combinedDirty]);
+
+  /**
+   * Содержимое разделов для второго поля формы комментария: вопросы банка и страницы
+   * содержания этого теста. Собирается здесь, а не в панели: состав теста знает ящик,
+   * а панель не должна ходить за ним сама.
+   */
+  const reviewAnchorItems = useMemo<ReviewAnchorItem[]>(() => {
+    const topicIds = new Set((editor.model?.sections ?? []).map((s) => s.topicId));
+    const questions = (reviewQuestions.data ?? [])
+      .filter((q) => q.topicId && topicIds.has(q.topicId))
+      .map((q, index) => ({
+        id: q.id,
+        // Формулировка бывает длинной, и в списке от неё нужен только опознавательный
+        // кусок — номер несёт остальное.
+        label: `Вопрос ${index + 1}: ${(q.prompt ?? "").slice(0, 60)}`,
+        kind: "question" as const,
+        topicId: q.topicId ?? null,
+      }));
+    const pages = contentPages.pages
+      .filter((page) => page.topicId && topicIds.has(page.topicId))
+      .map((page) => ({
+        id: page.id,
+        label: `Страница: ${page.templateKey ?? page.type}`,
+        kind: "content-page" as const,
+        topicId: page.topicId,
+      }));
+    return [...questions, ...pages];
+  }, [editor.model?.sections, reviewQuestions.data, contentPages.pages]);
+
+  // Счётчик открытых веток на вкладке. Запрос тот же, что у панели рецензирования, —
+  // React Query отдаёт его из кэша, второго обращения к серверу не будет.
+  const { openCount: reviewOpenCount } = useReviewComments(editor.model?.id ?? "", {
+    enabled: Boolean(editor.model?.id) && editor.mode !== "create",
+  });
 
   const tabItems = useMemo<TabItem<EditorTabKey>[]>(
     () =>
-      TAB_ORDER.map((tab) => {
-        const base = editor.tabStatuses[tab];
-        // The «Структура» tab folds in content-page warnings (missing variant /
-        // unfilled required fields) on top of its own draft status.
-        const status =
-          tab === "structure"
-            ? { ...base, warning: base.warning || structureWarn }
-            : base;
-        // Per prd7-editor-drawer.html the dirty/warn/error indicator is a
-        // small inline dot rendered INSIDE the tab label (not in the badge
-        // pill slot). Using the `badge` prop would wrap it in
-        // `.ou-tabs__badge` (an 18×18 chip designed for counts/labels) —
-        // that doesn't match the wireframe. So we compose label+dot here.
-        return {
-          id: tab,
-          label: (
-            <>
-              {TAB_LABELS[tab]}
-              <StatusBadge status={status} />
-            </>
-          ),
-        };
-      }),
-    [editor.tabStatuses, structureWarn],
+      TAB_ORDER
+        // PRD-52: комментарии привязаны к СУЩЕСТВУЮЩЕМУ тесту. У создаваемого ветки жить
+        // негде — вкладка появляется у сохранённого. Признак берётся из РЕЖИМА ящика, а не
+        // из загруженной модели: иначе полоса вкладок дёргалась бы по приходу ответа.
+        .filter((tab) => tab !== "review" || editor.mode !== "create")
+        .map((tab) => {
+          const base = editor.tabStatuses[tab];
+          // The «Структура» tab folds in content-page warnings (missing variant /
+          // unfilled required fields) on top of its own draft status.
+          const status =
+            tab === "composition"
+              ? { ...base, warning: base.warning || structureWarn }
+              : base;
+          // Per prd7-editor-drawer.html the dirty/warn/error indicator is a
+          // small inline dot rendered INSIDE the tab label (not in the badge
+          // pill slot). Using the `badge` prop would wrap it in
+          // `.ou-tabs__badge` (an 18×18 chip designed for counts/labels) —
+          // that doesn't match the wireframe. So we compose label+dot here.
+          return {
+            id: tab,
+            label: (
+              <>
+                {/* «Сценарий в ИС»: вкладка состава у теста «Сценарий» называется «Задание». */}
+                {tab === "composition" && editor.model?.mode === "scenario" ? "Задание" : TAB_LABELS[tab]}
+                {/* PRD-52: на вкладке комментариев — счётчик ОТКРЫТЫХ веток. Точка
+                    состояния говорит «тут что-то есть», а число — сколько ещё ждёт
+                    ответа, и ради него не нужно открывать вкладку. */}
+                {tab === "review" && reviewOpenCount > 0 && (
+                  <Tag tone="warning" size="s" data-testid="tab-review-open-count">
+                    {reviewOpenCount}
+                  </Tag>
+                )}
+                <StatusBadge status={status} />
+              </>
+            ),
+          };
+        }),
+    [editor.mode, editor.model?.mode, editor.tabStatuses, structureWarn, reviewOpenCount],
   );
 
   if (!open) return null;
@@ -426,7 +766,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
 
   return (
     <div
-      className="ou-drawer-root"
+      className="ou-drawer-root ou-drawer-root--right"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -497,9 +837,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
             // Tabs that render an `ou-drawer__split` (rail + content) need the
             // flush body so the split fills the full height — otherwise a short
             // pane (e.g. the Scales empty state) leaves a gap below.
-            (activeTab === "settings" || activeTab === "design" || activeTab === "scales"
-              ? " ou-drawer__body--flush"
-              : "")
+            (activeTab === "main" || activeTab === "review" ? "" : " ou-drawer__body--flush")
           }
           tabIndex={0}
           data-testid="test-editor-body"
@@ -522,94 +860,194 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
             container). With display:contents the wrapper is removed from
             layout but `inert` still propagates to its descendants.
           */}
-          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-          {/* @ts-expect-error inert attribute lacks types in older React/dom-lib versions */}
-          <div className="tb-saving-inert-wrap" inert={combinedSaving ? "" : undefined}>
-          {hasErrors && (
-            <Banner
-              tone="error"
-              title={`Поля с ошибками: ${errorFieldCount}`}
-              description="Исправьте отмеченные поля — сохранение недоступно, пока есть ошибки."
-              actions={[
-                {
-                  label: "Перейти к ошибкам",
-                  onClick: () => goToError(editor.validation.errors[0].field),
-                },
-              ]}
-              data-testid="test-editor-error-summary"
-            />
+          {/* React 19 types `inert` as a boolean and treats the old `""` as FALSE — the wrapper
+              was never inert and the author could keep editing a draft being saved. */}
+          <div className="tb-saving-inert-wrap" inert={combinedSaving || undefined}>
+          {/* Стопка баннеров липнет ЦЕЛИКОМ: два sticky-баннера с одинаковым `top`
+              наезжают друг на друга, и нижний закрывает верхний вместе с действием.
+              Ошибки выше предупреждений — у них разные последствия. */}
+          {(hasErrors || warningFieldCount > 0) && (
+            <div className="tb-alerts" data-testid="test-editor-alerts">
+              {hasErrors && (
+                <Banner
+                  tone="error"
+                  title={`Поля с ошибками: ${errorFieldCount}`}
+                  description={
+                    errorSummary
+                      ? `${errorSummary} Сохранение недоступно, пока есть ошибки.`
+                      : "Исправьте отмеченные поля — сохранение недоступно, пока есть ошибки."
+                  }
+                  actions={
+                    editor.validation.errors.length > 0
+                      ? [
+                          {
+                            label: "Перейти к ошибкам",
+                            onClick: () => goToError(editor.validation.errors[0].field),
+                          },
+                        ]
+                      : undefined
+                  }
+                  data-testid="test-editor-error-summary"
+                />
+              )}
+              {warningFieldCount > 0 && (
+                <Banner
+                  tone="warning"
+                  title={`Предупреждения: ${warningFieldCount}`}
+                  description={
+                    warningSummary
+                      ? `${warningSummary} Сохранить можно, но посмотрите — вероятно, задумано было иначе.`
+                      : "Сохранить можно, но посмотрите — вероятно, задумано было иначе."
+                  }
+                  actions={[
+                    {
+                      label: "Перейти к предупреждениям",
+                      onClick: () => goToError(editor.validation.warnings[0].field),
+                    },
+                  ]}
+                  data-testid="test-editor-warning-summary"
+                />
+              )}
+            </div>
           )}
           {editor.saveError && (
             <Banner
               tone="error"
               title="Не удалось сохранить тест"
-              description={editor.saveError.message}
+              description={
+                // Сбой на ДОЗАПИСИ: сам тест уже создан, повтор допишет остальное в
+                // него же и второго теста не создаст. Без этой строки автор читает
+                // «не удалось сохранить» и не знает, что тест уже есть.
+                editor.mode === "create" && editor.getCreatedId()
+                  ? `Тест создан, но часть настроек дописать не удалось: ${editor.saveError.message}. Нажмите «Сохранить» ещё раз — повтор дополнит этот же тест.`
+                  : editor.saveError.message
+              }
               onClose={editor.dismissSaveError}
               data-testid="test-editor-save-error"
             />
           )}
-          {editor.model && activeTab === "composition" && (
-            <CompositionSection
+          {editor.model && activeTab === "main" && (
+            <MainTab
               model={editor.model}
               updateModel={editor.updateModel}
               fieldErrors={fieldErrors}
+              issueLevel={issueLevel}
             />
           )}
-          {editor.model && activeTab === "settings" && (
-            <SettingsSection
+          {/* «Сценарий в ИС»: у теста «Сценарий» вместо состава и сценария прохождения — задание. */}
+          {editor.model && activeTab === "composition" && editor.model.mode === "scenario" && (
+            <ScenarioTaskSection
+              model={editor.model}
+              updateModel={editor.updateModel}
+              testId={editor.model.id}
+              content={contentPages}
+              savedFlowMode={editor.savedFlowMode}
+              designDraft={design.draft}
+            />
+          )}
+          {editor.model && activeTab === "composition" && editor.model.mode !== "scenario" && (
+            <CompositionTab
               model={editor.model}
               updateModel={editor.updateModel}
               fieldErrors={fieldErrors}
-              // Карточке отчёта нужен ЧЕРНОВОЙ шаблон вкладки «Оформление»: виды и их поля
-              // предлагает он, а не сохранённый (PRD-27 §4.2).
+              issueLevel={issueLevel}
+              testId={editor.model.id}
+              content={contentPages}
+              savedFlowMode={editor.savedFlowMode}
+              designDraft={design.draft}
+              onOpenQuestion={setReviewQuestionId}
+              onCreateQuestion={setNewQuestionTopicId}
+            />
+          )}
+          {editor.model && activeTab === "rules" && (
+            <RulesTab
+              model={editor.model}
+              updateModel={editor.updateModel}
+              fieldErrors={fieldErrors}
+              issueLevel={issueLevel}
+              // Параметры прогресса объявляет шаблон: рисуются они ЧЕРНОВИКОМ
+              // «Оформления», иначе автор правил бы уже выбранный, но не сохранённый
+              // шаблон вслепую.
               design={design}
+            />
+          )}
+          {editor.model && activeTab === "scoring" && (
+            <ScoringTab
+              model={editor.model}
+              updateModel={editor.updateModel}
+              fieldErrors={fieldErrors}
+              issueLevel={issueLevel}
+              testId={editor.model.id}
+            />
+          )}
+          {editor.model && activeTab === "feedback" && (
+            <FeedbackTab
+              model={editor.model}
+              updateModel={editor.updateModel}
+              fieldErrors={fieldErrors}
+              issueLevel={issueLevel}
+              design={design}
+              // Э2.4: реестр «По вопросам» уводит правку в редактор вопроса. Открывается тем
+              // же ящиком ПОВЕРХ, что и переход из комментария (PRD-52 FR-28): ящик теста
+              // остаётся смонтированным, и автор возвращается на то же место реестра.
+              onOpenQuestion={setReviewQuestionId}
             />
           )}
           {editor.model && activeTab === "design" && (
             <DesignSection
               testId={editor.model.id}
               design={design}
-              // PRD-47 §6.2: пункт «Отчёт о результатах» правит `model.report` — хранение
-              // осталось своей колонкой, переехал только элемент интерфейса.
+              // PRD-47 §6.2: облик отчёта правит `model.report` — хранение осталось
+              // своей колонкой, переехал только элемент интерфейса.
               model={editor.model}
               updateModel={editor.updateModel}
             />
           )}
-          {editor.model && activeTab === "structure" && (
-            <StructureSection
-              model={editor.model}
-              testId={editor.model.id}
-              content={contentPages}
-              savedFlowMode={editor.savedFlowMode}
-              onGoToComposition={() => setActiveTab("composition")}
-              updateModel={editor.updateModel}
-              designDraft={design.draft}
-            />
-          )}
-          {editor.model && activeTab === "scoring" && (
-            <ScoringSection
-              model={editor.model}
-              testId={editor.model.id}
-              updateModel={editor.updateModel}
-            />
-          )}
-          {editor.model && activeTab === "scales" && (
-            <ScalesSection
-              model={editor.model}
-              testId={editor.model.id}
-              updateModel={editor.updateModel}
-              fieldErrors={fieldErrors}
-            />
-          )}
-          {editor.model && activeTab === "metrics" && (
-            <ResultVariablesSection
-              model={editor.model}
-              testId={editor.model.id}
-              updateModel={editor.updateModel}
-              fieldErrors={fieldErrors}
-            />
+          {editor.model?.id && activeTab === "review" && (
+            <div className="tb-settings-content" data-testid="settings-pane-review">
+              <ReviewPanel
+                testId={editor.model.id}
+                mode="editor"
+                canResolve
+                currentUserId={auth?.user?.id}
+                // Место комментария автор выбирает из РАЗДЕЛОВ этого теста: панель сама
+                // не ходит за составом, его знает ящик.
+                anchorOptions={{
+                  topics: editor.model.sections.map((s) => ({ id: s.topicId, name: s.topicName })),
+                  items: reviewAnchorItems,
+                }}
+                onNavigate={(target) => {
+                  // Вопрос открывается ЯЩИКОМ ПОВЕРХ этого: ящик теста остаётся
+                  // смонтированным, поэтому после правки автор возвращается в то же
+                  // место списка комментариев, а не собирает контекст заново.
+                  if (target.target === "question-editor") setReviewQuestionId(target.questionId);
+                  else if (target.target === "test-editor") setActiveTab(target.tab);
+                }}
+                focusThreadId={props.focusReviewThreadId}
+              />
+            </div>
           )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}
+          {reviewQuestionId ? (
+            <QuestionEditorDrawer
+              open={Boolean(reviewQuestion)}
+              question={reviewQuestion}
+              topics={reviewTopics.data ?? []}
+              tagSuggestions={tagSuggestions}
+              onClose={() => setReviewQuestionId(null)}
+              onSaved={() => setReviewQuestionId(null)}
+            />
+          ) : newQuestionTopicId ? (
+            <QuestionEditorDrawer
+              open
+              question={null}
+              defaultTopicId={newQuestionTopicId}
+              topics={reviewTopics.data ?? []}
+              tagSuggestions={tagSuggestions}
+              onClose={() => setNewQuestionTopicId(null)}
+              onSaved={() => setNewQuestionTopicId(null)}
+            />
+          ) : null}
           </div>
           {combinedSaving && (
             <div
@@ -635,8 +1073,21 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
           data-testid="test-editor-foot"
           data-state={combinedDirty ? "dirty" : "default"}
         >
-          {combinedDirty ? (
+          {/* Причина, по которой «Сохранить» заперто. Кнопка `disabled` не читается
+              скринридером, и без этой строки блокировка выглядит поломкой. */}
+          {hasErrors && (
+            <span id="test-editor-save-blocked" className="ou-sr-only">
+              Сначала исправьте ошибки в выделенных секциях.
+            </span>
+          )}
+          {/* Тег состояния и список правок нужны только когда правки есть; три
+              действия стоят всегда и запираются по смыслу — прыгающий подвал хуже
+              заперной кнопки, потому что кнопка на месте, а состав кнопок нет. */}
+          {combinedDirty && (
             <>
+              <Tag tone="warning" data-testid="test-editor-foot-dirty-tag">
+                Изменено
+              </Tag>
               <div className="tb-changes-anchor">
                 <Button
                   variant="ghost"
@@ -657,54 +1108,44 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
                   />
                 )}
               </div>
-              <Button
-                variant="secondary"
-                size="m"
-                // Explicit cancel: discard the draft and close immediately, with no
-                // "save before closing?" prompt (that prompt belongs to the ambiguous
-                // header «×» / backdrop). The user already declared intent to cancel.
-                onClick={handleExitWithoutSave}
-                disabled={combinedSaving}
-                data-testid="test-editor-cancel"
-              >
-                Отменить
-              </Button>
-              <Button
-                variant="primary"
-                size="m"
-                disabled={saveDisabled}
-                aria-disabled={saveDisabled ? "true" : "false"}
-                onClick={handleSave}
-                loading={combinedSaving}
-                data-testid="test-editor-save"
-              >
-                {combinedSaving ? "Сохранение…" : "Сохранить"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="ghost"
-                size="m"
-                onClick={requestClose}
-                disabled={combinedSaving}
-                data-testid="test-editor-cancel"
-              >
-                Закрыть
-              </Button>
-              <Button
-                variant="primary"
-                size="m"
-                disabled={saveDisabled}
-                aria-disabled={saveDisabled ? "true" : "false"}
-                onClick={handleSave}
-                loading={combinedSaving}
-                data-testid="test-editor-save"
-              >
-                {combinedSaving ? "Сохранение…" : "Сохранить"}
-              </Button>
             </>
           )}
+          <Button
+            variant="secondary"
+            size="m"
+            // Отказ от набранного: откатывает черновик и закрывает ящик СРАЗУ, без
+            // вопроса «сохранить перед закрытием» — автор уже сказал, чего хочет.
+            // Вопрос принадлежит неоднозначным путям выхода: «Закрыть», крестику и
+            // клику по подложке.
+            onClick={handleExitWithoutSave}
+            disabled={!combinedDirty || combinedSaving}
+            data-testid="test-editor-cancel"
+          >
+            Отменить
+          </Button>
+          <Button
+            variant="primary"
+            size="m"
+            disabled={saveDisabled}
+            aria-disabled={saveDisabled ? "true" : "false"}
+            aria-describedby={hasErrors ? "test-editor-save-blocked" : undefined}
+            onClick={handleApply}
+            loading={combinedSaving}
+            data-testid="test-editor-save"
+          >
+            {combinedSaving ? "Сохранение…" : "Применить"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="m"
+            // Выход. Есть неприменённое — спрашиваем, как и крестик в шапке.
+            // Свой `testid`: у крестика в шапке уже занят `test-editor-close`.
+            onClick={requestClose}
+            disabled={combinedSaving}
+            data-testid="test-editor-foot-close"
+          >
+            Закрыть
+          </Button>
         </footer>
       </aside>
 
@@ -745,31 +1186,34 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
  * stable layout (badge slot reserved).
  */
 function StatusBadge({ status }: { status: TabStatus }) {
+  // Точка одна на весь ящик: вкладка, пункт рейла и карточка объекта показывают
+  // состояние ОДНИМ классом `tb-status-dot`. Своя копия с другими размерами и другим
+  // цветом «изменено» рассказывала бы про то же самое иначе.
   const cls = status.error
-    ? "status-dot error"
+    ? "tb-status-dot tb-status-dot--err"
     : status.warning
-      ? "status-dot warn"
+      ? "tb-status-dot tb-status-dot--warn"
       : status.dirty
-        ? "status-dot dirty"
+        ? "tb-status-dot tb-status-dot--warn"
         : null;
   if (!cls) return null;
   const aria = status.error
-    ? "есть блокирующие ошибки"
+    ? "Есть ошибки"
     : status.warning
-      ? "есть предупреждения"
-      : "есть изменения";
+      ? "Есть предупреждения"
+      : "Есть несохранённые изменения";
   return <span className={cls} aria-label={aria} />;
 }
 
 function TabPlaceholder({ tab }: { tab: EditorTabKey }) {
   const desc: Record<EditorTabKey, string> = {
-    composition: "Темы и выборка вопросов — наполнение тестом.",
-    settings: "Параметры прохождения, ограничения, обратная связь.",
-    design: "Цвета, шрифты, фоны и логотип.",
-    structure: "Порядок вопросов, страницы и секции.",
-    scoring: "Баллы, цена ответа и сложность вопросов в этом тесте.",
-    scales: "Шкалы и измерения — агрегаты вкладов вопросов.",
-    metrics: "Показатели результата — формулы над итогами теста.",
+    main: "Название, описание, режим теста и интеграция.",
+    composition: "Темы и выборка вопросов, уровни адаптивного теста, сценарий.",
+    rules: "Навигация, что видно во время прохождения, ограничения и защита контента.",
+    scoring: "Цена ответа, вердикт теста и тем, шкалы и показатели.",
+    feedback: "Что участник узнаёт о результате: итоги, тексты и отчёт.",
+    design: "Шаблон и объявленный им облик: цвета, шрифты, фоны и логотип.",
+    review: "Комментарии коллег к этому тесту.",
   };
   return (
     <EmptyState
@@ -874,7 +1318,7 @@ function ChangesPopover(props: {
                     >
                       <span className="tb-changes-popover__label">{d.label}</span>
                       <span className="tb-changes-popover__old">{d.old}</span>
-                      <span className="tb-changes-popover__arrow">→</span>
+                      <ArrowRight size={12} className="tb-changes-popover__arrow" aria-hidden="true" />
                       <span className="tb-changes-popover__new">{d.next}</span>
                     </div>
                   ))
@@ -902,13 +1346,13 @@ function collectChangesByTab(
   draft: TestEditorModel,
 ): Record<EditorTabKey, FieldDiff[]> {
   const result: Record<EditorTabKey, FieldDiff[]> = {
+    main: [],
     composition: [],
-    settings: [],
-    design: [],
-    structure: [],
+    rules: [],
     scoring: [],
-    scales: [],
-    metrics: [],
+    feedback: [],
+    design: [],
+    review: [],
   };
 
   const fmtBool = (v: boolean) => (v ? "Да" : "Нет");
@@ -931,63 +1375,63 @@ function collectChangesByTab(
     }
   > = [
     {
-      tab: "settings",
+      tab: "main",
       field: "title",
       label: "Название",
       oldValue: snap.basic.title,
       newValue: draft.basic.title,
     },
     {
-      tab: "settings",
+      tab: "main",
       field: "description",
       label: "Описание",
       oldValue: snap.basic.description || "не задано",
       newValue: draft.basic.description || "не задано",
     },
     {
-      tab: "settings",
+      tab: "main",
       field: "mode",
       label: "Режим теста",
       oldValue: fmtMode(snap.mode),
       newValue: fmtMode(draft.mode),
     },
     {
-      tab: "settings",
+      tab: "composition",
       field: "flowMode",
       label: "Сценарий прохождения",
       oldValue: fmtFlow(snap.flowMode),
       newValue: fmtFlow(draft.flowMode),
     },
     {
-      tab: "settings",
+      tab: "rules",
       field: "timeLimitMinutes",
       label: "Лимит времени",
       oldValue: fmtMinutes(snap.runtime.timeLimitMinutes),
       newValue: fmtMinutes(draft.runtime.timeLimitMinutes),
     },
     {
-      tab: "settings",
+      tab: "rules",
       field: "maxAttempts",
       label: "Максимум попыток",
       oldValue: fmtAttempts(snap.runtime.maxAttempts),
       newValue: fmtAttempts(draft.runtime.maxAttempts),
     },
     {
-      tab: "settings",
+      tab: "feedback",
       field: "showCorrectAnswers",
-      label: "Показывать правильные ответы",
+      label: "Показывать правильные ответы после ответа",
       oldValue: fmtBool(snap.runtime.showCorrectAnswers),
       newValue: fmtBool(draft.runtime.showCorrectAnswers),
     },
     {
-      tab: "settings",
+      tab: "main",
       field: "webhookUrl",
       label: "Webhook URL",
       oldValue: snap.basic.webhookUrl || "не задан",
       newValue: draft.basic.webhookUrl || "не задан",
     },
     {
-      tab: "settings",
+      tab: "main",
       field: "telemetryEnabled",
       label: "Телеметрия",
       oldValue: fmtBool(snap.basic.telemetryEnabled),
@@ -1132,8 +1576,10 @@ function ConflictDialog(props: {
     <ModalDialog
       open={props.open}
       onClose={props.onCancel}
-      // size "l" so the three actions + the diff-table fit without overflow.
-      size="l"
+      // Размер m — как в эскизе. Три действия в него помещаются: замер утверждённого
+      // эскиза даёт 456px кнопок на 560px модалки. Таблица различий узкая (две
+      // колонки значений), и её ширины хватает.
+      size="m"
       icon={<AlertTriangle size={20} />}
       iconTone="warning"
       title="Конфликт версий"
@@ -1151,7 +1597,7 @@ function ConflictDialog(props: {
           <Button
             variant="destructive"
             size="m"
-            title="Записать ваши изменения поверх серверной версии."
+            title="Записать ваши изменения поверх серверной версии. Чужие правки будут перезаписаны."
             onClick={() => {
               void props.onOverwrite();
             }}
@@ -1163,7 +1609,7 @@ function ConflictDialog(props: {
             variant="primary"
             size="m"
             autoFocus
-            title="Загрузить серверную версию."
+            title="Загрузить серверную версию. Ваши несохранённые правки будут потеряны."
             onClick={() => {
               void props.onReload();
             }}
@@ -1252,7 +1698,7 @@ function ConflictDiffTable(props: { testId: string; localModel: TestEditorModel 
   return (
     <table
       className="tb-conflict-diff"
-      aria-label="Сравнение версий"
+      aria-label="Различия версий"
       data-testid="test-editor-conflict-diff"
     >
       <thead>
@@ -1341,7 +1787,7 @@ function collectConflictRows(
     },
     {
       field: "showCorrectAnswers",
-      label: "Показывать правильные ответы",
+      label: "Показывать правильные ответы после ответа",
       serverValue: fmtBool(server.runtime.showCorrectAnswers),
       localValue: fmtBool(local.runtime.showCorrectAnswers),
     },
@@ -1364,22 +1810,28 @@ function collectConflictRows(
 
 // ─── Status tag derivation ────────────────────────────────────────────────────
 
-import type { TagProps } from "@universityrt/ui-kit";
+import type { TagProps } from "@skillum/ui-kit";
 
-function deriveStatusTag(editor: ReturnType<typeof useTestEditor>): {
+/**
+ * Тег в шапке ящика.
+ *
+ * `dirty` приходит СНАРУЖИ и равен тому же признаку, по которому живёт подвал:
+ * несохранённой бывает не только правка настроек, но и оформление, и структура
+ * страниц. Пока тег считал только черновик настроек, правка оформления давала
+ * «грязный» подвал при спокойной шапке.
+ */
+function deriveStatusTag(
+  editor: ReturnType<typeof useTestEditor>,
+  dirty: boolean,
+): {
   tone: TagProps["tone"];
   label: string;
   ariaLabel: string;
 } {
-  const hasErrors = editor.validation.errors.length > 0;
-  if (hasErrors) {
-    return {
-      tone: "error",
-      label: "Есть ошибки",
-      ariaLabel: "Статус: есть блокирующие ошибки",
-    };
-  }
-  if (editor.isDirty) {
+  // A-17: об ошибках говорят точки и баннер — три места на проблему, и тег шапки в
+  // их число не входит (контракт «Индикация проблем»). Подменяя статус публикации,
+  // тег отнимал у автора единственное место, где виден этот статус.
+  if (dirty) {
     return {
       tone: "warning",
       label: "Изменено",

@@ -57,9 +57,16 @@ const AUTHOR_CAPABILITIES: readonly Capability[] = [
   "tests.debug.play",
   // PRD-15 BRC-27: an author grants access to tests they own (object-scoped).
   "tests.access.grant",
+  // PRD-52 раздел 14: an author sends their own test out for review. Separate
+  // from `tests.access.grant` on purpose — handing someone access by hand and
+  // calling them in to review are different acts — and separate from
+  // `assignments.manage`, which the author does NOT hold: riding on it made the
+  // review dialog answer its own target role with a 403.
+  "tests.review.invite",
   "templates.read",
   "analytics.read",
   "analytics.export",
+  "analytics.import",
 ];
 
 /**
@@ -93,6 +100,7 @@ const MANAGER_CAPABILITIES: readonly Capability[] = [
   "users.create",
   "analytics.read",
   "analytics.export",
+  "analytics.import",
 ];
 
 /** Capabilities of the Administrator role: all except the superadmin-only ones. */

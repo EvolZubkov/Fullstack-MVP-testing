@@ -5,21 +5,31 @@
  *
  * Implements version-conflict detection per PRD-7 §5.3 and §9.
  */
+import { sanitizeAllStringValues } from "./content-page-fields";
+import {
+  replaceReportBlocksIn,
+  type ReportDocumentMode,
+} from "../storage/report-blocks-repository";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   tests,
   testSections,
+  testScenarios,
   adaptiveTopicSettings,
   adaptiveLevels,
   adaptiveLevelLinks,
   contentPages,
   templates,
 } from "@shared/schema";
-import type { Test, ContentPage, TemplateManifest, DrawBlueprint, FormSet } from "@shared/schema";
+import type { Test, ContentPage, TemplateManifest, DrawBlueprint, FormSet, BreakdownDisplaySetting, SectionGroup, SimScoringSettings } from "@shared/schema";
+import type { RichTextFormat } from "@shared/template/rich-text";
+import { sanitizeDescription } from "./description-format";
 import {
   planSystemPages,
+  legacyTypeForKind,
+  positionForKind,
   SYSTEM_KINDS,
   DEFAULT_TEMPLATE_ID,
   extractFlowMode,
@@ -27,7 +37,7 @@ import {
   type FlowMode,
   type SystemKind,
   type ExistingSystemPage,
-} from "./content-pages-lifecycle";
+} from "@shared/content-pages/lifecycle";
 import {
   findMissingRequiredFields,
   RequiredFieldsMissingError,
@@ -39,50 +49,6 @@ import {
 } from "./flow-policy-validator";
 import { syncEntityUsages } from "./media/usage-index";
 import { logger } from "../logger";
-
-/** Legacy `type` value for a freshly-created system row. `questions`/`router`
- *  have no native legacy mapping — we pick `info` since the column will be
- *  dropped in a future release (PRD-7 §1.12). */
-function legacyTypeForKind(kind: SystemKind): "intro" | "info" | "summary" | "html" {
-  switch (kind) {
-    case "intro":   return "intro"; // section «Введение раздела»
-    case "section-results": // section «Итоги раздела» — results-shaped legacy type
-    case "results": return "summary";
-    case "start":   // start/router/questions/review have no native legacy type
-    case "router":  // (column is deprecated, PRD-7 §1.12) — "info" is the neutral
-    case "questions": // placeholder.
-    case "review":
-    default:        return "info";
-  }
-}
-
-/** Position value for a system row. The position column was designed for
- *  content-page placement before/after a topic; system kinds reuse it on a
- *  best-fit basis (start/router → "before", results → "after",
- *  summary → "after_topic", intro/questions → "before_topic").
- *
- *  `router` is test-scope (topicId = null): it is the «До теста» navigation hub
- *  shown before the topics, so it MUST be "before" — the router runtime seeds the
- *  initial pageSequence from the test-scope "before" pages (PRD-4 v1.1 §4.7;
- *  contentFlow.rebuildPageSequence). Placing it at "before_topic" orphans the hub
- *  (no per-topic loop matches a null topicId), so the flow skips straight to the
- *  questions and the router page never renders. */
-function positionForKind(kind: SystemKind): "before" | "after" | "before_topic" | "after_topic" {
-  switch (kind) {
-    case "start":   return "before"; // test landing — «До теста», before everything
-    case "router":  return "before"; // router hub — test-scope «До теста», before the topics
-    case "results": return "after";  // test final results — «После теста»
-    // PRD-19 runtime nodes (обзор / итоги раздела): test-level singletons rendered
-    // by their own runtime phase and EXCLUDED from the content-page flow by kind
-    // (contentFlow.contentPagesFor), so the position is cosmetic — "after" keeps
-    // them out of the per-topic before/after zones.
-    case "review":
-    case "section-results": return "after";
-    case "intro":   // section «Введение раздела» — before the topic's questions
-    case "questions":
-    default:        return "before_topic";
-  }
-}
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 
@@ -115,6 +81,27 @@ export interface SectionPayload {
   drawBlueprintJson?: DrawBlueprint | null;
   /** PRD-17 (BR-12): optional fixed-variant set; null/absent = legacy draw. */
   formSetJson?: FormSet | null;
+  /**
+   * PRD-50 FR-50: тексты подтем этого раздела; `null`/отсутствие = автор их не писал.
+   *
+   * Своей колонкой, а не полем порогов: порог — про оценку (и с Э1 он легаси), текст — про
+   * содержание результата.
+   */
+  breakdownFeedbackJson?: unknown;
+  /**
+   * Толкование темы, заданное ЭТИМ тестом: заменяет текст самой темы целиком.
+   *
+   * `null`/отсутствие = тест не переопределял, и печатается текст темы. Замена, а не
+   * сложение, — то же правило, что у обратной связи темы (PRD-29 §7.1a).
+   */
+  interpretationJson?: unknown;
+  /** Толкования подтем этого раздела — `{ ключ: текст }`; `null`/отсутствие = не написаны. */
+  breakdownInterpretationJson?: unknown;
+  /**
+   * PRD-50 FR-11: `key` of the test's group this section belongs to; `null`/absent = no
+   * group, and the section prints after all groups in its own order (FR-25).
+   */
+  groupKey?: string | null;
   /** PRD-15 block D (FR-31): per-section default price; null = inherit test. */
   defaultPoints?: number | null;
   /**
@@ -146,6 +133,11 @@ export interface AdaptiveTopicPayload {
 export interface TestPayload {
   title?: string;
   description?: string | null;
+  /**
+   * PRD-59 FR-02: the format `description` is written in. Absent on save = keep the
+   * stored value; on create the column default (`plain`) applies.
+   */
+  descriptionFormat?: RichTextFormat;
   overallPassRuleJson?: unknown;
   /**
    * «Тест пройден, если» — how the overall rule and the topic gates combine
@@ -157,6 +149,12 @@ export interface TestPayload {
     | "overall_and_required_topics"
     | "required_topics_only"
     | "all_topics_passed";
+  /**
+   * PRD-50 FR-53: учитывать ли подтемы в вердикте темы (`tests.breakdown_gate_enabled`).
+   * Отсутствие = сохранить прежнее значение; у нового теста действует умолчание колонки
+   * (`false`) — подтема говорит о результате, но не судит его.
+   */
+  breakdownGateEnabled?: boolean;
   webhookUrl?: string | null;
   /** PRD-7 §4.1: primary status field. */
   status?: "draft" | "published" | "archived";
@@ -170,17 +168,34 @@ export interface TestPayload {
   reportSettingsJson?: unknown;
   /** Вводные блоки экрана итогов и отчёта (`tests.intro_json`). */
   introJson?: unknown;
+  /**
+   * PRD-50 FR-13: subtotal-by-key display setting (`tests.breakdown_display_json`).
+   * `null`/absent = hidden — the byte-identical results screen a test built before
+   * PRD-50 has always shown.
+   */
+  breakdownDisplayJson?: BreakdownDisplaySetting | null;
+  /**
+   * PRD-50 FR-11: named groups of sections (`tests.section_groups_json`). `null`/absent =
+   * no groups, i.e. the flat list of topic cards every test has printed so far (FR-27).
+   */
+  sectionGroupsJson?: SectionGroup[] | null;
   telemetryEnabled?: boolean;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   showCorrectAnswers?: boolean;
   // PRD-19 (Блок A): правила навигации/завершения.
   allowReturnToUnanswered?: boolean;
+  // PRD-19 (FR-11a): свободная навигация внутри раздела.
+  allowFreeSectionNavigation?: boolean;
   allowAnswerChange?: boolean;
   // PRD-43: independent of allowReturnToUnanswered.
   quickAdvance?: boolean;
   showSectionResults?: boolean;
   skipReviewWhenComplete?: boolean;
+  /** PRD-67: leaving a started section with a time limit closes it. */
+  closeSectionOnLeave?: boolean;
+  /** Что SCORM-пакет отдаёт в LMS при нескольких попытках: лучшую или последнюю. */
+  lmsAttemptResult?: "best" | "last";
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection?: boolean;
   protectionWatermark?: boolean;
@@ -188,12 +203,14 @@ export interface TestPayload {
   /** PRD-30 FR-16: test-wide delivery order; absent = `random` (today's behaviour). */
   questionOrder?: "fixed" | "random" | "shuffle_all";
   startPageContent?: string | null;
-  mode?: "standard" | "adaptive";
+  mode?: "standard" | "adaptive" | "scenario";
   showDifficultyLevel?: boolean;
   designSettingsJson?: unknown;
   folderId?: string | null;
   /** PRD-15 block D (FR-31): test-wide default price; null = system default. */
   defaultQuestionPoints?: number | null;
+  /** «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию; null — системные. */
+  simScoringJson?: SimScoringSettings | null;
   /**
    * PRD-13: test owner (= creator/importer). Written INSIDE the create INSERT so
    * ownership is atomic with the row — not a fragile post-insert `setTestOwner`
@@ -203,10 +220,35 @@ export interface TestPayload {
   ownerId?: string | null;
 }
 
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста (`test_scenarios`). Порядок задаётся позицией в
+ * массиве, как у разделов.
+ */
+export interface ScenarioPayload {
+  /** Идентификатор существующего пункта — сохраняется: на нём держится ключ `scenario:<id>`. */
+  id?: string;
+  /** Тема-банк сценариев. */
+  topicId: string;
+  /** Фиксированный сценарий темы; `null`/отсутствие — случайный сценарий темы. */
+  questionId?: string | null;
+  title?: string | null;
+  required?: boolean;
+  timeLimitMinutes?: number | null;
+  imageUrl?: string | null;
+  /** Группа тем, в которой стоит пункт; `null`/отсутствие — «вне групп». */
+  groupKey?: string | null;
+  /** Балл по умолчанию для сценариев пункта; `null`/отсутствие — по тесту. */
+  defaultPoints?: number | null;
+  /** Правило прохождения пункта (как `topicPassRuleJson` раздела); отсутствие — порога нет. */
+  passRuleJson?: unknown;
+}
+
 export interface CreatePayload {
   test: TestPayload;
   sections: SectionPayload[];
   adaptiveSettings?: AdaptiveTopicPayload[];
+  /** «Сценарий в ИС»: пункты-сценарии; отсутствие — пунктов нет. */
+  scenarios?: ScenarioPayload[];
 }
 
 /**
@@ -224,8 +266,33 @@ export interface SavePayload {
   test: TestPayload;
   sections?: SectionPayload[];
   adaptiveSettings?: AdaptiveTopicPayload[];
+  /**
+   * «Сценарий в ИС»: пункты-сценарии. Заменяются ЦЕЛИКОМ в той же транзакции, как разделы;
+   * отсутствие поля их не трогает.
+   */
+  scenarios?: ScenarioPayload[];
   /** When provided, the current DB version must match. Throws {@link VersionConflictError} if not. */
   expectedVersion?: number;
+  /**
+   * PRD-51: ДОКУМЕНТ ОТЧЁТА — состав и порядок блоков. Заменяется ЦЕЛИКОМ и в ТОЙ ЖЕ
+   * транзакции, что остальной ящик: порядок и состав осмысленны только вместе, а
+   * документ, применившийся без настроек, под которые автор его собирал, — это отчёт,
+   * которого автор не собирал.
+   *
+   * ОТСУТСТВИЕ поля документ не трогает: частичное сохранение с другого экрана не должно
+   * стирать работу, сделанную на этом. Пустой список — наоборот, осознанное «печатать
+   * нечего».
+   *
+   * `sortOrder` от клиента НЕ принимается: порядок выводится из позиции в массиве. Два
+   * источника истины о порядке разошлись бы, и спорить с ними было бы нечем.
+   */
+  reportBlocks?: Array<{
+    block: string;
+    templateKey?: string | null;
+    enabled?: boolean;
+    values?: Record<string, unknown>;
+    settings?: Record<string, unknown>;
+  }>;
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -262,11 +329,17 @@ export class TestSettingsService {
         // PRD-13: own the test atomically in the INSERT (no fragile post-insert UPDATE).
         ownerId: payload.test.ownerId ?? null,
         title: payload.test.title ?? "",
-        description: payload.test.description ?? null,
+        description:
+          sanitizeDescription(payload.test.description ?? "", payload.test.descriptionFormat) ||
+          null,
+        // PRD-59 FR-03: a test created without a format is a plain-text one.
+        descriptionFormat: payload.test.descriptionFormat ?? "plain",
         overallPassRuleJson: payload.test.overallPassRuleJson ?? { type: "percent", value: 70 },
         // «Тест пройден, если»: новый тест решает итог по общему порогу — правил по
         // темам у него ещё нет (рекомендация §3.4 test-settings-parameter-structure).
         passDecisionPolicy: payload.test.passDecisionPolicy ?? "overall_only",
+        // PRD-50 FR-53: новый тест не судит темы подтемами, пока автор не включит.
+        breakdownGateEnabled: payload.test.breakdownGateEnabled ?? false,
         webhookUrl: payload.test.webhookUrl ?? null,
         status,
         published,
@@ -276,9 +349,14 @@ export class TestSettingsService {
         retakePolicyJson: (payload.test.retakePolicyJson as never) ?? null,
         reportSettingsJson: (payload.test.reportSettingsJson as never) ?? null,
         introJson: (payload.test.introJson as never) ?? null,
+        breakdownDisplayJson: payload.test.breakdownDisplayJson ?? null,
+        sectionGroupsJson: payload.test.sectionGroupsJson ?? null,
         showCorrectAnswers: payload.test.showCorrectAnswers ?? false,
         // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
         allowReturnToUnanswered: payload.test.allowReturnToUnanswered ?? true,
+        // PRD-19 (FR-11c): новый тест — свободная навигация ВЫКЛ. Умолчание обязано быть
+        // выключенным: тест, заведённый до этой настройки, не меняет поведения сам собой.
+        allowFreeSectionNavigation: payload.test.allowFreeSectionNavigation ?? false,
         allowAnswerChange: payload.test.allowAnswerChange ?? false,
         // PRD-43: new test — matches today's two-step default (consistent with
         // allowReturnToUnanswered defaulting to true, i.e. flexible-two-step).
@@ -286,6 +364,12 @@ export class TestSettingsService {
         showSectionResults: payload.test.showSectionResults ?? true,
         // Обзор при полностью отвеченном объёме: новый тест ведёт себя как прежде.
         skipReviewWhenComplete: payload.test.skipReviewWhenComplete ?? false,
+        // PRD-67: новый тест — выход из раздела лишь замораживает время, как прежде.
+        closeSectionOnLeave: payload.test.closeSectionOnLeave ?? false,
+        // Результат в LMS: новый тест отчитывается за ТЕКУЩУЮ попытку, как того ждёт
+        // платформа; какую засчитать — решает LMS. Тесты, заведённые раньше, остались
+        // на «лучшей» (миграция 0022) и поведения не меняют.
+        lmsAttemptResult: payload.test.lmsAttemptResult ?? "last",
         // PRD-34 (FR-03): новый тест — защита ВКЛ по умолчанию.
         copyProtection: payload.test.copyProtection ?? true,
         // PRD-30 FR-16: новый тест — «перемешивание», сегодняшнее поведение.
@@ -301,9 +385,11 @@ export class TestSettingsService {
         designSettingsJson: (payload.test.designSettingsJson as Record<string, unknown>) ?? {},
         folderId: payload.test.folderId ?? null,
         defaultQuestionPoints: payload.test.defaultQuestionPoints ?? null,
+        simScoringJson: payload.test.simScoringJson ?? null,
       }).returning();
 
       await this._insertSections(tx, id, payload.sections);
+      await this._insertScenarios(tx, id, payload.scenarios ?? []);
 
       if (payload.adaptiveSettings?.length) {
         await this._replaceAdaptiveSettings(tx, id, payload.adaptiveSettings);
@@ -380,6 +466,22 @@ export class TestSettingsService {
 
       const patch: Record<string, unknown> = { ...payload.test, status, published };
 
+      // PRD-59 FR-24: очистка разметки на СЕРВЕРЕ — ящик не единственный писатель
+      // описания (книга Excel, перенос теста). Формат берётся из запроса, а когда его
+      // не прислали — из сохранённого: правка одного текста без переключения режима
+      // иначе чистилась бы по неверной политике и потеряла бы разметку автора.
+      if (typeof payload.test.description === "string") {
+        let format = payload.test.descriptionFormat;
+        if (format === undefined) {
+          const [row] = await tx
+            .select({ descriptionFormat: tests.descriptionFormat })
+            .from(tests)
+            .where(eq(tests.id, testId));
+          format = row?.descriptionFormat;
+        }
+        patch.description = sanitizeDescription(payload.test.description, format) || null;
+      }
+
       const [updated] = await tx
         .update(tests)
         .set({ ...(patch as object), version: sql`${tests.version} + 1`, updatedAt: new Date() })
@@ -397,6 +499,37 @@ export class TestSettingsService {
 
       if (payload.adaptiveSettings !== undefined) {
         await this._replaceAdaptiveSettings(tx, testId, payload.adaptiveSettings);
+      }
+
+      if (payload.scenarios !== undefined) {
+        await tx.delete(testScenarios).where(eq(testScenarios.testId, testId));
+        await this._insertScenarios(tx, testId, payload.scenarios);
+      }
+
+      // PRD-51: документ отчёта — в ТОЙ ЖЕ транзакции, тем же дескриптором. Ветвь
+      // берётся из режима, каким тест становится ПОСЛЕ этого сохранения: автор,
+      // переключивший режим и собравший документ одним заходом, ждёт, что документ
+      // ляжет в ветвь нового режима, а не прежнего.
+      if (payload.reportBlocks !== undefined) {
+        const mode = (updated.mode === "adaptive" ? "adaptive" : "standard") as ReportDocumentMode;
+        await replaceReportBlocksIn(
+          tx,
+          testId,
+          mode,
+          payload.reportBlocks.map((b, i) => ({
+            block: b.block,
+            templateKey: b.templateKey ?? null,
+            enabled: b.enabled !== false,
+            sortOrder: i,
+            // FR-14: разметка авторских областей чистится ТЕМ ЖЕ вызовом, что и значения
+            // контентных страниц, — включая заключение авторского CSS в область поля.
+            // В пакете эта разметка попадает в НАСТОЯЩИЙ документ, где правило
+            // `body { … }` перекрасило бы плеер, а скрипт исполнился бы. Второго набора
+            // правил очистки в продукте быть не должно.
+            valuesJson: sanitizeAllStringValues(b.values),
+            settingsJson: sanitizeAllStringValues(b.settings),
+          })),
+        );
       }
 
       // System content_pages reconciliation triggers when any of these change:
@@ -719,9 +852,50 @@ export class TestSettingsService {
         feedbackJson: s.feedbackJson ?? null,
         drawBlueprintJson: s.drawBlueprintJson ?? null,
         formSetJson: s.formSetJson ?? null,
+        breakdownFeedbackJson: (s.breakdownFeedbackJson ?? null) as never,
+        interpretationJson: (s.interpretationJson ?? null) as never,
+        breakdownInterpretationJson: (s.breakdownInterpretationJson ?? null) as never,
+        groupKey: s.groupKey ?? null,
         defaultPoints: s.defaultPoints ?? null,
         // FR-18: `null` = тема наследует правило теста.
         questionOrder: s.questionOrder ?? null,
+        sortOrder: i,
+      });
+    }
+  }
+
+  /** «Сценарий в ИС»: пункты-сценарии; индекс в массиве становится `sort_order`. */
+  private async _insertScenarios(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    testId: string,
+    scenarios: ScenarioPayload[],
+  ): Promise<void> {
+    // Присланный id принимается, только если он не занят пунктом ДРУГОГО теста: свой пункт
+    // уже удалён перед вставкой, а чужой не должен ни перезаписываться, ни ронять сохранение.
+    const claimed = scenarios.map((s) => s.id).filter((id): id is string => !!id);
+    const foreign = claimed.length
+      ? new Set(
+          (await tx
+            .select({ id: testScenarios.id })
+            .from(testScenarios)
+            .where(and(inArray(testScenarios.id, claimed), ne(testScenarios.testId, testId))))
+            .map((row) => row.id),
+        )
+      : new Set<string>();
+    for (let i = 0; i < scenarios.length; i += 1) {
+      const s = scenarios[i];
+      await tx.insert(testScenarios).values({
+        id: s.id && !foreign.has(s.id) ? s.id : randomUUID(),
+        testId,
+        topicId: s.topicId,
+        questionId: s.questionId ?? null,
+        title: s.title?.trim() || null,
+        required: s.required ?? true,
+        timeLimitMinutes: s.timeLimitMinutes ?? null,
+        imageUrl: s.imageUrl ?? null,
+        groupKey: s.groupKey ?? null,
+        defaultPoints: s.defaultPoints ?? null,
+        passRuleJson: s.passRuleJson ?? null,
         sortOrder: i,
       });
     }

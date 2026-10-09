@@ -14,7 +14,7 @@
  * render of the variant's own layout.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Banner } from "@universityrt/ui-kit";
+import { Banner } from "@skillum/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import {
   buildContentPageScreen,
@@ -22,7 +22,7 @@ import {
   type PreviewDemoDataset,
   type ScreenSpec,
 } from "@shared/template/preview-context";
-import { buildTemplateCssVars } from "@shared/template/params-css";
+import { buildTemplateCssVars, buildTemplateDataAttrs } from "@shared/template/params-css";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
 import { useTemplateBundle, type TemplateBundle } from "./use-template-bundle";
 
@@ -232,6 +232,12 @@ export function VariantPreviewPicker(props: {
     () => buildTemplateCssVars(props.params, bundle?.manifest.params),
     [props.params, bundle],
   );
+  // Той же парой едет выбор, объявленный атрибутом (`dataAttr`): предпросмотр должен
+  // показывать выбранный вариант ДО сохранения, а по атрибуту шаблон выбирает правило.
+  const dataAttrs = useMemo(
+    () => buildTemplateDataAttrs(props.params, bundle?.manifest.params),
+    [props.params, bundle],
+  );
   const selected = props.options.find((o) => o.key === props.selectedKey) ?? null;
   const spec = useMemo(() => {
     const s = buildVariantSpec(bundle, selected);
@@ -276,6 +282,7 @@ export function VariantPreviewPicker(props: {
               content={spec.input.content}
               css={bundle.css}
               cssVars={cssVars}
+              dataAttrs={dataAttrs}
               shell={(bundle.manifest as { mountShell?: boolean }).mountShell ? bundle.layouts.shell : undefined}
             />
           </ScaledPreview>

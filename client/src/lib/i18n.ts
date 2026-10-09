@@ -79,6 +79,8 @@ export const t = {
     loginSuccess: "Вы успешно вошли в систему.",
     loginFailed: "Ошибка входа",
     invalidCredentials: "Неверный email или пароль.",
+    linkScopeBlocksLogin:
+      "Сеанс был открыт по ссылке-приглашению и ограничен одним тестом. Он завершён — повторите вход.",
     somethingWentWrong: "Что-то пошло не так. Попробуйте ещё раз.",
     demoAccounts: "Демо-аккаунты:",
     author: "Автор",
@@ -273,9 +275,8 @@ export const t = {
     title: "Темы и вопросы",
     description: "Единое дерево: папки, темы и вопросы в них.",
     searchPlaceholder: "Поиск по темам и вопросам…",
-    filters: "Фильтры",
-    expandAll: "Развернуть всё",
-    collapseAll: "Свернуть всё",
+    expandAll: "Развернуть все",
+    collapseAll: "Свернуть все",
     allTopics: "Все темы",
     colName: "Название",
     colOwner: "Владелец",
@@ -493,6 +494,10 @@ export const t = {
     loadingQuestions: "Загрузка вопросов...",
     topic: "Тема",
     selectTopic: "Выберите тему",
+    /** Search row of the topic picker, its empty state and its reset button. */
+    topicSearchPlaceholder: "Поиск по названию темы",
+    topicSearchEmpty: "Тема не найдена",
+    clearTopic: "Очистить тему",
     type: "Тип",
     questionType: "Тип вопроса",
     selectType: "Выберите тип",
@@ -516,6 +521,10 @@ export const t = {
     ranking: "Ранжирование",
     scaleChoice: "Шкала",
     allocation: "Распределение баллов",
+    shortAnswer: "Короткий ответ",
+    blanks: "Пропуски",
+    longAnswer: "Развёрнутый ответ",
+    simulation: "Сценарий",
     allocationStatements: "Утверждения",
     allocationStatementPlaceholder: "Текст утверждения",
     allocationBudget: "Бюджет",
@@ -600,6 +609,9 @@ export const t = {
     feedbackCorrectPlaceholder: "Сообщение при правильном ответе",
     feedbackIncorrectPlaceholder: "Сообщение при неправильном ответе",
     feedbackConditionalHint: "Разные сообщения показываются в зависимости от правильности ответа",
+    optionFeedbackSwitch: "Переопределить обратную связь",
+    optionFeedbackLabel: "Обратная связь при выборе варианта",
+    optionFeedbackPlaceholder: "Показывается, если выбран этот вариант",
     tagsLabel: "Теги (подтемы)",
     tagsHint: "Теги — это подтемы; по ним задаются квоты выдачи. Можно с пробелами, до 100 символов, регистр не важен. Enter — добавить.",
     tagsPlaceholder: "Добавьте тег…",
@@ -618,14 +630,24 @@ export const t = {
     selected: "выбрано",
   },
 
-  // PRD-14 FR-15: раздел «Импорт» в боковой навигации.
+  // PRD-14 FR-15: раздел «Импорт» в боковой навигации. Называется так же, как пункт меню:
+  // раздел принимает не только книгу с вопросами, но и выгрузку отчёта LMS (PRD-54), и
+  // «Импорт из Excel» прятал вторую возможность (этап Э1 UX-аудита аналитики).
   importPage: {
-    title: "Импорт из Excel",
-    description:
-      "Загрузите файл .xlsx. Вопросы импортируются в общий банк; шкалы, показатели и вклады вопросов — в выбранный тест.",
+    title: "Импорт",
+    // Э6: что куда попадёт — в перечне видов под загрузчиком, а не в описании раздела.
+    description: "Загрузите файл — вид определится сам.",
     cardTitle: "Загрузка файла",
-    uploaderTitle: "Перетащите файл .xlsx или выберите",
-    uploaderSub: "Поддерживается формат .xlsx",
+    /** Заголовок карточки при входе из меню теста (Э6). */
+    cardTitleLms: "Загрузка выгрузки LMS",
+    uploaderTitle: "Перетащите файл или выберите",
+    kindsTitle: "Что можно загрузить",
+    kindsFormat: "Формат",
+    kindsTarget: "Куда попадёт",
+    kindTemplateButton: "Шаблон",
+    kindGuideButton: "Руководство",
+    chooseOtherFile: "Выбрать другой файл",
+    importDenied: "Недостаточно прав для выполнения операции",
     uploaderCta: "Выбрать файл",
     downloadTemplate: "Скачать шаблон",
     downloadGuide: "Руководство по заполнению (PDF)",
@@ -669,7 +691,8 @@ export const t = {
     unparsableXlsx:
       "Книга открывается как архив, но её содержимое разобрать не удалось. Откройте файл в Excel и сохраните заново как .xlsx.",
     failedToImport: "Не удалось выполнить импорт.",
-    wrongFileType: "Поддерживается только формат .xlsx.",
+    /** Расширение, которого нет среди доступных видов; доступные форматы дописываются в конце. */
+    wrongFileType: "Этот формат здесь не принимается. Доступно:",
     newTestCreated: "Создан тест",
   },
 
@@ -689,7 +712,7 @@ export const t = {
     configureSections: "Настройка разделов",
     configureSectionsDescription: "Установите количество вопросов для каждой темы и правила прохождения.",
     questionsToDrawPrefix: "Вопросов для выбора",
-    topicPassRule: "Правило прохождения темы",
+    topicPassRule: "Правило оценки темы",
     passType: "Тип",
     percentage: "Процент",
     absolute: "Абсолютное",
@@ -703,8 +726,6 @@ export const t = {
     overallPassCriteria: "Общие критерии прохождения",
     overallPassType: "Тип прохождения",
     overallPassValue: "Значение",
-    webhookUrl: "URL вебхука (опционально)",
-    webhookUrlDescription: "URL для отправки результатов после завершения теста",
     feedback: "Обратная связь",
     feedbackPlaceholder: "Комментарий к тесту (показывается в результатах)",
     timeLimit: "Ограничение времени (минуты)",
@@ -713,7 +734,7 @@ export const t = {
     maxAttempts: "Количество попыток",
     maxAttemptsPlaceholder: "Оставьте пустым для неограниченных попыток",
     maxAttemptsDescription: "Если задано, при достижении лимита тест будет недоступен",
-    showCorrectAnswers: "Показывать правильные ответы",
+    showCorrectAnswers: "Показывать правильные ответы после ответа",
     showCorrectAnswersDescription: "Показывать правильный ответ и обратную связь сразу после ответа на каждый вопрос",
     startPageContent: "Контент стартовой страницы",
     startPageContentPlaceholder: "Дополнительный текст для стартовой страницы теста...",

@@ -1,14 +1,18 @@
 /* ─────────────────────────────────────────────────────────────────────────
  * PRD-7 wireframes — shared styles.
  *
- * Tokens: --ou-* from UniversityRT Design System (ds/university-rt.css).
+ * Tokens: --ou-* from Skillum Design System (ds/skillum-ds.css).
  * Short aliases (--bg, --fg, --primary, …) are mapped to --ou-* below so
  * existing wireframe markup continues to work without modification.
  *
  * Required body class on every wireframe: ou ou--light ou--normal
  * ───────────────────────────────────────────────────────────────────────── */
 
-@import url('./ds/university-rt.css');
+/* Метка версии обязательна: без неё браузер берёт снимок ДС из кэша, и правка
+   дизайн-системы не видна в эскизах — при этом импортированная копия стоит в
+   каскаде ПОЗЖЕ ссылки из <head> и перебивает свежую. Поднимать вместе с
+   `?v=` в эскизах при каждом обновлении снимка. */
+@import url('./ds/skillum-ds.css?v=4');
 
 /* ── Wireframe-local tokens (no DS equivalent) ────────────────────────── */
 /* DS does not expose border-width / hairline tokens. Local aliases keep   */
@@ -165,7 +169,7 @@ body {
  * Stage 3.3a-c complete: legacy .form-* classes renamed to ou-formfield,
  * input/select/textarea wrapped in ou-field/ou-textarea, toggle/radio
  * rewritten to ou-switch/ou-radio. Native control styling is provided
- * by ds/university-rt.css; no shared scaffolding needed here.
+ * by ds/skillum-ds.css; no shared scaffolding needed here.
  * ────────────────────────────────────────────────────────────────────── */
 
 /* ── Status indicators (FR-25b, NFR-21) ───────────────────────────────── */
@@ -257,4 +261,4 @@ body {
   background: var(--ou-bg-hover); padding: var(--wf-border-w) var(--ou-space-1); border-radius: var(--ou-radius-xs);
 }
 
-/* Toast: ou-toast and modifiers provided by ds/university-rt.css. */
+/* Toast: ou-toast and modifiers provided by ds/skillum-ds.css. */

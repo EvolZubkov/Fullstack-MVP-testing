@@ -17,8 +17,11 @@
  *   questions WITHOUT any `exact`-mode tag (so `exact` strata stay exactly
  *   `count`, while `min` strata and untagged questions can fill it, FR-03a).
  *
- * `shuffle` is injected (the runtime passes Fisher-Yates; tests pass a
- * deterministic permutation) so the selection logic is testable.
+ * The SELECTION itself is injected as `pick` (PRD-55 FR-24): the web host passes a
+ * pick weighted by accumulated exposure, the package passes one weighted by the
+ * baked weight, feasibility passes a plain head-of-pool, and tests pass a
+ * deterministic one. A uniform draw is just the case where every weight is equal,
+ * so there is no second copy of the draw algorithm and no "correction off" branch.
  */
 
 import type { DrawBlueprint, DrawStratum } from "../schema";
@@ -42,6 +45,24 @@ export interface DrawResult<Q> {
   warnings: DrawWarning[];
 }
 
+/**
+ * Отбор `k` заданий из пула.
+ *
+ * PRD-55 (FR-24): заменил прежний `ShuffleFn`. Равномерный отбор выражается через него как
+ * `shuffle(pool).slice(0, k)`, а взвешенный по экспозиции — через `weightedPick`
+ * (`shared/draw/exposure`), поэтому второй реализации алгоритма выдачи в проекте не заводится и
+ * «поправка выключена» не становится отдельной веткой кода.
+ */
+export type PickFn = <T extends DrawableQuestion>(pool: T[], k: number) => T[];
+
+/**
+ * Перемешивание списка целиком.
+ *
+ * Осталось отдельным типом после PRD-55: отбор («какие задания выдать») и перемешивание («в каком
+ * порядке их показать») — разные операции, и путать их нельзя. Им пользуются порядок выдачи
+ * (`order-questions`), выбор варианта (`forms`) и сборка потока (`assemble-delivery`), где
+ * взвешивать по экспозиции нечего — состав там уже определён.
+ */
 export type ShuffleFn = <T>(arr: T[]) => T[];
 
 /** Effective mode of a stratum — per-tag, defaulting to "exact" (FR-03b). */
@@ -57,10 +78,10 @@ export function drawSection<Q extends DrawableQuestion>(
   questions: Q[],
   drawCount: number,
   blueprint: DrawBlueprint | null | undefined,
-  shuffle: ShuffleFn,
+  pick: PickFn,
 ): DrawResult<Q> {
   if (!blueprint || !blueprint.strata || blueprint.strata.length === 0) {
-    return { selected: shuffle(questions.slice()).slice(0, drawCount), warnings: [] };
+    return { selected: pick(questions.slice(), drawCount), warnings: [] };
   }
 
   const selected: Q[] = [];
@@ -80,7 +101,7 @@ export function drawSection<Q extends DrawableQuestion>(
   for (const stratum of blueprint.strata) {
     const stratumKey = tagKey(stratum.tag);
     const pool = questions.filter((q) => !used[q.id] && hasTag(q, stratumKey));
-    const take = shuffle(pool.slice()).slice(0, stratum.count);
+    const take = pick(pool.slice(), stratum.count);
     if (take.length < stratum.count) {
       warnings.push({ tag: stratum.tag, requested: stratum.count, available: take.length });
     }
@@ -98,7 +119,7 @@ export function drawSection<Q extends DrawableQuestion>(
     const free = questions.filter(
       (q) => !used[q.id] && !(qKeys.get(q.id) ?? []).some((k) => exactKeys.has(k)),
     );
-    for (const q of shuffle(free.slice()).slice(0, remainder)) {
+    for (const q of pick(free.slice(), remainder)) {
       used[q.id] = true;
       selected.push(q);
     }

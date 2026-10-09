@@ -24,6 +24,7 @@
 import type { ScaleResult } from "../formula/types";
 import { distributesBudget, isSingleIndexChoice } from "../questions/question-type";
 import type { AllocationSpec } from "../questions/allocation";
+import type { GradedRun } from "../sim/scoring";
 
 export type ScaleAggregation = "sum" | "avg" | "weighted_avg" | "max" | "min";
 export type ScaleNormalization = "none" | "percent" | "custom";
@@ -62,8 +63,26 @@ export interface MeasurementSpec {
   weight: number;
 }
 
-/** Learner answer shapes by question type (runtime encoding). */
-export type Answer = number | number[] | Record<string, number> | null | undefined;
+/**
+ * Learner answer shapes by question type (runtime encoding).
+ *
+ * The TWIN of `shared/scoring/engine.ts`'s `Answer`, and the two are assigned to each
+ * other (server/routes/attempts.ts) — widen them together or the next typed answer
+ * breaks the adaptive path. The `string` arm is a typed answer (PRD-57 §6.5): it fires
+ * a question-level contribution, because answering IS the contribution there, and never
+ * an option, pair, position or allocation one — those read a shape a string does not have.
+ */
+export type Answer =
+  | number
+  | number[]
+  | string
+  | Record<string, number>
+  | Record<string, string>
+  // «Сценарий в ИС»: результат прогона. Шкалы его не читают — у сценария нет вариантов, —
+  // но ответы попытки приходят сюда одной картой, и тип обязан её принять.
+  | GradedRun
+  | null
+  | undefined;
 
 export interface ScaleComputation {
   values: Record<string, ScaleResult>;
@@ -328,6 +347,11 @@ function allocationExtremes(spec: AllocationSpec | undefined, coeffs: number[]):
  * contributes 0 to `raw`, so counting its extremes would push `raw` outside
  * [min, max] and make percent go negative / exceed 100 (the reported defect). A
  * question is "delivered" when it has an entry in `answers`.
+ *
+ * `null` means NOTHING of this scale has been delivered yet — the ordinary state of a
+ * run that has not reached the scale's questions. It is deliberately distinct from a
+ * zero-width range: the caller must not confuse «nothing to normalize yet» with «the
+ * author's contributions cannot produce a range».
  */
 function rawRange(
   scaleMeasurements: MeasurementSpec[],
@@ -335,14 +359,14 @@ function rawRange(
   questionTypes: Record<string, QuestionType>,
   answers: Record<string, Answer>,
   budgets: Record<string, AllocationSpec>,
-): { min: number; max: number } {
+): { min: number; max: number } | null {
   // Only units the learner was actually given bound the range: a bank question the
   // draw did not deliver contributes 0 to `raw`, so counting its extremes would push
   // `raw` outside [min, max] and make percent go negative / exceed 100.
   const delivered = scaleMeasurements.filter((m) =>
     Object.prototype.hasOwnProperty.call(answers, m.questionId),
   );
-  return achievableRange(delivered, agg, questionTypes, budgets) ?? { min: 0, max: 0 };
+  return achievableRange(delivered, agg, questionTypes, budgets);
 }
 
 function applyBands(raw: number, bands: ScaleBand[] | undefined): { level: string; label: string } {
@@ -396,17 +420,26 @@ export function computeScales(
       let normalized = raw;
       let percent = 0;
       if (scale.normalization === "percent") {
-        const { min, max } = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers, budgets);
-        const span = max - min;
-        if (span > 0) {
-          percent =
-            scale.direction === "inverse"
-              ? ((max - raw) / span) * 100
-              : ((raw - min) / span) * 100;
-        } else {
-          // PRD-5 §5.2: the range is impossible / zero — percent is undefined, so
-          // report it as a diagnostic rather than emitting a meaningless number.
-          errors.push({ key: scale.key, message: "percent: диапазон нормализации невозможен или нулевой" });
+        const range = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers, budgets);
+        // Nothing of this scale delivered yet (a run standing before its questions, or
+        // one where they were all skipped): there is simply nothing to normalize. That
+        // is the NORMAL state of a run in progress, not a failure — percent stays
+        // undefined (`hasValue: false` says so) and the diagnostics stay silent.
+        // Reporting it made every percent scale «fail» on the start screen and lit the
+        // debug player's alarm on a healthy test.
+        if (range) {
+          const span = range.max - range.min;
+          if (span > 0) {
+            percent =
+              scale.direction === "inverse"
+                ? ((range.max - raw) / span) * 100
+                : ((raw - range.min) / span) * 100;
+          } else {
+            // PRD-5 §5.2: the delivered contributions cannot produce a range at all —
+            // percent is undefined for this test's construction, which the author has to
+            // know about. A diagnostic, not a meaningless number.
+            errors.push({ key: scale.key, message: "percent не определён: вклады доставленных вопросов не дают диапазона" });
+          }
         }
         normalized = percent;
       } else {

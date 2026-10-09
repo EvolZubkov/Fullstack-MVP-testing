@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ALTER COLUMN "lms_attempt_result" SET DEFAULT 'last';

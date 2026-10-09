@@ -100,6 +100,7 @@
       <span class="wf-nav-title">Ученические экраны (реальный шаблон):</span>
       <button type="button" class="active" onclick="showState(this, 'question')">вопрос</button>
       <button type="button" onclick="showState(this, 'obzor')">обзор</button>
+      <button type="button" onclick="showState(this, 'freenav')">свободная навигация</button>
       <button type="button" onclick="showState(this, 'router')">router-хаб</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
@@ -201,6 +202,52 @@
         </div>
       </div>
 
+      <!-- ░░░ ВОПРОС ПРИ СВОБОДНОЙ НАВИГАЦИИ — PRD-19 FR-11a: раздел выдан целиком ░░░ -->
+      <div class="wf-state" data-state="freenav">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="layout-question-wrap">
+              <div class="q-header"><h1 class="q-title">Основы сетей</h1></div>
+
+              <div class="tb-pills" role="group" aria-label="Карта вопросов раздела">
+                <div class="tb-pills__head"><span>Вопросы раздела «Сеть»</span><b>отвечено 2 · без ответа 6</b></div>
+                <div class="tb-pills__dots">
+                  <button type="button" class="tb-pill is-answered">1</button>
+                  <button type="button" class="tb-pill is-skipped">2</button>
+                  <button type="button" class="tb-pill is-current">3</button>
+                  <button type="button" class="tb-pill">4</button>
+                  <button type="button" class="tb-pill">5</button>
+                  <button type="button" class="tb-pill">6</button>
+                  <button type="button" class="tb-pill">7</button>
+                  <button type="button" class="tb-pill">8</button>
+                </div>
+                <div class="tb-pills__legend">
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>без ответа</span>
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-current"></span>текущий</span>
+                </div>
+              </div>
+
+              <div class="card question-card">
+                <div class="question-meta">Вопрос 3 из 8</div>
+                <div class="question-text">Какой протокол чаще всего используется для потокового IPTV?</div>
+                <label class="option"><input type="radio" name="fq"><span>HTTP</span></label>
+                <label class="option selected"><input type="radio" name="fq" checked><span>RTP / RTSP</span></label>
+                <label class="option"><input type="radio" name="fq"><span>SMTP</span></label>
+                <label class="option"><input type="radio" name="fq"><span>FTP</span></label>
+              </div>
+
+              <div class="q-actions">
+                <button type="button" class="btn btn--outline btn--sm"><svg width="15" height="15"><use href="#r-left"/></svg> Назад</button>
+                <button type="button" class="btn btn--outline btn--sm">К обзору раздела</button>
+                <span class="q-actions__spacer"></span>
+                <button type="button" class="btn btn--sm">Далее <svg width="15" height="15"><use href="#r-right"/></svg></button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
       <!-- ░░░ ROUTER-ХАБ — 1:1 с routerFlow.js (.router-topic-cards / .router-finish) ░░░ -->
       <div class="wf-state" data-state="router">
         <div class="tb-player" data-template="default">
@@ -251,6 +298,7 @@
               <tr><td>Пиллы</td><td>портированы на токены шаблона</td><td>В шаблоне пиллов НЕТ (DS-only <code>ou-quiz</code>). Здесь <code>.tb-pills</code> на токенах шаблона — нужно добавить компонент пиллов в шаблон. Статусы: отвечен/пропущен/текущий/не выдан; клик = переход к выданным (фронтир)</td></tr>
               <tr><td>Кнопки вопроса</td><td>FR-04c</td><td>«Отправить ответ» (справа) + «Пропустить»/«Вернуться» (слева; <code>.btn</code>/<code>.btn--outline</code>)</td></tr>
               <tr><td>Обзор</td><td>НОВЫЙ системный экран (FR-08)</td><td>В шаблоне такого слота НЕТ — спроектирован в конвенциях шаблона (<code>.card</code> + пиллы + явный список неотвеченных «Перейти» + «Завершить»). Нужно добавить layout-слот в шаблон</td></tr>
+              <tr><td>Свободная навигация</td><td>НОВЫЙ переключатель (FR-11a)</td><td>Включён — раздел выдаётся целиком: пиллы раздела кликабельны все, статуса «не выдан» нет, «Пропустить» уступает место паре «Назад» / «Далее» и переходу к обзору. Выключен — поведение прежнее (фронтир). Граница раздела не переступается ни при каком значении</td></tr>
               <tr><td>Router-хаб</td><td>routerFlow.js (1:1)</td><td>Реальные классы <code>.router-topic-cards</code> / <code>.router-topic-card--{status}</code> / <code>.router-finish</code>. Завершённые disabled, доступные — «Начать», «Завершить тест» disabled пока не все пройдены</td></tr>
               <tr><td>Тема</td><td>вариант шаблона</td><td>light + dark, тогл; светлые токены — добавить в theme.css</td></tr>
               <tr><td>Что добавить в шаблон</td><td>реализация</td><td>(1) компонент пиллов; (2) layout-слот «обзор» (section-finish/test-finish); (3) кнопки skip/return; (4) светлые токены</td></tr>

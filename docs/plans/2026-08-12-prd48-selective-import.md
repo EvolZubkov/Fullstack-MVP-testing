@@ -13,7 +13,7 @@
 сохранение исходных id.
 
 **Стек:** TypeScript, Express, Drizzle, vitest (модульные) + pglite (`npm run test:it`),
-дизайн-система `@universityrt/ui-kit`.
+дизайн-система `@skillum/ui-kit`.
 
 ---
 

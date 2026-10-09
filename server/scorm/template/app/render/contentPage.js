@@ -138,13 +138,39 @@ function pluralQuestions(n) {
   return "вопросов";
 }
 
-function pluralMinutes(n) {
-  var abs = Math.abs(n) % 100;
-  var d = abs % 10;
-  if (abs > 10 && abs < 20) return "минут";
-  if (d === 1) return "минута";
-  if (d > 1 && d < 5) return "минуты";
-  return "минут";
+/**
+ * A time limit as text, through the SHARED duration formatter in the bundle so
+ * the section intro says what the start screen says («14 дней», «2 ч 30 мин»).
+ * Degrades to a bare minute count when the bundle lacks the export.
+ * @param {number} minutes
+ * @returns {string}
+ */
+function timeLimitText(minutes) {
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (TB && typeof TB.formatMinutesHuman === "function") return TB.formatMinutesHuman(minutes);
+  return String(minutes) + " мин";
+}
+
+/**
+ * How many questions of `section` THIS run delivers — what the learner will actually answer. The
+ * hub card and the section intro state this number (owner's decision 2026-10-08, host parity Г1):
+ * the configured `drawCount` overstates it when the topic's bank is smaller than the draw, and a
+ * variant set may deliver another size. The web counts its delivery the same way. Adaptive topics
+ * keep the configured number: their questions are drawn as the run goes, not up front.
+ * @param {object} section A section of TEST_DATA.sections
+ * @returns {number}
+ */
+function deliveredQuestionCount(section) {
+  if (!section) return 0;
+  if ((typeof TEST_DATA !== "undefined" && TEST_DATA.mode === "adaptive") ||
+      typeof state === "undefined" || !state || !state.flatQuestions || state.flatQuestions.length === 0) {
+    return section.drawCount;
+  }
+  var n = 0;
+  for (var i = 0; i < state.flatQuestions.length; i++) {
+    if (state.flatQuestions[i].topicId === section.topicId) n++;
+  }
+  return n;
 }
 
 /**
@@ -171,17 +197,61 @@ function buildSectionIntroFallback(inp) {
     questionCount: count,
     questionCountLabel: count + " " + pluralQuestions(count),
     hasTimeLimit: hasTime,
-    timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
+    timeLimitLabel: hasTime ? timeLimitText(inp.timeLimitMinutes) : "",
     hasInstruction: instrText.length > 0,
     illustrationUrl: illo,
     hasIllustration: illo.length > 0,
     continueLabel: inp.continueLabel || "Далее",
   };
+  // The pass-condition fields come from the bundle too; a bundle without them shows the
+  // intro as before (no condition line, no mark, no warning).
+  var TBx = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (TBx && typeof TBx.sectionPassConditionText === "function") {
+    sectionIntro.passCondition = inp.passConditionShown === false
+      ? ""
+      : TBx.sectionPassConditionText(inp.passRule, inp.possiblePoints);
+    sectionIntro.isRequired = TBx.sectionIsRequiredForVerdict(inp.passDecisionPolicy, inp.required, inp.passRule);
+    sectionIntro.timerWarning = TBx.sectionTimerWarningText(inp.timeLimitMinutes, sectionIntro.continueLabel);
+  }
   if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
   return {
     course: { title: inp.courseTitle || inp.topicName || "", subtitle: inp.subtitle || "" },
     sectionIntro: sectionIntro,
   };
+}
+
+/**
+ * The topic rule of a section, resolved the way computeSectionResult resolves it — against
+ * the overall rule and the DELIVERED variant. Null when the topic is not gated or the
+ * bundle lacks the resolver.
+ * @param {object} section  A TEST_DATA.sections entry.
+ * @returns {{type: string, value: number}|null}
+ */
+function sectionIntroPassRule(section) {
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (!TB || typeof TB.resolveTopicRule !== "function" || typeof TB.resolveOverallRule !== "function") return null;
+  var formId = (typeof deliveredFormId === "function") ? deliveredFormId(section.topicId) : null;
+  return TB.resolveTopicRule(section.topicPassRule, TB.resolveOverallRule(TEST_DATA.overallPassRule), { formId: formId });
+}
+
+/**
+ * Σ prices of the delivered GRADED questions of a topic — the «из M» of a points threshold.
+ * A measurement-only question brings no points to the grader, so none here either. Null
+ * when the run holds no questions of the topic yet.
+ * @param {string} topicId
+ * @returns {number|null}
+ */
+function sectionIntroPossiblePoints(topicId) {
+  var flat = (typeof state !== "undefined" && state && state.flatQuestions) || [];
+  var sum = 0, seen = false;
+  for (var i = 0; i < flat.length; i++) {
+    if (flat[i].topicId !== topicId) continue;
+    seen = true;
+    var q = flat[i].question;
+    if (typeof TBQType !== "undefined" && TBQType.isMeasurementOnly(q)) continue;
+    sum += q.points != null ? q.points : 1;
+  }
+  return seen ? sum : null;
 }
 
 function renderSectionIntro(page) {
@@ -216,11 +286,21 @@ function renderSectionIntro(page) {
     courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
     topicName: section.topicName,
     description: section.topicDescription,
-    questionCount: section.drawCount,
+    questionCount: deliveredQuestionCount(section),
     timeLimitMinutes: section.timeLimitMinutes,
     instruction: instruction,
     illustration: illustrationUrl,
     continueLabel: "Далее",
+    // The threshold of this topic, stated before the learner answers: the SAME rule the
+    // grader applies (computeSectionResult), by the variant actually delivered.
+    passRule: sectionIntroPassRule(section),
+    possiblePoints: sectionIntroPossiblePoints(section.topicId),
+    required: section.required,
+    passDecisionPolicy: (typeof TEST_DATA !== "undefined" ? TEST_DATA.passDecisionPolicy : null) || null,
+    // The intro variant's `passConditionShown` switch: off hides only the threshold line.
+    passConditionShown: TB.passConditionShownOf
+      ? TB.passConditionShownOf(page)
+      : ((page.settings || page.settingsJson || {}).passConditionShown !== false),
   };
   var built = TB.buildSectionIntroContext
     ? TB.buildSectionIntroContext(introInput)
@@ -229,6 +309,10 @@ function renderSectionIntro(page) {
     course: built.course,
     design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
     sectionIntro: built.sectionIntro,
+    // PRD-22 FR-42: the intro screen is a content page like any other, and its settings
+    // (the section subtitle) arrive in the SAME `page.*` block the generic render path
+    // hands over below. Built by the same call so the two paths cannot drift.
+    page: buildPageRenderContext(page),
   };
 
   var app = document.getElementById("app");
@@ -290,6 +374,10 @@ function buildPageRenderContext(page) {
     (typeof canNavigateBack === "function" && canNavigateBack()) ||
     (typeof state !== "undefined" && state && (state.currentPageIndex || 0) > 0) ||
     (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode());
+  // The hub itself has nowhere to go back to: «Назад» there is not in the approved hub
+  // (sim-scenario-learner.html, screen 4 — the footer holds «Завершить» only) and the web
+  // hub never offers it. The router clause above is for a TOPIC page returning to the hub.
+  if (page && page.kind === "router") canGoBack = false;
   if (!TB || !TB.buildPageContextFor || !page) {
     return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack: !!canGoBack };
   }

@@ -236,12 +236,10 @@ describe("SummaryStrip", () => {
 });
 
 describe("MaterialsSection", () => {
-  it("lists every active template and every document as plain anchors", () => {
+  it("lists every document as a plain anchor", () => {
     render(
       <MaterialsSection
         data={{
-          showTemplates: true,
-          activeTemplates: ["Стандартный", "Сертификация (РТК)"],
           docs: [
             { id: "test-authoring", label: "Руководство автора", href: "/api/docs/test-authoring" },
             { id: "template-spec", label: "Спецификация", href: "/api/docs/template-spec" },
@@ -249,33 +247,22 @@ describe("MaterialsSection", () => {
         }}
       />,
     );
-    expect(screen.getByTestId("home-material-template-Стандартный")).toBeInTheDocument();
-    expect(screen.getByTestId("home-material-template-Сертификация (РТК)")).toBeInTheDocument();
     const guide = screen.getByTestId("home-material-doc-test-authoring");
     expect(guide.tagName).toBe("A");
     expect(guide).toHaveAttribute("href", "/api/docs/test-authoring");
+    expect(screen.getByTestId("home-material-doc-template-spec")).toBeInTheDocument();
   });
 
-  it("says so when no template is active", () => {
-    render(<MaterialsSection data={{ showTemplates: true, activeTemplates: [], docs: [] }} />);
-    expect(screen.getByText("Активных шаблонов нет")).toBeInTheDocument();
-  });
-
-  it("hides the template block from a reader who does not manage templates", () => {
-    render(
+  it("never lists design templates — that is the «Шаблоны» screen's job", () => {
+    const { container } = render(
       <MaterialsSection
-        data={{
-          showTemplates: false,
-          activeTemplates: [],
-          docs: [{ id: "test-authoring", label: "Руководство автора", href: "/api/docs/test-authoring" }],
-        }}
+        data={{ docs: [{ id: "test-authoring", label: "Руководство автора", href: "/api/docs/test-authoring" }] }}
       />,
     );
 
-    // An author is not told anything about the state of the template registry —
-    // «Активных шаблонов нет» would be a claim about a thing they cannot see.
+    expect(container.querySelector('[data-testid^="home-material-template-"]')).toBeNull();
     expect(screen.queryByText("Активных шаблонов нет")).not.toBeInTheDocument();
-    expect(screen.getByTestId("home-material-doc-test-authoring")).toBeInTheDocument();
+    expect(screen.queryByText("Активный шаблон оформления")).not.toBeInTheDocument();
   });
 });
 
@@ -303,14 +290,14 @@ describe("QuickActions", () => {
       <QuickActions
         actions={[
           { id: "test-create", label: "Создать тест", href: "/author/tests" },
-          { id: "import", label: "Импорт из Excel", href: "/author/import" },
+          { id: "import", label: "Импорт", href: "/author/import" },
         ]}
       />,
     );
 
     expect(screen.getByTestId("home-quick-actions")).toBeInTheDocument();
     expect(screen.getByText("Создать тест")).toBeInTheDocument();
-    expect(screen.getByText("Импорт из Excel")).toBeInTheDocument();
+    expect(screen.getByText("Импорт")).toBeInTheDocument();
     expect(screen.queryByText("Добавить пользователя")).not.toBeInTheDocument();
   });
 

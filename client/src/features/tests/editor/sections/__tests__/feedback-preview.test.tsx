@@ -86,4 +86,20 @@ describe("<FeedbackPreview /> (TD-02)", () => {
     fireEvent.click(screen.getByTestId("fb"));
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
+
+  // The pencil marks an unfilled field as editable. On the empty card the card
+  // ITSELF is the button, so the pencil must stay decorative: a second control
+  // inside would be a button nested in a button.
+  it("shows a decorative pencil on the empty placeholder", () => {
+    renderPreview({ text: "", links: [], assets: [], events: [] });
+    const hint = screen.getByTestId("fb").querySelector(".tb-feedback-preview__edit-hint");
+    expect(hint).not.toBeNull();
+    expect(hint).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("omits the pencil when the empty placeholder is read-only", () => {
+    render(<FeedbackPreview format="plain" text="" links={[]} assets={[]} events={[]} testId="ro" />);
+    expect(screen.getByTestId("ro").querySelector(".tb-feedback-preview__edit-hint")).toBeNull();
+  });
 });

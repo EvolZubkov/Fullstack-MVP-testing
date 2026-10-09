@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-51 — Отчёт шаблона «Сертификация»: три листа
+    Файл: docs/wireframes/prd51-certification-report.html
+
+    Показывает ДОКУМЕНТ, который печатает шаблон, а не экран редактора. Поэтому
+    разметка здесь — своя, шаблонная (`tb-report__*`), а не `ou-*`: отчёт рисуется
+    раскладками шаблона в служебном контейнере вне сцены, и дизайн-система в нём не
+    участвует (PRD-27 §6.3).
+
+    Состояния:
+      s-pass — сертификация пройдена
+      s-fail — сертификация не пройдена
+
+    Метрики сняты с референсов `docs/references/Макарова Анна Васильевна*.pdf`:
+    страница референса 2380 px при ширине 1190 единиц, наш лист 595 px, делитель 4.
+    Таблица метрик — в спеке §10.3 и в пояснениях под холстом.
+
+    Спека: docs/specs/prd-51/report-document-blocks.md §10.
+    Покрывает: FR-22 (три листа), FR-12 (разрыв листа), FR-07 (блоки — дети корня).
+  -->
+  <title>PRD-51 — Отчёт «Сертификация»: три листа</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <style>
+    /* ─── Холст эскиза: листы A4 в масштабе 1:1 (595 × 842 px) ──────────────── */
+    .wf-sheets {
+      display: flex; flex-wrap: wrap; gap: 24px;
+      padding: 24px; justify-content: center; align-items: flex-start;
+    }
+    .wf-sheet-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .wf-sheet-cap { font: var(--ou-text-caption); color: var(--ou-fg-muted); text-align: center; }
+
+    /* ─── ДОКУМЕНТ. Всё скоуплено в `.tb-report` — как требует контракт отчёта. ─ */
+    .tb-report {
+      width: 595px; height: 842px; box-sizing: border-box;
+      position: relative; overflow: hidden;
+      /* Фон листа и шапки карточки — один и тот же серый референса. */
+      background: #E2E2E2;
+      color: #101828;
+      font-family: "Rostelecom Basis", "Inter", -apple-system, sans-serif;
+      /* Поля листа: 15 px по горизонтали, 13 px по вертикали. */
+      padding: 13px 15px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.18);
+    }
+
+    /* ── Лист 1: белое полотно титула ──────────────────────────────────────── */
+    .tb-report__cover {
+      height: 100%; box-sizing: border-box;
+      background: #FFFFFF; border-radius: 18px;
+      padding: 36px;
+      display: flex; flex-direction: column;
+      position: relative; overflow: hidden;
+    }
+    .tb-report__brand { display: flex; align-items: center; gap: 10px; margin-bottom: 46px; }
+    .tb-report__brand-mark {
+      font-size: 8px; font-weight: 700; line-height: 1.1; color: #FFFFFF;
+      background: #7000FF; border-radius: 8px; padding: 4px 9px;
+    }
+    .tb-report__brand-name { font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+    .tb-report__title--head {
+      font-size: 27px; line-height: 1.16; font-weight: 700; letter-spacing: -.02em;
+      margin: 0 0 36px; max-width: 82%;
+    }
+
+    /* Тёмная карточка вердикта: отступ 36 px от края полотна, две линии-разделителя. */
+    .tb-report__card--verdict {
+      background: #101828; color: #FFFFFF;
+      border-radius: 14px; padding: 18px 20px;
+      width: 68%; position: relative;
+    }
+    .tb-report__headline { font-size: 15px; font-weight: 600; padding-bottom: 12px; }
+    .tb-report__learner { font-size: 15px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.28); }
+    .tb-report__date { font-size: 15px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.28); }
+    .tb-report__mark {
+      position: absolute; top: 16px; right: 18px;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .tb-report.is-pass .tb-report__mark { background: #19D7A4; color: #06301F; }
+    .tb-report.is-fail .tb-report__mark { background: #FF4F12; color: #FFFFFF; }
+
+    .tb-report__intro { margin-top: 28px; font-size: 11px; line-height: 1.55; max-width: 74%; }
+    .tb-report__intro p { margin: 0 0 8px; }
+    .tb-report__intro p:last-child { margin-bottom: 0; }
+
+    /* Декоративная иллюстрация — поле оболочки. В эскизе заглушка. */
+    .tb-report__decor {
+      position: absolute; right: 0; bottom: 0; width: 210px; height: 190px;
+      background:
+        radial-gradient(circle at 30% 30%, #FF4F12 0 34px, transparent 35px),
+        radial-gradient(circle at 66% 58%, #7000FF 0 28px, transparent 29px),
+        radial-gradient(circle at 44% 78%, #D8D8D8 0 40px, transparent 41px);
+      opacity: .9;
+    }
+    .tb-report__decor-note {
+      position: absolute; right: 14px; bottom: 8px;
+      font-size: 8px; color: #8A8A8A; letter-spacing: .04em; text-transform: uppercase;
+    }
+
+    /* ── Листы 2-3: карточки блоков ────────────────────────────────────────── */
+    .tb-report__block {
+      background: #F7F7F7; border: 1px solid #101828;
+      border-radius: 10px; overflow: hidden; margin-bottom: 10px;
+    }
+    .tb-report__block-head {
+      height: 59px; box-sizing: border-box;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 22px; background: #E2E2E2;
+    }
+    .tb-report__block-title { font-size: 15px; font-weight: 700; }
+    .tb-report__counter {
+      width: 50px; height: 31px; border-radius: 9px; background: #FF4F12;
+      color: #FFFFFF; font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .tb-report__topic {
+      /* 213 + 16 = разрезы начинаются на 266 px от края листа — как в референсе.
+         Шире левая колонка не бывает: третья колонка разрезов уходила бы за поле. */
+      display: grid; grid-template-columns: 213px 1fr; gap: 16px;
+      padding: 11px 22px; border-top: 1px solid #C9C9C9;
+      min-height: 83px; box-sizing: border-box;
+    }
+    .tb-report__block-head + .tb-report__topic { border-top: 0; }
+    .tb-report__topic-name { font-size: 11px; font-weight: 700; line-height: 1.3; }
+
+    /* Пилюля уровня: точка + подпись, цвет точки — исход. */
+    .tb-report__pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 10px; padding: 4px 10px 4px 5px;
+      border: 1px solid #101828; border-radius: 999px;
+      font-size: 8px; line-height: 1;
+    }
+    .tb-report__pill::before {
+      content: ""; width: 10px; height: 10px; border-radius: 50%; background: #19D7A4;
+    }
+    .tb-report__pill--fail::before { background: #FF4F12; }
+
+    /* Сетка разрезов: три колонки по 76 px с шагом 106 px. */
+    .tb-report__breakdown { display: grid; grid-template-columns: repeat(3, 76px); gap: 30px; align-content: center; }
+    /* min-height, а не height: длинное имя ключа должно ТЯНУТЬ строку, а не обрезаться.
+       Обрезка спрятала бы от нас настоящий вопрос раскладки — влезает ли документ. */
+    .tb-report__breakdown-name { font-size: 8px; line-height: 1.3; color: #101828; min-height: 21px; }
+    .tb-report__breakdown-bar {
+      height: 5px; border-radius: 3px; background: #DCDCDC;
+      margin-top: 6px; overflow: hidden;
+    }
+    /* Градиент привязан к ТРЕКУ, а не к заливке: цвет на конце заливки кодирует
+       уровень (оранжевый слева, зелёный справа), а её длина — реальную долю.
+       Градиент на самой заливке сжимался бы в неё и красил 26 % так же, как 94 %. */
+    .tb-report__breakdown-bar span {
+      display: block; height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, #FF4F12 0%, #19D7A4 100%);
+      background-size: 76px 100%; background-repeat: no-repeat;
+    }
+    .tb-report__breakdown-val { font-size: 8px; color: #6B7280; margin-top: 3px; }
+
+    /* Список поведенческих индикаторов — правая колонка блока компетенций. */
+    .tb-report__list { font-size: 9px; line-height: 1.5; }
+    .tb-report__list p { margin: 0 0 6px; }
+    .tb-report__list p:last-child { margin-bottom: 0; }
+
+    /* ── Лист 3: авторские страницы ────────────────────────────────────────── */
+    .tb-report__card {
+      background: #F7F7F7; border: 1px solid #101828;
+      border-radius: 10px; padding: 18px 22px; margin-bottom: 10px;
+    }
+    .tb-report__title {
+      font-size: 17px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 12px;
+    }
+    .tb-report__page-title { font-size: 17px; font-weight: 700; margin: 0 0 10px; }
+    .tb-report__text { font-size: 9px; line-height: 1.55; }
+    .tb-report__text p { margin: 0 0 7px; }
+    .tb-report__text p:last-child { margin-bottom: 0; }
+    .tb-report__cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .tb-report__cols-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .tb-report__col-title { font-size: 10px; font-weight: 700; margin: 0 0 6px; line-height: 1.25; }
+    .tb-report__note {
+      border: 1px solid #101828; border-radius: 10px; padding: 12px 14px;
+      background: #FFFFFF;
+    }
+    .tb-report__note-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .tb-report__note-ico {
+      width: 16px; height: 16px; border-radius: 50%; background: #FF4F12;
+      display: flex; align-items: center; justify-content: center;
+      color: #FFFFFF; font-size: 9px; font-weight: 700;
+    }
+    .tb-report__note-title { font-size: 10px; font-weight: 700; line-height: 1.2; }
+
+    /* Метка разрыва листа — ТОЛЬКО в подписи эскиза: в документе это пустой узел. */
+    .wf-sheet-cap b { color: var(--ou-accent-default); font-weight: 600; }
+
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Отчёт «Сертификация»:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-pass')">Пройдена</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-fail')">Не пройдена</button>
+  <a class="wf-nav-link" href="prd51-report-document.html">&larr; редактор документа</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-pass — сертификация пройдена
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-pass" class="wf-state active" data-state="pass">
+  <div class="wf-sheets">
+
+    <div class="wf-sheet-wrap">
+      <div class="tb-report is-pass">
+        <div class="tb-report__cover">
+          <div class="tb-report__brand">
+            <span class="tb-report__brand-mark">онлайн<br>университет</span>
+            <span class="tb-report__brand-name">Логотип заказчика</span>
+          </div>
+          <h1 class="tb-report__title--head">Сертификация на роль руководителя по стандартам компании</h1>
+          <div class="tb-report__card--verdict">
+            <div class="tb-report__mark">&#10003;</div>
+            <div class="tb-report__headline">Тест пройден</div>
+            <div class="tb-report__learner">Макарова Анна Васильевна</div>
+            <div class="tb-report__date">21.08.2024</div>
+          </div>
+          <div class="tb-report__intro">
+            <p>Поздравляем с успешным прохождением тестирования! Это значит, что уровень ваших компетенций и знаний соответствует стандарту руководителя.</p>
+            <p>Если вы уже руководитель, то точно находитесь на своём месте. А если нет — можете претендовать на руководящую позицию.</p>
+            <p>В отчёте вы найдёте подробные результаты теста.</p>
+          </div>
+          <div class="tb-report__decor" aria-hidden="true"></div>
+          <div class="tb-report__decor-note">поле оболочки: иллюстрация</div>
+        </div>
+      </div>
+      <div class="wf-sheet-cap">Лист 1 — блоки <code>header</code> + <code>intro</code> <b>&rarr; разрыв листа</b></div>
+    </div>
+
+    <div class="wf-sheet-wrap">
+      <div class="tb-report is-pass">
+        <div class="tb-report__block">
+          <div class="tb-report__block-head">
+            <div class="tb-report__block-title">Управленческие компетенции</div>
+            <div class="tb-report__counter">4 / 4</div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Управление командой</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Формирует эффективную команду с учётом целей подразделения и особенностей сотрудников;</p>
+              <p>Управляет исполнением задач;</p>
+              <p>Мотивирует и развивает подчинённых.</p>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Управление изменениями</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Открыт изменениям;</p>
+              <p>Транслирует преимущества изменений подчинённым;</p>
+              <p>Формирует среду, в которой можно и хочется выступать с инициативами.</p>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Критическое мышление</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Применяет аналитический подход к любой ситуации;</p>
+              <p>Принимает обоснованные комплексные решения;</p>
+              <p>Устойчив к манипуляциям.</p>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Клиентоцентричность</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Проясняет потребности клиента и своевременно на них реагирует;</p>
+              <p>Находит способ решения задачи клиента;</p>
+              <p>Запрашивает обратную связь и поддерживает партнёрские отношения.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tb-report__block">
+          <div class="tb-report__block-head">
+            <div class="tb-report__block-title">Знания</div>
+            <div class="tb-report__counter">4 / 4</div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">О компании</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Корпоративная культура</div>
+                <div class="tb-report__breakdown-bar"><span style="width:92%"></span></div>
+                <div class="tb-report__breakdown-val">92 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Продукты компании</div>
+                <div class="tb-report__breakdown-bar"><span style="width:88%"></span></div>
+                <div class="tb-report__breakdown-val">88 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Стратегия компании</div>
+                <div class="tb-report__breakdown-bar"><span style="width:95%"></span></div>
+                <div class="tb-report__breakdown-val">95 %</div>
+              </div>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Корпоративные финансы</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Финансовые основы</div>
+                <div class="tb-report__breakdown-bar"><span style="width:81%"></span></div>
+                <div class="tb-report__breakdown-val">81 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Финансовые метрики</div>
+                <div class="tb-report__breakdown-bar"><span style="width:78%"></span></div>
+                <div class="tb-report__breakdown-val">78 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Оценка эффективности проектов</div>
+                <div class="tb-report__breakdown-bar"><span style="width:85%"></span></div>
+                <div class="tb-report__breakdown-val">85 %</div>
+              </div>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Технологии</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Технологический стек</div>
+                <div class="tb-report__breakdown-bar"><span style="width:90%"></span></div>
+                <div class="tb-report__breakdown-val">90 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Цифровая экономика</div>
+                <div class="tb-report__breakdown-bar"><span style="width:87%"></span></div>
+                <div class="tb-report__breakdown-val">87 %</div>
+              </div>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Правовые основы</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Работа с персоналом</div>
+                <div class="tb-report__breakdown-bar"><span style="width:83%"></span></div>
+                <div class="tb-report__breakdown-val">83 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Персональные данные</div>
+                <div class="tb-report__breakdown-bar"><span style="width:79%"></span></div>
+                <div class="tb-report__breakdown-val">79 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Антикоррупционная политика</div>
+                <div class="tb-report__breakdown-bar"><span style="width:94%"></span></div>
+                <div class="tb-report__breakdown-val">94 %</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-sheet-cap">Лист 2 — блок <code>topics</code> <b>&rarr; разрыв листа</b></div>
+    </div>
+
+    <div class="wf-sheet-wrap">
+      <div class="tb-report is-pass">
+        <div class="tb-report__card">
+          <h2 class="tb-report__page-title">О тесте</h2>
+          <div class="tb-report__cols-2">
+            <div class="tb-report__text">
+              <p>Сертификационный тест для руководителей разработан в 2024 году.</p>
+              <p><b>Тест был пропилотирован на выборке из более 230 руководителей разных сегментов и функций.</b></p>
+              <p>Сотрудники относились к разным управленческим уровням и группам по стажу.</p>
+              <p>На основе результатов пилотного тестирования проведён психометрический анализ теста, каждое задание проверено на качество.</p>
+            </div>
+            <div class="tb-report__note">
+              <div class="tb-report__note-head">
+                <span class="tb-report__note-ico">&#8635;</span>
+                <span class="tb-report__note-title">Результаты теста действительны 12 месяцев</span>
+              </div>
+              <div class="tb-report__text">
+                <p>Тест имеет высокие коэффициенты надёжности — как отдельно взятых разделов, так и в целом.</p>
+                <p>Результаты теста позволяют определить уровень по каждому разделу по шкале «Начальный — Целевой».</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tb-report__card">
+          <h2 class="tb-report__page-title">Как читать отчёт</h2>
+          <div class="tb-report__cols-2">
+            <div>
+              <p class="tb-report__col-title">Управленческие компетенции</p>
+              <div class="tb-report__text">
+                <p>Результаты по каждой компетенции выражены в двухуровневой шкале: «начальный уровень» и «целевой уровень».</p>
+                <p><b>Целевой уровень</b> говорит о соответствии проявления компетенций ожиданиям компании в большинстве приведённых ситуаций.</p>
+                <p>Для прохождения сертификации уровень каждой из четырёх компетенций должен соответствовать целевому.</p>
+              </div>
+            </div>
+            <div>
+              <p class="tb-report__col-title">Знания</p>
+              <div class="tb-report__text">
+                <p>Результаты по каждому разделу выражены в той же двухуровневой шкале, а также имеют шкалу верно отвеченных вопросов по темам.</p>
+                <p><b>Начальный уровень</b> — о том, что знаний по предложенным темам недостаточно для руководителя.</p>
+                <p>Для прохождения сертификации уровень каждого из четырёх разделов знаний должен соответствовать целевому.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tb-report__card">
+          <h2 class="tb-report__page-title">Рекомендации</h2>
+          <div class="tb-report__cols-3">
+            <div>
+              <p class="tb-report__col-title">Изучите отчёт в разрезе каждого раздела</p>
+              <div class="tb-report__text"><p>Это поможет понять свои сильные стороны и зоны роста, как в проявлении компетенций, так и в уровне знаний.</p></div>
+            </div>
+            <div>
+              <p class="tb-report__col-title">Используйте результаты тестирования</p>
+              <div class="tb-report__text"><p>Используйте результаты как отправную точку для дальнейшего обучения и развития в соответствующей области.</p></div>
+            </div>
+            <div>
+              <p class="tb-report__col-title">Обсудите результаты с руководителем</p>
+              <div class="tb-report__text"><p>Запросите обратную связь по тому, как результаты отражают вашу рабочую деятельность.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-sheet-cap">Лист 3 — три блока <code>page</code></div>
+    </div>
+
+  </div>
+
+  <div class="wf-notes">
+    <h2 class="wf-notes-title">Пояснения — Сертификация пройдена</h2>
+    <p class="wf-notes-intro">Документ из блоков. Между листами стоят блоки «разрыв листа»: без них раскладка резала бы документ по своему усмотрению.</p>
+    <table class="wf-notes-table">
+      <thead><tr><th>Элемент</th><th>Откуда берётся</th></tr></thead>
+      <tbody>
+        <tr><td>Заголовок титула</td><td><code>course.title</code> — название теста. Фиксированной фразы референса у нас нет: имя документа принадлежит тесту.</td></tr>
+        <tr><td>«Тест пройден»</td><td><code>report.verdictHeadline</code>. Ядро считает его жёстко, словарь надписей его не покрывает — расхождение с «Сертификация пройдена» принято (§10.2).</td></tr>
+        <tr><td>ФИО и дата</td><td><code>report.learnerName</code>, <code>report.attemptDateLabel</code>.</td></tr>
+        <tr><td>Знак исхода</td><td>Класс <code>report.verdictClass</code> на корне документа: <code>is-pass</code> — зелёный, <code>is-fail</code> — оранжевый.</td></tr>
+        <tr><td>Абзац-обращение</td><td>Вводный блок автора (<code>result.introHtml</code>), блок <code>intro</code>.</td></tr>
+        <tr><td>Иллюстрация и логотип</td><td>Поля ОБОЛОЧКИ типа <code>image</code>. Чужие товарные знаки в шаблон не кладутся — автор подставляет свои файлы.</td></tr>
+        <tr><td>Карточка блока и счётчик</td><td><code>result.topicGroups[].label</code> и <code>counterLabel</code>. Умолчание формата счётчика — уже <code>{passed} / {total}</code>, то есть «4 / 4».</td></tr>
+        <tr><td>Пилюля уровня</td><td><code>verdictLabel</code> и <code>passClass</code> темы. Слова «целевой уровень» автор задаёт словарём надписей <code>topic.verdict.*</code>; наше умолчание — «Пройдено».</td></tr>
+        <tr><td>Полоса подтемы</td><td>Разрез PRD-50: <code>key</code>, <code>barPercent</code>, <code>valueLabel</code>. В отличие от референса полоса показывает реальную долю, а не только цвет уровня.</td></tr>
+        <tr><td>Лист 3</td><td>Три блока <code>page</code>, которые ставит и заполняет АВТОР. Шаблон даёт варианты «Заголовок и текст», «Две колонки», «Три колонки».</td></tr>
+      </tbody>
+    </table>
+    <h3 class="wf-notes-title">Метрики, снятые с референса</h3>
+    <table class="wf-notes-table">
+      <thead><tr><th>Элемент</th><th>Значение</th></tr></thead>
+      <tbody>
+        <tr><td>Лист</td><td>595 × 842, фон <code>#E2E2E2</code>, поля 15 / 13 px</td></tr>
+        <tr><td>Полотно титула</td><td><code>#FFFFFF</code>, скруглённое, отступ 15 / 20 px от края листа</td></tr>
+        <tr><td>Карточка титула</td><td><code>#101828</code>, отступ 36 px от края полотна, две линии-разделителя</td></tr>
+        <tr><td>Карточка блока</td><td>тело <code>#F7F7F7</code>, шапка <code>#E2E2E2</code> высотой 59 px, волосяная рамка, зазор 10 px</td></tr>
+        <tr><td>Бейдж-счётчика</td><td>50 × 31 px, <code>#FF4F12</code>, отступ 22 px от правого края</td></tr>
+        <tr><td>Строка раздела</td><td>83–90 px по содержимому, разделитель — волосяная линия</td></tr>
+        <tr><td>Полоса разреза</td><td>высота 5 px, колонка 76 px с шагом 106 px, три колонки</td></tr>
+        <tr><td>Цвета исхода</td><td>оранжевый <code>#FF4F12</code>, зелёный <code>#19D7A4</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-fail — сертификация не пройдена
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-fail" class="wf-state" data-state="fail">
+  <div class="wf-sheets">
+
+    <div class="wf-sheet-wrap">
+      <div class="tb-report is-fail">
+        <div class="tb-report__cover">
+          <div class="tb-report__brand">
+            <span class="tb-report__brand-mark">онлайн<br>университет</span>
+            <span class="tb-report__brand-name">Логотип заказчика</span>
+          </div>
+          <h1 class="tb-report__title--head">Сертификация на роль руководителя по стандартам компании</h1>
+          <div class="tb-report__card--verdict">
+            <div class="tb-report__mark">!</div>
+            <div class="tb-report__headline">Тест не пройден</div>
+            <div class="tb-report__learner">Макарова Анна Васильевна</div>
+            <div class="tb-report__date">02.04.2025</div>
+          </div>
+          <div class="tb-report__intro">
+            <p>Спасибо за прохождение теста.</p>
+            <p>Пока вам не хватает баллов по одной или нескольким темам, чтобы пройти сертификацию. Это значит, что уровень ваших компетенций и знаний на данный момент не соответствует стандарту руководителя.</p>
+            <p>Вы сможете повторно пройти тест через 14 дней. В отчёте подробные результаты — они помогут определить ваши зоны развития.</p>
+          </div>
+          <div class="tb-report__decor" aria-hidden="true"></div>
+          <div class="tb-report__decor-note">поле оболочки: иллюстрация</div>
+        </div>
+      </div>
+      <div class="wf-sheet-cap">Лист 1 — блоки <code>header</code> + <code>intro</code> <b>&rarr; разрыв листа</b></div>
+    </div>
+
+    <div class="wf-sheet-wrap">
+      <div class="tb-report is-fail">
+        <div class="tb-report__block">
+          <div class="tb-report__block-head">
+            <div class="tb-report__block-title">Управленческие компетенции</div>
+            <div class="tb-report__counter">2 / 4</div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Управляет потенциалом команды</div>
+              <div class="tb-report__pill tb-report__pill--fail">начальный уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Формирует эффективную команду с учётом целей подразделения и особенностей сотрудников;</p>
+              <p>Управляет исполнением задач;</p>
+              <p>Мотивирует и развивает подчинённых.</p>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Лидирует изменения</div>
+              <div class="tb-report__pill tb-report__pill--fail">начальный уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Открыт изменениям;</p>
+              <p>Транслирует преимущества изменений подчинённым;</p>
+              <p>Формирует среду, в которой можно и хочется выступать с инициативами.</p>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Принимает комплексные решения</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Применяет аналитический подход к любой ситуации;</p>
+              <p>Принимает обоснованные комплексные решения;</p>
+              <p>Устойчив к манипуляциям.</p>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Создаёт лучший опыт</div>
+              <div class="tb-report__pill">целевой уровень</div>
+            </div>
+            <div class="tb-report__list">
+              <p>Проясняет потребности клиента и своевременно на них реагирует;</p>
+              <p>Находит способ решения задачи клиента;</p>
+              <p>Запрашивает обратную связь и поддерживает партнёрские отношения.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tb-report__block">
+          <div class="tb-report__block-head">
+            <div class="tb-report__block-title">Знания</div>
+            <div class="tb-report__counter">0 / 4</div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">О компании</div>
+              <div class="tb-report__pill tb-report__pill--fail">начальный уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Корпоративная культура</div>
+                <div class="tb-report__breakdown-bar"><span style="width:44%"></span></div>
+                <div class="tb-report__breakdown-val">44 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Продукты компании</div>
+                <div class="tb-report__breakdown-bar"><span style="width:38%"></span></div>
+                <div class="tb-report__breakdown-val">38 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Стратегия компании</div>
+                <div class="tb-report__breakdown-bar"><span style="width:51%"></span></div>
+                <div class="tb-report__breakdown-val">51 %</div>
+              </div>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Корпоративные финансы</div>
+              <div class="tb-report__pill tb-report__pill--fail">начальный уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Финансовые основы</div>
+                <div class="tb-report__breakdown-bar"><span style="width:29%"></span></div>
+                <div class="tb-report__breakdown-val">29 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Финансовые метрики</div>
+                <div class="tb-report__breakdown-bar"><span style="width:35%"></span></div>
+                <div class="tb-report__breakdown-val">35 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Оценка эффективности проектов</div>
+                <div class="tb-report__breakdown-bar"><span style="width:41%"></span></div>
+                <div class="tb-report__breakdown-val">41 %</div>
+              </div>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Технологии</div>
+              <div class="tb-report__pill tb-report__pill--fail">начальный уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Технологический стек</div>
+                <div class="tb-report__breakdown-bar"><span style="width:47%"></span></div>
+                <div class="tb-report__breakdown-val">47 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Цифровая экономика</div>
+                <div class="tb-report__breakdown-bar"><span style="width:33%"></span></div>
+                <div class="tb-report__breakdown-val">33 %</div>
+              </div>
+            </div>
+          </div>
+          <div class="tb-report__topic">
+            <div>
+              <div class="tb-report__topic-name">Правовые основы</div>
+              <div class="tb-report__pill tb-report__pill--fail">начальный уровень</div>
+            </div>
+            <div class="tb-report__breakdown">
+              <div>
+                <div class="tb-report__breakdown-name">Работа с персоналом</div>
+                <div class="tb-report__breakdown-bar"><span style="width:52%"></span></div>
+                <div class="tb-report__breakdown-val">52 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Персональные данные</div>
+                <div class="tb-report__breakdown-bar"><span style="width:26%"></span></div>
+                <div class="tb-report__breakdown-val">26 %</div>
+              </div>
+              <div>
+                <div class="tb-report__breakdown-name">Антикоррупционная политика</div>
+                <div class="tb-report__breakdown-bar"><span style="width:48%"></span></div>
+                <div class="tb-report__breakdown-val">48 %</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-sheet-cap">Лист 2 — блок <code>topics</code> <b>&rarr; разрыв листа</b></div>
+    </div>
+
+    <div class="wf-sheet-wrap">
+      <div class="tb-report is-fail">
+        <div class="tb-report__card">
+          <h2 class="tb-report__page-title">Как читать отчёт</h2>
+          <div class="tb-report__cols-2">
+            <div>
+              <p class="tb-report__col-title">Управленческие компетенции</p>
+              <div class="tb-report__text">
+                <p>Результаты по каждой компетенции выражены в двухуровневой шкале: «начальный уровень» и «целевой уровень».</p>
+                <p><b>Начальный уровень</b> — о том, что лишь в небольшом проценте ситуаций ваш выбор демонстрировал ожидаемое от руководителя поведение.</p>
+              </div>
+            </div>
+            <div>
+              <p class="tb-report__col-title">Знания</p>
+              <div class="tb-report__text">
+                <p>Уровень определяется на основании количества баллов, который вы набираете, отвечая на вопросы, и сравнения его с нормативным значением.</p>
+                <p>Для прохождения сертификации уровень каждого из четырёх разделов должен соответствовать целевому.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tb-report__card">
+          <h2 class="tb-report__page-title">Рекомендации</h2>
+          <div class="tb-report__cols-3">
+            <div>
+              <p class="tb-report__col-title">Изучите отчёт в разрезе каждого раздела</p>
+              <div class="tb-report__text"><p>Это поможет понять свои сильные стороны и зоны роста, как в проявлении компетенций, так и в уровне знаний.</p></div>
+            </div>
+            <div>
+              <p class="tb-report__col-title">Используйте результаты тестирования</p>
+              <div class="tb-report__text"><p>Используйте результаты как отправную точку для дальнейшего обучения и развития в соответствующей области.</p></div>
+            </div>
+            <div>
+              <p class="tb-report__col-title">Обсудите результаты с руководителем</p>
+              <div class="tb-report__text"><p>Подумайте над задачами, в которых вы можете проявить свою экспертизу или поделиться ей с другими.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tb-report__card">
+          <h2 class="tb-report__page-title">Рекомендованные материалы</h2>
+          <div class="tb-report__text">
+            <p>Системный блок <code>recommendations</code>: тексты, ссылки и мероприятия, которые тест назначил по темам с недостаточным результатом. У прошедшего теста этого блока в документе нет.</p>
+          </div>
+        </div>
+      </div>
+      <div class="wf-sheet-cap">Лист 3 — блоки <code>page</code> + <code>recommendations</code></div>
+    </div>
+
+  </div>
+
+  <div class="wf-notes">
+    <h2 class="wf-notes-title">Пояснения — Сертификация не пройдена</h2>
+    <p class="wf-notes-intro">Тот же документ на непройденной попытке. Различия — не в раскладке, а в данных.</p>
+    <table class="wf-notes-table">
+      <thead><tr><th>Что меняется</th><th>Почему</th></tr></thead>
+      <tbody>
+        <tr><td>Знак исхода оранжевый</td><td>Класс <code>is-fail</code> на корне документа.</td></tr>
+        <tr><td>Счётчики «2 / 4» и «0 / 4»</td><td><code>counterLabel</code> блока разделов считает ядро.</td></tr>
+        <tr><td>Пилюли «начальный уровень»</td><td><code>passClass</code> темы. Раскладка одна, цвет приходит из данных.</td></tr>
+        <tr><td>Появился блок «Рекомендованные материалы»</td><td>Системный блок <code>recommendations</code> печатается, когда тесту есть что порекомендовать; у прошедшего попытки данных нет, и блок не даёт ни разметки, ни отступа (FR-13).</td></tr>
+        <tr><td>Третий лист короче</td><td>Автор поставил на непройденную попытку не три страницы, а две. Состав документа — его решение, не шаблона.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

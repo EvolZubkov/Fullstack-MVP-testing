@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import {
+  Banner,
   Box,
   Button,
   Cluster,
@@ -27,8 +28,8 @@ import {
   Tag,
   Text,
   type TableColumn,
-} from "@universityrt/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+  useToast,
+} from "@skillum/ui-kit";
 import { t } from "@/lib/i18n";
 import { BulkInviteTab } from "@/features/tests/assign/bulk-invite-tab";
 
@@ -64,7 +65,8 @@ interface Assignment {
 
 interface GroupUser {
   id: string;
-  email: string;
+  /** `null` — the account has no email (PRD-54 BR-54-42, an imported LMS participant). */
+  email: string | null;
   name: string | null;
   status: string;
   tokenStatus: "active" | "revoked" | "none";
@@ -89,7 +91,7 @@ function tokenStatusTag(status?: string) {
 /** One member row inside an expanded group assignment (resend / revoke link). */
 function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: string }) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
 
   const resendUser = useMutation({
     mutationFn: async () => {
@@ -99,9 +101,9 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
-      toast({ title: "Ссылка обновлена", description: `Письмо отправлено ${user.email}` });
+      toast({ tone: "success", title: "Ссылка обновлена", description: `Письмо отправлено ${user.email}` });
     },
-    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось обновить ссылку" }),
+    onError: () => toast({ tone: "error", title: "Ошибка", description: "Не удалось обновить ссылку" }),
   });
 
   const revokeUser = useMutation({
@@ -112,30 +114,33 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
-      toast({ title: "Ссылка отозвана" });
+      toast({ tone: "success", title: "Ссылка отозвана" });
     },
-    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось отозвать ссылку" }),
+    onError: () => toast({ tone: "error", title: "Ошибка", description: "Не удалось отозвать ссылку" }),
   });
 
   return (
     <Cluster justify="between" gap={0} wrap={false} padY={1} className="tb-row-sep">
       <Cluster gap={3} wrap={false}>
         <Users size={12} color="var(--ou-fg-muted)" />
-        <Text weight="medium">{user.email}</Text>
+        <Text weight="medium">{user.email ?? "—"}</Text>
         {user.name && <Text tone="muted">{user.name}</Text>}
       </Cluster>
       <Cluster gap={2} wrap={false}>
         <Tag size="s" tone={user.tokenStatus === "active" ? "success" : "neutral"}>
           {user.tokenStatus === "active" ? "Активна" : user.tokenStatus === "revoked" ? "Отозвана" : "Нет ссылки"}
         </Tag>
+        {/* PRD-54 BR-54-42: без почты ссылку отправить некуда — пункт гаснет, а не прячется,
+            и подсказка говорит почему; сервер такой запрос отклоняет и сам. */}
         <IconButton
           variant="ghost"
           size="s"
-          title="Обновить ссылку и отправить письмо"
+          title={user.email ? "Обновить ссылку и отправить письмо" : "У участника нет почты — ссылку отправить некуда"}
           aria-label="Обновить ссылку"
-          icon={<RefreshCw size={12} color="var(--ou-info-600)" />}
+          // Цвет значка задан явно, поэтому погасшую кнопку приглушает и он: иначе она выглядит живой.
+          icon={<RefreshCw size={12} color={user.email ? "var(--ou-info-600)" : "var(--ou-fg-muted)"} />}
           onClick={() => resendUser.mutate()}
-          disabled={resendUser.isPending}
+          disabled={resendUser.isPending || !user.email}
         />
         {user.tokenStatus === "active" && (
           <IconButton
@@ -178,11 +183,29 @@ function GroupUsersPanel({ assignmentId }: { assignmentId: string }) {
   );
 }
 
+/** PRD-52: строка списка приглашённых рецензентов. */
+interface ReviewerRow {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  external: boolean;
+  comments: number;
+}
+
 interface AssignTestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId: string;
   testTitle: string;
+  /**
+   * PRD-52: зачем открыт диалог. `assign` — назначить прохождение (PRD-28),
+   * `review` — отправить тест на рецензирование.
+   *
+   * Раскладка у них общая, потому что задача общая: выбрать людей и разослать им
+   * ссылки. Расходится только выдаваемое право — назначение против гранта
+   * `review` — и подписи, которые об этом говорят.
+   */
+  mode?: "assign" | "review";
 }
 
 export function AssignTestDialog({
@@ -190,8 +213,10 @@ export function AssignTestDialog({
   onOpenChange,
   testId,
   testTitle,
+  mode = "assign",
 }: AssignTestDialogProps) {
-  const { toast } = useToast();
+  const isReview = mode === "review";
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<AssignTab>("current");
@@ -213,7 +238,33 @@ export function AssignTestDialog({
   // Fetch current assignments
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<Assignment[]>({
     queryKey: [`/api/tests/${testId}/assignments`],
-    enabled: open,
+    enabled: open && !isReview,
+  });
+
+  /**
+   * PRD-52: приглашённые рецензенты. В режиме рецензирования первая вкладка обязана
+   * показывать ИХ, а не участников прохождения: это разные списки, и путать их —
+   * значит предлагать отозвать доступ не у того человека.
+   */
+  const { data: reviewers = [], isLoading: reviewersLoading } = useQuery<ReviewerRow[]>({
+    queryKey: [`/api/tests/${testId}/review/reviewers`],
+    enabled: open && isReview,
+  });
+
+  const revokeReviewer = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/tests/${testId}/review/reviewers/${userId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Не удалось отозвать доступ");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/review/reviewers`] });
+      toast({ tone: "success", title: "Доступ отозван", description: "Ссылка рецензента больше не работает." });
+    },
+    onError: (e: Error) => toast({ tone: "error", title: t.common.error, description: e.message }),
   });
 
   // Fetch all users
@@ -231,12 +282,25 @@ export function AssignTestDialog({
   // Assign mutation
   const assignMutation = useMutation({
     mutationFn: async (data: { userIds?: string[]; groupIds?: string[]; dueDate?: string; linkExpiresAt?: string }) => {
-      const res = await fetch(`/api/tests/${testId}/assignments/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
+      // Рецензенту выдаётся грант и ссылка на окно рецензирования; приглашение
+      // идёт поимённо — у рецензирования нет группового назначения, к которому
+      // можно было бы приписать группу целиком.
+      const res = isReview
+        ? await fetch(`/api/tests/${testId}/review/invite`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            rows: (data.userIds ?? []).map((id) => ({ userId: id })),
+            linkExpiresAt: data.linkExpiresAt ?? null,
+          }),
+        })
+        : await fetch(`/api/tests/${testId}/assignments/bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(data),
+        });
       if (!res.ok) throw new Error("Failed to assign");
       return res.json();
     },
@@ -247,10 +311,10 @@ export function AssignTestDialog({
       setDueDate("");
       setLinkExpiresAt("");
       setActiveTab("current");
-      toast({ title: t.assignments.assigned, description: t.assignments.assignedDescription });
+      toast({ tone: "success", title: t.assignments.assigned, description: t.assignments.assignedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.assignments.failedToAssign });
+      toast({ tone: "error", title: t.common.error, description: t.assignments.failedToAssign });
     },
   });
 
@@ -266,10 +330,10 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: t.assignments.removed, description: t.assignments.removedDescription });
+      toast({ tone: "success", title: t.assignments.removed, description: t.assignments.removedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.assignments.failedToRemove });
+      toast({ tone: "error", title: t.common.error, description: t.assignments.failedToRemove });
     },
   });
 
@@ -285,10 +349,10 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: "Ссылка отозвана", description: "Токен доступа деактивирован." });
+      toast({ tone: "success", title: "Ссылка отозвана", description: "Токен доступа деактивирован." });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отозвать ссылку." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось отозвать ссылку." });
     },
   });
 
@@ -304,10 +368,10 @@ export function AssignTestDialog({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: "Ссылки обновлены", description: `Отправлено ${data.sent} писем.` });
+      toast({ tone: "success", title: "Ссылки обновлены", description: `Отправлено ${data.sent} писем.` });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось обновить ссылки." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось обновить ссылки." });
     },
   });
 
@@ -323,10 +387,10 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: "Письмо отправлено", description: "Новая ссылка отправлена пользователю." });
+      toast({ tone: "success", title: "Письмо отправлено", description: "Новая ссылка отправлена пользователю." });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отправить письмо." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось отправить письмо." });
     },
   });
 
@@ -351,8 +415,10 @@ export function AssignTestDialog({
   // Filter out already assigned users (directly or via group membership)
   const assignedUserIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!));
   const groupMemberIds = new Set(assignments.flatMap((a) => a.groupMemberIds ?? []));
+  // PRD-54 BR-54-42: an account without email cannot receive the link, so it is not offered.
   const availableUsers = allUsers.filter(
     (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && (u.roles ?? []).includes("learner")
+      && Boolean(u.email)
   );
 
   // Filter out already assigned groups
@@ -380,17 +446,23 @@ export function AssignTestDialog({
       return next;
     });
 
+  // Срок сдачи — свойство НАЗНАЧЕНИЯ, которого у рецензирования нет: приглашение
+  // рецензента отправляет только срок жизни ссылки (`assignMutation`), и поле
+  // сдачи обещало бы поведение, которого не будет. Срок ссылки остаётся: он
+  // работает в обоих режимах.
   const dateFields = (
     <Stack direction="row" gap={4}>
-      <Box grow>
-        <Input
-          label={t.assignments.dueDate}
-          type="date"
-          fullWidth
-          value={dueDate}
-          onChange={(e) => handleDueDateChange(e.target.value)}
-        />
-      </Box>
+      {!isReview && (
+        <Box grow>
+          <Input
+            label={t.assignments.dueDate}
+            type="date"
+            fullWidth
+            value={dueDate}
+            onChange={(e) => handleDueDateChange(e.target.value)}
+          />
+        </Box>
+      )}
       <Box grow>
         <Input
           label="Ссылка активна до"
@@ -570,6 +642,67 @@ export function AssignTestDialog({
     />
   );
 
+  const reviewersPanel = reviewersLoading ? (
+    <Cluster justify="center" wrap={false} padY={7}>
+      <Loader2 size={24} className="ou-spin" />
+    </Cluster>
+  ) : reviewers.length === 0 ? (
+    <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+      <Users size={48} style={{ marginInline: "auto", marginBottom: "var(--ou-space-4)", opacity: 0.5 }} />
+      <p>Тест ещё никому не отправляли на рецензирование</p>
+      <p>Выберите людей на соседних вкладках — каждый получит свою ссылку.</p>
+    </Box>
+  ) : (
+    <Table
+      columns={[
+        {
+          key: "who",
+          header: "Рецензент",
+          render: (r: ReviewerRow) => (
+            <Stack gap={1}>
+              <Text weight="medium">{r.name || r.email || r.userId}</Text>
+              {r.name && r.email ? <Text variant="body-s" tone="muted">{r.email}</Text> : null}
+            </Stack>
+          ),
+        },
+        {
+          key: "kind",
+          header: "Доступ",
+          width: "200px",
+          render: (r: ReviewerRow) => (
+            <Tag size="s" variant="outline">
+              {r.external ? "по ссылке" : "по учётной записи"}
+            </Tag>
+          ),
+        },
+        {
+          key: "comments",
+          header: "Комментариев",
+          width: "140px",
+          render: (r: ReviewerRow) => (r.comments > 0 ? String(r.comments) : "—"),
+        },
+        {
+          key: "actions",
+          header: "",
+          width: "120px",
+          render: (r: ReviewerRow) => (
+            <Button
+              variant="ghost"
+              size="s"
+              onClick={() => revokeReviewer.mutate(r.userId)}
+              disabled={revokeReviewer.isPending}
+              data-testid={`revoke-reviewer-${r.userId}`}
+            >
+              Отозвать
+            </Button>
+          ),
+        },
+      ]}
+      rows={reviewers}
+      rowKey={(r: ReviewerRow) => r.userId}
+    />
+  );
+
   const usersPanel = (
     <Stack gap={4}>
       <Stack gap={3}>
@@ -580,13 +713,13 @@ export function AssignTestDialog({
             disabled={selectedUserIds.length === 0}
             loading={assignMutation.isPending}
           >
-            {t.assignments.assign} ({selectedUserIds.length})
+            {isReview ? "Пригласить" : t.assignments.assign} ({selectedUserIds.length})
           </Button>
         </Cluster>
       </Stack>
       {availableUsers.length === 0 ? (
         <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
-          <p>Все пользователи уже назначены</p>
+          <p>{isReview ? "Все пользователи уже приглашены" : "Все пользователи уже назначены"}</p>
         </Box>
       ) : (
         <ScrollArea maxH="lg">
@@ -613,7 +746,7 @@ export function AssignTestDialog({
             disabled={selectedGroupIds.length === 0}
             loading={assignMutation.isPending}
           >
-            {t.assignments.assign} ({selectedGroupIds.length})
+            {isReview ? "Пригласить" : t.assignments.assign} ({selectedGroupIds.length})
           </Button>
         </Cluster>
       </Stack>
@@ -641,7 +774,7 @@ export function AssignTestDialog({
       open={open}
       onClose={() => onOpenChange(false)}
       size="xl"
-      title={t.assignments.manageAssignments}
+      title={isReview ? "Отправить на рецензирование" : t.assignments.manageAssignments}
       description={testTitle}
       footer={
         <Button variant="secondary" onClick={() => onOpenChange(false)}>
@@ -649,24 +782,45 @@ export function AssignTestDialog({
         </Button>
       }
     >
+      {isReview ? (
+        <Banner tone="info">
+          Рецензенты видят комментарии друг друга и могут отвечать в чужих ветках. Прохождение теста по
+          этой ссылке не записывается: попытка не создаётся, в аналитике следа нет.
+        </Banner>
+      ) : null}
       <Tabs<AssignTab>
         variant="segment"
         align="stretch"
         value={activeTab}
         onChange={setActiveTab}
         items={[
-          { id: "current", label: `${t.assignments.assignedTo} (${assignments.length})`, content: currentPanel },
+          isReview
+            ? { id: "current", label: `Приглашены (${reviewers.length})`, content: reviewersPanel }
+            : { id: "current", label: `${t.assignments.assignedTo} (${assignments.length})`, content: currentPanel },
           { id: "users", label: t.assignments.users, icon: <Users size={16} />, content: usersPanel },
-          { id: "groups", label: t.assignments.groups, icon: <UsersRound size={16} />, content: groupsPanel },
+          // Группы — только у назначения. Рецензентов приглашают ПОИМЁННО: грант
+          // выдаётся человеку, ссылка персональная (иначе комментарий нечем
+          // подписать), и группового приглашения не существует — вкладка лишь
+          // предлагала выбор, который уходил на сервер пустым списком.
+          ...(isReview
+            ? []
+            : [{
+              id: "groups" as const,
+              label: t.assignments.groups,
+              icon: <UsersRound size={16} />,
+              content: groupsPanel,
+            }]),
           {
             id: "bulk",
-            label: "Списком из файла",
+            // Не «Списком из файла»: с PRD-28 раздела 16 список можно и набрать.
+            label: "Списком",
             icon: <FileSpreadsheet size={16} />,
             content: (
               <BulkInviteTab
                 testId={testId}
                 testTitle={testTitle}
                 onGoToAssignments={() => setActiveTab("current")}
+                purpose={mode}
               />
             ),
           },

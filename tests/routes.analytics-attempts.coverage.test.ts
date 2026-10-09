@@ -87,139 +87,9 @@ beforeEach(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /tests/:testId/attempts
-// ─────────────────────────────────────────────────────────────────────────────
-describe("GET /tests/:testId/attempts — scope & error branches", () => {
-  it("returns 401 when not authenticated", async () => {
-    const res = await request(app).get("/api/analytics/tests/test1/attempts");
-    expect(res.status).toBe(401);
-  });
+// Ручка списка попыток теста снята вместе с его вкладкой (PRD-56 FR-23): её ветки проверять
+// больше негде и незачем — прохождения показывает реестр (tests/routes.analytics-registry).
 
-  it("returns 403 when an author has no owner/grant scope on the test", async () => {
-    storageMock.getUserRoles.mockResolvedValue(["author"]);
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "T", mode: "standard", ownerId: "someoneelse" });
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(403);
-  });
-
-  it("returns 404 from the handler when the test vanishes after the scope check", async () => {
-    // Admin bypasses scope; the middleware sees the test, the handler re-fetch is undefined.
-    storageMock.getTest.mockResolvedValueOnce({ id: "test1", title: "T", mode: "standard", ownerId: null })
-      .mockResolvedValueOnce(undefined);
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(404);
-  });
-
-  it("returns 500 when attempt loading throws", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "T", mode: "standard", ownerId: null });
-    storageMock.getAllAttempts.mockRejectedValue(new Error("db down"));
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Failed to fetch attempts list");
-  });
-});
-
-describe("GET /tests/:testId/attempts — data branches", () => {
-  it("adaptive test: achieved levels, unfinished/null-field attempts, snapshot fallbacks and sort", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Adaptive", mode: "adaptive", ownerId: null });
-    storageMock.getSnapshotsForTest.mockResolvedValue([{ id: "snap1", version: 2 }]);
-
-    const a1 = {
-      id: "a1", testId: "test1", userId: "u1", snapshotId: "snap1",
-      startedAt: new Date(Date.now() - 60000), finishedAt: new Date(),
-      variantJson: { mode: "adaptive", topics: [] },
-      resultJson: {
-        overallPercent: 80, totalEarnedPoints: 8, totalPossiblePoints: 10, overallPassed: true,
-        topicResults: [
-          { topicId: "t1", topicName: "JS", achievedLevelName: "Профи" },
-          { topicId: "t2", topicName: "CSS", achievedLevelName: null },
-        ],
-      },
-    };
-    // Unfinished: result null, finishedAt null (duration null, completed false, fallbacks).
-    const a2 = {
-      id: "a2", testId: "test1", userId: "u2",
-      startedAt: new Date(Date.now() - 30000), finishedAt: null,
-      variantJson: null, resultJson: null,
-    };
-    // snapshotId present but absent from the snapshot list -> version resolves to null.
-    const a3 = {
-      id: "a3", testId: "test1", userId: "u1", snapshotId: "ghost",
-      startedAt: new Date(Date.now() - 90000), finishedAt: new Date(Date.now() - 80000),
-      variantJson: { mode: "adaptive", topics: [] },
-      resultJson: { overallPercent: 50, overallPassed: false, topicResults: [] },
-    };
-    // startedAt AND finishedAt null -> the "" date fallback in the sort comparator.
-    const a4 = {
-      id: "a4", testId: "test1", userId: "u3",
-      startedAt: null, finishedAt: null, variantJson: null, resultJson: null,
-    };
-    // Attempt of another test — filtered out.
-    const other = { ...a1, id: "z", testId: "test2" };
-    storageMock.getAllAttempts.mockResolvedValue([a2, a1, a3, a4, other]);
-    // u1 resolves with no name/email (-> "Unknown" via the name||email fallback);
-    // u2 resolves undefined (-> absent from the map, "Unknown" via the map fallback).
-    storageMock.getUser.mockImplementation((id: string) => {
-      if (id === "author1") return Promise.resolve(authorUser);
-      if (id === "u1") return Promise.resolve({ id: "u1", name: null, email: null });
-      if (id === "u2") return Promise.resolve(undefined);
-      return Promise.resolve({ id, name: `User ${id}`, email: `${id}@t.com` });
-    });
-
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(200);
-    expect(res.body.testMode).toBe("adaptive");
-    expect(res.body.currentVersion).toBe(2);
-    expect(res.body.attempts).toHaveLength(4);
-
-    const byId = Object.fromEntries(res.body.attempts.map((a: any) => [a.attemptId, a]));
-    expect(byId.a1.achievedLevels).toEqual([
-      { topicName: "JS", levelName: "Профи" },
-      { topicName: "CSS", levelName: null },
-    ]);
-    expect(byId.a1.snapshotVersion).toBe(2);
-    expect(byId.a1.duration).toBeGreaterThan(0);
-    expect(byId.a1.completed).toBe(true);
-    expect(byId.a1.username).toBe("Unknown"); // u1: null name/email
-    expect(byId.a2.username).toBe("Unknown"); // u2: not resolvable
-    expect(byId.a2.completed).toBe(false);
-    expect(byId.a2.duration).toBeNull();
-    expect(byId.a2.overallPercent).toBe(0);
-    expect(byId.a2.passed).toBe(false);
-    expect(byId.a3.snapshotVersion).toBeNull();
-    expect(byId.a4.startedAt).toBeNull();
-
-    // Version breakdown: v2 (a1) once, null (a2/a3/a4) three times, newest first.
-    expect(res.body.versions).toEqual([
-      { snapshotVersion: 2, attemptCount: 1 },
-      { snapshotVersion: null, attemptCount: 3 },
-    ]);
-    // Completed attempts sort ahead of the unfinished ones.
-    expect(res.body.attempts[0].completed).toBe(true);
-    expect(res.body.attempts[res.body.attempts.length - 1].completed).toBe(false);
-  });
-
-  it("standard test with no snapshots: currentVersion null, no achievedLevels", async () => {
-    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Std", mode: "standard", ownerId: null });
-    storageMock.getSnapshotsForTest.mockResolvedValue([]);
-    const a1 = {
-      id: "a1", testId: "test1", userId: "u1", snapshotId: null,
-      startedAt: new Date(Date.now() - 1000), finishedAt: new Date(),
-      variantJson: { sections: [] },
-      resultJson: { overallPercent: 70, totalEarnedPoints: 7, totalPossiblePoints: 10, overallPassed: true, topicResults: [] },
-    };
-    storageMock.getAllAttempts.mockResolvedValue([a1]);
-    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
-    expect(res.status).toBe(200);
-    expect(res.body.currentVersion).toBeNull();
-    expect(res.body.attempts[0].achievedLevels).toBeUndefined();
-    expect(res.body.attempts[0].snapshotVersion).toBeNull();
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /attempts/:attemptId
-// ─────────────────────────────────────────────────────────────────────────────
 describe("GET /attempts/:attemptId — scope & error branches", () => {
   it("returns 401 when not authenticated", async () => {
     const res = await request(app).get("/api/analytics/attempts/atmp1");
@@ -320,7 +190,7 @@ describe("GET /attempts/:attemptId — data branches", () => {
     expect(res.body.username).toBe("Unknown");
     expect(res.body.startedAt).toBeNull();
     const byId = Object.fromEntries(res.body.answers.map((a: any) => [a.questionId, a]));
-    expect(byId.q1.difficulty).toBe(50);            // null difficulty -> 50 default
+    expect(byId.q1.difficulty).toBeNull();          // Э4а: незаданная сложность — null, не 50
     expect(byId.q1.userAnswer).toBe(5);             // options[5] undefined -> raw index
     expect(byId.q2.userAnswer).toEqual([]);         // out-of-range filtered out
     expect(byId.q4.userAnswer).toEqual([]);         // ranking filtered out
@@ -365,5 +235,71 @@ describe("GET /attempts/:attemptId — data branches", () => {
     ]);
     // The answered level name is resolved from levelsState.
     expect(res.body.answers[0].levelName).toBe("База");
+  });
+});
+
+/** D3: протокол попытки книгой — из того же разбора, что окно, с ответом словами. */
+describe("GET /attempts/:attemptId/export/excel — протокол попытки", () => {
+  /** Ответ supertest как буфер: книга — двоичный файл, а не текст. */
+  const binary = (res: any, cb: (err: Error | null, body: Buffer) => void) => {
+    const chunks: Buffer[] = [];
+    res.on("data", (chunk: Buffer) => chunks.push(chunk));
+    res.on("end", () => cb(null, Buffer.concat(chunks)));
+  };
+
+  it("отдаёт книгу с ответом и эталоном словами", async () => {
+    storageMock.getAttempt.mockResolvedValue({
+      id: "atmp1", testId: "test1", userId: "u1", snapshotId: null,
+      startedAt: new Date("2026-09-30T10:00:00Z"), finishedAt: new Date("2026-09-30T10:05:00Z"),
+      variantJson: { sections: [{ topicId: "t1", questionIds: ["q1"] }] },
+      answersJson: { q1: 1 },
+      resultJson: { overallPercent: 0, overallPassed: false, totalPossiblePoints: 1, totalEarnedPoints: 0 },
+    });
+    storageMock.getTest.mockResolvedValue({
+      id: "test1", title: "T", mode: "standard", ownerId: null, overallPassRuleJson: { type: "percent", value: 70 },
+    });
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([{
+      id: "q1", topicId: "t1", type: "single", prompt: "Что выведет?", dataJson: { options: ["1", "2"] },
+      correctJson: { correctIndex: 0 }, difficulty: 40, contentHash: "h1",
+    }]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1/export/excel"))
+      .buffer(true).parse(binary);
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("spreadsheetml");
+    expect(res.headers["content-disposition"]).toContain(".xlsx");
+    const { readWorkbookFromBuffer, sheetToArrays } = await import("../server/utils/excel");
+    const workbook = await readWorkbookFromBuffer(res.body as Buffer);
+    const answers = sheetToArrays(workbook.getWorksheet("Ответы")!);
+    expect(answers[1].slice(3, 6)).toEqual(["2) 2", "1) 1", "Неверно"]);
+  });
+
+  it("не отдаёт попытку теста вне области видимости", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getAttempt.mockResolvedValue({ id: "atmp1", testId: "test1", userId: "u1" });
+    storageMock.getTest.mockResolvedValue({ id: "test1", title: "T", mode: "standard", ownerId: "someoneelse" });
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1/export/excel"));
+
+    expect(res.status).toBe(403);
+  });
+
+  it("закрыта без права выгрузки", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1/export/excel"));
+
+    expect(res.status).toBe(403);
+    expect(storageMock.getAttempt).not.toHaveBeenCalled();
+  });
+
+  it("отвечает 404 на несуществующую попытку", async () => {
+    storageMock.getAttempt.mockResolvedValue(undefined);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/x/export/excel"));
+
+    expect(res.status).toBe(404);
   });
 });

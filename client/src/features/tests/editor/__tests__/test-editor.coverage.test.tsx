@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as React from "react";
 import { TestEditor, TestEditorView } from "../test-editor";
 import { useTestEditor } from "../use-test-editor";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ function makeClient() {
 }
 
 function withClient(client: QueryClient, ui: React.JSX.Element) {
-  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+  return <QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>;
 }
 
 // ─── fetch mocking ────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ describe("<TestEditor /> — create mode", () => {
     render(withClient(makeClient(), <TestEditor open onClose={() => {}} />));
     await screen.findByTestId("test-editor-root");
     expect(screen.getByText("Редактор теста")).toBeInTheDocument();
-    expect(screen.getByTestId("test-editor-tab-body-composition")).toBeInTheDocument();
+    expect(screen.getByTestId("test-editor-tab-body-main")).toBeInTheDocument();
   });
 });
 
@@ -147,7 +148,7 @@ describe("<TestEditor /> — focus trap (NFR-20)", () => {
 // ─── Successful unified save ─────────────────────────────────────────────────
 
 describe("<TestEditor /> — successful save", () => {
-  it("footer «Сохранить» persists and closes the drawer", async () => {
+  it("footer «Применить» persists and KEEPS the drawer open", async () => {
     nextResponse(buildApiResponse());
     const onClose = vi.fn();
     const client = makeClient();
@@ -179,7 +180,12 @@ describe("<TestEditor /> — successful save", () => {
     nextResponse(buildApiResponse({ version: 8, title: "Sample Test edited" }));
     fireEvent.click(screen.getByTestId("test-editor-save"));
 
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // Применение — не выход: правки записаны, тег «Изменено» погас, ящик на месте.
+    await waitFor(() =>
+      expect(screen.queryByTestId("test-editor-foot-dirty-tag")).toBeNull(),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("test-editor-foot")).toBeInTheDocument();
   });
 
   // PRD-22: the tests-list column «недоступный вариант» is server-computed, so it
@@ -215,8 +221,9 @@ describe("<TestEditor /> — successful save", () => {
     nextResponse(buildApiResponse({ version: 8, title: "Sample Test edited" }));
     fireEvent.click(screen.getByTestId("test-editor-save"));
 
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["/api/tests"] });
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["/api/tests"] }),
+    );
   });
 
   it("close-confirm «Сохранить» saves and exits", async () => {
@@ -282,7 +289,7 @@ describe("<TestEditor /> — close-confirm error anchor", () => {
     }
 
     render(withClient(client, <Harness />));
-    await screen.findByText("Основы ИБ");
+    await screen.findByTestId("settings-pane-main");
     act(() => {
       fireEvent.click(screen.getByTestId("harness-dirty"));
     });
@@ -351,19 +358,25 @@ describe("<TestEditor /> — archived status tag", () => {
 // ─── Tab panel rendering ─────────────────────────────────────────────────────
 
 describe("<TestEditor /> — non-default tab panels", () => {
-  it("switches to the «Оценка» and «Показатели» tabs and keeps the drawer mounted", async () => {
+  it("переключается на «Оценку результата» и её подразделы, не роняя ящик", async () => {
     installRouter();
     render(withClient(makeClient(), <TestEditor testId="test-1" open onClose={() => {}} />));
     await screen.findByText("Sample Test");
 
     // These two section panels render from `editor.model` + list endpoints that
     // the router answers with empty arrays, so they mount without extra fixtures.
-    for (const label of ["Оценка", "Показатели"]) {
-      fireEvent.click(screen.getByRole("tab", { name: new RegExp(label, "i") }));
-      await waitFor(() =>
-        expect(screen.getByRole("tab", { name: new RegExp(label, "i"), selected: true })).toBeInTheDocument(),
-      );
-      expect(screen.getByTestId("test-editor-body")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Оценка результата/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /Оценка результата/i, selected: true }),
+      ).toBeInTheDocument(),
+    );
+    // «Шкалы» — группа второго уровня: у неё два пункта, а не один. «Вклады вопросов»
+    // у теста без шкал заблокированы, поэтому проверяются доступные.
+    for (const rail of ["scales-list", "metrics"]) {
+      fireEvent.click(screen.getByTestId(`scoring-rail-${rail}`));
+      expect(screen.getByTestId(`scoring-pane-${rail}`)).toBeInTheDocument();
     }
+    expect(screen.getByTestId("test-editor-body")).toBeInTheDocument();
   });
 });

@@ -22,7 +22,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Banner, Button, ModalDialog, SegmentedControl } from "@universityrt/ui-kit";
+import { Banner, Button, ModalDialog, SegmentedControl } from "@skillum/ui-kit";
 import { AlertTriangle, Play, Power, RefreshCw, X } from "lucide-react";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildScreenInputs } from "@shared/template/preview-context";

@@ -4,17 +4,97 @@
  * (`scorm_packages`), attempts (`scorm_attempts`) and per-question answers
  * (`scorm_answers`). Attempts are keyed by (packageId, sessionId, attemptNumber);
  * `getNextAttemptNumber` computes the next sequence number. Packages carry a
- * nullable `testId` and survive test deletion by design, so this domain is
- * self-contained. Exposed through the `IStorage` facade, never imported by routes.
+ * nullable `testId` (no FK: legacy packages may still point nowhere); test
+ * deletion purges the whole LMS trail through {@link purgeTestLmsData}.
+ * Exposed through the `IStorage` facade, never imported by routes.
  */
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, or, isNull, desc, inArray, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "../db";
 import {
-  scormPackages, scormAttempts, scormAnswers,
+  scormPackages, scormAttempts, scormAnswers, lmsImportBatches, lmsImportBatchUsers,
+  users, userRoles, userGroups, attempts, testAssignments,
   type ScormPackage, type InsertScormPackage,
   type ScormAttempt, type InsertScormAttempt,
   type ScormAnswer, type InsertScormAnswer,
+  type LmsImportBatch, type InsertLmsImportBatch,
 } from "@shared/schema";
+
+/**
+ * Поля импортированного прохождения (PRD-54).
+ *
+ * `origin` зафиксирован литералом намеренно: телеметрия в этот метод не ходит, и тип должен это
+ * говорить, а не полагаться на дисциплину вызывающего.
+ */
+export interface ImportedAttemptInput {
+  testId: string;
+  participantKey: string;
+  /**
+   * Различитель попыток участника за одну дату (PRD-54 раздел 8.1): `r:<метка регистрации>` или
+   * `c:<отпечаток>:<n>`. Входит в ключ вместе с тестом, псевдонимом и датой.
+   */
+  attemptKey: string;
+  origin: "import";
+  batchId: string | null;
+  groupId: string | null;
+  userId: string | null;
+  lmsUserName: string | null;
+  lmsUserOrg: string | null;
+  /** Подразделение и должность: входят в псевдоним, поэтому хранятся рядом с прохождением. */
+  lmsUserUnit: string | null;
+  lmsUserPosition: string | null;
+  startedAt: Date;
+  finishedAt: Date;
+  lastActivityAt: Date;
+  /** Номер попытки внутри регистрации SCO (`meta_attempt`, PRD-54 решение 13); 1 — не сообщён. */
+  attemptNumber: number;
+  resultPassed: boolean | null;
+  totalPoints: number | null;
+  /** Процент из корневого балла выгрузки; `null` — балла нет (измерительный тест). */
+  resultPercent: number | null;
+  /** Шкала процента (100) рядом с ним; `null` вместе с процентом. */
+  maxPoints: number | null;
+  /** PRD-55 FR-08: выданный состав прохождения — из него пересчитывается экспозиция импорта. */
+  deliveredQuestionIds: string[];
+  totalQuestions: number | null;
+  scalesJson: Record<string, number> | null;
+  variablesJson: Record<string, string> | null;
+  /**
+   * PRD-56 FR-19a: версия публикации прохождения, разрешённая по номеру из выгрузки.
+   * `null` — пакет версии не сообщал либо снимка с таким номером у теста нет.
+   */
+  snapshotId: string | null;
+  /** PRD-56 FR-18: выданные варианты картой «тема -> вариант»; `null` — вариантов не было. */
+  formsJson: Record<string, string> | null;
+  /**
+   * Достигнутые уровни тем `[{ topicId, topicName, levelName }]` — та же колонка и форма, что у
+   * телеметрии; `levelName: null` — уровень не достигнут, `null` целиком — блоков уровней нет.
+   */
+  achievedLevelsJson: Array<{ topicId: string; topicName: string | null; levelName: string | null }> | null;
+  /** Рекомендованные курсы `[{ title, url }]`, как у телеметрии; `null` — рекомендаций нет. */
+  failedTopicCoursesJson: Array<{ title: string; url: string }> | null;
+}
+
+/** Уже загруженное прохождение теста — то, с чем импорт сопоставляет строки файла (BR-54-37). */
+export interface ImportedAttemptKeyRow {
+  id: string;
+  participantKey: string;
+  startedAt: Date;
+  /** `null` — строка загружена до появления различителя (2026-10-06). */
+  attemptKey: string | null;
+}
+
+/** Счётчики и протокол, которыми партия дополняется после прогона. */
+export interface LmsImportCounts {
+  rowsTotal: number;
+  rowsCreated: number;
+  rowsUpdated: number;
+  rowsSkipped: number;
+  rowsLinked: number;
+  /** PRD-66 FR-11: взаимодействий, не нашедших своего задания в тесте. */
+  rowsUnmatched: number;
+  warnings: string[];
+}
 
 /** Repository for the SCORM telemetry tables. */
 export class ScormRepository {
@@ -52,6 +132,53 @@ export class ScormRepository {
   async getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
     const [attempt] = await db.select().from(scormAttempts).where(eq(scormAttempts.id, id));
     return attempt || undefined;
+  }
+
+  /**
+   * Достигнутые уровни и курсы проваленных тем для набора прохождений LMS — то, что пакет
+   * сообщает телеметрией при завершении (`finish`). Слой наблюдений этих полей не несёт, а книге
+   * выгрузки они нужны для листов «Статистика уровней» и «Рекомендации». Один запрос по id.
+   *
+   * @param ids идентификаторы прохождений (`scorm_attempts.id`)
+   */
+  async getScormAttemptOutcomes(ids: string[]): Promise<Array<{
+    id: string;
+    achievedLevelsJson: unknown;
+    failedTopicCoursesJson: unknown;
+  }>> {
+    if (ids.length === 0) return [];
+    return db
+      .select({
+        id: scormAttempts.id,
+        achievedLevelsJson: scormAttempts.achievedLevelsJson,
+        failedTopicCoursesJson: scormAttempts.failedTopicCoursesJson,
+      })
+      .from(scormAttempts)
+      .where(inArray(scormAttempts.id, ids));
+  }
+
+  /**
+   * PRD-56 FR-21h: stored scale and indicator values of LMS runs, for the analytics workbook.
+   *
+   * The observations layer does not carry them; the export reads them in one query over its
+   * selection, like the outcomes above.
+   *
+   * @param ids run ids (`scorm_attempts.id`)
+   */
+  async getScormAttemptMeasures(ids: string[]): Promise<Array<{
+    id: string;
+    scalesJson: unknown;
+    variablesJson: unknown;
+  }>> {
+    if (ids.length === 0) return [];
+    return db
+      .select({
+        id: scormAttempts.id,
+        scalesJson: scormAttempts.scalesJson,
+        variablesJson: scormAttempts.variablesJson,
+      })
+      .from(scormAttempts)
+      .where(inArray(scormAttempts.id, ids));
   }
 
   async getScormAttemptBySession(
@@ -115,4 +242,345 @@ export class ScormRepository {
   async getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
     return db.select().from(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
   }
+
+  // ─── PRD-54: импорт выгрузок отчётов LMS ────────────────────────────────────
+
+  /**
+   * Записать импортированное прохождение, обновив существующее с тем же ключом (PRD-54 раздел 8.1).
+   *
+   * Ключ — `(test_id, participant_key, started_at, attempt_key)`, он же частичный уникальный индекс
+   * `scorm_attempts_import_row_idx`. Конфликт разрешает БАЗА, а не проверка «сначала выбрать,
+   * потом вставить»: две параллельные загрузки одного файла иначе создали бы дубли.
+   *
+   * Обновляются не все поля подряд, а только те, что приносит новая загрузка. `participant_key`,
+   * `test_id`, `started_at` и `attempt_key` в набор не входят — они и есть ключ.
+   *
+   * @param data поля прохождения
+   * @returns идентификатор строки и признак `created`: создана (true) или обновлена (false)
+   */
+  async upsertImportedAttempt(data: ImportedAttemptInput): Promise<{ id: string; created: boolean }> {
+    const id = randomUUID();
+    const [row] = await db
+      .insert(scormAttempts)
+      .values({ id, ...data })
+      .onConflictDoUpdate({
+        target: [scormAttempts.testId, scormAttempts.participantKey, scormAttempts.startedAt, scormAttempts.attemptKey],
+        targetWhere: sql`${scormAttempts.origin} = 'import'`,
+        set: {
+          batchId: data.batchId,
+          groupId: data.groupId,
+          userId: data.userId,
+          lmsUserName: data.lmsUserName,
+          lmsUserOrg: data.lmsUserOrg,
+          finishedAt: data.finishedAt,
+          lastActivityAt: data.lastActivityAt,
+          attemptNumber: data.attemptNumber,
+          resultPassed: data.resultPassed,
+          totalPoints: data.totalPoints,
+          resultPercent: data.resultPercent,
+          maxPoints: data.maxPoints,
+          deliveredQuestionIds: data.deliveredQuestionIds,
+          totalQuestions: data.totalQuestions,
+          scalesJson: data.scalesJson,
+          variablesJson: data.variablesJson,
+          // Повторная загрузка переписывает уровни тем и рекомендации целиком, как и шкалы.
+          achievedLevelsJson: data.achievedLevelsJson,
+          failedTopicCoursesJson: data.failedTopicCoursesJson,
+          // PRD-56: повторная загрузка того же файла обязана обновлять и версию с вариантом —
+          // иначе строка, загруженная пакетом прошлой сборки, навсегда осталась бы без версии.
+          snapshotId: data.snapshotId,
+          formsJson: data.formsJson,
+        },
+      })
+      .returning({ id: scormAttempts.id });
+    // Идентификатор генерируется ДО запроса, поэтому совпадение выданного и вернувшегося и есть
+    // ответ «строку создали». Отдельный SELECT ради того же факта был бы вторым обращением к базе.
+    return { id: row.id, created: row.id === id };
+  }
+
+  /**
+   * Ключи всех импортированных прохождений теста (PRD-54 раздел 8.1, BR-54-37).
+   *
+   * Читается один раз на партию: по нему импорт решает, обновит строка файла свою запись, перенимет
+   * чужую без различителя или создаст новую, — и сухой прогон считает то же самое без записи.
+   *
+   * @param testId тест загрузки
+   * @returns идентификатор, псевдоним, дата и различитель каждой импортированной строки теста
+   */
+  async listImportedAttemptKeys(testId: string): Promise<ImportedAttemptKeyRow[]> {
+    const rows = await db
+      .select({
+        id: scormAttempts.id,
+        participantKey: scormAttempts.participantKey,
+        startedAt: scormAttempts.startedAt,
+        attemptKey: scormAttempts.attemptKey,
+      })
+      .from(scormAttempts)
+      .where(and(eq(scormAttempts.testId, testId), eq(scormAttempts.origin, "import")));
+    // У импорта псевдоним заполнен всегда; строка без него сопоставляться ни с чем не может.
+    return rows.flatMap((r) => (r.participantKey ? [{ ...r, participantKey: r.participantKey }] : []));
+  }
+
+  /**
+   * Передать уже лежащей записи ключ строки файла (BR-54-37): запись без различителя или с
+   * отпечатком той же строки отчёта перестаёт быть отдельным прохождением и обновляется следующим
+   * upsert-ом, а не остаётся рядом дублем.
+   *
+   * @param id запись, которая перенимает ключ
+   * @param attemptKey новый различитель
+   */
+  async setImportedAttemptKey(id: string, attemptKey: string): Promise<void> {
+    await db
+      .update(scormAttempts)
+      .set({ attemptKey })
+      .where(and(eq(scormAttempts.id, id), eq(scormAttempts.origin, "import")));
+  }
+
+  /** Переписать ответы попытки: повторный импорт заменяет их целиком, а не доливает. */
+  async replaceImportedAnswers(attemptId: string, answers: (InsertScormAnswer & { id: string })[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
+      if (answers.length > 0) await tx.insert(scormAnswers).values(answers);
+    });
+  }
+
+  /** Завести партию импорта. Счётчики проставляются позже, когда строки записаны. */
+  async createLmsImportBatch(batch: InsertLmsImportBatch & { id: string }): Promise<{ id: string }> {
+    const [row] = await db.insert(lmsImportBatches).values(batch).returning({ id: lmsImportBatches.id });
+    return row;
+  }
+
+  /** Проставить счётчики и протокол после прогона. */
+  async updateLmsImportBatch(id: string, counts: LmsImportCounts): Promise<void> {
+    await db.update(lmsImportBatches).set({
+      rowsTotal: counts.rowsTotal,
+      rowsCreated: counts.rowsCreated,
+      rowsUpdated: counts.rowsUpdated,
+      rowsSkipped: counts.rowsSkipped,
+      rowsLinked: counts.rowsLinked,
+      rowsUnmatched: counts.rowsUnmatched,
+      warningsJson: counts.warnings,
+    }).where(eq(lmsImportBatches.id, id));
+  }
+
+  /**
+   * Одна партия по идентификатору — нужна откату, чтобы узнать ТЕСТ партии: область доступа
+   * проверяется по тесту, а в маршруте отката стоит идентификатор партии.
+   */
+  async getLmsImportBatchById(id: string): Promise<LmsImportBatch | undefined> {
+    const [row] = await db.select().from(lmsImportBatches).where(eq(lmsImportBatches.id, id));
+    return row || undefined;
+  }
+
+  /** Партии теста, новые первыми. */
+  async getLmsImportBatches(testId: string): Promise<LmsImportBatch[]> {
+    return db.select().from(lmsImportBatches)
+      .where(eq(lmsImportBatches.testId, testId))
+      .orderBy(desc(lmsImportBatches.importedAt));
+  }
+
+  /**
+   * Откатить партию целиком (PRD-54 раздел 8.6).
+   *
+   * Одной транзакцией: половина отката хуже, чем его отсутствие — прохождения без партии осели бы
+   * в аналитике навсегда и уже ничем бы не удалялись. Телеметрию не задевает: удаляются только
+   * строки с этим `batch_id`, а у телеметрии он пуст.
+   */
+  /**
+   * Запомнить, что партия сделала с участником (PRD-54 BR-54-43): завела ли его запись и добавила ли
+   * в группу. Флаги только поднимаются: строка файла, встретившая участника второй раз, не должна
+   * стереть то, что о нём записала первая.
+   *
+   * @param batchId партия
+   * @param userId участник
+   * @param flags заведена ли запись этой партией и поставлено ли ею членство
+   */
+  async recordImportBatchUser(
+    batchId: string,
+    userId: string,
+    flags: { createdUser: boolean; addedToGroup: boolean },
+  ): Promise<void> {
+    await db
+      .insert(lmsImportBatchUsers)
+      .values({ batchId, userId, ...flags })
+      .onConflictDoUpdate({
+        target: [lmsImportBatchUsers.batchId, lmsImportBatchUsers.userId],
+        set: {
+          createdUser: sql`${lmsImportBatchUsers.createdUser} OR ${flags.createdUser}`,
+          addedToGroup: sql`${lmsImportBatchUsers.addedToGroup} OR ${flags.addedToGroup}`,
+        },
+      });
+  }
+
+  /**
+   * Откатить партию (PRD-54 раздел 8.6, BR-54-43): прохождения с ответами, затем то, что партия
+   * сделала с участниками, затем сама партия — одной транзакцией.
+   *
+   * Членство, поставленное партией, снимается, только если у участника не осталось прохождений с
+   * этой группой; иначе отметка «поставлено импортом» переходит к другой его партии этой группы,
+   * чтобы её откат снял членство в свой черёд. Запись, заведённая партией, удаляется, только если
+   * ничем больше не занята: ни прохождений, ни членства, ни назначений. Иначе её отметка «заведена
+   * импортом» переходит к другой партии участника.
+   */
+  async deleteLmsImportBatch(id: string): Promise<void> {
+    await db.transaction((tx) => rollbackLmsImportBatch(tx, id));
+  }
+}
+
+/** A transaction handle of {@link db} — what the in-transaction helpers below run on. */
+export type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Откат партии внутри ЧУЖОЙ транзакции — тело {@link ScormRepository.deleteLmsImportBatch}.
+ * Вынесено, чтобы удаление теста откатывало его партии той же транзакцией и тем же правилом:
+ * второе правило «кого из заведённых импортом участников удалять» разошлось бы с первым.
+ *
+ * @param tx транзакция вызывающего
+ * @param id партия
+ */
+export async function rollbackLmsImportBatch(tx: DbTx, id: string): Promise<void> {
+  const [batch] = await tx.select().from(lmsImportBatches).where(eq(lmsImportBatches.id, id));
+  const touched = await tx.select().from(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
+
+  const attemptRows = await tx.select({ id: scormAttempts.id }).from(scormAttempts)
+    .where(eq(scormAttempts.batchId, id));
+  const ids = attemptRows.map((a) => a.id);
+  if (ids.length > 0) await tx.delete(scormAnswers).where(inArray(scormAnswers.attemptId, ids));
+  await tx.delete(scormAttempts).where(eq(scormAttempts.batchId, id));
+  await tx.delete(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
+
+  /** Другая партия участника, которой можно передать отметку; с группой — только этой группы. */
+  const heirBatch = async (userId: string, groupId: string | null) => {
+    const [row] = await tx
+      .select({ batchId: lmsImportBatchUsers.batchId })
+      .from(lmsImportBatchUsers)
+      .innerJoin(lmsImportBatches, eq(lmsImportBatches.id, lmsImportBatchUsers.batchId))
+      .where(and(
+        eq(lmsImportBatchUsers.userId, userId),
+        groupId ? eq(lmsImportBatches.groupId, groupId) : sql`true`,
+      ))
+      .orderBy(lmsImportBatches.importedAt)
+      .limit(1);
+    return row?.batchId ?? null;
+  };
+
+  for (const t of touched) {
+    if (t.addedToGroup && batch?.groupId) {
+      const heir = await heirBatch(t.userId, batch.groupId);
+      if (heir) {
+        await tx.update(lmsImportBatchUsers).set({ addedToGroup: true })
+          .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
+      } else {
+        await tx.delete(userGroups)
+          .where(and(eq(userGroups.userId, t.userId), eq(userGroups.groupId, batch.groupId)));
+      }
+    }
+  }
+
+  for (const t of touched) {
+    if (!t.createdUser) continue;
+    const heir = await heirBatch(t.userId, null);
+    if (heir) {
+      await tx.update(lmsImportBatchUsers).set({ createdUser: true })
+        .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
+      continue;
+    }
+    const busy = await Promise.all([
+      tx.select({ id: scormAttempts.id }).from(scormAttempts).where(eq(scormAttempts.userId, t.userId)).limit(1),
+      tx.select({ id: attempts.id }).from(attempts).where(eq(attempts.userId, t.userId)).limit(1),
+      tx.select({ id: userGroups.id }).from(userGroups).where(eq(userGroups.userId, t.userId)).limit(1),
+      tx.select({ id: testAssignments.id }).from(testAssignments).where(eq(testAssignments.userId, t.userId)).limit(1),
+    ]);
+    if (busy.some((rows) => rows.length > 0)) continue;
+    await tx.delete(userRoles).where(eq(userRoles.userId, t.userId));
+    await tx.delete(users).where(and(eq(users.id, t.userId), eq(users.isExternal, true)));
+  }
+
+  await tx.delete(lmsImportBatches).where(eq(lmsImportBatches.id, id));
+}
+
+/**
+ * Стереть всё, что LMS знает об удаляемом тесте: прохождения телеметрии с ответами, загрузки
+ * выгрузок (каждая — тем же откатом, что кнопка, вместе с заведёнными ею участниками) и выгруженные
+ * пакеты. Без пакета телеметрия копии, оставшейся в LMS, получает 404 — как у отключённого пакета —
+ * и строк о несуществующем тесте больше не пишет.
+ *
+ * Прохождения удалённого теста раньше хранились «для администратора». Решение пересмотрено
+ * 2026-10-07 (PRD-15 FR-07a): учёт прохождений ведёт сама LMS, у нас без теста они ничего не
+ * объясняют — ни разбора по вопросам, ни оценки, — а хранить персональные данные без цели нельзя.
+ * Сохранить данные теста — значит перевести его в архив, а не удалить.
+ *
+ * Вызывающий отвечает за порядок: назначения и веб-прохождения теста должны быть удалены ДО
+ * вызова, иначе откат сочтёт участника занятым ими и оставит его запись.
+ *
+ * @param tx транзакция удаления теста
+ * @param testId удаляемый тест
+ */
+export async function purgeTestLmsData(tx: DbTx, testId: string): Promise<void> {
+  const { packageIds, ofTest } = await lmsScopeOfTest(tx, testId);
+  // Строки загрузок уходят ниже, откатом своей партии: он же решает судьбу заведённых участников.
+  const telemetry = and(ofTest, isNull(scormAttempts.batchId));
+  const telemetryIds = (await tx.select({ id: scormAttempts.id }).from(scormAttempts).where(telemetry))
+    .map((a) => a.id);
+  if (telemetryIds.length > 0) {
+    await tx.delete(scormAnswers).where(inArray(scormAnswers.attemptId, telemetryIds));
+    await tx.delete(scormAttempts).where(inArray(scormAttempts.id, telemetryIds));
+  }
+
+  // Загрузки — по одной, старые первыми: отметка «заведён импортом» переходит к более поздней
+  // партии того же теста, и её откат доводит дело до конца.
+  const batches = await tx.select({ id: lmsImportBatches.id }).from(lmsImportBatches)
+    .where(eq(lmsImportBatches.testId, testId))
+    .orderBy(lmsImportBatches.importedAt);
+  for (const b of batches) await rollbackLmsImportBatch(tx, b.id);
+
+  if (packageIds.length > 0) await tx.delete(scormPackages).where(inArray(scormPackages.id, packageIds));
+}
+
+/** {@link db} itself or a transaction on it — both read the same way. */
+type DbLike = typeof db | DbTx;
+
+/**
+ * Пакеты теста и условие «прохождение LMS относится к тесту»: свой `test_id`, а у старой
+ * телеметрии без него — тест пакета (тот же порядок, что в аналитике). Одно на удаление и на подсчёт
+ * перед ним, чтобы окно удаления называло ровно то, что удалится.
+ */
+async function lmsScopeOfTest(conn: DbLike, testId: string) {
+  const packageIds = (await conn.select({ id: scormPackages.id }).from(scormPackages)
+    .where(eq(scormPackages.testId, testId))).map((p) => p.id);
+  const ofTest = packageIds.length > 0
+    ? or(
+      eq(scormAttempts.testId, testId),
+      and(isNull(scormAttempts.testId), inArray(scormAttempts.packageId, packageIds)),
+    )
+    : eq(scormAttempts.testId, testId);
+  return { packageIds, ofTest };
+}
+
+/** Что {@link purgeTestLmsData} удалит у теста — числа для окна удаления (PRD-15 FR-07a). */
+export interface TestLmsTrailCounts {
+  /** Прохождения LMS: телеметрия и загруженные выгрузки вместе. */
+  lmsAttempts: number;
+  /** Загрузки выгрузок отчёта LMS (PRD-54). */
+  importBatches: number;
+  /** Выгруженные пакеты: после удаления их телеметрия получает 404. */
+  packages: number;
+}
+
+/**
+ * Посчитать LMS-след теста, ничего не трогая.
+ *
+ * @param testId тест, который собираются удалить
+ */
+export async function countTestLmsTrail(testId: string): Promise<TestLmsTrailCounts> {
+  const { packageIds, ofTest } = await lmsScopeOfTest(db, testId);
+  const [[attemptsRow], [batchesRow]] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(scormAttempts).where(ofTest),
+    db.select({ n: sql<number>`count(*)::int` }).from(lmsImportBatches).where(eq(lmsImportBatches.testId, testId)),
+  ]);
+  return {
+    lmsAttempts: Number(attemptsRow?.n ?? 0),
+    importBatches: Number(batchesRow?.n ?? 0),
+    packages: packageIds.length,
+  };
 }

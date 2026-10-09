@@ -1,5 +1,17 @@
 import type { Test } from "@shared/schema";
 import { escapeXml } from "../utils/escape";
+import { richTextToPlain } from "@shared/template/rich-text";
+
+/**
+ * PRD-59 FR-20: the catalogue text of the package.
+ *
+ * XML is no carrier of markup — an author's `<p>` here would arrive at the LMS as
+ * escaped tag soup. What goes in is the plain projection, paragraphs intact: this
+ * entry is read by a person browsing the LMS catalogue.
+ */
+function descriptionText(test: Test): string {
+  return richTextToPlain(test.description, test.descriptionFormat) || "Assessment test";
+}
 
 export function buildMetadataXml(test: Test): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -15,7 +27,7 @@ export function buildMetadataXml(test: Test): string {
       <string language="en">${escapeXml(test.title)}</string>
     </title>
     <description>
-      <string language="en">${escapeXml(test.description || "Assessment test")}</string>
+      <string language="en">${escapeXml(descriptionText(test))}</string>
     </description>
     <language>en</language>
   </general>

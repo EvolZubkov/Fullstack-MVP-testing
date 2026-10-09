@@ -7,9 +7,9 @@
  * straight to the preview/check modal for the fresh draft.
  */
 import { useEffect, useState } from "react";
-import { Banner, Button, FileUploader, ModalDialog } from "@universityrt/ui-kit";
+import { Button, FileUploader, ModalDialog } from "@skillum/ui-kit";
 import { useUploadTemplate, type AdminTemplate, type UploadOutcome } from "./use-admin-templates";
-import { IssueList } from "./issue-list";
+import { TemplateUploadOutcome } from "./upload-outcome";
 
 export interface UploadModalProps {
   open: boolean;
@@ -43,7 +43,6 @@ export function UploadModal({ open, onClose, onCheckNow }: UploadModalProps) {
   const pending = upload.isPending;
   const accepted = outcome?.ok && outcome.template;
   const rejected = outcome && !outcome.ok;
-  const warnings = outcome?.report?.warnings ?? [];
 
   return (
     <ModalDialog
@@ -88,54 +87,11 @@ export function UploadModal({ open, onClose, onCheckNow }: UploadModalProps) {
           />
         )}
 
-        {pending && (
-          <Banner
-            tone="info"
-            title="Идёт распаковка и проверка комплектности…"
-            description="Архив проверяется в памяти; ничего не сохраняется до прохождения проверки."
-          />
-        )}
-
-        {upload.isError && !outcome && (
-          <Banner tone="error" title="Не удалось загрузить архив" description={upload.error?.message} />
-        )}
-
-        {accepted && (
-          <Banner
-            tone={warnings.length > 0 ? "warning" : "success"}
-            title={
-              warnings.length > 0
-                ? "Архив принят с предупреждениями — создан черновик"
-                : "Комплектность в порядке — создан черновик"
-            }
-            description="Запустите проверку работоспособности, чтобы шаблон можно было активировать."
-          />
-        )}
-
-        {accepted && warnings.length > 0 && (
-          <div>
-            <div className="tpl-detail-section-title">Предупреждения ({warnings.length})</div>
-            <IssueList issues={warnings} tone="warning" />
-          </div>
-        )}
-
-        {rejected && (
-          <>
-            <Banner
-              tone="error"
-              title="Шаблон не загружен — есть блокирующие ошибки"
-              description={outcome?.error ?? "Устраните ошибки и загрузите архив повторно."}
-            />
-            {outcome?.report?.blocking && outcome.report.blocking.length > 0 && (
-              <div>
-                <div className="tpl-detail-section-title">
-                  Блокирующие ошибки ({outcome.report.blocking.length})
-                </div>
-                <IssueList issues={outcome.report.blocking} tone="error" />
-              </div>
-            )}
-          </>
-        )}
+        <TemplateUploadOutcome
+          pending={pending}
+          failure={upload.isError ? upload.error?.message ?? null : null}
+          outcome={outcome}
+        />
       </div>
     </ModalDialog>
   );

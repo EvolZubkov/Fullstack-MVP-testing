@@ -17,7 +17,7 @@
  *    would advertise features the user cannot reach.
  */
 import type { ReactNode } from "react";
-import { Box, Card, CardBody, EmptyState, Grid, Stack, Text } from "@universityrt/ui-kit";
+import { Box, Card, CardBody, EmptyState, Grid, Stack, Text } from "@skillum/ui-kit";
 import { PageHeader } from "@/components/page-header";
 import { LoadingState } from "@/components/loading-state";
 import { sectionData, sectionFailed, type HomeSection } from "@shared/home/contract";

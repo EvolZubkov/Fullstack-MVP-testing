@@ -4,7 +4,7 @@
  * PRD-25 FR-11/FR-12/FR-13: the three counter-style home sections. These carry
  * real rules that no other suite exercises — the «active assignment» definition,
  * the personal-only «not started» count, the 30-day window with its scope filter
- * and its division-by-zero guard, and the template lifecycle filter.
+ * and its division-by-zero guard, and the per-capability document filter.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -182,23 +182,6 @@ describe("buildSummary", () => {
 });
 
 describe("buildMaterials", () => {
-  it("returns the names of templates in the active lifecycle state", async () => {
-    dbMock.rows = [{ name: "Стандартный" }, { name: "Сертификация (РТК)" }];
-
-    const result = await buildMaterials(["administrator"]);
-
-    expect(result.activeTemplates).toEqual(["Стандартный", "Сертификация (РТК)"]);
-    expect(result.showTemplates).toBe(true);
-  });
-
-  it("reports an empty list rather than failing when nothing is active", async () => {
-    dbMock.rows = [];
-
-    const result = await buildMaterials(["administrator"]);
-
-    expect(result.activeTemplates).toEqual([]);
-  });
-
   it("offers every document on the consolidated download route", async () => {
     const result = await buildMaterials(["administrator"]);
 
@@ -219,14 +202,13 @@ describe("buildMaterials", () => {
     expect(result.docs.map((d) => d.id)).toEqual(["test-authoring", "import-workbook"]);
   });
 
-  it("does not query templates for a reader who does not manage them", async () => {
+  it("never touches the template registry — the block lists documents only", async () => {
     dbMock.rows = [{ name: "Стандартный" }];
 
-    const result = await buildMaterials(["author"]);
+    const result = await buildMaterials(["administrator"]);
 
-    expect(result.showTemplates).toBe(false);
-    expect(result.activeTemplates).toEqual([]);
     expect(dbMock.where).not.toHaveBeenCalled();
+    expect(Object.keys(result)).toEqual(["docs"]);
   });
 
   it("gives a pure learner nothing to download", async () => {

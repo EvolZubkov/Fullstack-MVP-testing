@@ -104,6 +104,14 @@ function toPayload(s: ScaleModel, sortOrder: number) {
   return {
     key: s.key,
     label: s.label,
+    // PRD-53: пустое описание — это ОТСУТСТВИЕ описания, а не пустая строка; колонка
+    // nullable, и книга Excel читает её так же. Иначе «стёр текст» и «никогда не писал»
+    // хранились бы по-разному, а выглядели одинаково.
+    //
+    // Читается через `?.` намеренно, хотя в модели поле обязательное: это граница с API,
+    // и объект сюда может прийти собранным до появления поля. Обращение к `.trim()` у
+    // undefined уронило бы ВЕСЬ сохраняющий проход — не только описание.
+    description: s.description?.trim() ? s.description.trim() : null,
     type: s.type,
     aggregation: s.aggregation,
     normalization: s.normalization,
@@ -120,6 +128,7 @@ function sameScale(a: ScaleModel, b: ScaleModel): boolean {
   return (
     a.key === b.key &&
     a.label === b.label &&
+    (a.description ?? "").trim() === (b.description ?? "").trim() &&
     a.type === b.type &&
     a.aggregation === b.aggregation &&
     a.normalization === b.normalization &&

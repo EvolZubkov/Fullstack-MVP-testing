@@ -152,6 +152,16 @@ describe("computeScales — percent range is over DELIVERED questions (PRD-5 §5
     expect(out.values.s.percent).toBe(0);
   });
 
+  it("stays silent while nothing of the scale has been delivered yet", () => {
+    // The ordinary state of a run standing before the scale's questions (and of one where
+    // every one of them was skipped): there is nothing to normalize, which is not a
+    // failure. Reporting it lit the debug player's «ошибка расчёта» on a healthy test.
+    const out = computeScales([scale({ key: "s", normalization: "percent" })], bankMeasurements, {}, qTypes);
+    expect(out.errors).toHaveLength(0);
+    expect(out.values.s.hasValue).toBe(false);
+    expect(out.values.s.percent).toBe(0);
+  });
+
   it("reports a diagnostic (not a number) when the delivered range is degenerate", () => {
     // The only delivered contribution is a fixed 0 → min === max === 0 → span 0.
     const ms: MeasurementSpec[] = [{ questionId: "d1", scaleKey: "s", sourceType: "question", sourceKey: null, value: 0, weight: 1 }];

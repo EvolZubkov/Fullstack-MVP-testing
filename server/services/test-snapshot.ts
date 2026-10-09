@@ -24,6 +24,9 @@
  * snapshot attempts share one resolution code path (FR-32).
  */
 
+import { isSimulation } from "@shared/questions/question-type";
+import { orderTestItems, scenarioItemKey } from "@shared/test-items";
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { storage } from "../storage";
 import { materializeScaleDomains } from "./scale-domain";
 import { syncEntityUsages } from "./media/usage-index";
@@ -31,6 +34,7 @@ import { logger } from "../logger";
 import type {
   Test,
   TestSection,
+  TestScenario,
   Question,
   Topic,
   TopicCourse,
@@ -44,6 +48,8 @@ import type {
   ContentPage,
   TestQuestionScoring,
   QuestionScoring,
+  ReportBlockRow,
+  TestSnapshot,
 } from "@shared/schema";
 
 /** The frozen deliverable of a test (stored as test_snapshots.content_json). */
@@ -70,6 +76,117 @@ export interface TestSnapshotContent {
    * (read as []).
    */
   questionScoring?: TestQuestionScoring[];
+  /**
+   * PRD-51: ДОКУМЕНТ ОТЧЁТА теста — строки `report_blocks` обоих режимов, как они были
+   * на момент публикации.
+   *
+   * Замораживается по той же причине, по какой заморожен весь ряд теста: вместе с ним уже
+   * заморожены выбор оболочки и значения её полей (`report_settings_json`). Оставить
+   * состав документа живым значило бы печатать по старой попытке наполовину замороженный
+   * отчёт — с прежним оформлением и нынешним набором разделов.
+   *
+   * Отсутствует в снапшотах, снятых раньше (читается как `[]`), и тогда документ берётся
+   * по умолчанию шаблона.
+   */
+  reportBlocks?: ReportBlockRow[];
+  /**
+   * «Сценарий в ИС»: пункты-сценарии теста. Пул пункта — сценарии его темы, а тема уже лежит в
+   * `questionsByTopic`. Отсутствует в снимках, снятых раньше (читается как `[]`).
+   */
+  scenarios?: TestScenario[];
+}
+
+/**
+ * «Сценарий в ИС»: пункт-сценарий, каким его видит выдача, — раздел своей темы-банка, из
+ * которого выдаётся ровно один вопрос.
+ *
+ * Тест «Сценарий» не заводит своего пути попытки: старт, завершение, итоги, отчёт и аналитика
+ * работают с разделами, и пункт приходит к ним разделом. Синтез живёт в ОДНОМ месте — в
+ * `getTestSections` источников данных ниже, — поэтому все читатели видят один и тот же раздел.
+ * Своё у такого раздела только одно: пул. Его даёт {@link TestDataSource.getScenarioPool}, а
+ * не `getQuestionsByTopic`: пункт выдаёт ТОЛЬКО сценарии темы, а тема отдаёт все свои вопросы.
+ */
+export type ScenarioSection = TestSection & { scenarioItem: TestScenario };
+
+/** Раздел, синтезированный из пункта-сценария. */
+export function isScenarioSection(section: TestSection): section is ScenarioSection {
+  return (section as Partial<ScenarioSection>).scenarioItem !== undefined;
+}
+
+/**
+ * Пункт-сценарий как раздел выдачи: один вопрос из темы-банка.
+ *
+ * `topicId` раздела — КЛЮЧ ПУНКТА `scenario:<id>`, а не тема-банк: разделы попытки, правила
+ * разблокировки и состояние хаба ключуются этим полем, и пункт на той же теме, что обычный раздел
+ * теста, не должен с ним схлопнуться (`shared/test-items`). Тема-банк — в `scenarioItem.topicId`.
+ */
+export function scenarioSection(item: TestScenario): ScenarioSection {
+  return {
+    id: item.id,
+    testId: item.testId,
+    topicId: scenarioItemKey(item.id),
+    drawCount: 1,
+    drawAll: false,
+    // Техдолг №8: порог пункта — тот же движок, что у темы. Снимок до появления столбца его не
+    // несёт: порога нет, как и было.
+    topicPassRuleJson: item.passRuleJson ?? null,
+    required: item.required,
+    timeLimitMinutes: item.timeLimitMinutes,
+    feedbackJson: null,
+    drawBlueprintJson: null,
+    formSetJson: null,
+    breakdownFeedbackJson: null,
+    interpretationJson: null,
+    breakdownInterpretationJson: null,
+    groupKey: null,
+    questionOrder: null,
+    defaultPoints: null,
+    sortOrder: item.sortOrder,
+    scenarioItem: item,
+  };
+}
+
+/**
+ * Имя раздела выдачи, которое видит участник: у темы — её название, у пункта-сценария —
+ * название, заданное автором, иначе название темы-банка.
+ *
+ * @param topicName Название темы по идентификатору.
+ */
+export function deliverySectionName(section: TestSection, topicName: (topicId: string) => string | undefined): string {
+  if (isScenarioSection(section)) {
+    return section.scenarioItem.title?.trim() || topicName(section.scenarioItem.topicId) || "Сценарий";
+  }
+  return topicName(section.topicId) || "Unknown";
+}
+
+/**
+ * Разделы выдачи теста — то, что видят старт, завершение и итоги.
+ *
+ * - тест «Сценарий» — его пункт;
+ * - тест с роутером — разделы тем и пункты-сценарии, в порядке `router.itemOrder`;
+ * - прочие — разделы тем. Пункты-сценарии в линейном потоке не выдаются: их место — хаб.
+ */
+export function deliverySections(test: Test, sections: TestSection[], scenarios: TestScenario[]): TestSection[] {
+  // Тест «Сценарий» — один пункт: первый в порядке автора; остальные — пункты роутера, которые
+  // ждут возврата теста к нему (FR-40).
+  if (test.mode === "scenario") return scenarios.slice(0, 1).map(scenarioSection);
+  const policy = resolveFlowPolicy(test.flowPolicyJson);
+  if (policy.mode !== "router_by_topics" || scenarios.length === 0) return sections;
+  const items = [
+    ...sections.map((section) => ({ key: section.topicId, section })),
+    ...scenarios.map((item) => ({ key: scenarioItemKey(item.id), section: scenarioSection(item) as TestSection })),
+  ];
+  return orderTestItems(items, policy.itemOrder).map((entry) => entry.section);
+}
+
+/**
+ * Пул пункта-сценария: сценарии его темы; у фиксированной выдачи — только выбранный.
+ * Прочие вопросы темы пункт не выдаёт (решение владельца, plan-tests.md раздел 1).
+ */
+export function scenarioPool(item: TestScenario, topicQuestions: Question[]): Question[] {
+  return topicQuestions.filter(
+    (question) => isSimulation(question.type) && (!item.questionId || question.id === item.questionId),
+  );
 }
 
 /**
@@ -79,7 +196,15 @@ export interface TestSnapshotContent {
  */
 export interface TestDataSource {
   getTest(testId: string): Promise<Test | undefined>;
+  /**
+   * Разделы выдачи. В тесте «Сценарий» — его пункт-сценарий, синтезированный в раздел
+   * ({@link scenarioSection}).
+   */
   getTestSections(testId: string): Promise<TestSection[]>;
+  /** «Сценарий в ИС»: пункты-сценарии теста. */
+  getTestScenarios(testId: string): Promise<TestScenario[]>;
+  /** «Сценарий в ИС»: пул пункта-сценария ({@link scenarioPool}). */
+  getScenarioPool(item: TestScenario): Promise<Question[]>;
   getTopics(): Promise<Topic[]>;
   getTopic(topicId: string): Promise<Topic | undefined>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
@@ -94,6 +219,8 @@ export interface TestDataSource {
   getResultVariables(testId: string): Promise<ResultVariable[]>;
   getContentPages(testId: string): Promise<ContentPage[]>;
   getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]>;
+  /** PRD-51: строки документа отчёта для режима теста. */
+  getReportBlocks(testId: string, mode: "standard" | "adaptive"): Promise<ReportBlockRow[]>;
 }
 
 /**
@@ -110,7 +237,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
   // editor; it writes nothing when the bounds are already there.
   await materializeScaleDomains(testId);
 
-  const [sections, allTopics, scales, measurements, resultVariables, contentPages, questionScoring] =
+  const [sections, allTopics, scales, measurements, resultVariables, contentPages, questionScoring, scenarios] =
     await Promise.all([
       storage.getTestSections(testId),
       storage.getTopics(),
@@ -119,11 +246,22 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
       storage.getResultVariables(testId),
       storage.getContentPages(testId),
       storage.getTestQuestionScoring(testId),
+      storage.getTestScenarios(testId),
     ]);
+
+  // PRD-51: документ отчёта морозится ОБОИМИ режимами. Тест хранит обе ветви
+  // одновременно (как и `report_settings_json`), и смена режима после публикации не
+  // должна оставлять снапшот без документа.
+  const reportBlocks = [
+    ...(await storage.listReportBlocks(testId, "standard")),
+    ...(await storage.listReportBlocks(testId, "adaptive")),
+  ];
 
   // Topics referenced by sections (plus any referenced by content pages).
   const topicIds = new Set<string>();
   for (const s of sections) topicIds.add(s.topicId);
+  // «Сценарий в ИС»: тема-банк пункта — источник его пула.
+  for (const item of scenarios) topicIds.add(item.topicId);
   for (const p of contentPages) if (p.topicId) topicIds.add(p.topicId);
 
   const topics = allTopics.filter((t) => topicIds.has(t.id));
@@ -131,8 +269,22 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
   const questionsByTopic: Record<string, Question[]> = {};
   const topicCoursesByTopic: Record<string, TopicCourse[]> = {};
   const topicEventsByTopic: Record<string, TopicEvent[]> = {};
+  /**
+   * PRD-56 FR-17a: задания, исключённые из выдачи этого теста, в НОВУЮ публикацию не идут.
+   *
+   * Снимок фиксирует то, что тест выдаёт СЕЙЧАС, а сейчас он их не выдаёт: иначе автор
+   * снимает вопрос, публикует тест и молча получает его обратно. Уже опубликованные версии
+   * при этом не меняются — в этом и смысл снимка (PRD-15), и об этом говорит окно
+   * подтверждения (FR-17b).
+   */
+  const excludedFromDelivery = new Set(
+    (await storage.getTestQuestionScoring(testId))
+      .filter(row => row.excludedFromDelivery)
+      .map(row => row.questionId),
+  );
   for (const topicId of topicIds) {
-    questionsByTopic[topicId] = await storage.getQuestionsByTopic(topicId);
+    questionsByTopic[topicId] = (await storage.getQuestionsByTopic(topicId))
+      .filter(question => !excludedFromDelivery.has(question.id));
     topicCoursesByTopic[topicId] = await storage.getTopicCourses(topicId);
     topicEventsByTopic[topicId] = await storage.getTopicEvents(topicId);
   }
@@ -165,6 +317,8 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
     resultVariables,
     contentPages,
     questionScoring,
+    reportBlocks,
+    scenarios,
   };
 }
 
@@ -227,7 +381,16 @@ export async function pruneSnapshots(testId: string, keepId: string): Promise<vo
 export function liveDataSource(): TestDataSource {
   return {
     getTest: (id) => storage.getTest(id),
-    getTestSections: (id) => storage.getTestSections(id),
+    getTestSections: async (id) => {
+      const test = await storage.getTest(id);
+      const sections = await storage.getTestSections(id);
+      if (!test) return sections;
+      // Пункты читаются только там, где они выдаются: в тесте «Сценарий» и в роутере.
+      const usesItems = test.mode === "scenario" || resolveFlowPolicy(test.flowPolicyJson).mode === "router_by_topics";
+      return deliverySections(test, sections, usesItems ? await storage.getTestScenarios(id) : []);
+    },
+    getTestScenarios: (id) => storage.getTestScenarios(id),
+    getScenarioPool: async (item) => scenarioPool(item, await storage.getQuestionsByTopic(item.topicId)),
     getTopics: () => storage.getTopics(),
     getTopic: (id) => storage.getTopic(id),
     getQuestionsByTopic: (id) => storage.getQuestionsByTopic(id),
@@ -242,6 +405,7 @@ export function liveDataSource(): TestDataSource {
     getResultVariables: (id) => storage.getResultVariables(id),
     getContentPages: (id) => storage.getContentPages(id),
     getTestQuestionScoring: (id) => storage.getTestQuestionScoring(id),
+    getReportBlocks: (id, mode) => storage.listReportBlocks(id, mode),
   };
 }
 
@@ -259,7 +423,13 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       return content.test;
     },
     async getTestSections() {
-      return content.sections;
+      return deliverySections(content.test, content.sections, content.scenarios ?? []);
+    },
+    async getTestScenarios() {
+      return content.scenarios ?? [];
+    },
+    async getScenarioPool(item) {
+      return scenarioPool(item, content.questionsByTopic[item.topicId] ?? []);
     },
     async getTopics() {
       return content.topics;
@@ -315,6 +485,12 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       // `q.points || 1` coercion treated 0 as 1), and scoring whenever set.
       return synthesizeFrozenOverrides(content.test.id, allQuestions);
     },
+    async getReportBlocks(_testId, mode) {
+      // Снапшот заморозил ОБА режима одной пачкой — отбираем нужный. Пусто здесь значит
+      // «снапшот снят до PRD-51 либо автор документа не собирал»: и в том, и в другом
+      // случае печатается документ по умолчанию шаблона, а не пустой отчёт.
+      return (content.reportBlocks ?? []).filter((r) => r.mode === mode);
+    },
   };
 }
 
@@ -346,6 +522,9 @@ function synthesizeFrozenOverrides(
       difficulty: null,
       // Pin to the frozen question so the resolver never marks it stale.
       pinnedContentHash: q.contentHash ?? null,
+      // Задание, лежащее В СНИМКЕ, по определению не исключено из его выдачи: исключённые
+      // в снимок не попадают (PRD-56 FR-17a), а уже опубликованный состав не меняется.
+      excludedFromDelivery: false,
       createdAt: new Date(0),
       updatedAt: new Date(0),
     });
@@ -365,19 +544,68 @@ export async function dataSourceForAttempt(snapshotId: string | null): Promise<T
   return snapshotDataSource(snap.contentJson as TestSnapshotContent);
 }
 
+/** What an export bakes from: the content source and the snapshot behind it, if any. */
+export interface ExportSource {
+  src: TestDataSource;
+  /**
+   * The snapshot the package is baked from, or `null` for a draft baked live.
+   *
+   * PRD-56 FR-19a: its VERSION travels into the package and from there into the LMS, so
+   * a run played from the package can be told apart from a run played before the last
+   * republish. A draft has no publication version, and inventing one would be the very
+   * lie the version slice exists to prevent.
+   */
+  snapshot: TestSnapshot | null;
+}
+
+/**
+ * Which version of a test an export is built from (stage E5, owner decision Р7 2026-10-05):
+ * the published one — the active snapshot — or the current working draft.
+ */
+export type ExportVersion = "published" | "draft";
+
+/** The published version was asked for, but the test has none. */
+export class ExportVersionUnavailableError extends Error {
+  constructor(message = "Тест не опубликован: выгрузить можно только текущий черновик") {
+    super(message);
+    this.name = "ExportVersionUnavailableError";
+  }
+}
+
+/**
+ * The published version of a test: its active snapshot, if the test is published and has one.
+ * Archived tests and drafts have no published version to export — even with an old snapshot.
+ *
+ * @param testId test
+ * @returns the snapshot, or `null`
+ */
+export async function publishedSnapshotOf(testId: string): Promise<TestSnapshot | null> {
+  const test = await storage.getTest(testId);
+  if (test?.status !== "published") return null;
+  return (await storage.getLatestSnapshot(testId)) ?? null;
+}
+
 /**
  * Resolves the data source for SCORM EXPORT (PRD-15 FR-16). A published test
  * exports from its active snapshot — the package then matches exactly what the
  * web delivers, even if the working draft has drifted. Drafts (no snapshot)
  * export from live storage (preview-style).
+ *
+ * Stage E5: the author may choose the version explicitly. `draft` always bakes live storage;
+ * `published` requires a published version and throws {@link ExportVersionUnavailableError}
+ * otherwise — silently falling back to the draft would hand out a package nobody asked for.
+ *
+ * @param testId test
+ * @param version explicit version; omitted — the snapshot-aware default above
  */
-export async function exportSourceForTest(testId: string): Promise<TestDataSource> {
-  const test = await storage.getTest(testId);
-  if (test?.status === "published") {
-    const snap = await storage.getLatestSnapshot(testId);
-    if (snap) return snapshotDataSource(snap.contentJson as TestSnapshotContent);
+export async function exportSourceForTest(testId: string, version?: ExportVersion): Promise<ExportSource> {
+  if (version === "draft") return { src: liveDataSource(), snapshot: null };
+  const snap = await publishedSnapshotOf(testId);
+  if (snap) {
+    return { src: snapshotDataSource(snap.contentJson as TestSnapshotContent), snapshot: snap };
   }
-  return liveDataSource();
+  if (version === "published") throw new ExportVersionUnavailableError();
+  return { src: liveDataSource(), snapshot: null };
 }
 
 /** Publication state of a test for the author UI (PRD-15 FR-12). */

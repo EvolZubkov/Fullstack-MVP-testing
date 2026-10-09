@@ -5,7 +5,8 @@
  * except GroupDeleteFlow whose on-open dry-run uses a mocked fetch.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, cleanup, waitFor } from "@testing-library/react";
+import { ToastProvider } from "@skillum/ui-kit";
 import {
   BulkImpactDialog,
   GroupMoveModal,
@@ -14,6 +15,10 @@ import {
   GroupDeleteFlow,
 } from "./bulk-content-ops";
 import type { Folder } from "@shared/schema";
+
+/** Components under test push notifications, and the ui-kit hook needs a provider. */
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+  rtlRender(ui, { wrapper: ToastProvider });
 
 const folders = [
   { id: "f1", name: "Финансы", parentId: null },

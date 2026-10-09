@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: поля текстового ввода на экране участника, шаблон «Стандартный».
+    Файл: docs/wireframes/approved/prd57-question-input.html
+    Спека: docs/specs/prd-57/open-response-and-formatting.md
+           (§5 FR-11..FR-13, FR-17; §6 FR-24, FR-24i, FR-28, FR-28u..FR-28w,
+            FR-28z..FR-28ac; §7 FR-29, FR-30).
+    Issue: #40 (PRD-57, Э0) — эскизы до реализации, блокируют Э3, Э5, Э6, Э7, Э8.
+    Статус: СОГЛАСОВАН 2026-09-18, взят в реализацию.
+
+    Холст взят один в один с согласованного экрана вопроса
+    (docs/wireframes/approved/question-scale.html, он же — с
+    docs/wireframes/prohozhdenie/Прохождение теста.html): шапка, карта вопросов,
+    полоса прогресса, подвал и колонка вопроса скопированы без изменений.
+    Дельта ровно одна — блок ответа. Экран обзора (состояние «Обзор · прочерк»)
+    собран по МАКЕТУ шаблона server/scorm/templates/default/layouts/review.html,
+    потому что прочерк живёт именно там, а не на экране вопроса.
+
+    Состояния (переключатель в навбаре):
+      s-short        — короткий ответ: одно однострочное поле с пределом длины
+      s-numeric      — то же поле под числовым правилом: единица измерения
+      s-numeric-nan  — введено не число: сообщение на ВВОДЕ, а не при оценке
+      s-long         — развёрнутый ответ: многострочное поле со счётчиком
+      s-blanks       — задание с пропусками: короткие поля внутри текста
+      s-answers      — разбор ответов: подстановка ответа участника (режим 2)
+      s-etalon       — эталон автора / инспектор отладки (режим 3)
+      s-review-dash  — экран обзора: прочерк вместо поля (режим 1)
+
+    Решения, зафиксированные до эскиза (из спеки):
+      - модель «один вопрос = один экран» не меняется;
+      - короткий ответ (§6.5) и развёрнутый (§5) — РАЗНЫЕ типы: первый
+        проверяется автоматически, второй не проверяется вовсе;
+      - числовой ответ типом НЕ становится: это правило над коротким ответом
+        или пропуском (FR-28ad), поэтому поле здесь то же самое;
+      - оба хоста рендерят из общего кода (FR-30), отдельной разметки для
+        SCORM-пакета не заводится — поэтому сцена одна;
+      - периметр защиты PRD-34 обязан ПРОПУСКАТЬ поля ввода (FR-29): запрет
+        выделения остаётся на тексте задания и снимается с полей.
+  -->
+  <title>PRD-57 · Поля текстового ввода на экране участника</title>
+
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+
+  <style>
+    /* ─── Эскизный фрейм ──────────────────────────────────────────────────
+       Перенесён из approved/question-scale.html без изменений. */
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    .wf-annot-wrap--block { position: relative; display: block; }
+    .wf-annot {
+      display: none;
+      position: absolute;
+      top: calc(-1 * var(--ou-space-2));
+      right: calc(-1 * var(--ou-space-1));
+      z-index: 200;
+      background: var(--ou-warning-default);
+      color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s);
+      padding: 0 var(--ou-space-1);
+      font-weight: 700;
+      font-size: var(--wf-space-10);
+      line-height: var(--ou-space-5);
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-annots-on .wf-annot { display: block; }
+
+    .wf-scene {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      display: flex; flex-direction: column; overflow: hidden;
+      font-family: var(--ou-font-family-base);
+    }
+    /* Вложенный переключатель блока ответа. Верхнеуровневые .wf-state меняют
+       ЭКРАН (вопрос / обзор), .wf-sub — только блок ответа внутри экрана
+       вопроса: иначе показ обзора гасил бы и выбранный вариант ответа.
+       Это эскизная инфраструктура, в продукт не мигрирует. */
+    .wf-sub { display: none; }
+    .wf-sub.active { display: flex; flex-direction: column; gap: var(--ou-space-4); flex: 1; min-height: 0; }
+    /* Формулировка у состояний РАЗНАЯ, поэтому она живёт внутри переключаемого
+       блока. Чтобы раскладка осталась той же, что на согласованном экране
+       вопроса, вертикально центрируется не весь блок, а только слот ответа. */
+    .wf-slot { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--ou-space-5); padding-block: var(--ou-space-8); }
+
+    /* ─── Кандидаты в theme.css шаблона: поле под масштаб сцены ─────────────
+       Самый крупный размер поля в ДС (`ou-field--l`) набран кеглем элемента
+       управления, а ответы сцены — общей переменной `--tb-answer-fs`, которую
+       ставят длиновой проход перед рендером и `fitQuestionScene` после него.
+       Поле размером с элемент панели настроек рядом с вопросом вдвое крупнее
+       читается как настройка, а не как место для ответа.
+       Модификатора `ou-*` здесь НЕ заводится намеренно: это не новый размер
+       компонента, а правило СЦЕНЫ поверх существующего компонента — ровно так
+       же, как `theme.css` уже подкрашивает `ou-match__row` и `ou-radio-card`
+       под вердикт. Место правил — `server/scorm/templates/<id>/styles/theme.css`,
+       единственный общий источник оформления сцены для обоих хостов.
+       Меняются ровно кегль и высота коробки, ничего больше. */
+    /* Числовое поле занимает ПОЛОВИНУ колонки, а не всю её. Ширина выводится
+       из правила (§6.6): под число текстовой строки не нужно, а поле во всю
+       колонку обещает ответ, которого от участника не ждут. Доля, а не
+       фиксированная величина — колонка сама сужается по контейнерным ступеням
+       сцены, и поле сужается вместе с ней. */
+    .tb-answer-field--num { display: flex; width: 50%; }
+    .tb-answer-field .ou-field__box { height: auto; min-height: var(--ou-size-control-xl); padding: 0 var(--ou-space-4); }
+    .tb-answer-field .ou-field__input { font-size: var(--tb-answer-fs); }
+    .tb-answer-field .ou-field__affix { font: var(--ou-text-body-m); }
+    .tb-answer-textarea .ou-textarea__input { font-size: var(--tb-answer-fs); line-height: 1.4; }
+
+    /* ─── Кандидаты в theme.css шаблона: пропуск в тексте задания ───────────
+       Проектно-специфичный паттерн: поле ввода, вставленное В СТРОКУ текста
+       задания. В ДС такого нет и быть не должно — это не компонент формы, а
+       способ подачи задания. Собран из существующего `ou-field`: класс задаёт
+       только ширину по ожидаемому ответу и посадку на базовую линию строки.
+       Место этих правил — в `server/scorm/templates/<id>/styles/theme.css`:
+       это оформление СЦЕНЫ, а она у веб-хоста и пакета одна (`styles.css`
+       пакета генерируется из того же источника). В `tb-components.css` им не
+       место — там живут паттерны авторского интерфейса, а не сцены.
+       После согласования переезжают туда и отсюда удаляются.
+
+       Ширина полей РАЗНАЯ и задаётся автором через ожидаемый ответ: поле на
+       две цифры и поле на слово — разные подсказки о том, чего ждут. Поэтому
+       ширина живёт в `--tb-blank-w`, а не в классе. */
+    /* Собственных отступов у пропуска НЕТ намеренно: пробелы вокруг него —
+       это пробелы ТЕКСТА задания. Свой margin выглядел бы как лишний пробел
+       перед запятой, стоящей сразу за пропуском. */
+    .tb-blank {
+      display: inline-flex; vertical-align: baseline;
+      /* `--tb-blank-w` — ширина ТЕКСТА ответа; собственные поля коробки
+         прибавляются сверху. Иначе поле на две цифры съедало бы их padding'ом
+         и показывало обрезок. */
+      width: calc(var(--tb-blank-w, 12ch) + 2 * var(--ou-space-2));
+    }
+    .tb-blank .ou-field__box { padding-inline: var(--ou-space-2); }
+    .tb-blank .ou-field__input { font-size: var(--tb-answer-fs); text-align: center; }
+    /* Подстановка вместо поля. Три режима одной общей функции (FR-24i):
+       прочерк — там, где полей нет вовсе; ответ участника и эталон — там, где
+       поле уже отыграно. Вид у всех трёх один, различается только источник
+       текста и разметка верности. */
+    /* Ширину держит ТОЛЬКО прочерк: там подставлять нечего, и без неё он
+       схлопнулся бы в точку. У ответа и эталона ширина равна ширине текста —
+       фиксированная превратилась бы в лишний пробел перед запятой, стоящей
+       сразу за пропуском. */
+    .tb-blank-sub {
+      display: inline-block;
+      border-bottom: var(--wf-border-w-2) solid var(--ou-border-default);
+      text-align: center; font-weight: 600;
+    }
+    .tb-blank-sub--dash { color: transparent; min-width: var(--tb-blank-w, 12ch); }
+    .tb-blank-sub.correct-answer {
+      border-bottom-color: var(--ou-success-default); color: var(--ou-success-on-soft);
+    }
+    .tb-blank-sub.incorrect-answer {
+      border-bottom-color: var(--ou-error-default); color: var(--ou-error-on-soft);
+    }
+    /* Эталон автора: нейтральный тон. Это не «верно» — это «вот что ожидалось»,
+       и зелёный здесь читался бы как вердикт по чужому ответу. */
+    .tb-blank-sub--etalon { border-bottom-style: dashed; color: var(--ou-accent-on-soft); }
+
+    /* Текст задания с пропусками набирается тем же кеглем, что и остальные
+       ответы сцены: поля стоят ВНУТРИ него и не должны спорить с текстом. */
+    /* Межстрочный интервал — обычный для абзаца и кратный модулю сетки
+       (1.6 от кегля ответов). Разгонять его под высоту поля ввода нельзя:
+       поля стоят только в режиме ответа, а тот же текст печатается ещё
+       и с прочерком, с ответом участника и с эталоном — там полей нет,
+       и разогнанный интервал читается как дефект вёрстки. На строке
+       с полем высоту задаёт само поле. */
+    .tb-blank-text { font-size: var(--tb-answer-fs); line-height: 1.6; text-wrap: pretty; margin: 0; }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Экран вопроса:</span>
+  <button class="wf-btn active" type="button" onclick="showAnswer(this,'s-short')">Короткий ответ</button>
+  <button class="wf-btn"        type="button" onclick="showAnswer(this,'s-numeric')">Число</button>
+  <button class="wf-btn"        type="button" onclick="showAnswer(this,'s-numeric-nan')">Не число</button>
+  <button class="wf-btn"        type="button" onclick="showAnswer(this,'s-long')">Развёрнутый</button>
+  <button class="wf-btn"        type="button" onclick="showAnswer(this,'s-blanks')">Пропуски</button>
+  <button class="wf-btn"        type="button" onclick="showAnswer(this,'s-answers')">Разбор ответов</button>
+  <button class="wf-btn"        type="button" onclick="showAnswer(this,'s-etalon')">Эталон</button>
+  <div class="wf-nav-sep"></div>
+  <span class="wf-nav-title">Обзор:</span>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-review-dash')">Прочерк</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Light</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+  <button class="wf-btn" type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ЭКРАН ВОПРОСА. Сцена скопирована с согласованного экрана вопроса;
+     вложенный переключатель меняет ТОЛЬКО содержимое блока ответа.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state active" id="s-question">
+<!-- `--tb-answer-fs` объявлен инлайном на корне сцены — так же, как его ставит
+     рантаймовый проход `fitQuestionScene` в продукте. -->
+<div class="wf-scene" style="--tb-answer-fs:20px">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px 0;display:flex;flex-direction:column;gap:var(--ou-space-3);position:relative">
+    <div style="display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+      <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+        <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Наряд-допуск и организация работ повышенной опасности</h1>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Аттестация · Попытка 1 из 2</span>
+      </div>
+    </div>
+
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m" style="width:100%;flex-direction:row;align-items:center;gap:var(--ou-space-5);padding-bottom:var(--ou-space-4)">
+      <div class="ou-quiz__dots" style="flex:none">
+        <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1">1</button>
+        <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2">2</button>
+        <button type="button" class="ou-quiz__dot is-flagged"  aria-label="Вопрос 3">3</button>
+        <button type="button" class="ou-quiz__dot is-current"  aria-label="Вопрос 4">4</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 5">5</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 6">6</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 7">7</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 8">8</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 9">9</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 10">10</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 11">11</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 12">12</button>
+      </div>
+      <div class="ou-quiz__legend" style="margin-top:0;align-items:center">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot" style="background:transparent;box-shadow:inset 0 0 0 2px var(--ou-accent-default)"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <span style="margin-left:auto;flex:none;text-align:right;font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">2</strong> из 12 · пропущено 1</span>
+    </div>
+
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)">
+      <div style="height:100%;width:25%;background:var(--ou-accent-default);border-radius:0 999px 999px 0;transition:width 240ms var(--ou-easing-standard)"></div>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:75%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">Вопрос 4 из 12</span>
+        <span class="ou-tag ou-tag--neutral">Наряд-допуск</span>
+      </div>
+
+      <!-- Формулировка задания. Текст РАЗНЫЙ у разных состояний, поэтому
+           заголовок живёт внутри переключаемого блока, а не над ним. -->
+      <div class="wf-answers" style="flex:1;min-height:0;display:flex;flex-direction:column">
+
+        <!-- ─── КОРОТКИЙ ОТВЕТ (§6.5, FR-28u) ─────────────────────────────── -->
+        <div id="s-short" class="wf-sub active">
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+            <h2 style="margin:0;font-weight:600;font-size:30px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">Как называется федеральная служба, осуществляющая надзор в области промышленной безопасности?</h2>
+            <span class="wf-annot-wrap" style="display:inline-block">
+              <span class="wf-annot">подсказка типа</span>
+              <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Введите ответ</span>
+            </span>
+          </div>
+          <div class="wf-slot">
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-28u · FR-28v</span>
+              <div class="ou-field ou-field--l ou-field--full tb-answer-field">
+                <div class="ou-field__box">
+                  <input class="ou-field__input" type="text" value="Ростехнадзор" maxlength="40" aria-label="Ваш ответ" />
+                </div>
+                <div class="ou-field__msg">До 40 символов</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── ЧИСЛОВОЕ ПРАВИЛО НАД ТЕМ ЖЕ ПОЛЕМ (§6.6, FR-28z, FR-28ac) ──── -->
+        <div id="s-numeric" class="wf-sub">
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+            <h2 style="margin:0;font-weight:600;font-size:30px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">Укажите наименьшую температуру наружного воздуха, при которой допускаются работы на высоте.</h2>
+            <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Введите число</span>
+          </div>
+          <div class="wf-slot">
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-28ac</span>
+              <div class="ou-field ou-field--l tb-answer-field tb-answer-field--num">
+                <div class="ou-field__box">
+                  <input class="ou-field__input" type="text" inputmode="decimal" value="-25" aria-label="Ваш ответ" />
+                  <span class="ou-field__affix">°C</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── ВВЕДЕНО НЕ ЧИСЛО (FR-28z1) ─────────────────────────────────
+             Сообщение приходит НА ВВОДЕ, до отправки: «около трёх» не с чем
+             сравнивать, и узнать об этом на экране итогов участник не должен. -->
+        <div id="s-numeric-nan" class="wf-sub">
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+            <h2 style="margin:0;font-weight:600;font-size:30px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">Укажите наименьшую температуру наружного воздуха, при которой допускаются работы на высоте.</h2>
+            <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Введите число</span>
+          </div>
+          <div class="wf-slot">
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-28z1</span>
+              <div class="ou-field ou-field--l tb-answer-field tb-answer-field--num ou-field--error">
+                <div class="ou-field__box">
+                  <input class="ou-field__input" type="text" inputmode="decimal" value="минус двадцать пять" aria-invalid="true" aria-label="Ваш ответ" />
+                  <span class="ou-field__affix">°C</span>
+                </div>
+                <div class="ou-field__msg ou-field__msg--error">Ожидается число. Например: -25, 12,5 или 3/4</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── РАЗВЁРНУТЫЙ ОТВЕТ (§5, FR-11, FR-12) ───────────────────────
+             Ни ключа, ни эталона, ни сравнения. Ни одного обещания проверки:
+             в пакете её не будет никогда (FR-43), и обещать её экраном нельзя. -->
+        <div id="s-long" class="wf-sub">
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+            <h2 style="margin:0;font-weight:600;font-size:30px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">Опишите порядок действий бригады при обнаружении признаков утечки газа в зоне работ.</h2>
+            <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Ответьте своими словами</span>
+          </div>
+          <div class="wf-slot">
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-11 · FR-12</span>
+              <label class="ou-textarea ou-textarea--l ou-textarea--full tb-answer-textarea">
+                <div class="ou-textarea__box">
+                  <textarea class="ou-textarea__input" rows="6" maxlength="4000" aria-label="Ваш ответ">Прекратить работы, вывести бригаду из опасной зоны против ветра, исключить источники огня и искрообразования, сообщить руководителю работ и в аварийную службу, выставить предупреждающие знаки и не допускать посторонних до прибытия аварийной бригады.</textarea>
+                </div>
+                <span class="ou-textarea__counter"><strong>318</strong> / 4000</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── ЗАДАНИЕ С ПРОПУСКАМИ (§6, FR-24, FR-28) ────────────────────
+             Поле короткое и однострочное: абзац — это тип из §5, а не пропуск. -->
+        <div id="s-blanks" class="wf-sub">
+          <div class="wf-slot">
+            <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+              <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Заполните пропуски</span>
+            </div>
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-24 · FR-28</span>
+              <p class="tb-blank-text">
+                Надзор в области промышленной безопасности осуществляет
+                <span class="tb-blank" style="--tb-blank-w:16ch">
+                  <span class="ou-field ou-field--l ou-field--full"><span class="ou-field__box"><input class="ou-field__input" type="text" value="Ростехнадзор" aria-label="Пропуск 1" /></span></span>
+                </span>,
+                а наряд-допуск действует не более
+                <span class="tb-blank" style="--tb-blank-w:6ch">
+                  <span class="ou-field ou-field--l ou-field--full"><span class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Пропуск 2" /></span></span>
+                </span>
+                суток со дня его выдачи.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── РАЗБОР ОТВЕТОВ (FR-24i режим 2; §5 FR-17) ──────────────────
+             Слева от вердикта важно, ЧТО именно показано: у пропусков — ответ
+             участника с разметкой верности, у развёрнутого — его текст БЕЗ
+             блока «правильный ответ», потому что эталона не существует. -->
+        <div id="s-answers" class="wf-sub">
+          <div class="wf-slot">
+            <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+              <span class="ou-banner__ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <span class="ou-banner__body">
+                <span class="ou-banner__title">Задание выполнено частично</span>
+                <span class="ou-banner__desc">Один пропуск из двух заполнен верно. Правильный срок — 15 суток.</span>
+              </span>
+            </div>
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-24i · режим 2</span>
+              <p class="tb-blank-text">
+                Надзор в области промышленной безопасности осуществляет
+                <span class="tb-blank-sub correct-answer" style="--tb-blank-w:16ch">Ростехнадзор</span>,
+                а наряд-допуск действует не более
+                <span class="tb-blank-sub incorrect-answer" style="--tb-blank-w:6ch">30</span>
+                суток со дня его выдачи.
+              </p>
+            </div>
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-17 · FR-35</span>
+              <!-- Карточка сцены `tb-card` из theme.css шаблона. В эскизе её
+                   правила воспроизведены инлайном — тем же приёмом, что шапка и
+                   подвал: таблица сцены сюда не подключается. -->
+              <div style="width:100%;text-align:left;border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-l);background:var(--ou-bg-surface-2);padding:var(--ou-space-5);display:flex;flex-direction:column;gap:var(--ou-space-2)">
+                <span style="font:var(--ou-text-heading-s);color:var(--ou-fg-default);display:flex;align-items:center;gap:var(--ou-space-3)">
+                  Вопрос 9 · Опишите порядок действий бригады при обнаружении признаков утечки газа
+                  <span class="ou-tag ou-tag--neutral ou-tag--s">ждёт проверки</span>
+                </span>
+                <p style="margin:0;font:var(--ou-text-body-m);color:var(--ou-fg-soft);text-wrap:pretty">Прекратить работы, вывести бригаду из опасной зоны против ветра, исключить источники огня и искрообразования, сообщить руководителю работ и в аварийную службу.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── ЭТАЛОН АВТОРА (FR-24i режим 3) ─────────────────────────────
+             Та же подстановка в инспекторе отладочного прогона (PRD-18,
+             накладка «Эталон») и в предпросмотре автора. Тон нейтральный:
+             это не вердикт по чужому ответу, а «вот что ожидалось». -->
+        <div id="s-etalon" class="wf-sub">
+          <div class="wf-slot">
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">FR-24i · режим 3</span>
+              <p class="tb-blank-text">
+                Надзор в области промышленной безопасности осуществляет
+                <span class="tb-blank-sub tb-blank-sub--etalon" style="--tb-blank-w:16ch">Ростехнадзор</span>,
+                а наряд-допуск действует не более
+                <span class="tb-blank-sub tb-blank-sub--etalon" style="--tb-blank-w:6ch">15</span>
+                суток со дня его выдачи.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">
+      <span class="ou-btn__ico" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path></svg>
+      </span>
+      Назад
+    </button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">К обзору ответов</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-3)">
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Далее</button>
+    </div>
+  </footer>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ЭКРАН ОБЗОРА (PRD-19). Собран по макету шаблона
+     server/scorm/templates/default/layouts/review.html: шапка без карты
+     вопросов, карта в теле, карточка «Без ответа», подвал с двумя кнопками.
+     Здесь формулировка печатается через renderPlainText — полей ввода нет,
+     и на их месте стоит прочерк (FR-24i, режим 1).
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-state" id="s-review-dash">
+<div class="wf-scene">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+    <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+    <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+      <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Наряд-допуск и организация работ повышенной опасности</h1>
+      <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Аттестация · Попытка 1 из 2</span>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:75%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <h2 style="margin:0;font-weight:600;font-size:24px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em">Обзор ответов</h2>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Проверьте ответы перед завершением теста</span>
+      </div>
+
+      <div class="ou-quiz ou-quiz--circle ou-quiz--l" role="group" aria-label="Карта вопросов">
+        <div class="ou-quiz__dots">
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1">1</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2">2</button>
+          <button type="button" class="ou-quiz__dot is-flagged"  aria-label="Вопрос 3">3</button>
+          <button type="button" class="ou-quiz__dot is-flagged"  aria-label="Вопрос 4">4</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 5">5</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 6">6</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 7">7</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 8">8</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 9">9</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 10">10</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 11">11</button>
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 12">12</button>
+        </div>
+        <div class="ou-quiz__legend">
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+        </div>
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">10</strong> из 12 · пропущено 2</span>
+      </div>
+
+      <hr class="ou-separator ou-separator--horizontal">
+
+      <div style="width:100%;text-align:left;border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-l);background:var(--ou-bg-surface-2);padding:var(--ou-space-5);display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <span style="font:var(--ou-text-heading-s);color:var(--ou-fg-default)">Без ответа: 2</span>
+        <div style="display:flex;flex-direction:column;gap:var(--ou-space-1)">
+          <div class="ou-stat-row">
+            <div class="ou-stat-row__body">
+              <div class="wf-annot-wrap" style="display:inline-block">
+                <span class="wf-annot">FR-24i · режим 1</span>
+                <div class="ou-stat-row__title">Вопрос 4 · Надзор в области промышленной безопасности осуществляет <span class="tb-blank-sub tb-blank-sub--dash" style="--tb-blank-w:12ch">Ростехнадзор</span>, а наряд-допуск действует не более <span class="tb-blank-sub tb-blank-sub--dash" style="--tb-blank-w:5ch">15</span> суток со дня его выдачи.</div>
+              </div>
+            </div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти</button>
+          </div>
+          <div class="ou-stat-row">
+            <div class="ou-stat-row__body">
+              <div class="ou-stat-row__title">Вопрос 3 · Кто имеет право выдавать наряд-допуск на работы повышенной опасности?</div>
+            </div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Завершить тест</button>
+    <div style="margin-left:auto"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Назад к вопросу</button>
+  </footer>
+</div>
+</div>
+
+<script>
+  /* Wireframe-only controls. showState переключает ЭКРАН, showAnswer — блок
+     ответа внутри экрана вопроса. Разделение нужно потому, что экран обзора —
+     другой макет шаблона, а не другое состояние блока ответа. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      if (b.getAttribute('onclick') && b.getAttribute('onclick').indexOf('Theme') < 0
+          && b.getAttribute('onclick').indexOf('Density') < 0
+          && b.getAttribute('onclick').indexOf('Annots') < 0) {
+        b.classList.toggle('active', b === btn);
+      }
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.showAnswer = function showAnswer(btn, id) {
+    document.getElementById('s-question').classList.add('active');
+    document.getElementById('s-review-dash').classList.remove('active');
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-sub').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      var a = b.getAttribute('onclick') || '';
+      if (a.indexOf('showAnswer') >= 0 || a.indexOf('showState') >= 0) {
+        b.classList.toggle('active', b === btn);
+      }
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ПОЯСНЕНИЯ И DS MAPPING (вне холста)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<section class="wf-notes" aria-label="Пояснения к экрану">
+  <h3 class="wf-notes-title">Пояснения — поведение экрана</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Холст экрана вопроса</td>
+        <td>—</td>
+        <td>Шапка, карта вопросов, полоса прогресса, колонка вопроса и подвал взяты один в один с согласованного экрана вопроса (<code>approved/question-scale.html</code>). Дельта ровно одна — блок ответа. Таймеры в этом тесте не заданы, поэтому блок таймеров отсутствует (условный элемент шаблона).</td>
+      </tr>
+      <tr>
+        <td>Оба хоста</td>
+        <td>—</td>
+        <td>Сцена ОДНА: веб-хост и SCORM-пакет рендерят из общего кода <code>shared/template/</code> (FR-30). Отдельного состояния «в пакете» не заводится — если бы оно потребовалось, это означало бы нарушение PRD-12.</td>
+      </tr>
+      <tr>
+        <td>Поле короткого ответа</td>
+        <td><code>answer.text</code>, тип <code>short</code></td>
+        <td>Однострочное, предел длины задаёт автор в рамках системного потолка (FR-28v). Предел показан подписью под полем: он не запрет, а сообщение о том, чего ждут. Без правила сравнения тот же тип собирает текст и не оценивается (FR-28w).</td>
+      </tr>
+      <tr>
+        <td>Единица измерения</td>
+        <td>числовое правило, поле <code>unit</code></td>
+        <td>Подпись поля, а не часть ответа (FR-28ac): участник вводит только число. Разбор единиц с конверсией («1,5 м» против «150 см») в охват не входит.</td>
+      </tr>
+      <tr>
+        <td>Формы записи числа</td>
+        <td>числовое правило, всегда</td>
+        <td>Поле принимает целое и десятичное с точкой или запятой, ОТРИЦАТЕЛЬНОЕ (в том числе с типографским минусом и пробелом после знака), обыкновенную дробь и смешанное число, научную запись и пробелы внутри числа. Сравнивается разобранное значение, а хранится ровно то, что набрано (FR-28z): при разборе спора важно видеть, что человек написал «3/4», а не «0,75».</td>
+      </tr>
+      <tr>
+        <td>Экранная клавиатура</td>
+        <td>мобильный</td>
+        <td>Выводится ИЗ ПРАВИЛА, как и остальное у числового задания. Правилу без дробей хватает цифровой раскладки (<code>inputmode="decimal"</code>); правилу с дробями её НЕ хватает — косой черты на ней нет, а минус есть не на всех платформах. Поле обязано просить раскладку, на которой введётся то, что правило принимает, иначе участник физически не наберёт верный ответ.</td>
+      </tr>
+      <tr>
+        <td>Подсказка у числового поля</td>
+        <td>числовое правило</td>
+        <td>«Введите число» — можно; «ожидается от 12 до 15» — нельзя, это подсказка ответа (FR-28aa5). Границы правила на экране участника не показываются никогда.</td>
+      </tr>
+      <tr>
+        <td>«Ожидается число»</td>
+        <td>ввод не разбирается как число</td>
+        <td>Сообщение приходит НА ВВОДЕ, а не при оценке (FR-28z1). Ответ при этом сохраняется как текст ровно в том виде, как набран (FR-28z): при разборе спора важно видеть, что человек написал.</td>
+      </tr>
+      <tr>
+        <td>Поле развёрнутого ответа</td>
+        <td><code>answer.text</code>, тип <code>long</code></td>
+        <td>Многострочное, со счётчиком. Ни ключа, ни эталона, ни сравнения (FR-13). Экран НЕ обещает проверку: в автономном пакете её не будет никогда (FR-43).</td>
+      </tr>
+      <tr>
+        <td>Фиксация ответа</td>
+        <td>уход с вопроса</td>
+        <td>Ответ фиксируется при переходе, уходе в обзор или завершении, а не посимвольно (FR-23). Текст развёрнутого ответа в <code>cmi.suspend_data</code> не пишется (FR-22) — следствие принято явно: при обрыве сессии несохранённый текст теряется.</td>
+      </tr>
+      <tr>
+        <td>Пропуск в тексте</td>
+        <td><code>{{идентификатор}}</code> в <code>question.prompt</code></td>
+        <td>Каждое вхождение — отдельное поле, порядок полей равен порядку вхождений (FR-24). Поле короткое и однострочное: абзац — это тип из §5, а не пропуск (FR-28).</td>
+      </tr>
+      <tr>
+        <td>Ширина блока ответа</td>
+        <td>текстовый ответ</td>
+        <td>Поле занимает колонку целиком — как карточка варианта, дорожка шкалы, строка ранжирования и строка распределения (<code>width: 100%</code> в <code>theme.css</code>). Колонка — 75% сцены и 100% ниже контейнерной ступени 900. Длина ожидаемого ответа на ширину НЕ влияет: под длину подстраивается кегль (<code>--tb-answer-fs</code>), и это единственная адаптация по содержимому, принятая в оформлении.</td>
+      </tr>
+      <tr>
+        <td>Ширина числового поля</td>
+        <td>числовое правило</td>
+        <td>Половина колонки. Ширина и выравнивание поля выводятся ИЗ ПРАВИЛА (§6.6) — под число текстовой строки не нужно, а поле во всю колонку обещает ответ, которого от участника не ждут. Задаётся долей, а не фиксированной величиной: колонка сужается по контейнерным ступеням сцены, и поле сужается вместе с ней. Выравнивание числа в поле — открытый вопрос, в эскизе оставлено по левому краю, как у текста.</td>
+      </tr>
+      <tr>
+        <td>Ширина поля пропуска</td>
+        <td>пропуск внутри текста</td>
+        <td>Единственное исключение, и оно вынужденное: пропуск стоит В СТРОКЕ текста, где «на всю колонку» не существует. Ширина берётся из правила — по самому длинному допустимому ответу или по разрядности числа, автор её руками не задаёт.</td>
+      </tr>
+      <tr>
+        <td>Прочерк</td>
+        <td>обзор, PDF-отчёт, комментарий рецензента, списки заданий</td>
+        <td>Режим 1 общей подстановки (FR-24i). Сырой <code>{{organ}}</code> в этих местах читался бы как сбой, поэтому подстановку делает ОДНА функция в <code>shared/</code>, а не три копии по местам показа.</td>
+      </tr>
+      <tr>
+        <td>Ответ участника в разборе</td>
+        <td>разбор ответов</td>
+        <td>Режим 2: подстановка ответа с разметкой верности продуктовыми классами <code>correct-answer</code> / <code>incorrect-answer</code> — теми же, что размечают варианты остальных типов.</td>
+      </tr>
+      <tr>
+        <td>Эталон</td>
+        <td>предпросмотр автора, накладка «Эталон» отладочного плеера (PRD-18)</td>
+        <td>Режим 3: подставлен правильный ответ из правила. Тон нейтральный и подчёркивание пунктирное — это не вердикт по чужому ответу. Ничего, кроме самой подстановки, на сцене не появляется: тумблер «Эталон» живёт в риббоне окна отладочного плеера, и он же служит индикатором включённой накладки.</td>
+      </tr>
+      <tr>
+        <td>Развёрнутый ответ в разборе</td>
+        <td>всегда</td>
+        <td>Текст участника БЕЗ блока «правильный ответ»: эталона не существует, и пустая рамка читается как потеря данных (FR-17). Метка «ждёт проверки» — состояние оценки (FR-35), а не вердикт: исход ответа при этом нейтральный, а не «неверно» (FR-16).</td>
+      </tr>
+      <tr>
+        <td>Защита от копирования</td>
+        <td>PRD-34 включён</td>
+        <td>Периметр обязан ПРОПУСКАТЬ поля ввода (FR-29). Сегодня запрет выделения ставится инлайном на весь слот <code>question-interaction</code> — с появлением текстового поля это сломало бы редактирование собственного ответа. Исключение делается для полей, текст ЗАДАНИЯ остаётся защищённым.</td>
+      </tr>
+      <tr>
+        <td>Узкая сцена</td>
+        <td>ширина СЦЕНЫ ниже ступени шаблона</td>
+        <td>Отдельного состояния в эскизе НЕТ намеренно. Адаптация шаблона «Стандартный» принята 2026-07-31 и этим треком не меняется: все размерные условия — контейнерные (<code>@container tbscene</code> на <code>.tb-scene</code>), ступени 900 / 700 / 520 по ширине сцены, вьюпортных <code>@media</code> по ширине в <code>theme.css</code> не осталось ни одного. Поле ввода ведёт себя как остальные элементы колонки: занимает её ширину, единица остаётся внутри коробки, текст с пропусками переносится по строкам вместе с полями. Рисовать «узкий экран» сжатием одного блока при широкой сцене нельзя — это не тот механизм и не то, что увидит участник.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-mapping" aria-label="DS mapping">
+  <h3 class="wf-mapping-title">DS Mapping</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент холста</th><th>Компонент DS</th><th>Токены</th><th>Примечания</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Поле короткого ответа, числовое поле</td>
+        <td><code>Input</code> (<code>ou-field</code>, <code>__box</code> / <code>__input</code> / <code>__affix</code> / <code>__msg</code>; тон <code>ou-field--error</code>)</td>
+        <td><code>--ou-bg-input</code>, <code>--ou-border-default</code>, <code>--ou-error-*</code>, <code>--ou-space-*</code></td>
+        <td>СУЩЕСТВУЮЩИЙ компонент. Единица измерения — штатный <code>suffix</code>, сообщение об ошибке — штатный <code>error</code>. Новое ровно одно: размер под масштаб сцены (<code>tb-answer-field</code>), см. строку ниже.</td>
+      </tr>
+      <tr>
+        <td>Размер поля на сцене прохождения</td>
+        <td><code>Input</code> — предлагаемый размер <code>answer</code> (<code>tb-answer-field</code>); то же у <code>Textarea</code> (<code>tb-answer-textarea</code>)</td>
+        <td><code>--tb-answer-fs</code>, <code>--ou-space-*</code></td>
+        <td>ДОПОЛНЕНИЕ ui-kit. Самый крупный размер поля сегодня — <code>l</code> с кеглем 15px; рядом с вопросом в 30px это читается как элемент панели настроек. Режим меняет кегль и высоту коробки, ничего больше, и берёт кегль из общей переменной сцены — чтобы рантаймовый проход <code>fitQuestionScene</code> сохранил свой единственный рычаг. В эскизе объявлен локально в <code>&lt;style&gt;</code>, после согласования переезжает в <code>vendor/ui-kit</code> и <code>client/src/styles/vendor</code> (обе копии бандла) и отсюда удаляется.</td>
+      </tr>
+      <tr>
+        <td>Поле развёрнутого ответа</td>
+        <td><code>Textarea</code> (<code>ou-textarea</code>, <code>__box</code> / <code>__input</code> / <code>__counter</code>)</td>
+        <td><code>--ou-bg-input</code>, <code>--ou-border-default</code></td>
+        <td>Существующий компонент, счётчик символов у него уже есть (<code>showCount="outside"</code>). Правок не требует, кроме размера сцены.</td>
+      </tr>
+      <tr>
+        <td>Пропуск внутри текста задания</td>
+        <td><code>Input</code> в обёртке <code>tb-blank</code> (кандидат в <code>theme.css</code> шаблона)</td>
+        <td><code>--tb-blank-w</code>, <code>--tb-answer-fs</code>, <code>--ou-space-*</code></td>
+        <td>Проектный паттерн, не компонент ДС: это способ подачи задания, а не элемент формы. Обёртка задаёт только ширину по ожидаемому ответу и посадку на базовую линию строки; сам контрол — штатный <code>Input</code>.</td>
+      </tr>
+      <tr>
+        <td>Подстановка вместо поля (прочерк / ответ / эталон)</td>
+        <td><code>tb-blank-sub</code> (кандидат в <code>theme.css</code> шаблона) + продуктовые <code>correct-answer</code> / <code>incorrect-answer</code></td>
+        <td><code>--ou-success-*</code>, <code>--ou-error-*</code>, <code>--ou-accent-on-soft</code>, <code>--ou-border-default</code></td>
+        <td>Один класс на три режима: различаются источник текста и разметка верности, а не вид. Классы вердикта взяты продуктовые — те же, что у вариантов остальных типов в <code>templates/default/styles/theme.css</code>.</td>
+      </tr>
+      <tr>
+        <td>Баннер обратной связи</td>
+        <td><code>Banner</code> (<code>ou-banner--subtle ou-banner--error</code> / <code>--info</code>)</td>
+        <td><code>--ou-error-soft</code>, <code>--ou-accent-soft</code></td>
+        <td>Существующий компонент, тот же слот <code>question-feedback</code>, что у остальных типов.</td>
+      </tr>
+      <tr>
+        <td>Метка «ждёт проверки»</td>
+        <td><code>Tag</code> (<code>ou-tag ou-tag--neutral ou-tag--s</code>)</td>
+        <td><code>--ou-bg-subtle</code>, <code>--ou-fg-muted</code></td>
+        <td>Нейтральный тон обязателен: это состояние оценки, а не вердикт. Успех или ошибка здесь читались бы как проверка, которой не было.</td>
+      </tr>
+      <tr>
+        <td>Экран обзора: карта, строки без ответа, карточка</td>
+        <td><code>QuizMap</code> (<code>ou-quiz</code>), <code>ou-stat-row</code>, <code>Separator</code> (<code>ou-separator</code>), карточка сцены <code>tb-card</code></td>
+        <td><code>--ou-*</code></td>
+        <td>Без изменений относительно макета <code>layouts/review.html</code>. <code>tb-card</code> живёт в <code>theme.css</code> шаблона и в эскизе воспроизведён инлайном — таблица сцены сюда не подключается, как и в согласованном экране вопроса.</td>
+      </tr>
+      <tr>
+        <td>Шапка, карта вопросов, подвал экрана вопроса</td>
+        <td><code>QuizMap</code> (<code>ou-quiz</code>), <code>Tag</code>, <code>Button</code></td>
+        <td><code>--ou-*</code></td>
+        <td>Без изменений относительно согласованного экрана вопроса.</td>
+      </tr>
+      <tr>
+        <td>Метанавигация состояний, метки требований, «Пояснения», «DS Mapping»</td>
+        <td><code>Wireframe utility</code> (<code>wf-nav</code>, <code>wf-annot</code>, <code>wf-sub</code>, <code>wf-notes</code>, <code>wf-mapping</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code></td>
+        <td>Каркас эскиза, в продуктовый UI не мигрирует.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Вопросы к согласованию">
+  <h3 class="wf-notes-title">Вопросы к согласованию</h3>
+  <table>
+    <thead>
+      <tr><th>Место</th><th>Неоднозначность</th><th>Решение в эскизе</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Предел длины короткого ответа</td>
+        <td>Показывать пределом-подписью («До 40 символов») или живым счётчиком, как у развёрнутого ответа.</td>
+        <td>Подпись. Счётчик на сорока символах создаёт шум ради сведений, которые видны и так; у развёрнутого ответа он оправдан, потому что предел там на три порядка больше.</td>
+      </tr>
+      <tr>
+        <td>Величина предела развёрнутого ответа</td>
+        <td>В эскизе стоит 4000 — рекомендованный предел <code>long-fill-in</code> по спецификации SCORM 2004 4th Edition.</td>
+        <td>Число ПРЕДВАРИТЕЛЬНОЕ. FR-20 требует измерить поведение WebTutor на этом пределе на стенде до реализации: обрезает, отклоняет вызов или принимает больше. Замер заведён отдельной задачей (issue #51).</td>
+      </tr>
+      <tr>
+        <td>Признак обрезки при отправке в LMS</td>
+        <td>FR-21 требует обрезать ответ при отправке с явным признаком, храня целое у себя. Виден ли этот признак участнику.</td>
+        <td>В эскизе не показан: участнику он ничего не даёт, а места требует. Предлагается показывать его автору — в разборе попытки и в выгрузке.</td>
+      </tr>
+      <tr>
+        <td>Подсказка типа</td>
+        <td>Формулировка строки под вопросом.</td>
+        <td>«Введите ответ» у короткого, «Введите число» у числового, «Ответьте своими словами» у развёрнутого, «Заполните пропуски» у пропусков. Альтернативы принимаются.</td>
+      </tr>
+      <tr>
+        <td>Метка «ждёт проверки»</td>
+        <td>Показывать ли её участнику вообще, пока ручной проверки нет в охвате.</td>
+        <td>Показана в разборе. Контекст рендера обязан нести это состояние с первого дня (FR-41), а экран, который молчит о непроверенном ответе, читается как «ответ не засчитан».</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+</body>
+</html>

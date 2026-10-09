@@ -16,6 +16,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopicDrawer } from "../topic-drawer";
 import type { Topic } from "@shared/schema";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── fetch harness ──────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ function renderWithClient(ui: React.JSX.Element) {
       mutations: { retry: false },
     },
   });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>);
 }
 
 /** Find a fetch call matching a method + url predicate. */

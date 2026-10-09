@@ -16,10 +16,11 @@
 
 import { describe, it, expect } from "vitest";
 import path from "node:path";
+import { templateRoot } from "./helpers/template-roots";
 import { readReportLabelKeys } from "../server/services/template-render";
 
-const DEFAULT_DIR = path.resolve(process.cwd(), "server", "scorm", "templates", "default");
-const CERT_DIR = path.resolve(process.cwd(), "templates", "certification");
+const DEFAULT_DIR = templateRoot("default");
+const CERT_DIR = templateRoot("certification");
 
 /** Ровно то, что печатают `report.html` и `report.adaptive.html` поставляемых шаблонов. */
 const PRINTED = [
@@ -28,6 +29,9 @@ const PRINTED = [
   "results.scales",
   "results.indicators",
   "results.topics",
+  // PRD-50 (Э4): документ печатает сводный блок разреза своим заголовком, поэтому
+  // надпись попадает в панель наравне с подзаголовками остальных подблоков.
+  "results.breakdown",
   "recommendations.courses",
   "recommendations.events",
 ];

@@ -18,6 +18,7 @@ import session from "express-session";
 const {
   storageMock,
   buildScormExportDataMock,
+  assessTestPublishMock,
   generateScormPackageMock,
   createDebugSessionMock,
   getDebugSessionMock,
@@ -30,6 +31,7 @@ const {
     getTestGrantForUser: vi.fn(),
   },
   buildScormExportDataMock: vi.fn(),
+  assessTestPublishMock: vi.fn().mockResolvedValue([]),
   generateScormPackageMock: vi.fn(),
   createDebugSessionMock: vi.fn(),
   getDebugSessionMock: vi.fn(),
@@ -37,6 +39,7 @@ const {
 }));
 
 vi.mock("../server/db", () => ({ db: {} }));
+vi.mock("../server/services/draw-feasibility", () => ({ assessTestPublish: assessTestPublishMock }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -95,6 +98,9 @@ beforeEach(() => {
   storageMock.getUser.mockResolvedValue(adminUser);
   storageMock.getTest.mockResolvedValue(baseTest);
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
+  // `clearAllMocks` не трогает реализации, а два теста ниже подменяют эту — без
+  // сброса они бы протекали в соседние по порядку выполнения.
+  assessTestPublishMock.mockResolvedValue([]);
 });
 
 // ─── POST /:id/debug/session ───────────────────────────────────────────────────
@@ -144,12 +150,50 @@ describe("POST /api/tests/:id/debug/session", () => {
       playUrl: "/api/tests/test-1/debug/play/tok-1/index.html",
       title: "Test",
       template: "default",
+      // PRD-15 FR-05: замечания о выполнимости выдачи едут с сессией. Пусто = помех нет.
+      feasibility: [],
     });
     // Isolation invariants: LIVE source + no telemetry baked in.
     expect(buildScormExportDataMock).toHaveBeenCalledWith("test-1", { source: "debug" });
     expect(generateScormPackageMock).toHaveBeenCalledTimes(1);
     expect(generateScormPackageMock.mock.calls[0][0]).toMatchObject({ telemetry: null });
     expect(createDebugSessionMock).toHaveBeenCalledWith("test-1", "user-1", expect.any(Buffer));
+  });
+
+  // PRD-15 FR-05: отладочный прогон — не публикация, поэтому невыполнимая выдача его
+  // не запрещает. Но и молчать нельзя: непроходимая адаптивная лестница выглядит как
+  // «Вопрос 1 из 0» и замерший экран — именно на этом встала приёмка Э5 PRD-50.
+  it("passes feasibility findings along with the session instead of refusing the run", async () => {
+    const findings = [
+      {
+        topicId: "tp1",
+        topicName: "Корпоративные компетенции",
+        issues: [{ kind: "adaptive_shortfall", levelIndex: 0, levelName: "Базовый", required: 3, available: 0 }],
+      },
+    ];
+    assessTestPublishMock.mockResolvedValue(findings);
+    buildScormExportDataMock.mockResolvedValue({ test: baseTest, designSettings: { templateId: "default" } });
+    generateScormPackageMock.mockResolvedValue(Buffer.from("zip-bytes"));
+    createDebugSessionMock.mockResolvedValue({ token: "tok-2", launch: "index.html" });
+
+    const res = await request(makeApp()).post("/api/tests/test-1/debug/session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toBe("tok-2");
+    expect(res.body.feasibility).toEqual(findings);
+  });
+
+  it("still opens the session when the feasibility check itself fails", async () => {
+    assessTestPublishMock.mockRejectedValue(new Error("boom"));
+    buildScormExportDataMock.mockResolvedValue({ test: baseTest, designSettings: { templateId: "default" } });
+    generateScormPackageMock.mockResolvedValue(Buffer.from("zip-bytes"));
+    createDebugSessionMock.mockResolvedValue({ token: "tok-3", launch: "index.html" });
+
+    const res = await request(makeApp()).post("/api/tests/test-1/debug/session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toBe("tok-3");
+    expect(res.body.feasibility).toEqual([]);
   });
 
   it("maps a ScormBuildError(422) to 422 with the offending field (FR-16)", async () => {

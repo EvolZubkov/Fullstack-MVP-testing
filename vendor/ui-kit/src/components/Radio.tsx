@@ -17,10 +17,17 @@ export interface RadioGroupProps<T extends string = string> {
   layout?: 'column' | 'row';
   legend?: React.ReactNode;
   hint?: React.ReactNode;
+  /**
+   * Текст ошибки. Если задан — печатается вместо подсказки и озвучивается сразу
+   * (`role="alert"`), как у `Input` / `Select` / `Textarea`. Своего класса сообщения
+   * у группы нет: берётся общий `ou-field__msg--error`, чтобы ошибка выглядела
+   * одинаково у всех полей и не требовала новых правил в таблице стилей.
+   */
+  error?: React.ReactNode;
 }
 
 export function RadioGroup<T extends string = string>({
-  name, value, defaultValue, onChange, options, className, layout = 'column', legend, hint,
+  name, value, defaultValue, onChange, options, className, layout = 'column', legend, hint, error,
 }: RadioGroupProps<T>) {
   const autoName = useId();
   const groupName = name || `ou-radio-${autoName}`;
@@ -28,7 +35,7 @@ export function RadioGroup<T extends string = string>({
   return (
     <fieldset className={['ou-radio-group', isVertical && 'ou-radio-group--vertical', className].filter(Boolean).join(' ')}>
       {legend && <legend className="ou-radio-group__legend">{legend}</legend>}
-      {hint && <p className="ou-radio-group__hint">{hint}</p>}
+      {hint && !error && <p className="ou-radio-group__hint">{hint}</p>}
       <div className="ou-radio-group__items">
         {options.map((opt) => {
           const checked = value !== undefined ? value === opt.value : undefined;
@@ -56,6 +63,7 @@ export function RadioGroup<T extends string = string>({
           );
         })}
       </div>
+      {error && <p className="ou-field__msg ou-field__msg--error" role="alert">{error}</p>}
     </fieldset>
   );
 }

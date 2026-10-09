@@ -85,16 +85,56 @@ describe("buildSnapshot", () => {
     expect(s.status.verdict).toBe("unknown");
   });
 
+  it("показывает занятую долю бюджета состояния прогона (PRD-36 FR-17)", () => {
+    const suspend = JSON.stringify({ v: 2, attemptsUsed: 1, best: null });
+    const s = buildSnapshot(null, bridge({ "cmi.suspend_data": suspend }), { protocolMode: "live", watchSource: "state" });
+    expect(s.runState.length).toBe(suspend.length);
+    expect(s.runState.budget).toBe(4096);
+    expect(s.runState.share).toBeCloseTo(suspend.length / 4096, 5);
+    expect(s.runState.version).toBe(2);
+  });
+
+  it("состояние пакета, собранного до PRD-36, опознаётся как формат 1", () => {
+    const legacy = JSON.stringify({ attemptsUsed: 1, attempts: [{ percent: 50 }] });
+    const s = buildSnapshot(null, bridge({ "cmi.suspend_data": legacy }), { protocolMode: "live", watchSource: "state" });
+    expect(s.runState.version).toBe(1);
+  });
+
+  it("подписи попыток читаются и у сводки формата 2, и у записи легаси", () => {
+    window.TBInspector = mockTB({
+      getSuspendAttempts: vi.fn(() => [
+        { n: 2, pc: 87.4 } as never,
+        { attemptNumber: 1, percent: 40 } as never,
+      ]),
+    });
+    const s = buildSnapshot(null, bridge({}), { protocolMode: "live", watchSource: "state" });
+    expect(s.attempts.map((a) => a.label)).toEqual([
+      "Текущая (live)", "#2 — 87%", "#1 — 40%",
+    ]);
+  });
+
   it("raises the calculation alarm on an engine error", () => {
     window.TBInspector = mockTB({ readPkg: vi.fn(() => ({ ...PKG, engineError: "boom" })) });
     const s = buildSnapshot(null, bridge({}), { protocolMode: "live", watchSource: "state" });
     expect(s.status.alarm).toBe("boom");
   });
 
-  it("raises the calculation alarm when a scale/indicator formula errored", () => {
-    window.TBInspector = mockTB({ readPkg: vi.fn(() => ({ ...PKG, scaleErrors: [{ key: "k", message: "bad" }] })) });
+  it("names what could not be computed — the scale and the indicator, not just «ошибка»", () => {
+    window.TBInspector = mockTB({
+      readPkg: vi.fn(() => ({
+        ...PKG,
+        scaleErrors: [{ key: "leadership", message: "bad" }],
+        resultErrors: [{ name: "certification_passed", message: "bad" }],
+      })),
+    });
     const s = buildSnapshot(null, bridge({}), { protocolMode: "live", watchSource: "state" });
-    expect(s.status.alarm).toContain("Ошибка расчёта");
+    expect(s.status.alarm).toBe("Не рассчитано: шкала «leadership», показатель «certification_passed»");
+  });
+
+  it("keeps quiet when nothing failed — an empty diagnostics list is not an alarm", () => {
+    window.TBInspector = mockTB({ readPkg: vi.fn(() => ({ ...PKG, scaleErrors: [], resultErrors: [] })) });
+    const s = buildSnapshot(null, bridge({}), { protocolMode: "live", watchSource: "state" });
+    expect(s.status.alarm).toBeNull();
   });
 
   it("selects the cmi store as the watch source, nested into a uniform tree", () => {

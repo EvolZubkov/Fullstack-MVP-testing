@@ -150,15 +150,15 @@ describe("POST /api/tests/:id/result-variables", () => {
     expect(storageMock.createResultVariable).not.toHaveBeenCalled();
   });
 
-  it("returns 422 when another variable already controls the same status", async () => {
+  it("accepts a second variable controlling the same status (verdicts combine with OR)", async () => {
     storageMock.getResultVariables.mockResolvedValue([
       { ...savedVar, id: "rv-other", controlsStatus: "success" },
     ]);
     const res = await request(makeApp())
       .post("/api/tests/test-1/result-variables")
       .send({ ...validBody, controlsStatus: "success" });
-    expect(res.status).toBe(422);
-    expect(res.body.field).toBe("controlsStatus");
+    expect(res.status).toBe(201);
+    expect(storageMock.createResultVariable).toHaveBeenCalled();
   });
 
   it("returns 422 when the formula is invalid", async () => {

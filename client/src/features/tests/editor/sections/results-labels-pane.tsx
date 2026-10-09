@@ -31,7 +31,7 @@ import {
   Stack,
   Switch,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import type { LabelDeclaration, LabelValue, LabelValues } from "@shared/template/labels";
 import {
   DEFAULT_BLOCK_ORDER,
@@ -57,11 +57,6 @@ export type ResultsLabelsPaneProps = {
    * экрана итогов, чтобы автор видел, от чего он отступает. Пусто — умолчания шаблона.
    */
   baseLabels?: Record<string, string>;
-  /** Сохранённый порядок подблоков. Блок порядка рисуется только с `onOrderChange`. */
-  order?: readonly ResultsBlockKey[];
-  /** Состав и порядок, объявленные шаблоном для экрана итогов. */
-  templateOrder?: readonly ResultsBlockKey[];
-  onOrderChange?: (next: ResultsBlockKey[]) => void;
   readOnly?: boolean;
 };
 
@@ -74,6 +69,7 @@ const BLOCK_FALLBACK_NAMES: Record<ResultsBlockKey, string> = {
   scales: "По шкалам",
   indicators: "По показателям",
   topics: "По темам",
+  breakdown: "Разрез результата",
 };
 
 /** Ключ надписи второго уровня, подписывающей подблок. */
@@ -82,6 +78,7 @@ const BLOCK_LABEL_KEY: Record<ResultsBlockKey, string> = {
   scales: "results.scales",
   indicators: "results.indicators",
   topics: "results.topics",
+  breakdown: "results.breakdown",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -136,9 +133,6 @@ export function ResultsLabelsPane({
   onChange,
   screen = "results",
   baseLabels,
-  order,
-  templateOrder,
-  onOrderChange,
   readOnly = false,
 }: ResultsLabelsPaneProps) {
   const groups = useMemo(() => groupDeclarations(declarations), [declarations]);
@@ -177,16 +171,6 @@ export function ResultsLabelsPane({
           ))}
         </FormSection>
       ))}
-      {onOrderChange && (
-        <BlockOrderList
-          order={order}
-          templateOrder={templateOrder}
-          labels={labels}
-          declarations={declarations}
-          readOnly={readOnly}
-          onChange={onOrderChange}
-        />
-      )}
     </div>
   );
 }
@@ -213,12 +197,17 @@ function LabelRow({
   return (
     <FormField
       label={decl.label}
-      // Подсказка поля — текст, который напечатается без вмешательства автора. Пустой
-      // означает, что надписи на этом экране нет вовсе.
-      hint={placeholder ? undefined : "Эта надпись не печатается на экране итогов."}
+      // Подсказка говорит, что будет, если оставить поле пустым. Шаблон почти всегда
+      // предлагает свою формулировку — тогда именно она и напечатается; надписи без
+      // формулировки в шаблоне не будет вовсе, и об этом сказано отдельно.
+      hint={
+        placeholder
+          ? "Пусто — печатается формулировка шаблона."
+          : "Шаблон не печатает эту надпись — задайте свою, если она нужна."
+      }
       data-testid={`results-label-row-${decl.key}`}
     >
-      <Stack gap={2}>
+      <Stack gap={1}>
         <Switch
           label="Показывать"
           aria-label={`Показывать надпись «${decl.label}»`}
@@ -261,7 +250,7 @@ function LabelRow({
  * прогоняется через `resolveBlockOrder`: ключ, которого шаблон не знает, исчезает, а
  * подблок, о котором автор ещё не слышал, дописывается в конец.
  */
-function BlockOrderList({
+export function ResultsBlockOrderPane({
   order,
   templateOrder,
   labels,
@@ -302,15 +291,14 @@ function BlockOrderList({
   };
 
   return (
-    <FormSection
-      stacked
-      title="Порядок подблоков"
-      subtitle="Блоки печатаются под общим заголовком итогов в этом порядке. Выключенный заголовок блок не убирает — за видимость отвечают настройки самих блоков."
-    >
-      <Stack gap={2} data-testid="results-block-order">
+    // Без подзаголовка: список сам показывает, что и в каком порядке печатается, а
+    // оговорка про выключенный заголовок относится к надписям — они ниже, своим разделом.
+    <FormSection stacked title="Порядок подблоков">
+      <Stack gap={1} data-testid="results-block-order">
         {resolved.map((key, index) => (
           <Stack
             key={key}
+            className="tb-order-row"
             direction="row"
             gap={2}
             align="center"

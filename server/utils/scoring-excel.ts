@@ -26,10 +26,14 @@
  */
 
 import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
-import { distributesBudget, isSingleIndexChoice } from "@shared/questions/question-type";
+import { distributesBudget, isSingleIndexChoice, isOpenText } from "@shared/questions/question-type";
 
 /** Question types accepted by the scoring grammar. */
-export type ScoringQuestionType = "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation";
+export type ScoringQuestionType =
+  | "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation"
+  // PRD-57: текстовые типы тоже оцениваются ступенями — счётчиком выполненных правил
+  // (FR-28aa4) и числом верных пропусков. Весов у них нет: весить нечего, вариантов нет.
+  | "short" | "blanks" | "long";
 
 /** Parse outcome: a validated scoring config (or null = exact), or an error. */
 export type ParseScoringResult =
@@ -42,6 +46,9 @@ export type ParseScoringResult =
  */
 export function serializeScoring(scoring: QuestionScoring | null | undefined): string {
   if (!scoring || scoring.kind === "exact") return "";
+  // «Сценарий в ИС»: книга сценарии не переносит — их строки отсеиваются ещё на листе «Вопросы»,
+  // поэтому до «Оценки» их штрафы не доходят. Пустая ячейка здесь — не потеря, а неприменимость.
+  if (scoring.kind === "simulation") return "";
 
   if (scoring.kind === "weighted") {
     const base = `веса: ${scoring.weights.join(" # ")}`;
@@ -138,6 +145,12 @@ export function parseScoringCell(
   // это прямо лучше, чем позволить формуле разобраться и молча ничего не посчитать.
   if (distributesBudget(type)) {
     return { ok: false, error: "распределение баллов не проверяется, «Цена ответа» к нему неприменима" };
+  }
+
+  // PRD-57 §5.3: у развёрнутого ответа автопроверки нет вовсе, поэтому ступеням не на чём
+  // сработать — сказать это прямо лучше, чем сохранить таблицу, которая никогда не сыграет.
+  if (isOpenText(type)) {
+    return { ok: false, error: "развёрнутый ответ не проверяется автоматически, «Цена ответа» к нему неприменима" };
   }
 
   const lower = text.toLowerCase();

@@ -12,6 +12,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DebugSessionState } from "../use-debug-session";
 import type { ProtocolRow, TBInspectorApi } from "../inspector-snapshot";
 
@@ -29,6 +30,15 @@ vi.mock("../use-debug-session", () => ({
 vi.mock("wouter", () => ({ useParams: () => ({ testId: "t1" }) }));
 
 import DebugPlayerPage from "../debug-player-page";
+
+/**
+ * Страница держит панель комментариев (PRD-52), которая ходит в API через
+ * react-query — рендер идёт под собственным клиентом; сеть не трогается.
+ */
+function renderPage(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 // ─── Compute mock ────────────────────────────────────────────────────────────────
 
@@ -123,7 +133,7 @@ afterEach(() => cleanup());
 
 describe("DebugPlayerPage — toolbar actions", () => {
   it("rebuilds the package via «Пересобрать»", () => {
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("button", { name: "Пересобрать" }));
     expect(rebuildMock).toHaveBeenCalled();
   });
@@ -131,7 +141,7 @@ describe("DebugPlayerPage — toolbar actions", () => {
   it("closes the window via the close button", () => {
     const close = vi.fn();
     (window as unknown as { close: () => void }).close = close;
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("button", { name: "Закрыть окно плеера" }));
     expect(close).toHaveBeenCalled();
   });
@@ -140,7 +150,7 @@ describe("DebugPlayerPage — toolbar actions", () => {
     const openMock = vi.fn();
     (window as unknown as { open: unknown }).open = openMock;
     sessionState.current = { status: "error", error: "Шаблон не поддерживается" };
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("button", { name: "Открыть тест в редакторе" }));
     expect(openMock).toHaveBeenCalledWith("/author/tests?edit=t1", "_blank", "noopener");
   });
@@ -151,7 +161,7 @@ describe("DebugPlayerPage — toolbar actions", () => {
 describe("DebugPlayerPage — adaptive", () => {
   it("shows the adaptive score panel and the adaptive progress lane", () => {
     installTB(adaptiveTB());
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     // Status-bar adaptive lane.
     expect(screen.getByText(/Прогресс · адаптив/)).toBeInTheDocument();
     // «Результаты» tab → adaptive KPI + per-topic status table.
@@ -163,7 +173,7 @@ describe("DebugPlayerPage — adaptive", () => {
 
   it("renders the adaptive draw path per topic on «Выдача»", () => {
     installTB(adaptiveTB());
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
     expect(screen.getByText(/подтверждён уровень Средний/)).toBeInTheDocument();
     expect(screen.getByText(/идёт \(текущий: Базовый →\)/)).toBeInTheDocument();
@@ -181,7 +191,7 @@ describe("DebugPlayerPage — adaptive", () => {
       buildScore: vi.fn(() => ({ available: true, adaptive: true, bar: { finished: false, topicLevels: many } }) as never),
       buildAdaptiveBar: vi.fn(() => ({ visible: true, finished: false, topicLevels: many })),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     // Two confirmed shown, the rest folded; pending tail folded to «осталось 2».
     expect(screen.getByRole("button", { name: /\+2 подтверждено/ })).toBeInTheDocument();
     expect(screen.getByText("осталось 2")).toBeInTheDocument();
@@ -197,7 +207,7 @@ describe("DebugPlayerPage — adaptive", () => {
       buildAdaptiveBar: vi.fn(() => ({ visible: false })),
       buildDraw: vi.fn(() => ({ available: true, adaptive: true, path: [] })),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     expect(screen.getByText(/подтверждённые уровни появятся/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
     expect(screen.getByText(/путь по уровням появится/)).toBeInTheDocument();
@@ -218,7 +228,7 @@ describe("DebugPlayerPage — sectioned flow", () => {
         ],
       })),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     // Status-bar sectioned lane: A done ✓, B still «в процессе».
     expect(screen.getByText(/Прогресс · разделы/)).toBeInTheDocument();
     expect(screen.getByText("Раздел A — 100% ✓")).toBeInTheDocument();
@@ -243,7 +253,7 @@ describe("DebugPlayerPage — protocol variants", () => {
         note: "",
       })),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Протокол" }));
     expect(screen.getByText("частично 50%")).toBeInTheDocument();
     expect(screen.getByText("неверно")).toBeInTheDocument();
@@ -279,7 +289,7 @@ describe("DebugPlayerPage — draw sections", () => {
         ],
       })),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
     expect(screen.getByText(/случайная выборка/)).toBeInTheDocument();
     expect(screen.getByText(/все вопросы/)).toBeInTheDocument();
@@ -307,7 +317,7 @@ describe("DebugPlayerPage — LMS tab", () => {
       ]),
       buildLmsRawLog: vi.fn(() => 'Initialize("") → "true"\nSetValue("cmi.score.raw","5") → "true"'),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "LMS" }));
     // Structured rows: marker chip, short kbd value, long-value disclosure.
     expect(screen.getByText("сеанс открыт")).toBeInTheDocument();
@@ -325,7 +335,7 @@ describe("DebugPlayerPage — LMS tab", () => {
 describe("DebugPlayerPage — empty inspector panels", () => {
   it("shows «нет шкал» / «нет показателей» when the package has data but none defined", () => {
     installTB({ buildScaleRows: vi.fn(() => []), buildResultRows: vi.fn(() => []) });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Шкалы" }));
     expect(screen.getByText("В тесте нет шкал.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Показатели" }));
@@ -353,7 +363,7 @@ describe("DebugPlayerPage — state sources & published score", () => {
       })),
       getSuspendAttempts: vi.fn(() => [{ attemptNumber: 1, percent: 80 }]),
     });
-    render(<DebugPlayerPage />);
+    renderPage(<DebugPlayerPage />);
     // Completed run → status-bar verdict is a hard pass/fail, not «в процессе».
     expect(screen.getAllByText("Не пройден").length).toBeGreaterThan(0);
     // «Состояние» tab: switch the source across cmi and suspend_data.

@@ -155,8 +155,24 @@ describe("type-trait parity: the ES5 mirror matches the shared module", () => {
     }
   });
 
+  it("оба хоста считают короткий ответ БЕЗ ПРАВИЛ неоцениваемым (PRD-57 §5.3)", () => {
+    // Третий вход в неоцениваемость, и он ближе к шкале, чем к распределению:
+    // переключателем служит ОТСУТСТВИЕ правил, а не сам тип. Автор, не написавший
+    // проверку, не должен молча утянуть вниз процент и вердикт.
+    for (const correct of [{}, null, undefined, { answerKind: "text", join: "any", rules: [] }]) {
+      expect(isMeasurementOnly({ type: "short", correctJson: correct })).toBe(true);
+      expect(mirror.isMeasurementOnly({ type: "short", correct })).toBe(true);
+    }
+    const withRules = { answerKind: "text", join: "any", rules: [{ kind: "text", match: "wildcard", value: "РТН" }] };
+    expect(isMeasurementOnly({ type: "short", correctJson: withRules })).toBe(false);
+    expect(mirror.isMeasurementOnly({ type: "short", correct: withRules })).toBe(false);
+  });
+
   it("прочие типы измерительными не становятся", () => {
-    for (const type of QUESTION_TYPES.filter((t) => t !== "scale" && t !== "allocation")) {
+    // Типы, у которых «неоцениваемость» — это СОСТОЯНИЕ содержимого: шкала без верной
+    // градации, распределение всегда, короткий ответ и пропуски без правил.
+    const measurementKinds = ["scale", "allocation", "short", "blanks", "long"];
+    for (const type of QUESTION_TYPES.filter((t) => !measurementKinds.includes(t))) {
       expect(isMeasurementOnly({ type, correctJson: {} })).toBe(false);
       expect(mirror.isMeasurementOnly({ type, correct: {} })).toBe(false);
     }

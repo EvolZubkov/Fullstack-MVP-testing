@@ -22,7 +22,7 @@ import {
   Grid,
   Stack,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import type { AssignedTestItem } from "@shared/home/contract";
 
 /** Render a calendar date (`YYYY-MM-DD`, PRD-6 cooldown) as `DD.MM.YYYY`. */

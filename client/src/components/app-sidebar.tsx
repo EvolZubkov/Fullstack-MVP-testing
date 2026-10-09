@@ -2,7 +2,7 @@
  * @module components/app-sidebar
  *
  * Author-side primary navigation, rendered with the design-system `Sidebar`
- * (`@universityrt/ui-kit`) inside the DS `AppShell` (see pages/author/layout).
+ * (`@skillum/ui-kit`) inside the DS `AppShell` (see pages/author/layout).
  * Replaces the former shadcn `Sidebar` shell so the app frame matches the rest
  * of the DS-based UI (see docs/PLAN_appshell_migration.md).
  *
@@ -21,43 +21,49 @@ import {
   LayoutTemplate,
   BarChart3,
   Users,
-  UsersRound,
+  UserGroup,
   Import,
   type LucideIcon,
 } from "lucide-react";
-import { Cluster, Sidebar, Text } from "@universityrt/ui-kit";
+import { Cluster, Sidebar, Text } from "@skillum/ui-kit";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
-import type { Capability } from "@shared/access";
+import { IMPORT_CAPABILITIES, type Capability } from "@shared/access";
 
-/** Nav entry: route + icon + the capability that gates it (PRD-13). */
+/** Nav entry: route + icon + the capability that gates it (PRD-13); a list means ANY of them. */
 interface NavEntry {
   id: string;
   href: string;
   label: string;
   icon: LucideIcon;
-  perm: Capability;
+  perm: Capability | readonly Capability[];
 }
 
 const NAV: NavEntry[] = [
   // PRD-25: главная доступна любому аутентифицированному пользователю, поэтому
   // гейтится правом `auth.self`, которое есть у каждой роли.
   { id: "home", href: "/", label: t.navigation.home, icon: Home, perm: "auth.self" },
+  // «Тесты» стоят выше «Тем и вопросов»: тест — основной объект работы автора,
+  // а его вопросы видны и правятся прямо из ящика теста.
+  { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
   // PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
   { id: "content", href: "/author/content", label: t.navigation.topicsAndQuestions, icon: FolderTree, perm: "topics.manage" },
-  { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
   { id: "templates", href: "/author/templates", label: t.navigation.templates, icon: LayoutTemplate, perm: "adminTemplates.manage" },
   { id: "analytics", href: "/author/analytics", label: t.navigation.analytics, icon: BarChart3, perm: "analytics.read" },
   { id: "users", href: "/author/users", label: t.navigation.users, icon: Users, perm: "users.read" },
-  { id: "groups", href: "/author/groups", label: t.navigation.groups, icon: UsersRound, perm: "groups.manage" },
-  { id: "import", href: "/author/import", label: t.navigation.import, icon: Import, perm: "questions.importExport" },
+  { id: "groups", href: "/author/groups", label: t.navigation.groups, icon: UserGroup, perm: "groups.manage" },
+  // Э6: единая точка импорта — раздел открыт любым правом на импорт (менеджеру — ради выгрузок
+  // LMS и списков пользователей), а виды файлов в нём — по правам.
+  { id: "import", href: "/author/import", label: t.navigation.import, icon: Import, perm: IMPORT_CAPABILITIES },
 ];
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { can } = useAuth();
 
-  const allowed = NAV.filter((n) => can(n.perm));
+  const allowed = NAV.filter((n) =>
+    typeof n.perm === "string" ? can(n.perm) : n.perm.some((capability) => can(capability)),
+  );
   // PRD-25: «/» требует ТОЧНОГО совпадения — префиксная проверка совпала бы с
   // любым маршрутом и подсвечивала бы «Главную» повсюду.
   const activeId = allowed.find((n) =>

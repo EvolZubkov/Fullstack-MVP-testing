@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: строка темы в блоке разделов — отчёт и экран итогов.
+    Файл: docs/wireframes/approved/prd-rtk-topic-row.html
+    План: docs/plans/2026-09-21-rtk-report-reference.md (этап Э0)
+    Спеки: PRD-50 (разрезы и блоки разделов), PRD-51 §10 (референс, метрики §10.3),
+           PRD-49 (надписи вердикта и счётчика блока).
+    Референс: docs/references/Макарова Анна Васильевна отчёт_неуспешная попытка.pdf, лист 2.
+    Статус: СОГЛАСОВАН 2026-09-21.
+
+    Что в холсте: РЕАЛЬНЫЕ классы шаблона «Сертификация» (tb-report__*), реальные токены DS
+    (`--ou-bg-page`, `--ou-bg-surface-1`, `--ou-fg-*`) и реальные значения из разбора референса. Правила, скопированные из styles/report.css шаблона,
+    помечены «ИЗ ШАБЛОНА»; предлагаемая дельта — «ДЕЛЬТА Э3».
+
+    Что меняется и почему — в состоянии «Пояснения» (таблица), в холсте только реальный UI.
+
+    Решения владельца, зафиксированные до эскиза (см. план §3, §6):
+      - полоса подтемы НЕ меняется: цвет по вердикту, дорожка светло-серая;
+      - значение подтемы печатается, подпись «Нужно N %» — нет;
+      - толкование подтемы скрываемо и по умолчанию скрыто (состояние s-report-sub);
+      - заголовки итога задаются в карточке «Итоги теста» (эскиз prd-rtk-editor-cards.html).
+  -->
+  <title>Строка темы: отчёт и итоги — «Сертификация»</title>
+
+  <link rel="stylesheet" href="/docs/wireframes/ds/skillum-ds.css" />
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+
+  <style>
+    /* ─── Эскизный фрейм ──────────────────────────────────────────────── */
+    .wf-canvas { padding: calc(var(--wf-nav-offset,52px) + 24px) 24px 40px; background:#6E6E6E; min-height:100vh; }
+    .wf-sheet { width:595px; margin:0 auto 24px; background:#E2E2E2; padding:13px 15px; box-sizing:content-box; }
+    .wf-sheet-cap { color:#fff; font:600 12px/1.4 Arial, sans-serif; width:595px; margin:0 auto 6px; }
+
+    /* ═══ ИЗ ШАБЛОНА: styles/report.css «Сертификации», без изменений ═══ */
+    /* line-height задан ЯВНО: в документе DS нет, а в эскизе он подключён, и его
+       пиксельный line-height наследуется вплоть до подписей в 7-8 px. */
+    .tb-report__card { background:#FFFFFF; border-radius:8px; padding:18px 20px; margin-bottom:10px;
+      font-family:Arial, Helvetica, sans-serif; color:#101828; line-height:1.3; }
+    .tb-report__title { font-size:15px; font-weight:700; margin-bottom:10px; }
+    .tb-report__topic-group { margin-bottom:10px; border:1px solid #D8D8D8; border-radius:8px; background:#F7F7F7; overflow:hidden; }
+    .tb-report__topic-group:last-child { margin-bottom:0; }
+    .tb-report__topic-group-head { display:flex; align-items:center; justify-content:space-between;
+      gap:8px; height:59px; padding:0 22px; background:#E2E2E2; }
+    .tb-report__topic-group-title { font-size:13px; font-weight:700; line-height:1.2; }
+    .tb-report__topic-group-counter { min-width:50px; height:31px; display:inline-flex; align-items:center;
+      justify-content:center; border-radius:6px; background:#FF4F12; color:#FFFFFF; font-size:11px; font-weight:600; }
+    .tb-report__topics { display:block; }
+    .tb-report__topic { background:transparent; border-top:1px solid #E2E2E2; min-height:83px;
+      padding:14px 22px; position:relative; overflow:hidden; }
+    .tb-report__topic-name { font-size:12px; font-weight:700; line-height:1.2; overflow-wrap:anywhere; }
+    .tb-report__breakdown-name { font-size:8px; line-height:1.25; color:#5A6472; margin-bottom:3px; overflow-wrap:anywhere; }
+    .tb-report__breakdown-bar { height:5px; background:#E2E2E2; border-radius:3px; overflow:hidden; }
+    .tb-report__breakdown-bar span { display:block; height:100%; border-radius:2px; background:#98A2B3; }
+    .tb-report__breakdown-val { font-size:7px; line-height:1.2; color:#5A6472; margin-top:2px; }
+    .tb-report__breakdown-row.is-pass .tb-report__breakdown-bar span { background:#19D7A4; }
+    .tb-report__breakdown-row.is-fail .tb-report__breakdown-bar span { background:#FF4F12; }
+    .tb-report__breakdown-row.is-fail .tb-report__breakdown-bar { background:#FFE4DB; }
+
+    /* ═══ ДЕЛЬТА Э3: двухколоночная строка, пилюля с точкой, слот толкования ═══
+       Разметка получает две обёртки — `-main` и `-aside`, — а печать «N из M»,
+       баллов и общей полосы темы снимается. Колонка подтем и её метрики (76 px,
+       шаг 106, полоса 5 px) не меняются: они замерены с референса (§10.3). */
+    /* Ширины сняты с референса и пересчитаны на наш лист (1190 pt -> 595 pt, делитель 2):
+       имя с чипом занимает ~223 pt, блок подтем ~280 pt, между ними ~16 pt. Полоса и колонка
+       остаются референсными (76 px), сжимается только ШАГ: на листе вдвое уже шага 106 pt нет. */
+    .tb-report__topic { display:grid; grid-template-columns:215px 1fr; gap:16px; align-items:start; }
+    .tb-report__topic-main { min-width:0; }
+    .tb-report__topic-aside { min-width:0; padding-top:2px; }
+    .tb-report__topic-verdict { display:inline-flex; align-items:center; gap:6px; margin-top:8px;
+      padding:5px 12px; border-radius:999px; font-size:10px; font-weight:500; white-space:nowrap;
+      background:#FFFFFF; border:1px solid #D8D8D8; color:#101828; }
+    .tb-report__topic-verdict::before { content:""; width:7px; height:7px; border-radius:50%; background:#FF4F12; }
+    .tb-report__topic.is-pass .tb-report__topic-verdict::before { background:#19D7A4; }
+    /* Толкование темы: тот же слот у компетенции и у знаниевой темы. */
+    .tb-report__topic-interpretation { font-size:9px; line-height:1.5; color:#101828; }
+    .tb-report__topic-interpretation p { margin:0 0 6px; }
+    .tb-report__topic-interpretation p:last-child { margin-bottom:0; }
+    /* Разрезы стоят СПРАВА, поэтому сетка живёт в колонке-aside, а не под именем. */
+    .tb-report__breakdown { display:grid; grid-template-columns:repeat(3, 76px); gap:10px 26px; margin:0; align-items:end; }
+    /* Имя подтемы занимает ДВЕ строки всегда: иначе полосы соседних колонок встают на разной
+       высоте, и строка темы читается как сломанная (в референсе они на одной линии). */
+    .tb-report__breakdown-name { min-height:2.5em; }
+    /* ВКЛЮЧЁННОЕ толкование подтем меняет РАСКЛАДКУ разрезов: сетка из трёх колонок по 76 px
+       разворачивается в список во всю ширину колонки-aside. Толкование стоит ПОД СВОЕЙ полосой,
+       поэтому название подтемы печатается ОДИН раз — в заголовке её строки. В колонке 76 px
+       абзац нечитаем (10-12 знаков в строке), а повтор названия перед текстом — визуальный мусор. */
+    /* `align-items:stretch` — не косметика: базовое правило сетки ставит `end`, а в колоночном
+       флексе это поперечная ось, то есть ШИРИНА. Строка с коротким толкованием сжималась по
+       тексту и вставала уже соседних. */
+    .tb-report__breakdown--notes { display:flex; flex-direction:column; gap:10px; align-items:stretch; }
+    .tb-report__breakdown--notes .tb-report__breakdown-row { display:grid;
+      grid-template-columns:1fr 34px; gap:2px 8px; align-items:center; }
+    .tb-report__breakdown--notes .tb-report__breakdown-name { min-height:0; grid-column:1; }
+    .tb-report__breakdown--notes .tb-report__breakdown-bar { grid-column:1; }
+    .tb-report__breakdown--notes .tb-report__breakdown-val { grid-column:2; grid-row:2; margin:0; text-align:right; }
+    .tb-report__breakdown-note { grid-column:1 / -1; font-size:8px; line-height:1.45; color:#5A6472; margin-top:2px; }
+
+    /* ═══ Экран итогов: тот же состав, облик карточек DS ═══ */
+    /* Состояние экрана итогов живёт на фоне СТРАНИЦЫ продукта, а не на сером фоне листа
+       отчёта: серый под светлой карточкой гасил текст и читался как выключенный экран. */
+    #wf-results { background:var(--ou-bg-page); margin:-24px -24px -40px; padding:24px 24px 40px; min-height:100vh; }
+    #wf-results .wf-sheet-cap { color:var(--ou-fg-muted); }
+    .wf-results { width:760px; margin:0 auto; background:var(--ou-bg-surface-1); border-radius:12px; padding:20px;
+      color:var(--ou-fg-default); }
+    .tb-topic-group { border:1px solid var(--ou-border-default); border-radius:12px; overflow:hidden; margin-bottom:12px; }
+    .tb-topic-group__head { display:flex; align-items:center; justify-content:space-between;
+      padding:14px 18px; background:var(--ou-bg-surface-2); }
+    .tb-topic-group__title { font-weight:700; font-size:15px; }
+    .tb-topic-group__counter { background:#FF4F12; color:#fff; border-radius:8px; padding:4px 12px; font-weight:600; font-size:13px; }
+    .tb-topic-row { display:grid; grid-template-columns:260px 1fr; gap:24px; padding:16px 18px;
+      border-top:1px solid var(--ou-border-default); align-items:start; }
+    .tb-topic-row__name { font-weight:700; font-size:14px; }
+    .tb-topic-row__text { font-size:13px; line-height:1.5; color:var(--ou-fg-muted); }
+    .tb-topic-row__text p { margin:0 0 6px; }
+    .tb-topic-row__bars { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px 20px; align-items:end; }
+    /* То же правило, что в документе: имя занимает две строки всегда, иначе полосы соседних
+       колонок встают на разной высоте. */
+    .tb-bar__name { font-size:12px; line-height:1.3; min-height:2.6em; color:var(--ou-fg-muted); margin-bottom:4px; }
+    .tb-bar__track { height:6px; border-radius:4px; background:var(--ou-bg-surface-2); overflow:hidden; }
+    .tb-bar__fill { display:block; height:100%; border-radius:4px; background:#FF4F12; }
+    .tb-bar--pass .tb-bar__fill { background:#19D7A4; }
+    .tb-bar__val { font-size:11px; color:var(--ou-fg-muted); margin-top:3px; }
+    .tb-level { display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:5px 12px;
+      border-radius:999px; border:1px solid var(--ou-border-default); background:var(--ou-bg-surface-1); font-size:12px; }
+    .tb-level::before { content:""; width:8px; height:8px; border-radius:50%; background:#FF4F12; }
+    .tb-level--pass::before { background:#19D7A4; }
+  </style>
+</head>
+<body class="ou ou--light">
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Строка темы:</span>
+  <button type="button" class="active" onclick="showState(this,'report-comp')">Отчёт · компетенции</button>
+  <button type="button" onclick="showState(this,'report-know')">Отчёт · знания</button>
+  <button type="button" onclick="showState(this,'report-sub')">Отчёт · толкование подтем</button>
+  <button type="button" onclick="showState(this,'results')">Экран итогов</button>
+  <button type="button" onclick="showState(this,'today')">Как печатается сегодня</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" onclick="showState(this,'docs')">Пояснения</button>
+  <span class="wf-nav-sep"></span>
+</nav>
+
+<div class="wf-canvas">
+
+  <!-- ══════════ Отчёт: блок компетенций ══════════ -->
+  <div id="wf-report-comp" class="wf-state active">
+    <p class="wf-sheet-cap">Лист отчёта, блок «Управленческие компетенции». Справа — ТОЛКОВАНИЕ темы.</p>
+    <div class="wf-sheet">
+      <section class="tb-report__card">
+        <div class="tb-report__title">Результаты по темам</div>
+        <div class="tb-report__topic-group">
+          <div class="tb-report__topic-group-head">
+            <div class="tb-report__topic-group-title">Управленческие компетенции</div>
+            <div class="tb-report__topic-group-counter">2/4</div>
+          </div>
+          <div class="tb-report__topics">
+            <div class="tb-report__topic is-fail">
+              <div class="tb-report__topic-main" style="position:relative">
+                <div class="tb-report__topic-name">Управляет потенциалом команды</div>
+                <div class="tb-report__topic-verdict">начальный уровень</div>
+              </div>
+              <div class="tb-report__topic-aside" style="position:relative">
+                <div class="tb-report__topic-interpretation">
+                  <p>Формирует эффективную команду с учетом целей подразделения и особенностей сотрудников;</p>
+                  <p>Управляет исполнением задач;</p>
+                  <p>Мотивирует и развивает подчиненных.</p>
+                </div>
+              </div>
+            </div>
+            <div class="tb-report__topic is-fail">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">Лидирует изменения</div>
+                <div class="tb-report__topic-verdict">начальный уровень</div>
+              </div>
+              <div class="tb-report__topic-aside">
+                <div class="tb-report__topic-interpretation">
+                  <p>Открыт изменениям;</p>
+                  <p>Транслирует преимущества изменений подчинённым;</p>
+                  <p>Формирует среду, в которой можно и хочется выступать с инициативами.</p>
+                </div>
+              </div>
+            </div>
+            <div class="tb-report__topic is-pass">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">Принимает комплексные решения</div>
+                <div class="tb-report__topic-verdict">целевой уровень</div>
+              </div>
+              <div class="tb-report__topic-aside">
+                <div class="tb-report__topic-interpretation">
+                  <p>Применяет аналитический подход к любой ситуации;</p>
+                  <p>Принимает обоснованные комплексные решения;</p>
+                  <p>Устойчив к манипуляциям.</p>
+                </div>
+              </div>
+            </div>
+            <div class="tb-report__topic is-pass">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">Создает лучший опыт</div>
+                <div class="tb-report__topic-verdict">целевой уровень</div>
+              </div>
+              <div class="tb-report__topic-aside">
+                <div class="tb-report__topic-interpretation">
+                  <p>Проясняет потребности клиента и своевременно на них реагирует;</p>
+                  <p>Находит способ решения задачи клиента;</p>
+                  <p>Запрашивает обратную связь и поддерживает партнерские отношения.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ══════════ Отчёт: блок знаний ══════════ -->
+  <div id="wf-report-know" class="wf-state">
+    <p class="wf-sheet-cap">Лист отчёта, блок «Знания». Справа — ПОЛОСЫ ПОДТЕМ со значением, без подписи «Нужно N %».</p>
+    <div class="wf-sheet">
+      <section class="tb-report__card">
+        <div class="tb-report__topic-group">
+          <div class="tb-report__topic-group-head">
+            <div class="tb-report__topic-group-title">Знания</div>
+            <div class="tb-report__topic-group-counter">3/4</div>
+          </div>
+          <div class="tb-report__topics">
+            <div class="tb-report__topic is-fail">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">О компании</div>
+                <div class="tb-report__topic-verdict">начальный уровень</div>
+              </div>
+              <div class="tb-report__topic-aside" style="position:relative">
+                <div class="tb-report__breakdown">
+                  <div class="tb-report__breakdown-row is-fail">
+                    <div class="tb-report__breakdown-name">Стратегия компании</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:40%"></span></div>
+                    <div class="tb-report__breakdown-val">40 %</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Продукты компании</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:63%"></span></div>
+                    <div class="tb-report__breakdown-val">63 %</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-fail">
+                    <div class="tb-report__breakdown-name">Корпоративная культура</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:54%"></span></div>
+                    <div class="tb-report__breakdown-val">54 %</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="tb-report__topic is-pass">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">Корпоративные финансы</div>
+                <div class="tb-report__topic-verdict">целевой уровень</div>
+              </div>
+              <div class="tb-report__topic-aside">
+                <div class="tb-report__breakdown">
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Финансовые основы</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:83%"></span></div>
+                    <div class="tb-report__breakdown-val">83 %</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Финансовые метрики</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:67%"></span></div>
+                    <div class="tb-report__breakdown-val">67 %</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Оценка эффективности проектов</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:50%"></span></div>
+                    <div class="tb-report__breakdown-val">50 %</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="tb-report__topic is-pass">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">Технологии</div>
+                <div class="tb-report__topic-verdict">целевой уровень</div>
+              </div>
+              <div class="tb-report__topic-aside">
+                <div class="tb-report__breakdown">
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Технологический стек БТИ</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:64%"></span></div>
+                    <div class="tb-report__breakdown-val">64 %</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Цифровая экономика</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:55%"></span></div>
+                    <div class="tb-report__breakdown-val">55 %</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ══════════ Отчёт: толкование подтем включено ══════════ -->
+  <div id="wf-report-sub" class="wf-state">
+    <p class="wf-sheet-cap">То же, но автор ВКЛЮЧИЛ показ толкования подтем. По умолчанию блок скрыт.</p>
+    <div class="wf-sheet">
+      <section class="tb-report__card">
+        <div class="tb-report__topic-group">
+          <div class="tb-report__topic-group-head">
+            <div class="tb-report__topic-group-title">Знания</div>
+            <div class="tb-report__topic-group-counter">3/4</div>
+          </div>
+          <div class="tb-report__topics">
+            <div class="tb-report__topic is-fail">
+              <div class="tb-report__topic-main">
+                <div class="tb-report__topic-name">О компании</div>
+                <div class="tb-report__topic-verdict">начальный уровень</div>
+              </div>
+              <div class="tb-report__topic-aside">
+                <div class="tb-report__breakdown tb-report__breakdown--notes" style="position:relative">
+                  <div class="tb-report__breakdown-row is-fail">
+                    <div class="tb-report__breakdown-name">Стратегия компании</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:40%"></span></div>
+                    <div class="tb-report__breakdown-val">40 %</div>
+                    <div class="tb-report__breakdown-note">Понимание стратегических целей компании до 2030 года и роли своего подразделения в их достижении.</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-pass">
+                    <div class="tb-report__breakdown-name">Продукты компании</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:63%"></span></div>
+                    <div class="tb-report__breakdown-val">63 %</div>
+                    <div class="tb-report__breakdown-note">Знание продуктовой линейки и умение подобрать решение под задачу клиента.</div>
+                  </div>
+                  <div class="tb-report__breakdown-row is-fail">
+                    <div class="tb-report__breakdown-name">Корпоративная культура</div>
+                    <div class="tb-report__breakdown-bar"><span style="width:54%"></span></div>
+                    <div class="tb-report__breakdown-val">54 %</div>
+                    <div class="tb-report__breakdown-note">Ценности компании и поведение, которое из них следует.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ══════════ Экран итогов ══════════ -->
+  <div id="wf-results" class="wf-state">
+    <p class="wf-sheet-cap" style="width:760px">Экран итогов: тот же состав и та же двухколоночная строка, облик — DS.</p>
+    <div class="wf-results">
+      <h2 style="margin:0 0 4px;font-size:22px">Сертификация не пройдена</h2>
+      <p style="margin:0 0 16px;color:var(--ou-fg-muted);font-size:13px">Заголовок из карточки «Итоги теста», поле «Заголовок при неуспехе»</p>
+
+      <div class="tb-topic-group">
+        <div class="tb-topic-group__head">
+          <span class="tb-topic-group__title">Управленческие компетенции</span>
+          <span class="tb-topic-group__counter">2/4</span>
+        </div>
+        <div class="tb-topic-row">
+          <div>
+            <div class="tb-topic-row__name">Управляет потенциалом команды</div>
+            <span class="tb-level">начальный уровень</span>
+          </div>
+          <div class="tb-topic-row__text">
+            <p>Формирует эффективную команду с учетом целей подразделения и особенностей сотрудников;</p>
+            <p>Управляет исполнением задач;</p>
+            <p>Мотивирует и развивает подчиненных.</p>
+          </div>
+        </div>
+        <div class="tb-topic-row">
+          <div>
+            <div class="tb-topic-row__name">Принимает комплексные решения</div>
+            <span class="tb-level tb-level--pass">целевой уровень</span>
+          </div>
+          <div class="tb-topic-row__text">
+            <p>Применяет аналитический подход к любой ситуации;</p>
+            <p>Принимает обоснованные комплексные решения;</p>
+            <p>Устойчив к манипуляциям.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tb-topic-group">
+        <div class="tb-topic-group__head">
+          <span class="tb-topic-group__title">Знания</span>
+          <span class="tb-topic-group__counter">3/4</span>
+        </div>
+        <div class="tb-topic-row">
+          <div>
+            <div class="tb-topic-row__name">О компании</div>
+            <span class="tb-level">начальный уровень</span>
+          </div>
+          <div class="tb-topic-row__bars">
+            <div class="tb-bar">
+              <div class="tb-bar__name">Стратегия компании</div>
+              <div class="tb-bar__track"><span class="tb-bar__fill" style="width:40%"></span></div>
+              <div class="tb-bar__val">40 %</div>
+            </div>
+            <div class="tb-bar tb-bar--pass">
+              <div class="tb-bar__name">Продукты компании</div>
+              <div class="tb-bar__track"><span class="tb-bar__fill" style="width:63%"></span></div>
+              <div class="tb-bar__val">63 %</div>
+            </div>
+            <div class="tb-bar">
+              <div class="tb-bar__name">Корпоративная культура</div>
+              <div class="tb-bar__track"><span class="tb-bar__fill" style="width:54%"></span></div>
+              <div class="tb-bar__val">54 %</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ Как печатается сегодня ══════════ -->
+  <div id="wf-today" class="wf-state">
+    <p class="wf-sheet-cap">Сегодняшняя печать того же блока — для сравнения. Снято пробным рендером 2026-09-21.</p>
+    <div class="wf-sheet">
+      <section class="tb-report__card">
+        <div class="tb-report__topic-group">
+          <div class="tb-report__topic-group-head">
+            <div class="tb-report__topic-group-title">Знания</div>
+            <div class="tb-report__topic-group-counter">3 / 4</div>
+          </div>
+          <div class="tb-report__topics">
+            <div class="tb-report__topic is-fail" style="display:block">
+              <div class="tb-report__topic-name">О компании</div>
+              <div class="tb-report__topic-verdict" style="border:0;background:rgba(255,79,18,.14);color:#C23A0C">Не пройдено</div>
+              <div style="display:flex;justify-content:space-between;font-size:7px;color:#5A6472;margin:5px 0">
+                <span>9 из 16 (54%)</span><span>14.0/26.0</span>
+              </div>
+              <div style="height:3px;background:#E2E2E2;border-radius:2px;overflow:hidden;margin-bottom:6px">
+                <div style="height:100%;width:54%;background:#FF4F12"></div>
+              </div>
+              <div class="tb-report__breakdown" style="margin-top:10px">
+                <div class="tb-report__breakdown-row is-fail">
+                  <div class="tb-report__breakdown-name">Стратегия компании</div>
+                  <div class="tb-report__breakdown-bar"><span style="width:40%"></span></div>
+                  <div class="tb-report__breakdown-val">40 %</div>
+                  <div class="tb-report__breakdown-val">Нужно 58 %</div>
+                </div>
+                <div class="tb-report__breakdown-row is-pass">
+                  <div class="tb-report__breakdown-name">Продукты компании</div>
+                  <div class="tb-report__breakdown-bar"><span style="width:63%"></span></div>
+                  <div class="tb-report__breakdown-val">63 %</div>
+                  <div class="tb-report__breakdown-val">Нужно 58 %</div>
+                </div>
+                <div class="tb-report__breakdown-row is-fail">
+                  <div class="tb-report__breakdown-name">Корпоративная культура</div>
+                  <div class="tb-report__breakdown-bar"><span style="width:54%"></span></div>
+                  <div class="tb-report__breakdown-val">54 %</div>
+                  <div class="tb-report__breakdown-val">Нужно 58 %</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+
+  <!-- ══════════ Пояснения ══════════ -->
+  <div id="wf-docs" class="wf-state">
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — строка темы</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Поле / источник</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code></td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Холст</td><td>классы шаблона «Сертификация» и токены DS</td><td>Правила скопированы из <code>styles/report.css</code>; значения — из разбора референсного PDF</td></tr>
+            <tr><td>Две колонки строки темы</td><td>обёртки <code>-main</code> / <code>-aside</code></td><td>Слева имя и чип уровня, справа толкование (компетенция) либо полосы подтем (знаниевая тема)</td></tr>
+            <tr><td>Снято: «N из M (X %)», баллы</td><td><code>countsLabel</code>, <code>pointsFixedLabel</code></td><td>Референс их не содержит; в документе они не гейтятся надписями <code>topic.correct</code> / <code>topic.points</code></td></tr>
+            <tr><td>Снято: полоса исхода над строкой</td><td><code>tb-report__topic-stripe</code></td><td>Дублировала чип и дробила лист; строки разделяет волосяная линия, цвет исхода несёт чип</td></tr>
+            <tr><td>Чип уровня</td><td><code>topic.verdict.passed</code> / <code>failed</code> (PRD-49)</td><td>Белый, с рамкой и цветной точкой. Слова «целевой уровень» / «начальный уровень» задаёт автор надписями</td></tr>
+            <tr><td>Счётчик блока</td><td><code>group.counter</code>, формат <code>{passed}/{total}</code></td><td>Считает темы с вынесенным вердиктом (PRD-50 FR-26)</td></tr>
+            <tr><td>Полоса подтемы</td><td><code>barPercent</code>, <code>passClass</code></td><td>Не меняется: цвет по вердикту, дорожка светло-серая, значение печатается</td></tr>
+            <tr><td>Подпись «Нужно N %»</td><td><code>requiredLabel</code></td><td>Приходит в контекст вместе со значением, но макет её не печатает: порог производный от темы и повторялся бы под каждой подтемой</td></tr>
+            <tr><td>Толкование подтем</td><td>признак в <code>tests.breakdown_display_json</code></td><td>По умолчанию скрыто. Включённый показ разворачивает сетку в список: текст стоит под своей полосой, название не повторяется</td></tr>
+            <tr><td>Метрики колонок</td><td>колонка 76 px, полоса 5 px</td><td>Сняты с референса (PRD-51 §10.3); шаг сжат до 26 px — наш лист вдвое уже оригинального</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) { b.classList.toggle('active', b === btn); });
+  };
+</script>
+</body>
+</html>

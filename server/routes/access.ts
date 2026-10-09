@@ -70,21 +70,41 @@ router.get("/:token", async (req: Request, res: Response) => {
       return res.status(403).send(renderErrorPage("Срок действия ссылки истёк. Обратитесь к организатору теста."));
     }
 
+    // The link opens its OWN session rather than moving into whatever session the
+    // browser already holds. Writing the mark into the existing one silently
+    // demoted it: an author who clicked a link kept a single cookie that was now
+    // "this test only", under a session id minted before the link was presented.
+    // A fresh id also means a link handed to someone cannot fix their session id
+    // in advance. The old session is dropped from the store by `regenerate`, which
+    // is the honest outcome — it was going to be overwritten either way.
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate(err => err ? reject(err) : resolve())
+    );
+
     // The link is access to ONE test, not a login: the session is marked so the
     // scope guard can hold it inside that test. A password login clears the mark.
     req.session.userId = record.userId;
-    req.session.magic = { assignmentId: record.assignmentId, testId: record.testId };
+    req.session.magic = {
+      assignmentId: record.assignmentId,
+      testId: record.testId,
+      purpose: record.purpose === "review" ? "review" : "attempt",
+    };
     await new Promise<void>((resolve, reject) =>
       req.session.save(err => err ? reject(err) : resolve())
     );
 
     logger.info(
-      `Magic link login: userId=${record.userId} testId=${record.testId} ${describeCaller(req)}`,
+      `Magic link login: userId=${record.userId} testId=${record.testId} purpose=${record.purpose} ${describeCaller(req)}`,
       LOG_SOURCE,
     );
 
-    // Редиректим на тест
-    res.redirect(`/learner/test/${record.testId}`);
+    // PRD-52: назначение ссылки решает, куда человек попадает. Ссылка без поля —
+    // выданная до PRD-52 — ведёт на прохождение, как и раньше.
+    res.redirect(
+      record.purpose === "review"
+        ? `/review/tests/${record.testId}`
+        : `/learner/test/${record.testId}`,
+    );
   } catch (error) {
     logger.error("Magic link error: " + (error as Error).message, LOG_SOURCE);
     res.status(500).send(renderErrorPage("Произошла ошибка. Попробуйте ещё раз или обратитесь к организатору."));

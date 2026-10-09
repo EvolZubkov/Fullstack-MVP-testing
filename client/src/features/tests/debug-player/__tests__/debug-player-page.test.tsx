@@ -6,7 +6,8 @@
  * access/error/loading states, reset, and CSV export.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DebugSessionState } from "../use-debug-session";
 import type { ProtocolRow, TBInspectorApi } from "../inspector-snapshot";
 
@@ -23,6 +24,16 @@ vi.mock("../use-debug-session", () => ({
 vi.mock("wouter", () => ({ useParams: () => ({ testId: "t1" }) }));
 
 import DebugPlayerPage from "../debug-player-page";
+
+/**
+ * Страница держит панель комментариев (PRD-52), а та ходит в API через react-query,
+ * поэтому рендер идёт под собственным клиентом — без сети: запросы панели остаются
+ * висеть, а проверяемая разметка от них не зависит.
+ */
+function render(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 // ─── Compute mock ───────────────────────────────────────────────────────────────
 
@@ -200,6 +211,17 @@ describe("DebugPlayerPage — ready", () => {
     expect(screen.getByText("completion_status")).toBeInTheDocument(); // structured LMS table
   });
 
+  it("keeps the suspend_data budget on the LMS tab, not on the status bar", () => {
+    // Эскиз PRD-18 держит на статусной панели методологический минимум, а всё про обмен
+    // с LMS отправляет в LMS-журнал: «плумбинг, не зона методолога». Показатель PRD-36
+    // приехал позже плеера и однажды уже осел на панели.
+    const { container } = render(<DebugPlayerPage />);
+    expect(container.querySelector(".dbg__status")?.textContent ?? "").not.toContain("бюджета");
+    fireEvent.click(screen.getByRole("tab", { name: "LMS" }));
+    expect(screen.getByText(/Состояние прогона/)).toBeInTheDocument();
+    expect(screen.getByText(/% бюджета/)).toBeInTheDocument();
+  });
+
   it("filters the state table by path", () => {
     render(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Состояние" }));
@@ -275,5 +297,22 @@ describe("DebugPlayerPage — variant pins", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
     expect(within(screen.getByTestId("variant-pin-topic-vars")).getByRole("button")).toBeDisabled();
     expect(screen.getByText(/После старта прогона выбор зафиксирован/)).toBeInTheDocument();
+  });
+});
+
+describe("PRD-52: полная выдача в отладчике", () => {
+  it("тумблер выключен по умолчанию и уводит флаг в стейдж", () => {
+    render(<DebugPlayerPage />);
+    const toggle = screen.getByTestId("toggle-full-draw") as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    fireEvent.click(toggle);
+    expect(screen.getByTitle("Прогон отладки").getAttribute("src")).toContain("tbfa=1");
+  });
+});
+
+describe("PRD-52: комментарии в отладчике", () => {
+  it("вкладка «Комментарии» есть у автора", () => {
+    render(<DebugPlayerPage />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toContain("Комментарии");
   });
 });

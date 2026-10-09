@@ -66,6 +66,17 @@ describe("computeResultVariables port parity (PRD-2 §5.1; A7 core)", () => {
     ],
     [{ name: "won", type: "boolean", formula: "percent >= 75", controlsStatus: "success", sortOrder: 0 }],
     [{ name: "cat", type: "string", formula: 'IF(percent >= 90, "Expert", "Advanced")', sortOrder: 0 }],
+    // Several controllers of one status combine with OR, whatever order the true one comes in.
+    [
+      { name: "low", type: "boolean", formula: "percent >= 75", controlsStatus: "success", sortOrder: 0 },
+      { name: "high", type: "boolean", formula: "percent >= 90", controlsStatus: "success", sortOrder: 1 },
+    ],
+    [
+      { name: "high", type: "boolean", formula: "percent >= 90", controlsStatus: "success", sortOrder: 0 },
+      { name: "low", type: "boolean", formula: "percent >= 75", controlsStatus: "success", sortOrder: 1 },
+      { name: "no", type: "boolean", formula: "percent >= 95", controlsStatus: "completion", sortOrder: 2 },
+      { name: "no2", type: "boolean", formula: "percent >= 99", controlsStatus: "completion", sortOrder: 3 },
+    ],
   ];
   scenarios.forEach((vars, i) => {
     it(`scenario ${i + 1} — TS ≡ runtime port`, () => {

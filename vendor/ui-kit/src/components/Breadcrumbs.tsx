@@ -76,7 +76,7 @@ export const Breadcrumbs = forwardRef<HTMLElement, BreadcrumbsProps>(
                     aria-label={it.ariaLabel}
                   >
                     {it.icon && <span className="ou-crumbs__ico">{it.icon}</span>}
-                    {it.label}
+                    <span className="ou-crumbs__label">{it.label}</span>
                   </span>
                 ) : (
                   <a
@@ -86,7 +86,8 @@ export const Breadcrumbs = forwardRef<HTMLElement, BreadcrumbsProps>(
                     onClick={it.onClick}
                   >
                     {it.icon && <span className="ou-crumbs__ico">{it.icon}</span>}
-                    {it.label}
+                    {/* The crumb is inline-flex, which ignores text-overflow: the label is its own box. */}
+                    <span className="ou-crumbs__label">{it.label}</span>
                   </a>
                 )}
               </li>

@@ -40,6 +40,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTopicEvents: vi.fn(),
     // referential protection (PRD-15 FR-03..FR-05)
     getTestsUsingTopic: vi.fn(),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSectionsByTopic: vi.fn(),
     getMeasurementsForQuestions: vi.fn(),
     getTopicPageRefs: vi.fn(),
@@ -48,6 +51,9 @@ const { storageMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn(),
     getTest: vi.fn(),
     // publish gate (E-12)
+    // PRD-51: маршрут читает документ отчёта. Здесь он не предмет проверки —
+    // пустой список означает «документ по умолчанию шаблона».
+    listReportBlocks: vi.fn().mockResolvedValue([]),
     getTestSections: vi.fn(),
     patchTestStatus: vi.fn(),
     // snapshot build on publish (PRD-15 block B)

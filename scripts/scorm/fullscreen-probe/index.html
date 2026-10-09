@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Зонд: сценарий на весь экран</title>
+<style>
+  body { font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 24px; background: #f6f7f9; color: #16181d; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #5b6270; margin: 0 0 20px; }
+  section { background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eceff3; vertical-align: top; }
+  th { color: #5b6270; font-weight: 600; width: 34%; }
+  td.ok { color: #1d7a41; font-weight: 600; }
+  td.bad { color: #b3261e; font-weight: 600; }
+  td.warn { color: #9a6700; font-weight: 600; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #16181d; background: #fff; color: #16181d; cursor: pointer; }
+  button.primary { background: #6b2bd9; border-color: #6b2bd9; color: #fff; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .task { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+  .status { padding: 8px 12px; border-radius: 8px; background: #f6f7f9; margin-top: 12px; }
+  .status.paused { background: #fff6dd; }
+  .status.done { background: #e3f4ea; }
+  pre { background: #16181d; color: #e7eaee; padding: 12px; border-radius: 8px; overflow: auto; max-height: 320px; font-size: 12px; }
+  ol.log { margin: 0; padding-left: 20px; font: 12px/1.5 Consolas, monospace; max-height: 260px; overflow: auto; }
+</style>
+<script src="fs-probe.js"></script>
+</head>
+<body>
+<h1>Зонд: задание-сценарий на весь экран</h1>
+<p class="sub">Проверяет на стенде, как пакет может развернуть сценарий на весь экран и вернуться из него. Прохождением теста не является.</p>
+
+<section>
+  <h2>Экран вопроса</h2>
+  <p class="task" id="task"></p>
+  <div class="row">
+    <button type="button" class="primary" id="start">Начать выполнение</button>
+    <span class="sub" style="margin:0">Выбирает способ сам: на весь экран → отдельное окно → слой на область пакета</span>
+  </div>
+  <div class="row">
+    <button type="button" data-method="A">Способ А: на весь экран из пакета</button>
+    <button type="button" data-method="B">Способ Б: отдельное окно</button>
+    <button type="button" data-method="C">Способ В: слой на область пакета</button>
+  </div>
+  <div class="status" id="status">Задание не начато</div>
+</section>
+
+<section>
+  <h2>Итог по способам</h2>
+  <table id="verdicts"></table>
+</section>
+
+<section>
+  <h2>Среда</h2>
+  <table id="env"></table>
+</section>
+
+<section>
+  <h2>Журнал событий</h2>
+  <ol class="log" id="log"></ol>
+</section>
+
+<section>
+  <h2>Отчёт</h2>
+  <div class="row" style="margin-top:0">
+    <button type="button" id="copy">Скопировать отчёт</button>
+    <button type="button" id="toggle">Показать JSON</button>
+    <button type="button" id="finish">Завершить сеанс</button>
+    <span id="copied" class="sub" style="margin:0"></span>
+  </div>
+  <pre id="json" hidden></pre>
+</section>
+
+<div class="tbfs" id="stage" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var startedAt = Date.now();
+  var report = {
+    probe: "sim-scenario-fullscreen",
+    startedAt: new Date().toISOString(),
+    environment: {},
+    methods: {
+      A: { title: "На весь экран из пакета", tried: false, verdict: "не проверен", details: [] },
+      B: { title: "Отдельное окно", tried: false, verdict: "не проверен", details: [] },
+      C: { title: "Слой на область пакета", tried: false, verdict: "не проверен", details: [] },
+      auto: { title: "Кнопка «Начать выполнение»", tried: false, verdict: "не проверена", details: [] },
+    },
+    log: [],
+  };
+
+  function log(text) {
+    var line = "+" + ((Date.now() - startedAt) / 1000).toFixed(1) + " с  " + text;
+    report.log.push(line);
+    var li = document.createElement("li");
+    li.textContent = line;
+    document.getElementById("log").appendChild(li);
+    li.scrollIntoView({ block: "nearest" });
+    renderReport();
+  }
+
+  /* ── SCORM: поиск API по стандартному правилу и штатное завершение сессии ── */
+  function findApi(win) {
+    var tries = 0;
+    while (win && tries < 12) {
+      try { if (win.API_1484_11) return win.API_1484_11; } catch (e) { return null; }
+      if (win.parent && win.parent !== win) { win = win.parent; tries += 1; continue; }
+      break;
+    }
+    try { if (window.opener && window.opener.API_1484_11) return window.opener.API_1484_11; } catch (e2) { /* чужой открыватель */ }
+    return null;
+  }
+  var api = findApi(window);
+  var terminated = false;
+  report.environment.apiFound = !!api;
+  if (api) {
+    report.environment.initialize = String(api.Initialize(""));
+    report.environment.lastError = String(api.GetLastError());
+    report.environment.entry = String(api.GetValue("cmi.entry"));
+    api.SetValue("cmi.completion_status", "incomplete");
+    api.Commit("");
+  }
+  function terminate(reason) {
+    if (!api || terminated) return;
+    terminated = true;
+    api.Commit("");
+    api.Terminate("");
+    log("сеанс SCORM завершён: " + reason);
+  }
+
+  /* ── Среда: цепочка фреймов и их разрешения ── */
+  function frameChain() {
+    var chain = [];
+    var win = window;
+    var depth = 0;
+    while (win && win.parent && win.parent !== win && depth < 12) {
+      var item = { level: depth + 1 };
+      try {
+        var el = win.frameElement;
+        if (el) {
+          item.tag = el.tagName.toLowerCase();
+          item.allow = el.getAttribute("allow");
+          item.allowfullscreen = el.hasAttribute("allowfullscreen");
+          item.src = (el.getAttribute("src") || "").slice(0, 120);
+        } else {
+          item.note = "frameElement недоступен";
+        }
+      } catch (e) {
+        item.note = "родитель с другого домена: атрибуты не прочитать";
+      }
+      chain.push(item);
+      try { win = win.parent; win.location.href; } catch (e3) { chain.push({ level: depth + 2, note: "дальше — другой домен" }); break; }
+      depth += 1;
+    }
+    return chain;
+  }
+  function policyAllows() {
+    var p = document.permissionsPolicy || document.featurePolicy;
+    if (!p || typeof p.allowsFeature !== "function") return "не сообщается браузером";
+    return p.allowsFeature("fullscreen") ? "разрешён" : "запрещён";
+  }
+  var env = report.environment;
+  env.userAgent = navigator.userAgent;
+  env.inFrame = window.parent !== window;
+  env.frames = frameChain();
+  env.fullscreenEnabled = TBFS.fsEnabled(document);
+  env.permissionsPolicy = policyAllows();
+  env.sizes = TBFS.sizeInfo(window);
+
+  /* ── Прогресс сценария живёт в окне SCO: его читает и отдельное окно ── */
+  var store = { step: 0, misses: 0, done: false };
+  var stage = document.getElementById("stage");
+  var openMethod = null;
+  var closingByButton = false;
+  var popup = null;
+  var popupTimer = null;
+
+  document.getElementById("task").textContent = TBFS.TASK;
+
+  function setStatus(kind) {
+    var el = document.getElementById("status");
+    el.className = "status" + (kind === "paused" ? " paused" : kind === "done" ? " done" : "");
+    el.textContent = kind === "done"
+      ? "Задание выполнено. Промахов: " + store.misses
+      : kind === "paused"
+        ? "Выполнение прервано на шаге " + (store.step + 1) + " из " + TBFS.STEPS.length + ". Нажмите любую кнопку открытия, чтобы продолжить"
+        : "Задание не начато";
+  }
+
+  function verdict(m, text) { report.methods[m].verdict = text; renderReport(); }
+
+  /**
+   * Итог по попыткам, а не по последней: отказ без жеста пользователя (повтор из скрипта,
+   * задержка) не должен перечёркивать уже доказанную работоспособность способа.
+   */
+  function tally(m, ok, reason) {
+    var r = report.methods[m];
+    r.ok = (r.ok || 0) + (ok ? 1 : 0);
+    r.fail = (r.fail || 0) + (ok ? 0 : 1);
+    if (!ok) r.lastError = reason;
+    var total = r.ok + r.fail;
+    verdict(m, r.ok === 0
+      ? "не работает: " + r.lastError
+      : r.fail === 0 ? "работает" : "работает в " + r.ok + " из " + total + " попыток; отказ: " + r.lastError);
+  }
+  function detail(m, text) { report.methods[m].details.push(text); log("[" + m + "] " + text); }
+
+  /** Закрытие окна сценария любым путём сводится сюда: прогресс сохраняется. */
+  function closed(reason) {
+    if (openMethod) detail(openMethod, "возврат к вопросу: " + reason + ", шаг " + Math.min(store.step + 1, TBFS.STEPS.length) + ", промахов " + store.misses);
+    openMethod = null;
+    stage.hidden = true;
+    stage.innerHTML = "";
+    setStatus(store.done ? "done" : "paused");
+    if (store.done && api) {
+      api.SetValue("cmi.completion_status", "completed");
+      api.Commit("");
+    }
+  }
+
+  var stageUi = {
+    log: function (t) { log(t); },
+    collapse: function () { closeInline("кнопка «Свернуть»"); },
+    finish: function () { closeInline("кнопка «Вернуться к вопросу»"); },
+  };
+  function closeInline(reason) {
+    if (TBFS.fsElement(document)) { closingByButton = true; TBFS.exitFs(document); }
+    closed(reason);
+  }
+
+  /* ── Способ А: Fullscreen API на элементе внутри пакета ── */
+  function openA(m) {
+    report.methods[m].tried = true;
+    openMethod = "A";
+    stage.hidden = false;
+    TBFS.render(stage, store, stageUi);
+    if (!TBFS.fsEnabled(document)) {
+      detail("A", "document.fullscreenEnabled = false: полный экран запрещён политикой фрейма");
+      verdict("A", "не работает: LMS не разрешила полный экран фрейму пакета");
+      stage.hidden = true; openMethod = null;
+      return Promise.resolve(false);
+    }
+    return TBFS.requestFs(stage).then(function () {
+      var s = TBFS.sizeInfo(window);
+      detail("A", "полный экран включён, окно " + s.viewport + ", экран " + s.screen);
+      tally("A", true);
+      return true;
+    }, function (e) {
+      detail("A", "отказ: " + (e && (e.name + ": " + e.message)));
+      tally("A", false, e && e.name ? e.name + ": " + e.message : "отказ");
+      stage.hidden = true; openMethod = null;
+      return false;
+    });
+  }
+  TBFS.onFsChange(document, function () {
+    var on = !!TBFS.fsElement(document);
+    log("смена полного экрана: " + (on ? "включён" : "выключен"));
+    if (!on && openMethod === "A") {
+      if (closingByButton) { closingByButton = false; return; }
+      detail("A", "полный экран снят не нашей кнопкой (Esc или жест системы)");
+      closed("выход клавишей Esc или жестом системы");
+    }
+  });
+
+  /* ── Способ Б: отдельное окно браузера, в нём свой полный экран ── */
+  window.TBFSHost = {
+    store: store,
+    log: function (t) { detail("B", t); },
+    collapse: function () { popupDone("кнопка «Свернуть» в отдельном окне"); },
+    finish: function () { popupDone("кнопка «Вернуться к вопросу» в отдельном окне"); },
+    fsResult: function (ok, text) { detail("B", text); tallyPopupFs(ok, text); },
+  };
+  function tallyPopupFs(ok, text) {
+    var r = report.methods.B;
+    r.fsOk = (r.fsOk || 0) + (ok ? 1 : 0);
+    r.fsFail = (r.fsFail || 0) + (ok ? 0 : 1);
+    verdict("B", r.fsOk > 0
+      ? "работает: окно открыто, полный экран в окне включён" + (r.fsFail ? " (отказов: " + r.fsFail + ")" : "")
+      : "окно открывается, полный экран в окне отказал: " + text);
+  }
+  function popupDone(reason) {
+    clearInterval(popupTimer);
+    try { if (popup && !popup.closed) popup.close(); } catch (e) { /* уже закрыто */ }
+    popup = null;
+    closed(reason);
+    try { window.focus(); } catch (e2) { /* фокус не отдан */ }
+  }
+  function openB(m) {
+    report.methods[m].tried = true;
+    var w = screen.availWidth;
+    var h = screen.availHeight;
+    try {
+      popup = window.open("sim.html", "tbfs_sim", "popup=yes,left=0,top=0,width=" + w + ",height=" + h);
+    } catch (e) {
+      popup = null;
+      detail("B", "window.open бросил исключение: " + e.message);
+    }
+    if (!popup) {
+      detail("B", "окно не открылось: заблокировано браузером или LMS");
+      verdict("B", "не работает: всплывающее окно заблокировано");
+      return false;
+    }
+    openMethod = "B";
+    detail("B", "окно открыто, запрошенный размер " + w + " × " + h);
+    if (report.methods.B.verdict === "не проверен") verdict("B", "окно открывается; полный экран в окне ещё не проверен");
+    popupTimer = setInterval(function () {
+      if (popup && popup.closed) {
+        clearInterval(popupTimer);
+        popup = null;
+        detail("B", "окно закрыто пользователем");
+        closed("окно закрыто крестиком");
+      }
+    }, 500);
+    return true;
+  }
+
+  /* ── Способ В: слой на всю область пакета, без полного экрана ── */
+  function openC(m) {
+    report.methods[m].tried = true;
+    openMethod = "C";
+    stage.hidden = false;
+    TBFS.render(stage, store, stageUi);
+    var s = TBFS.sizeInfo(window);
+    detail("C", "слой открыт на " + s.viewport + " при экране " + s.screen + " (" + s.share + " площади экрана)");
+    verdict("C", "работает всегда; площадь — " + s.viewport + ", " + s.share + " экрана");
+    return true;
+  }
+
+  /* ── «Начать выполнение»: цепочка А → Б → В ── */
+  function openAuto() {
+    report.methods.auto.tried = true;
+    if (TBFS.fsEnabled(document)) {
+      // Решение принимается синхронно, пока жест пользователя ещё действует: после
+      // отказа запроса полного экрана окно могло бы уже не открыться.
+      report.methods.auto.details.push("выбран способ А");
+      openA("auto").then(function (ok) {
+        report.methods.auto.verdict = ok ? "открыто способом А" : "способ А отказал, открыт слой (В)";
+        if (!ok) openC("auto");
+        renderReport();
+      });
+      return;
+    }
+    report.methods.auto.details.push("полный экран запрещён фрейму, пробую отдельное окно");
+    if (openB("auto")) { report.methods.auto.verdict = "открыто способом Б"; renderReport(); return; }
+    report.methods.auto.details.push("окно заблокировано, открываю слой");
+    openC("auto");
+    report.methods.auto.verdict = "открыто способом В";
+    renderReport();
+  }
+
+  function busy() {
+    if (!openMethod) return false;
+    log("окно сценария уже открыто способом " + openMethod);
+    if (openMethod === "B" && popup) { try { popup.focus(); } catch (e) { /* нет фокуса */ } }
+    return true;
+  }
+  document.getElementById("start").onclick = function () { if (!busy()) openAuto(); };
+  var methodButtons = document.querySelectorAll("[data-method]");
+  for (var i = 0; i < methodButtons.length; i += 1) {
+    methodButtons[i].onclick = function () {
+      if (busy()) return;
+      var m = this.getAttribute("data-method");
+      if (m === "A") openA("A"); else if (m === "B") openB("B"); else openC("C");
+    };
+  }
+
+  window.addEventListener("resize", function () { if (openMethod) log("размер окна пакета: " + window.innerWidth + " × " + window.innerHeight); });
+  document.addEventListener("visibilitychange", function () { log("видимость страницы: " + document.visibilityState); });
+
+  /* ── Отчёт ── */
+  function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function cls(v) { return /^работает в|отказал/.test(v) ? "warn" : /^работает|^открыто/.test(v) ? "ok" : /^не работает/.test(v) ? "bad" : /не проверен|окно открывается/.test(v) ? "warn" : ""; }
+  function renderReport() {
+    var rows = "";
+    ["A", "B", "C", "auto"].forEach(function (k) {
+      var m = report.methods[k];
+      rows += "<tr><th>" + esc(m.title) + '</th><td class="' + cls(m.verdict) + '">' + esc(m.verdict) + "</td></tr>";
+    });
+    document.getElementById("verdicts").innerHTML = rows;
+    var e = report.environment;
+    var envRows = [
+      ["API SCORM 2004", e.apiFound ? "найден, Initialize = " + e.initialize + ", cmi.entry = " + e.entry : "не найден (пакет открыт вне LMS)"],
+      ["Пакет во фрейме", e.inFrame ? "да, уровней: " + e.frames.length : "нет, документ верхнего уровня"],
+      ["fullscreenEnabled", String(e.fullscreenEnabled)],
+      ["Политика разрешений fullscreen", e.permissionsPolicy],
+      ["Окно пакета", e.sizes.viewport],
+      ["Экран / доступно", e.sizes.screen + " / " + e.sizes.available],
+      ["Доля экрана у пакета", e.sizes.share],
+      ["Браузер", e.userAgent],
+    ];
+    e.frames.forEach(function (f) {
+      envRows.push(["Фрейм уровня " + f.level, f.note || (f.tag + ", allow=" + (f.allow === null ? "нет" : "«" + f.allow + "»") + ", allowfullscreen=" + f.allowfullscreen)]);
+    });
+    document.getElementById("env").innerHTML = envRows.map(function (r) { return "<tr><th>" + esc(r[0]) + "</th><td>" + esc(r[1]) + "</td></tr>"; }).join("");
+    document.getElementById("json").textContent = JSON.stringify(report, null, 2);
+  }
+
+  document.getElementById("toggle").onclick = function () {
+    var pre = document.getElementById("json");
+    pre.hidden = !pre.hidden;
+    this.textContent = pre.hidden ? "Показать JSON" : "Скрыть JSON";
+  };
+  document.getElementById("copy").onclick = function () {
+    var text = JSON.stringify(report, null, 2);
+    var done = function () { document.getElementById("copied").textContent = "Отчёт скопирован"; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { document.getElementById("copied").textContent = "Скопируйте вручную из JSON ниже"; }
+      document.body.removeChild(ta);
+      document.getElementById("json").hidden = false;
+    }
+  };
+  document.getElementById("finish").onclick = function () { terminate("кнопка «Завершить сеанс»"); };
+  window.addEventListener("pagehide", function () {
+    try { if (popup && !popup.closed) popup.close(); } catch (e) { /* уже закрыто */ }
+    terminate("страница выгружена");
+  });
+
+  renderReport();
+  log("зонд загружен; API " + (api ? "найден" : "не найден") + ", fullscreenEnabled = " + env.fullscreenEnabled);
+})();
+</script>
+</body>
+</html>

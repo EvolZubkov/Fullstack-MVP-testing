@@ -30,26 +30,26 @@
  * System rows expose «Сменить вариант» (FR-46 / PRD-1 §4.3.3) — disabled when
  * the active template declares a single variant of that kind. Structural
  * classes live in `client/src/styles/tb-components.css`; controls use
- * `@universityrt/ui-kit`.
+ * `@skillum/ui-kit`.
+ *
+ * Сохранённого теста раздел НЕ требует. У нового теста системные узлы приходят
+ * ПРЕДСКАЗАННЫМИ — их считает общий планировщик (`shared/content-pages/lifecycle`),
+ * тот же, которым сервер раскладывает строки в транзакции создания, — поэтому перед
+ * сохранением автор видит ровно ту структуру, которую получит. Разница только в
+ * идентификаторах: у предсказанных узлов они черновые, и сохранение сопоставляет их
+ * с настоящими по паре «вид + тема» (см. `useContentPages.commit`).
  */
 import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   ChevronRight,
-  Eye,
-  FileText,
+  EyeOff,
   GripVertical,
-  HelpCircle,
   Image as ImageIcon,
   Info,
-  Layout,
-  List,
-  Lock,
-  MoreHorizontal,
-  PieChart,
+  MoreVertical,
   Plus,
-  Route,
   Search,
   Upload,
   X,
@@ -60,7 +60,6 @@ import {
   Combobox,
   IconButton,
   Input,
-  Menu,
   MenuItem,
   MenuTrigger,
   ModalDialog,
@@ -71,7 +70,7 @@ import {
   Tag,
   Textarea,
   type RichTextMode,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import {
   DndContext,
   DragOverlay,
@@ -109,17 +108,27 @@ import {
 import { isPlaceholderType, isSettingType, inputModesFor } from "@shared/template/field-types";
 import { sanitizeHtml as sanitizeContentHtml, placeholderScope } from "@shared/security/html-sanitize";
 import type { TestEditorModel } from "../test-editor.types";
+import { PlaceholderControl, ImagePlaceholderControl } from "./placeholder-control";
 import { PagePreviewModal } from "./page-preview-modal";
 import { VariantPreviewPicker } from "./variant-preview-picker";
 import { SanitizeBanner } from "./sanitize-banner";
 import { ScaleAppearanceControl, type AppearanceScale } from "./scale-appearance-control";
 import { SCALE_APPEARANCE_KEY } from "@shared/template/scale-appearance";
+import {
+  SECTION_SUBTITLE_SETTING_KEY,
+  SECTION_SUBTITLE_SHOWN_SETTING_KEY,
+} from "@shared/template/page-sequences";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type StructureSectionProps = {
   model: TestEditorModel;
-  /** Test id is required to fetch content_pages; `undefined` in create mode. */
+  /**
+   * Тест, чьи страницы грузить самостоятельно; `undefined` в режиме создания.
+   * Раздел о режиме НЕ знает: у нового теста страницы приходят готовым черновиком в
+   * `content` — системные узлы там ПРЕДСКАЗАНЫ тем же планировщиком, которым сервер
+   * разложит их при создании.
+   */
   testId?: string;
   /**
    * Optional pre-hoisted content-pages hook. When provided, the section does
@@ -161,14 +170,25 @@ export type StructureSectionProps = {
    * — consistent with the «Оформление» template preview.
    */
   designDraft?: { templateId: string; params?: Record<string, unknown> };
+  /**
+   * «Сценарий в ИС»: строка задания теста «Сценарий» («Сценарий из банка «…» на весь экран»).
+   * Задана — поток рисуется одной зоной «Задание» вместо вопросов, без «Обзора теста»: у теста
+   * одно задание, и обозревать нечего (согласованный эскиз sim-scenario-test-editor.html).
+   */
+  taskLabel?: string;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
 export type StartPagesSectionProps = StructureSectionProps;
 
+/**
+ * Э5.5 (Ф-18): the SAME three words the «Сценарий» field offers. The banner used to call
+ * the first two «Последовательный», so an author who had picked «Линейный» arrived at the
+ * canvas and checked whether they were in the right place.
+ */
 const FLOW_LABEL: Record<TestEditorModel["flowMode"], string> = {
-  linear_flat: "Последовательный",
-  linear_by_topics: "Последовательный по темам",
+  linear_flat: "Линейный",
+  linear_by_topics: "Линейный по темам",
   router_by_topics: "Через страницу-маршрутизатор",
 };
 
@@ -238,11 +258,23 @@ function synthSystemNode(
   };
 }
 
+/**
+ * Заголовки СИСТЕМНЫХ страниц в полотне сценария. Бейдж рядом называет вид узла
+ * коротко («Старт»), а заголовок — саму страницу, поэтому повторять бейдж он не может.
+ */
+const SYSTEM_PAGE_TITLE: Record<string, string> = {
+  start: "Стартовая страница",
+  results: "Итоги теста",
+  "section-results": "Итоги раздела",
+  router: "Страница-маршрутизатор",
+};
+
 function pageTitle(page: ContentPage): string {
   const values = page.valuesJson?.values ?? {};
   return (
     (values.title as string | undefined) ||
     (values.heading as string | undefined) ||
+    SYSTEM_PAGE_TITLE[page.kind] ||
     KIND_LABEL[page.kind] ||
     "Страница"
   );
@@ -269,8 +301,8 @@ function UnmappedPagesBanner(props: { pages: ContentPage[]; onMap: (page: Conten
       stacked
       title={`Страниц требуют сопоставления: ${unmapped.length}`}
       description={
-        "Выбранный шаблон оформления не содержит вариантов, к которым привязаны эти страницы. " +
-        "До сопоставления они показываются вариантом по умолчанию — привязка сохранена." +
+        "Выбранный шаблон оформления не содержит макетов, к которым привязаны эти страницы. " +
+        "До сопоставления они показываются макетом по умолчанию — привязка сохранена." +
         (rest > 0 ? ` Показаны первые ${listed.length}, ещё ${rest} — по отметке в списке.` : "")
       }
       actions={listed.map((page) => ({
@@ -431,7 +463,7 @@ export function previewTemplateId(
   return hasOwnVariant ? draftTemplateId : "default";
 }
 
-export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft }: StructureSectionProps) {
+export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft, taskLabel }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
   const fallback = useContentPages(contentProp ? undefined : testId);
@@ -480,13 +512,12 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
           data-testid="structure-mode-change-banner"
         />
       )}
-      <FlowModeBar mode={model.flowMode} />
-
+      {/* Полосы «Режим: …» здесь нет: сценарий выбирают полем выше, на этом же экране,
+          и повторять выбранное значение под ним значит отодвигать полотно структуры
+          ради строки, которая ничего не говорит. О СМЕНЕ режима говорит баннер выше. */}
       <UnmappedPagesBanner pages={cp.pages} onMap={(page) => setReplaceCtx({ page })} />
 
-      {testId === undefined ? (
-        <CreateModeNotice />
-      ) : cp.isLoading ? (
+      {cp.isLoading ? (
         <LoadingNotice />
       ) : cp.error ? (
         <ErrorNotice message={cp.error.message} />
@@ -496,6 +527,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
           handlers={handlers}
           onGoToComposition={onGoToComposition}
           updateModel={updateModel}
+          taskLabel={taskLabel}
         />
       )}
 
@@ -565,30 +597,6 @@ export const StartPagesSection = StructureSection;
 
 // ─── Top banner ───────────────────────────────────────────────────────────────
 
-function FlowModeBar({ mode }: { mode: TestEditorModel["flowMode"] }) {
-  return (
-    <div className="flow-mode-bar" data-testid="structure-mode-banner">
-      <Layout size={14} aria-hidden="true" />
-      <span>Режим:</span>
-      <span className="flow-mode-label">{FLOW_LABEL[mode]}</span>
-      <span className="flow-mode-hint">
-        — задаётся во вкладке Настройки › Сценарий прохождения
-      </span>
-    </div>
-  );
-}
-
-function CreateModeNotice() {
-  return (
-    <Banner
-      tone="info"
-      title="Сначала сохраните черновик"
-      description="Структура страниц «до / после» привязана к существующему тесту. Сохраните черновик во вкладке «Настройки», после этого здесь появится возможность редактировать страницы."
-      data-testid="structure-create-notice"
-    />
-  );
-}
-
 function LoadingNotice() {
   return <Banner tone="info" title="Загружаем структуру…" data-testid="structure-loading" />;
 }
@@ -616,6 +624,12 @@ type ZoneHandlers = {
   onPreview: (page: ContentPage) => void;
   /** When true, the tab is rendered without authoring controls (PRD-7 G19). */
   readOnly: boolean;
+  /**
+   * Видимость карточки: показывается ли экран ученику и можно ли это менять
+   * (см. {@link RowVisibility}). Живёт в handlers, потому что строки лежат на трёх
+   * уровнях вложенности зон — тащить один и тот же проп через каждый было бы шумом.
+   */
+  visibilityFor?: (page: ContentPage) => RowVisibility;
 };
 
 function ZonesBlock(props: {
@@ -623,9 +637,46 @@ function ZonesBlock(props: {
   handlers: ZoneHandlers;
   onGoToComposition?: () => void;
   updateModel?: (updater: (model: TestEditorModel) => TestEditorModel) => void;
+  /** «Сценарий в ИС»: см. {@link StructureSectionProps.taskLabel}. */
+  taskLabel?: string;
 }) {
-  const { model, handlers, onGoToComposition, updateModel } = props;
-  const pages = handlers.cp.pages;
+  const { model, handlers: baseHandlers, onGoToComposition, updateModel, taskLabel } = props;
+  const pages = baseHandlers.cp.pages;
+
+  // Видимость «Итогов раздела»: пункт меню строки и переключатель «Показывать итоги
+  // раздела» («Обратная связь и итоги» → «Во время теста») правят ОДНУ настройку —
+  // у автора не должно быть двух выключателей одного экрана.
+  const sectionResultsVisibility: RowVisibility = {
+    kind: "toggle",
+    hidden: !model.runtime.showSectionResults,
+    onToggle:
+      updateModel && !baseHandlers.readOnly
+        ? () =>
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, showSectionResults: !m.runtime.showSectionResults },
+            }))
+        : undefined,
+  };
+
+  // Видимость ЛЮБОЙ карточки полотна (решение владельца 2026-09-20). Скрывать можно
+  // всё, кроме блока вопросов и маршрутизатора; «Итоги раздела» ходят через настройку
+  // теста (см. выше), остальные — через признак самой страницы.
+  const visibilityFor = (page: ContentPage): RowVisibility => {
+    const locked = NON_HIDEABLE_REASON[page.kind];
+    if (locked) return { kind: "locked", reason: locked };
+    if (page.kind === "section-results") return sectionResultsVisibility;
+    return {
+      kind: "toggle",
+      hidden: page.hidden === true,
+      onToggle: baseHandlers.readOnly
+        ? undefined
+        : () => {
+            void baseHandlers.cp.update(page.id, { hidden: !(page.hidden === true) });
+          },
+    };
+  };
+  const handlers: ZoneHandlers = { ...baseHandlers, visibilityFor };
   // Distinct id namespace so the shared DndContext routes topic drags to the
   // topic-level SortableContext and page drags stay on the existing path.
   const TOPIC_ID_PREFIX = "topic:";
@@ -660,13 +711,14 @@ function ZonesBlock(props: {
   //   - review: design is always bindable; its DISPLAY is gated by «возврат к
   //     неотвеченным» (reviewSlot below) and hidden for adaptive (FR-08a / FR-22).
   //   - section-results: OPTIONAL, gated by the `showSectionResults` setting
-  //     (FR-05a). When OFF the runtime goes straight to the next section, so the
-  //     row is hidden.
+  //     (FR-05a). When OFF the runtime goes straight to the next section — but the
+  //     row STAYS in the canvas, dimmed and marked «Скрыт от ученика» (решение
+  //     владельца 2026-09-20), and its menu toggles that very setting.
   const reviewPage =
     systemSingleton("review") ?? synthSystemNode("review", handlers.cp.contentTemplates);
-  const sectionResultsPage = model.runtime.showSectionResults
-    ? (systemSingleton("section-results") ?? synthSystemNode("section-results", handlers.cp.contentTemplates))
-    : null;
+  const sectionResultsPage =
+    systemSingleton("section-results") ??
+    synthSystemNode("section-results", handlers.cp.contentTemplates);
 
   // «После теста» order list = author after-pages + «Итоги теста» (results), by
   // sortOrder. Reordering/adding here renumbers this combined list so «Итоги
@@ -786,13 +838,14 @@ function ZonesBlock(props: {
     });
   };
 
-  if (model.sections.length === 0) {
+  // «Сценарий в ИС»: у теста «Сценарий» тем нет по определению — вместо них строка задания.
+  if (model.sections.length === 0 && taskLabel === undefined) {
     if (model.flowMode === "router_by_topics") {
       return (
         <Banner
           tone="info"
           title="В тесте нет тем"
-          description="Добавьте темы во вкладке «Состав», и они появятся здесь как ветки маршрутизатора."
+          description="Добавьте темы в подразделе «Состав», и они появятся здесь как ветки маршрутизатора."
           data-testid="structure-empty"
         >
           {onGoToComposition && (
@@ -812,7 +865,7 @@ function ZonesBlock(props: {
       <Banner
         tone="info"
         title="Тем пока нет"
-        description="Добавьте темы во вкладке «Состав» — здесь они появятся в порядке прохождения."
+        description="Добавьте темы в подразделе «Состав» — здесь они появятся в порядке прохождения."
         data-testid="structure-empty"
       />
     );
@@ -834,6 +887,7 @@ function ZonesBlock(props: {
       : model.runtime.allowReturnToUnanswered
         ? "enabled"
         : "disabled";
+
 
   return (
     <DndContext
@@ -863,7 +917,14 @@ function ZonesBlock(props: {
         />
       </Zone>
 
-      {model.flowMode === "linear_flat" ? (
+      {taskLabel !== undefined ? (
+        <Zone title="Задание" testId="structure-zone-task">
+          <div className="page-row page-row--system page-row--questions" data-testid="structure-task-row" data-kind="questions">
+            <span className="page-variant-badge">Задание</span>
+            <span className="page-title">{taskLabel}</span>
+          </div>
+        </Zone>
+      ) : model.flowMode === "linear_flat" ? (
         <Zone title="Внутри теста" testId="structure-zone-questions">
           <QuestionsRow
             page={systemSingleton("questions")}
@@ -876,39 +937,23 @@ function ZonesBlock(props: {
         </Zone>
       ) : (
         <SortableContext items={topicSortableIds} strategy={verticalListSortingStrategy}>
-          {model.flowMode === "router_by_topics" ? (
-            <InsideTestZone
-              router={router}
-              handlers={handlers}
-              sections={model.sections}
-              infoIn={infoIn}
-              questionsForTopic={questionsForTopic}
-              introForTopic={introForTopic}
-              reviewPage={reviewPage}
-              sectionResultsPage={sectionResultsPage}
-              reviewSlot={reviewSlot}
-              dragEnabled={Boolean(updateModel) && !handlers.readOnly}
-              dimGrip={handlers.readOnly}
-            />
-          ) : (
-            model.sections.map((section, idx) => (
-              <TopicBlock
-                key={section.topicId}
-                index={idx + 1}
-                section={section}
-                intro={introForTopic(section.topicId)}
-                reviewPage={reviewPage}
-                sectionResultsPage={sectionResultsPage}
-                before={infoIn("before_topic", section.topicId)}
-                after={infoIn("after_topic", section.topicId)}
-                questions={questionsForTopic(section.topicId)}
-                reviewSlot={reviewSlot}
-                handlers={handlers}
-                dragEnabled={Boolean(updateModel) && !handlers.readOnly}
-                dimGrip={handlers.readOnly}
-              />
-            ))
-          )}
+          {/* Зона «Внутри теста» — у ОБОИХ потемных сценариев (эскиз 2581-2721). Раньше её
+              получал только маршрутизаторный: у линейного темы шли прямо за зоной «До
+              теста», и полотно не говорило, где начинается сам тест. Маршрутизатора у
+              линейного нет — строка не рисуется, ветки остаются те же. */}
+          <InsideTestZone
+            router={model.flowMode === "router_by_topics" ? router : null}
+            handlers={handlers}
+            sections={model.sections}
+            infoIn={infoIn}
+            questionsForTopic={questionsForTopic}
+            introForTopic={introForTopic}
+            reviewPage={reviewPage}
+            sectionResultsPage={sectionResultsPage}
+            reviewSlot={reviewSlot}
+            dragEnabled={Boolean(updateModel) && !handlers.readOnly}
+            dimGrip={handlers.readOnly}
+          />
         </SortableContext>
       )}
 
@@ -946,10 +991,8 @@ function flatCountLabel(model: TestEditorModel): string {
 function Zone(props: { title: string; testId: string; children: React.ReactNode }) {
   return (
     <section className="zone-block" data-testid={props.testId}>
-      <div className="zone-header">
-        <ChevronRight size={14} aria-hidden="true" />
-        {props.title}
-      </div>
+      {/* Только надпись: шеврон обещал бы свёртку зоны, которой нет. */}
+      <div className="zone-header">{props.title}</div>
       <div className="topic-body">{props.children}</div>
     </section>
   );
@@ -964,7 +1007,7 @@ function TopicBlock(props: {
    *  after the questions/after-zone. `null` only if the singleton is missing. */
   reviewPage: ContentPage | null;
   /** PRD-19: test-level «Итоги раздела» (kind: section-results) design binding,
-   *  shown last. `null` when `showSectionResults` is OFF (node hidden). */
+   *  shown last. Строка стоит в полотне всегда; выключенная — гаснет с пометкой. */
   sectionResultsPage: ContentPage | null;
   before: ContentPage[];
   after: ContentPage[];
@@ -1023,7 +1066,6 @@ function TopicBlock(props: {
           <SystemPageRow
             page={props.intro}
             title="Введение раздела"
-            icon="content"
             handlers={props.handlers}
             testId={`structure-system-intro-${section.topicId}`}
           />
@@ -1058,13 +1100,13 @@ function TopicBlock(props: {
           handlers={props.handlers}
           testId={`structure-review-slot-${section.topicId}`}
         />
-        {/* PRD-19 FR-05a: section-level «Итоги раздела» (section-results node) —
-            shown only when `showSectionResults` is ON; design via template. */}
+        {/* PRD-19 FR-05a: section-level «Итоги раздела» (section-results node) — строка
+            стоит всегда, а выключенный экран гаснет с пометкой «Скрыт от ученика» и
+            возвращается из её же меню; оформление — через шаблон. */}
         {props.sectionResultsPage && (
           <SystemPageRow
             page={props.sectionResultsPage}
             title="Итоги раздела"
-            icon="section-results"
             handlers={props.handlers}
             testId={`structure-system-section-results-${section.topicId}`}
           />
@@ -1098,8 +1140,9 @@ function ReviewNodeRow(props: {
 }) {
   if (props.state === null) return null;
   const noun = props.scope === "section" ? "раздела" : "теста";
-  const finishLabel = props.scope === "section" ? "«Завершить раздел»" : "«Завершить тест»";
-  const title = `Обзор ${noun} — навигация по вопросам и ${finishLabel}`;
+  // Заголовок строки называет узел, а не пересказывает его устройство: что на экране
+  // обзора есть навигация и кнопка завершения, видно в самом экране.
+  const title = `Обзор ${noun}`;
   if (props.state === "enabled") {
     // Template-backed system node: variant badge + «Сменить вариант» + «Предпросмотр».
     if (props.page) {
@@ -1107,7 +1150,6 @@ function ReviewNodeRow(props: {
         <SystemPageRow
           page={props.page}
           title={title}
-          icon="review"
           handlers={props.handlers}
           testId={props.testId}
         />
@@ -1120,7 +1162,6 @@ function ReviewNodeRow(props: {
         data-testid={props.testId}
         data-kind="review-slot"
       >
-        <List className="page-icon" size={14} aria-hidden="true" />
         <span className="page-variant-badge">Обзор</span>
         <span className="page-title">{title}</span>
       </div>
@@ -1134,7 +1175,6 @@ function ReviewNodeRow(props: {
         data-kind="review-slot"
         data-disabled="true"
       >
-        <Lock className="page-icon" size={14} aria-hidden="true" />
         <span className="page-variant-badge">Обзор</span>
         <span className="page-title">Обзор {noun} — недоступен</span>
       </div>
@@ -1142,7 +1182,8 @@ function ReviewNodeRow(props: {
         <Info size={13} aria-hidden="true" />
         <span>
           Экран обзора доступен только при включённом возврате к неотвеченным. Включите
-          «Возврат к неотвеченным» в разделе «Настройки › Правила прохождения».
+          «Разрешить возврат к неотвеченным вопросам» во вкладке «Правила прохождения»,
+          подраздел «Навигация».
         </span>
       </div>
     </>
@@ -1167,7 +1208,7 @@ function InsideTestZone(props: {
   introForTopic: (topicId: string) => ContentPage | null;
   /** PRD-19: test-level «Обзор раздела» design binding (singleton). */
   reviewPage: ContentPage | null;
-  /** PRD-19: test-level «Итоги раздела» design binding (null when hidden). */
+  /** PRD-19: test-level «Итоги раздела» design binding. */
   sectionResultsPage: ContentPage | null;
   /** PRD-19 FR-08a: «Обзор раздела» slot state (`null` = hidden, e.g. adaptive). */
   reviewSlot: "enabled" | "disabled" | null;
@@ -1178,17 +1219,15 @@ function InsideTestZone(props: {
   const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, reviewPage, sectionResultsPage, reviewSlot, dragEnabled, dimGrip } = props;
   return (
     <section className="inside-test" data-testid="structure-inside-test">
-      <div className="inside-test__label">
-        <ChevronRight size={14} aria-hidden="true" />
-        Внутри теста
-      </div>
+      {/* Только надпись: шеврон обещал бы свёртку зоны, которой нет (та же правка, что
+          у заголовков зон «До теста» / «После теста»). */}
+      <div className="inside-test__label">Внутри теста</div>
       <div className="inside-test__body">
         {router && (
           <SystemPageRow
             page={router}
             title={pageTitle(router)}
             handlers={handlers}
-            icon="router"
             testId="structure-system-router"
           />
         )}
@@ -1236,7 +1275,6 @@ function QuestionsRow(props: {
         data-testid={props.testId}
         data-kind="questions"
       >
-        <HelpCircle className="page-icon" size={14} aria-hidden="true" />
         <span className="page-variant-badge">Вопросы</span>
         <span className="page-title">{props.countLabel}</span>
       </div>
@@ -1247,7 +1285,6 @@ function QuestionsRow(props: {
       page={props.page}
       title={props.countLabel}
       handlers={props.handlers}
-      icon="questions"
       testId={props.testId}
     />
   );
@@ -1255,18 +1292,46 @@ function QuestionsRow(props: {
 
 // ─── System page row (read-only + variant switch) ───────────────────────────────
 
+/**
+ * Видимость карточки полотна (решение владельца 2026-09-20): выдачей экрана управляют
+ * ПРЯМО в полотне, как «скрыть слайд», а скрытая карточка не исчезает, а гаснет с
+ * пометкой. Исчезнувшая строка не говорила автору ни что экран в тесте есть, ни где
+ * его включают.
+ *   - `toggle` — автор решает сам; `onToggle` пишет в ТУ ЖЕ настройку теста, которой
+ *     этот экран управлялся и раньше, поэтому второй правды не заводится. Без
+ *     `onToggle` (просмотр, read-only) пометка видна, а действия нет;
+ *   - `locked` — экран скрыть нельзя, и меню называет причину. Погашенный пункт лучше
+ *     отсутствующего: пропавший автор искал бы снова.
+ */
+type RowVisibility =
+  | { kind: "toggle"; hidden: boolean; onToggle?: () => void }
+  | { kind: "locked"; reason: string };
+
+/**
+ * Что скрыть нельзя (решение владельца 2026-09-20): блок вопросов — это сам тест, а
+ * маршрутизатор — способ навигации по нему, и без хаба сценарий перестаёт быть
+ * маршрутизаторным. Всё остальное, включая «Старт» и «Итоги теста», автор скрывает
+ * сам. Тот же запрет проверяет сервер: сломанный тест не должен собираться никаким
+ * клиентом.
+ */
+const NON_HIDEABLE_REASON: Partial<Record<string, string>> = {
+  questions: "Вопросы — суть теста, их скрыть нельзя",
+  router: "На маршрутизаторе ученик выбирает раздел",
+};
+
 function SystemPageRow(props: {
   page: ContentPage;
   title: string;
   handlers: ZoneHandlers;
-  icon?: "questions" | "router" | "content" | "review" | "section-results";
   testId: string;
+  /** Не задана — вид берётся из {@link NON_HIDEABLE_REASON} по виду страницы. */
+  visibility?: RowVisibility;
 }) {
   const { page, handlers } = props;
   const { cp, expandedId, setExpandedId, readOnly } = handlers;
   const variants = cp.contentTemplates.filter((v) => v.kind === page.kind);
   const variant = variants.find((v) => v.key === page.templateKey);
-  const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
+  const badge = KIND_LABEL[page.kind] ?? page.kind;
   const canSwitch = variants.length > 1 && !readOnly;
   // PRD-7 G21: when the active template declares NO variant of this system
   // kind, the planner falls back to the built-in `default` template. Surface
@@ -1286,24 +1351,19 @@ function SystemPageRow(props: {
     (variant?.placeholders.length ?? 0) + (variant?.settings?.length ?? 0) > 0;
   const expanded = isExpandable && expandedId === page.id;
   // PRD-7 G25 heuristic: an intro/summary page is "template-driven" until
-  // the author has saved at least one non-empty placeholder value. Rendered
-  // as `.page-row--template` with a small «шаблон» marker per wireframe
-  // `s-main` linear-by-topics (lines 560-563, 649-652). The classification
-  // is purely cosmetic — saving values flips it back to plain `--system`.
+  // the author has saved at least one non-empty placeholder value. The only trace
+  // left is the muted `.page-row--template` colour: purely cosmetic — saving values
+  // flips it back to plain `--system`.
   const isFromTemplate =
     (page.kind === "intro" || page.kind === "summary") &&
     Object.values(values).every((v) => v === null || v === undefined || v === "");
-
-  const Icon =
-    props.icon === "router"
-      ? Route
-      : props.icon === "questions"
-        ? HelpCircle
-        : props.icon === "review"
-          ? List
-          : props.icon === "section-results"
-            ? PieChart
-            : FileText;
+  const visibility: RowVisibility | undefined =
+    props.visibility ??
+    handlers.visibilityFor?.(page) ??
+    (NON_HIDEABLE_REASON[page.kind]
+      ? { kind: "locked", reason: NON_HIDEABLE_REASON[page.kind] as string }
+      : undefined);
+  const isHidden = visibility?.kind === "toggle" && visibility.hidden;
 
   return (
     <>
@@ -1313,10 +1373,12 @@ function SystemPageRow(props: {
         (isFromTemplate ? "page-row--template" : "page-row--system") +
         (page.kind === "questions" ? " page-row--questions" : "") +
         (hasErr ? " page-row--error" : "") +
+        (isHidden ? " page-row--hidden" : "") +
         (expanded ? " is-expanded" : "")
       }
       data-testid={props.testId}
       data-kind={page.kind}
+      data-hidden={isHidden ? "true" : undefined}
       data-from-template={isFromTemplate ? "true" : undefined}
     >
       {isExpandable && (
@@ -1331,59 +1393,72 @@ function SystemPageRow(props: {
           <ChevronRight size={14} aria-hidden="true" />
         </button>
       )}
-      <Icon className="page-icon" size={14} aria-hidden="true" />
-      <span className="page-variant-badge">{badge}</span>
-      <span className="page-title">
-        {props.title}
-        {isFromTemplate && (
-          <span
-            className="tpl-page-marker"
-            data-testid={`${props.testId}-template-marker`}
-          >
-            шаблон
-          </span>
-        )}
-      </span>
-      <div className="page-actions">
-        {/* Предпросмотр — прямой кнопкой перед меню: смотреть страницу приходится
-            чаще, чем менять её вариант, и прятать это за меню незачем. */}
-        <button
-          type="button"
-          className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
-          aria-label={`Предпросмотр системной страницы «${badge}»`}
-          onClick={() => handlers.onPreview(page)}
-          data-testid={`${props.testId}-preview-inline`}
+      {/* Единственная пиктограмма в заголовке строки — статус выдачи: скрытый экран
+          виден сразу, без чтения подписей (решение владельца 2026-09-20). Вид узла
+          по-прежнему называет бейдж, а «страница ещё вся из шаблона» пиктограммы не
+          получает: это не состояние, с которым автор что-то делает. */}
+      {isHidden && (
+        <span
+          className="page-hidden-ico"
+          role="img"
+          aria-label="Скрыт от ученика"
+          title="Скрыт от ученика"
+          data-testid={`${props.testId}-hidden-ico`}
         >
-          <Eye size={12} aria-hidden="true" />
-        </button>
+          <EyeOff size={14} aria-hidden="true" />
+        </span>
+      )}
+      <span className="page-variant-badge">{badge}</span>
+      <span className="page-title">{props.title}</span>
+      <div className="page-actions">
+        {/* Кнопки-глазка в строке нет (решение владельца 2026-09-20): рядом со знаком
+            «скрыт» второй глаз читался как часть того же сообщения. Предпросмотр —
+            команда меню. */}
         <MenuTrigger
+          size="sm"
           placement="bottom-end"
           trigger={
             <button
               type="button"
               className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
-              aria-label={`Действия для системной страницы «${badge}»`}
+              aria-label="Действия для страницы"
               data-testid={`${props.testId}-actions`}
             >
-              <MoreHorizontal size={12} aria-hidden="true" />
+              <MoreVertical size={13} aria-hidden="true" />
             </button>
           }
         >
-          <Menu size="sm">
+          <MenuItem
+            disabled={!canSwitch}
+            onClick={canSwitch ? () => handlers.onReplaceVariant(page) : undefined}
+            data-testid={`${props.testId}-replace`}
+          >
+            Сменить макет
+          </MenuItem>
+          <MenuItem
+            onClick={() => handlers.onPreview(page)}
+            data-testid={`${props.testId}-preview`}
+          >
+            Предпросмотр
+          </MenuItem>
+          {/* Решение о ВЫДАЧЕ экрана, а не о его оформлении, поэтому последним
+              пунктом. Погашенный пункт у неснимаемого экрана объясняет причину. */}
+          {visibility && (
             <MenuItem
-              disabled={!canSwitch}
-              onClick={canSwitch ? () => handlers.onReplaceVariant(page) : undefined}
-              data-testid={`${props.testId}-replace`}
+              disabled={visibility.kind === "locked" || !visibility.onToggle}
+              onClick={
+                visibility.kind === "toggle" && visibility.onToggle
+                  ? visibility.onToggle
+                  : undefined
+              }
+              // Пояснений в меню нет (решение владельца 2026-09-20): команда называет
+              // себя сама, а у неснимаемого экрана пункт просто погашен. Причина
+              // запрета описана в руководстве автора, а не строкой под пунктом.
+              data-testid={`${props.testId}-visibility`}
             >
-              Сменить вариант
+              {visibility.kind === "toggle" && visibility.hidden ? "Показать" : "Скрыть"}
             </MenuItem>
-            <MenuItem
-              onClick={() => handlers.onPreview(page)}
-              data-testid={`${props.testId}-preview`}
-            >
-              Предпросмотр
-            </MenuItem>
-          </Menu>
+          )}
         </MenuTrigger>
       </div>
       {(canSwitch || usingFallback || hasErr || page.templateKeyMissing) && (
@@ -1408,10 +1483,17 @@ function SystemPageRow(props: {
               Из стандартного шаблона
             </Tag>
           )}
+          {/* Название выбранного МАКЕТА: бейдж слева называет вид узла (эскиз), а какой
+              именно макет выбран, автору всё равно надо видеть, не раскрывая строку. */}
+          {variant?.label && (
+            <Tag size="s" data-testid={`${props.testId}-variant-label`}>
+              {variant.label}
+            </Tag>
+          )}
           {canSwitch && (
             <Tag tone="info" size="s" data-testid={`${props.testId}-variant-hint`}>
               <Info size={12} aria-hidden="true" />
-              Доступно вариантов: {variants.length}
+              Доступно макетов: {variants.length}
             </Tag>
           )}
         </div>
@@ -1518,6 +1600,8 @@ function AfterTestZone(props: {
             ) : (
               <SortablePageItem page={item} handlers={handlers} />
             )}
+            {/* Вставка есть и после «Итогов теста»: страницы за ними ученик получает после
+                экрана итогов — в вебе и в пакете (eb8031e7). */}
             {!handlers.readOnly && (
               <InsertRow onClick={() => addAt(idx + 1)} testId={`structure-insert-after-test-${idx + 1}`} />
             )}
@@ -1558,6 +1642,7 @@ function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) 
         readOnly={handlers.readOnly}
         onReplaceVariant={handlers.onReplaceVariant}
         onPreview={handlers.onPreview}
+        visibilityFor={handlers.visibilityFor}
       />
     </div>
   );
@@ -1614,6 +1699,8 @@ function AuthorPageRow(props: {
   onReplaceVariant: (page: ContentPage) => void;
   /** PRD-7 G17 / FR-44: opens PagePreviewModal for this page. */
   onPreview: (page: ContentPage) => void;
+  /** Видимость строки (см. {@link RowVisibility}); не задана — скрывать нельзя. */
+  visibilityFor?: (page: ContentPage) => RowVisibility;
 }) {
   const { page, cp } = props;
   const [confirming, setConfirming] = useState(false);
@@ -1641,6 +1728,10 @@ function AuthorPageRow(props: {
 
   const title = pageTitle(page);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
+  // Авторскую страницу автор и раньше мог убрать — но только УДАЛИВ вместе с текстом.
+  // Скрытие обратимо: страница остаётся в полотне и в тесте, ученику не выдаётся.
+  const visibility = props.visibilityFor?.(page);
+  const isHidden = visibility?.kind === "toggle" && visibility.hidden;
 
   return (
     <>
@@ -1648,11 +1739,13 @@ function AuthorPageRow(props: {
         className={
           "page-row" +
           (hasErr ? " page-row--error" : hasWarn ? " page-row--warn" : "") +
+          (isHidden ? " page-row--hidden" : "") +
           (props.expanded ? " is-expanded" : "") +
           (props.isDragging ? " dragging" : "") +
           (props.readOnly ? " page-row--readonly" : "")
         }
         data-testid={`structure-page-row-${page.id}`}
+        data-hidden={isHidden ? "true" : undefined}
       >
         <span
           className="drag-handle"
@@ -1672,25 +1765,26 @@ function AuthorPageRow(props: {
         >
           <ChevronRight size={14} aria-hidden="true" />
         </button>
+        {isHidden && (
+          <span
+            className="page-hidden-ico"
+            role="img"
+            aria-label="Скрыт от ученика"
+            title="Скрыт от ученика"
+            data-testid={`structure-page-hidden-ico-${page.id}`}
+          >
+            <EyeOff size={14} aria-hidden="true" />
+          </span>
+        )}
         <span className="page-variant-badge">{badge}</span>
         <span className="page-title">{title}</span>
         <div className="page-actions">
-          {/* Предпросмотр — прямой кнопкой перед меню. Показывается и в
-              опубликованном тесте: смотреть страницу можно всегда, это ничего не
-              меняет, а меню действий там скрыто целиком. */}
-          {!confirming && (
-            <button
-              type="button"
-              className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
-              aria-label={`Предпросмотр страницы ${title}`}
-              onClick={() => props.onPreview(page)}
-              data-testid={`structure-page-preview-inline-${page.id}`}
-            >
-              <Eye size={12} aria-hidden="true" />
-            </button>
-          )}
+          {/* Кнопки-глазка в строке нет (решение владельца 2026-09-20): у скрытой
+              карточки рядом стояли два глаза — знак «скрыт» и команда «посмотреть», —
+              и строка читалась двусмысленно. Предпросмотр живёт командой меню. */}
           {props.readOnly ? null : !confirming ? (
             <MenuTrigger
+              size="sm"
               placement="bottom-end"
               trigger={
                 <button
@@ -1699,33 +1793,44 @@ function AuthorPageRow(props: {
                   aria-label={`Действия для страницы ${title}`}
                   data-testid={`structure-page-actions-${page.id}`}
                 >
-                  <MoreHorizontal size={12} aria-hidden="true" />
+                  <MoreVertical size={13} aria-hidden="true" />
                 </button>
               }
             >
-              <Menu size="sm">
-                {canReplaceVariant && (
-                  <MenuItem
-                    onClick={() => props.onReplaceVariant(page)}
-                    data-testid={`structure-page-replace-${page.id}`}
-                  >
-                    Сменить вариант…
-                  </MenuItem>
-                )}
+              {canReplaceVariant && (
                 <MenuItem
-                  onClick={() => props.onPreview(page)}
-                  data-testid={`structure-page-preview-${page.id}`}
+                  onClick={() => props.onReplaceVariant(page)}
+                  data-testid={`structure-page-replace-${page.id}`}
                 >
-                  Предпросмотр
+                  Сменить макет…
                 </MenuItem>
+              )}
+              <MenuItem
+                onClick={() => props.onPreview(page)}
+                data-testid={`structure-page-preview-${page.id}`}
+              >
+                Предпросмотр
+              </MenuItem>
+              {visibility && (
                 <MenuItem
-                  danger
-                  onClick={() => setConfirming(true)}
-                  data-testid={`structure-page-delete-${page.id}`}
+                  disabled={visibility.kind === "locked" || !visibility.onToggle}
+                  onClick={
+                    visibility.kind === "toggle" && visibility.onToggle
+                      ? visibility.onToggle
+                      : undefined
+                  }
+                  data-testid={`structure-page-visibility-${page.id}`}
                 >
-                  Удалить
+                  {visibility.kind === "toggle" && visibility.hidden ? "Показать" : "Скрыть"}
                 </MenuItem>
-              </Menu>
+              )}
+              <MenuItem
+                danger
+                onClick={() => setConfirming(true)}
+                data-testid={`structure-page-delete-${page.id}`}
+              >
+                Удалить
+              </MenuItem>
             </MenuTrigger>
           ) : (
             <>
@@ -1774,7 +1879,7 @@ function AuthorPageRow(props: {
             {showVariantHint && (
               <Tag tone="info" size="s" data-testid={`structure-page-${page.id}-variant-hint`}>
                 <Info size={12} aria-hidden="true" />
-                Доступно вариантов: {variantsForKind.length}
+                Доступно макетов: {variantsForKind.length}
               </Tag>
             )}
           </div>
@@ -1855,7 +1960,7 @@ function PageEditForm(props: {
         <Banner
           tone="warning"
           size="sm"
-          description="Вариант страницы недоступен в текущем шаблоне. Выберите другой шаблон оформления или пересоздайте страницу."
+          description="Макет страницы недоступен в текущем шаблоне. Выберите другой шаблон оформления или пересоздайте страницу."
           data-testid={`structure-page-edit-no-variant-${page.id}`}
         />
       )}
@@ -1926,79 +2031,6 @@ function PageEditForm(props: {
   );
 }
 
-// ─── Placeholder control (ui-kit) ────────────────────────────────────────────────
-
-function PlaceholderControl(props: {
-  placeholder: ContentTemplatePlaceholder;
-  value: unknown;
-  style?: { fontSize?: number };
-  onChange: (value: unknown) => void;
-  onStyleChange: (style: { fontSize?: number }) => void;
-  testId: string;
-}) {
-  const { placeholder: ph, value, onChange, testId } = props;
-  const label = ph.label + (ph.required ? " *" : "");
-
-  // PRD-22 FR-10: content types come from the closed registry and every one of
-  // them is handled here. The former `default` branch silently turned an unknown
-  // type into a single-line input; now an unknown type is a template error caught
-  // at upload, and a page that still carries one shows a diagnostic instead.
-  if (!isPlaceholderType(ph.type)) {
-    return (
-      <div className="ou-formfield" data-testid={testId}>
-        <span className="ou-formfield__lbl">{ph.label}</span>
-        <Banner
-          tone="warning"
-          size="sm"
-          description={`Тип поля «${ph.type}» не поддерживается. Сохранённое значение не изменяется и остаётся в тесте.`}
-          data-testid={`${testId}-unknown-type`}
-        />
-      </div>
-    );
-  }
-
-  switch (ph.type) {
-    case "textarea":
-    case "richText":
-    case "html":
-      // PRD-22 FR-32/33: the declared type is the CEILING of what the author may
-      // enter; within it they pick the mode. Formatted mode shows the result, not
-      // the markup, and pasted fragments are normalised on arrival (FR-34), so a
-      // save error can only come from HTML the author typed themselves.
-      //
-      // Normalisation includes confining a pasted `<style>` to this field's own
-      // region — the SAME scope the server applies on save and on package build,
-      // so the author sees the final CSS immediately instead of discovering in the
-      // package that their `body { … }` rule restyled the player.
-      return (
-        <RichTextEditor
-          label={label}
-          value={(value as string) || ""}
-          onChange={(next) => onChange(next)}
-          modes={inputModesFor(ph.type) as RichTextMode[]}
-          sanitize={(html) => sanitizeContentHtml(html, { scope: placeholderScope(ph.key) })}
-          rows={ph.type === "html" ? 6 : 5}
-          fullWidth
-          data-testid={testId}
-        />
-      );
-    case "image":
-      return <ImagePlaceholderControl label={label} value={value} onChange={onChange} testId={testId} />;
-    case "resultField":
-    case "text":
-      return (
-        <Input
-          label={label}
-          size="m"
-          fullWidth
-          value={typeof value === "string" ? value : value == null ? "" : String(value)}
-          maxLength={ph.maxLength}
-          onChange={(e) => onChange(e.target.value)}
-          data-testid={testId}
-        />
-      );
-  }
-}
 
 /**
  * Which declared properties this page actually shows, given what the others hold.
@@ -2018,8 +2050,18 @@ function PlaceholderControl(props: {
 const CHART_KINDS_WITH_LOOK = new Set(["rose", "auto"]);
 
 export function showsSetting(settings: Record<string, unknown>) {
-  return (st: ContentTemplateSetting): boolean =>
-    st.key !== SCALE_APPEARANCE_KEY || CHART_KINDS_WITH_LOOK.has(String(settings.scalesChartKind));
+  return (st: ContentTemplateSetting): boolean => {
+    // The rose's per-scale look only means anything on a chart that reads it.
+    if (st.key === SCALE_APPEARANCE_KEY) {
+      return CHART_KINDS_WITH_LOOK.has(String(settings.scalesChartKind));
+    }
+    // PRD-22 FR-44: a live wording field under an off switch invites «I typed it, why is
+    // it not showing» — so it hides together with the line it words.
+    if (st.key === SECTION_SUBTITLE_SETTING_KEY) {
+      return settings[SECTION_SUBTITLE_SHOWN_SETTING_KEY] !== false;
+    }
+    return true;
+  };
 }
 
 /**
@@ -2086,7 +2128,12 @@ export function SettingControl(props: {
           // description an author whose test has two sees a switch that does nothing
           // and no reason why. The report card already shows it; the structure did not.
           description={st.description}
-          checked={Boolean(value)}
+          // PRD-22 FR-45: an UNSET value means «the author never opened this property», so
+          // what has to be shown is the manifest's declared default, not the off state. The
+          // `text` branch already shows its default as a placeholder; here the two drifted,
+          // and a page created before a property was declared showed an off switch while
+          // the property was in force.
+          checked={value === undefined || value === null ? st.default === true : Boolean(value)}
           onChange={(e) => onChange(e.target.checked)}
           data-testid={testId}
         />
@@ -2111,6 +2158,10 @@ export function SettingControl(props: {
           label={label}
           size="m"
           fullWidth
+          // Подсказка объявления: у текстовой настройки она так же обязательна, как у
+          // тумблера и выбора рядом, — «пусто» у поля заголовка значит не «ничего», а
+          // «печатается умолчание», и без строки об этом автор этого не узнает.
+          hint={st.description}
           value={typeof value === "string" ? value : value == null ? "" : String(value)}
           placeholder={typeof st.default === "string" ? st.default : undefined}
           onChange={(e) => onChange(e.target.value)}
@@ -2214,145 +2265,6 @@ function SequenceSettingControl(props: {
   );
 }
 
-/** Best-effort human file name from an uploaded media URL (`/uploads/media/...`). */
-function imageNameFromUrl(url: string): string {
-  try {
-    const clean = url.split("?")[0].split("#")[0];
-    const seg = clean.substring(clean.lastIndexOf("/") + 1);
-    return decodeURIComponent(seg) || "изображение";
-  } catch {
-    return "изображение";
-  }
-}
-
-/**
- * Upload control for `image`-typed page placeholders (PRD-1 content pages). Mirrors
- * the «Оформление» {@link MediaParamRow} (hidden file input behind a DS Button +
- * a filename chip with remove), but stores a PLAIN URL string — the unified
- * renderer emits `String(value)` for image placeholders
- * ({@link module:shared/template/render-screen}), so the design-section media
- * ENVELOPE (`{ url, name, ... }`) would render as `[object Object]`. Upload goes
- * through `POST /api/media/upload` (multer disk storage), the same endpoint the
- * design tab uses.
- */
-function ImagePlaceholderControl(props: {
-  label: string;
-  value: unknown;
-  onChange: (value: unknown) => void;
-  testId: string;
-}) {
-  const { value, onChange, testId } = props;
-  const fieldId = useId();
-  // Image placeholders store a PLAIN URL string. Be tolerant of a legacy media
-  // envelope `{ url, name }` (e.g. copied from «Оформление» params, imported, or
-  // hand-edited): surface its `.url` so the field isn't shown as empty, and heal
-  // it on mount so the stray object never survives to render as `[object Object]`.
-  const url =
-    typeof value === "string"
-      ? value
-      : value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string"
-        ? (value as { url: string }).url
-        : "";
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploadedName, setUploadedName] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const maxSizeKb = 512;
-
-  useEffect(() => {
-    // Normalise a non-string value once, on mount (no-op for the common string case).
-    if (typeof value !== "string") onChange(url);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function handleFile(file: File) {
-    setError(null);
-    if (file.size > maxSizeKb * 1024) {
-      setError(`Файл превышает ${maxSizeKb} КБ.`);
-      return;
-    }
-    const form = new FormData();
-    form.append("file", file);
-    setUploading(true);
-    try {
-      const res = await fetch("/api/media/upload", {
-        method: "POST",
-        credentials: "include",
-        body: form,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = (await res.json()) as { url: string; originalName?: string };
-      setUploadedName(body.originalName ?? null);
-      onChange(body.url);
-    } catch (err) {
-      setError((err as Error)?.message ?? "Не удалось загрузить изображение");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  return (
-    <div className="ou-formfield" data-testid={testId}>
-      <label className="ou-formfield__lbl" htmlFor={fieldId}>
-        {props.label}
-      </label>
-      <div className="design-media-row">
-        {/* PRD-22: a thumbnail of what is actually loaded. The file name alone
-            told the author nothing — least of all for a background image. */}
-        <span
-          className="image-field__preview"
-          style={url ? { backgroundImage: `url("${url.replace(/"/g, "%22")}")` } : undefined}
-          role={url ? "img" : undefined}
-          aria-label={url ? "Предпросмотр изображения" : undefined}
-          aria-hidden={url ? undefined : true}
-          data-testid={`${testId}-preview`}
-        />
-        <Button
-          id={fieldId}
-          variant="secondary"
-          size="s"
-          leadingIcon={<Upload width={12} height={12} aria-hidden="true" />}
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          loading={uploading}
-          data-testid={`${testId}-upload`}
-        >
-          {uploading ? "Загрузка…" : url ? "Заменить изображение" : "Загрузить изображение"}
-        </Button>
-        {url && (
-          <span className="design-media-chip" data-testid={`${testId}-chip`}>
-            <ImageIcon className="design-media-chip__ico" width={14} height={14} aria-hidden="true" />
-            <span className="design-media-chip__name">{uploadedName || imageNameFromUrl(url)}</span>
-            <IconButton
-              icon={<X width={12} height={12} aria-hidden="true" />}
-              aria-label="Удалить изображение"
-              variant="ghost"
-              size="s"
-              onClick={() => onChange("")}
-              data-testid={`${testId}-remove`}
-            />
-          </span>
-        )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/svg+xml,image/webp"
-          style={{ display: "none" }}
-          aria-hidden="true"
-          tabIndex={-1}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
-            e.target.value = "";
-          }}
-          data-testid={`${testId}-file`}
-        />
-      </div>
-      <div className="ou-formfield__desc">PNG, JPEG, SVG или WebP; до {maxSizeKb} КБ.</div>
-      {error && <Banner tone="error" size="sm" description={error} data-testid={`${testId}-error`} />}
-    </div>
-  );
-}
 
 // ─── Add page modal (variant picker) ─────────────────────────────────────────────
 
@@ -2441,7 +2353,7 @@ function AddPageModal(props: {
       }}
       size="xl"
       title="Добавить страницу"
-      description={ctx ? `Выберите вариант для зоны «${ctx.zoneLabel}».` : undefined}
+      description={ctx ? `Выберите макет для зоны «${ctx.zoneLabel}».` : undefined}
       footer={
         <>
           <Button
@@ -2481,8 +2393,8 @@ function AddPageModal(props: {
           <input
             type="search"
             className="variant-search__input"
-            placeholder="Поиск по названию варианта…"
-            aria-label="Поиск вариантов"
+            placeholder="Поиск по названию макета…"
+            aria-label="Поиск макетов"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             data-testid="structure-add-search"
@@ -2649,7 +2561,7 @@ function ReplaceVariantModal(props: {
         props.onClose();
       }}
       size="xl"
-      title="Сменить вариант страницы"
+      title="Сменить макет страницы"
       description={page ? `Системная страница «${KIND_LABEL[page.kind] ?? page.kind}».` : undefined}
       footer={
         <>
@@ -2690,8 +2602,8 @@ function ReplaceVariantModal(props: {
           <input
             type="search"
             className="variant-search__input"
-            placeholder="Поиск по названию варианта…"
-            aria-label="Поиск вариантов"
+            placeholder="Поиск по названию макета…"
+            aria-label="Поиск макетов"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             data-testid="structure-replace-search"
@@ -2745,8 +2657,8 @@ function ReplaceVariantModal(props: {
             </ul>
             <p className="diff-block__meta">
               {isNoFields
-                ? "У нового варианта нет редактируемых полей — содержимое страницы будет полностью задано шаблоном."
-                : "У нового варианта таких полей нет."}
+                ? "У нового макета нет редактируемых полей — содержимое страницы будет полностью задано шаблоном."
+                : "У нового макета таких полей нет."}
             </p>
           </div>
         </div>

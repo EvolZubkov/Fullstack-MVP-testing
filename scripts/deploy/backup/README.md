@@ -12,7 +12,7 @@ nothing calls them, and they are NOT maintained.
 | `build-test.bat` | `deploy-test.bat` |
 | `deploy-test.bat` | `deploy-test.bat` (same name, now a wrapper over `deploy.bat`) |
 | `deploy-test.sh` | `deploy.sh` (one server script; the test instance differs only in DB init) |
-| `prepare-deploy.bat` | nothing — legacy staging pipeline (`docker/build/`), dead since the image-based deploy |
+| `prepare-deploy.bat` | nothing — legacy staging pipeline, dead since the image-based deploy; its staging directory `docker/build/` was deleted on 2026-09-21 |
 | `upload-deploy.bat` | nothing — legacy companion of `prepare-deploy.bat` |
 
 Why they went away:

@@ -19,7 +19,7 @@ import {
   Tag,
   Text,
   type TableColumn,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import type { RecentResultItem } from "@shared/home/contract";
 
 /**
@@ -41,12 +41,15 @@ export function RecentResultsSection({ items }: { items: RecentResultItem[] }) {
     {
       key: "percent",
       header: "Результат",
+      // Числа и теги — по центру вместе с заголовком (правило 2026-10-03).
+      align: "center",
       numeric: true,
       render: (row) => `${row.percent} %`,
     },
     {
       key: "passed",
       header: "",
+      align: "center",
       render: (row) =>
         row.passed === null ? null : (
           <Tag tone={row.passed ? "success" : "error"}>{row.passed ? "Зачёт" : "Незачёт"}</Tag>

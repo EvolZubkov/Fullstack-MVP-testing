@@ -8,7 +8,7 @@
  * branch (design draft persisted through the unified footer save), the status-tag
  * error/dirty derivations, the changes-popover structural line + close button,
  * the close-confirm «Продолжить редактирование», the composition-error anchor and
- * the «Структура» tab panel.
+ * панель вкладки «Состав и сценарий».
  *
  * Harness copied from {@link test-editor.coverage.test}.
  */
@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as React from "react";
 import { TestEditor, TestEditorView } from "../test-editor";
 import { useTestEditor } from "../use-test-editor";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function makeClient() {
 }
 
 function withClient(client: QueryClient, ui: React.JSX.Element) {
-  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+  return <QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>;
 }
 
 // ─── fetch mocking ────────────────────────────────────────────────────────────
@@ -255,7 +256,7 @@ describe("<TestEditor /> — conflict resolution", () => {
 // ─── saveAll: design draft persisted through the unified footer ───────────────
 
 describe("<TestEditor /> — unified save persists a dirty design draft", () => {
-  it("footer «Сохранить» commits the design draft (design.isDirty branch)", async () => {
+  it("footer «Применить» commits the design draft (design.isDirty branch)", async () => {
     const onClose = vi.fn();
     let designPut = false;
     fetchMock.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
@@ -283,20 +284,78 @@ describe("<TestEditor /> — unified save persists a dirty design draft", () => 
     fireEvent.click(screen.getByTestId("test-editor-save"));
 
     await waitFor(() => expect(designPut).toBe(true));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // Применение не закрывает ящик — выход остался отдельным действием.
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+// ─── «Применить» в режиме создания ────────────────────────────────────────────
+//
+// Применение — не выход: тест создаётся, а ящик остаётся открытым и переключается на
+// созданный. Переключает владелец состояния, поэтому ящик сообщает ему идентификатор
+// (`onCreated`) вместо того, чтобы закрыться.
+
+describe("<TestEditor /> — «Применить» на новом тесте", () => {
+  it("создаёт тест, не закрывает ящик и отдаёт идентификатор наверх", async () => {
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    const created = buildApiResponse({ id: "te-new", title: "Свежий", version: 1 });
+    fetchMock.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+      const method = (init?.method ?? "GET").toUpperCase();
+      const path = url.split("?")[0];
+      if (path === "/api/topics") return res([{ id: "topic-1", name: "Основы ИБ" }]);
+      if (path === "/api/questions") return res([]);
+      if (path === "/api/tests" && method === "POST") return res(created, 201);
+      if (path === "/api/tests/te-new" && method === "GET") return res(created);
+      if (path === "/api/tests/te-new/design") return res({ templateId: "default" });
+      if (path.startsWith("/api/templates/")) {
+        return res({
+          id: "default", name: "Default", version: "1", templateApiVersion: "1",
+          isBuiltin: true, isActive: true, previewPath: null,
+          manifest: { id: "default", name: "Default", version: "1", templateApiVersion: "1", params: [], contentTemplates: [] },
+        });
+      }
+      if (path === "/api/tests/te-new/content-pages") return res([]);
+      return res(method === "GET" ? [] : {});
+    });
+
+    render(
+      withClient(
+        makeClient(),
+        <TestEditor createMode={{ folderId: null }} open onClose={onClose} onCreated={onCreated} />,
+      ),
+    );
+
+    // Название и одна тема — минимум, без которого сохранение заперто.
+    const title = await screen.findByTestId("settings-title-input");
+    fireEvent.change(title, { target: { value: "Свежий" } });
+    fireEvent.click(screen.getByRole("tab", { name: /Состав и сценарий/i }));
+    fireEvent.click(await screen.findByTestId("composition-add-topic"));
+    fireEvent.click(await screen.findByTestId("topic-picker-item-topic-1"));
+
+    await waitFor(() => expect(screen.getByTestId("test-editor-save")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("test-editor-save"));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("te-new"));
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 
 // ─── Status-tag derivations ───────────────────────────────────────────────────
 
 describe("<TestEditor /> — header status tag", () => {
-  it("shows «Есть ошибки» when the model has blocking validation errors", async () => {
+  it("при ошибке тег шапки НЕ подменяет статус публикации", async () => {
+    // Об ошибке говорят точки на вкладках и сводный баннер — три места на проблему,
+    // и тег шапки в их число не входит (контракт «Индикация проблем»). Подменяя
+    // статус, тег отнимал единственное место, где виден статус публикации.
     nextResponse(buildApiResponse({ title: "" }));
     render(withClient(makeClient(), <TestEditor testId="test-1" open onClose={() => {}} />));
-    await screen.findByText("Основы ИБ");
+    await screen.findByTestId("settings-pane-main");
     await waitFor(() =>
-      expect(screen.getByTestId("test-editor-status-tag")).toHaveTextContent("Есть ошибки"),
+      expect(screen.getByTestId("test-editor-error-summary")).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("test-editor-status-tag")).not.toHaveTextContent("Есть ошибки");
   });
 
   it("shows «Изменено» when the draft is dirty but valid", async () => {
@@ -422,30 +481,33 @@ describe("<TestEditor /> — close-confirm cancel", () => {
   });
 });
 
-// ─── Composition-error anchor + «Структура» tab ──────────────────────────────
+// ─── Адрес ошибки состава + полотно сценария ─────────────────────────────────
 
-describe("<TestEditor /> — error anchor to composition + structure tab", () => {
+describe("<TestEditor /> — адрес ошибки состава и полотно сценария", () => {
   it("anchors a sections error to the «Состав» tab (tabForField composition branch)", async () => {
-    // No topics → a blocking `sections` error whose anchor lives in Состав.
+    // Нет тем → блокирующая ошибка `sections`, её адрес — «Состав и сценарий».
     nextResponse(buildApiResponse({ sections: [] }));
     render(withClient(makeClient(), <TestEditor testId="test-1" open onClose={() => {}} />));
 
     await screen.findByTestId("test-editor-error-summary");
     fireEvent.click(screen.getByRole("button", { name: /Перейти к ошибкам/i }));
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Состав/i, selected: true })).toBeInTheDocument(),
+      expect(screen.getByRole("tab", { name: /Состав и сценарий/i, selected: true })).toBeInTheDocument(),
     );
   });
 
-  it("renders the «Структура» tab panel", async () => {
+  it("рисует полотно сценария на вкладке «Состав и сценарий»", async () => {
     installRouter();
     render(withClient(makeClient(), <TestEditor testId="test-1" open onClose={() => {}} />));
     await screen.findByText("Sample Test");
 
-    fireEvent.click(screen.getByRole("tab", { name: /Структура/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Состав и сценарий/i }));
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Структура/i, selected: true })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("tab", { name: /Состав и сценарий/i, selected: true }),
+      ).toBeInTheDocument(),
     );
+    fireEvent.click(screen.getByTestId("composition-rail-scenario"));
     expect(screen.getByTestId("test-editor-body")).toBeInTheDocument();
   });
 });

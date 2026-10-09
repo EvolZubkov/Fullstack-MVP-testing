@@ -51,10 +51,18 @@ export const MEASUREMENT_WIDTHS = [14, 16, 12, 16, 10, 8];
 // text and a grammar packed into one cell (as «Диапазоны» does for a scale) would
 // be unreadable and unfixable by hand.
 //
-// The outcome's FEEDBACK (attachments, links) deliberately stays out: the book is
-// a format for text, and the package (`.tbtest`) carries the rest.
-export const OUTCOME_HEADERS = ["Показатель", "Код", "Метка", "Текст", "Тональность"];
-export const OUTCOME_WIDTHS = [18, 14, 28, 60, 16];
+// The outcome's feedback ATTACHMENTS (links, events, assets) deliberately stay out:
+// the book is a format for text, and the package (`.tbtest`) carries the rest.
+//
+// «Рекомендации» добавлены PRD-53 §6: у профиля по группе шкал обратная связь это ВТОРОЙ
+// крупный текст методики — «как мне повысить человекоцентричность», — и лист без неё
+// переносил половину. Колонка везёт только `feedback.text`; формат, ссылки и вложения
+// остаются вне книги и при загрузке сохраняются (см. {@link mergeOutcomes}).
+//
+// Отдельного листа «Профили» не понадобилось: колонка «Код» — свободный текст, поэтому
+// коды-наборы (`cel+pro`) и запасные по размеру набора (`count:2`) лист везёт как есть.
+export const OUTCOME_HEADERS = ["Показатель", "Код", "Метка", "Текст", "Тональность", "Рекомендации"];
+export const OUTCOME_WIDTHS = [18, 14, 28, 60, 16, 60];
 
 // ─── «Варианты теста» column of the «Вопросы» sheet ──────────────────────────
 //
@@ -420,7 +428,9 @@ export function parseScaleRow(
       // cell silently kept the old levels once merging arrived.
       configJson: config,
       learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
-      scormTarget: String(row["SCORM"] ?? "").trim() || "none",
+      // Пустая ячейка — «книга не задаёт»: значение решает импорт — у существующей шкалы
+      // оно прежнее, у новой — общее умолчание (PRD-54, решение 13).
+      scormTarget: String(row["SCORM"] ?? "").trim() || undefined,
     },
   };
 }
@@ -677,8 +687,12 @@ export const STRUCTURE_HEADERS = [
   // «Структура» is the sheet with exactly one row per topic — on the levels sheet it would
   // have to be repeated in every row, with nothing to say which copy wins.
   "Обратная связь при непройденном уровне",
+  // PRD-50 FR-11: членство раздела в блоке итогов, по НАЗВАНИЮ блока. Список самих блоков
+  // и их порядок задаёт параметр «Блоки итогов» листа «Настройки»: там одна строка на тест,
+  // здесь — одна строка на раздел, и каждая говорит своё.
+  "Блок итогов",
 ];
-export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34, 60];
+export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34, 60, 26];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
@@ -722,6 +736,8 @@ export {
   parseFeedbackSheets,
   type FeedbackPayload,
   type FeedbackSource,
+  type InterpretationPayload,
+  type InterpretationSource,
   type FeedbackSectionSource,
   type FeedbackLevelSource,
   type ParsedLevelRecommendations,
@@ -907,6 +923,16 @@ export interface ParsedSection {
    * editor's job — the book can only replace it.
    */
   failureFeedback: string | null;
+  /**
+   * PRD-50 FR-11: НАЗВАНИЕ блока итогов, которому принадлежит раздел; `""` — вне блоков.
+   *
+   * Название, а не ключ: ключ блока внутренний, автору он не виден нигде, и книга
+   * адресует блок так же, как всё остальное, — так, как это подписано на экране.
+   * «Ячейка пуста» и «колонки нет вовсе» здесь неразличимы намеренно: их разводит
+   * оркестратор по заголовкам листа, потому что решение у них разное — «вне блоков»
+   * против «книга о блоках молчит».
+   */
+  groupLabel: string;
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -997,11 +1023,17 @@ export function parseStructureRow(
   const failureRaw = String(row["Обратная связь при непройденном уровне"] ?? "");
   const failureFeedback = failureRaw.trim() === "" ? null : failureRaw;
 
+  // PRD-50 FR-11: блок итогов назван так, как его видит автор. Пустая ячейка — «вне
+  // блоков»; отличать её от отсутствующей колонки приходится ВЫШЕ, по заголовкам листа:
+  // раздел переписывается целиком, и не сказанное здесь было бы стёрто.
+  const groupLabel = String(row["Блок итогов"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+
   return {
     ok: true,
     value: {
       topicName, topicCode, sortOrder, drawCount, passRule, required, questionOrder,
       drawAll, timeLimitMinutes, defaultPoints, unlockMode, unlockDependsOn, failureFeedback,
+      groupLabel,
     },
   };
 }
@@ -1029,6 +1061,8 @@ export function serializeStructureRow(s: {
   unlockDependsOn?: string[];
   /** PRD-48 FR-16: the topic's adaptive «failed a level» text; null/absent = none. */
   failureFeedback?: string | null;
+  /** PRD-50 FR-11: название блока итогов; пусто/absent = раздел вне блоков. */
+  groupLabel?: string | null;
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -1058,6 +1092,7 @@ export function serializeStructureRow(s: {
       UNLOCK_MODE_TO[s.unlockMode ?? "always_available"] ?? UNLOCK_MODE_TO.always_available,
     "Зависит от разделов": (s.unlockDependsOn ?? []).join("; "),
     "Обратная связь при непройденном уровне": s.failureFeedback ?? "",
+    "Блок итогов": s.groupLabel ?? "",
   };
 }
 
@@ -1251,6 +1286,8 @@ export interface ParsedOutcomeRow {
   label?: string;
   text?: string;
   tone?: string;
+  /** PRD-53: `feedback.text` исхода. Present only when the sheet HAS the column. */
+  feedbackText?: string;
 }
 
 /**
@@ -1281,6 +1318,7 @@ export function parseOutcomeRow(
     }
     parsed.tone = tone;
   }
+  if (headers.has("Рекомендации")) parsed.feedbackText = String(row["Рекомендации"] ?? "").trim();
   return { ok: true, value: parsed };
 }
 
@@ -1301,6 +1339,7 @@ export function serializeOutcomeRows(v: {
     "Метка": String(o.label ?? ""),
     "Текст": String(o.text ?? ""),
     "Тональность": String(o.tone ?? ""),
+    "Рекомендации": String((o.feedback as { text?: unknown } | undefined)?.text ?? ""),
   }));
 }
 
@@ -1337,6 +1376,17 @@ export function mergeOutcomes(
     if (row.tone !== undefined) {
       if (row.tone === "") delete merged.tone;
       else merged.tone = row.tone;
+    }
+    // PRD-53: колонка задаёт ТОЛЬКО текст обратной связи. Формат, ссылки и вложения книга
+    // выразить не может, поэтому переносятся с сохранённого исхода: опустошённая ячейка стирает
+    // текст и не должна забирать с собой прикреплённый курс. Если после стирания в обратной
+    // связи не осталось ничего — поле убирается целиком, чтобы не плодить пустых объектов.
+    if (row.feedbackText !== undefined) {
+      const feedback = { ...((kept.feedback as Record<string, unknown> | undefined) ?? {}) };
+      if (row.feedbackText === "") delete feedback.text;
+      else feedback.text = row.feedbackText;
+      if (Object.keys(feedback).length === 0) delete merged.feedback;
+      else merged.feedback = feedback;
     }
     return merged;
   });

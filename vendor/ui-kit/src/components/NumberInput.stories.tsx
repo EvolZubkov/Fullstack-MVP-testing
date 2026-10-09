@@ -40,3 +40,24 @@ export const Pill: Story = { args: { pill: true, value: 1, max: 99 } };
 export const AtMin: Story = { args: { value: 0 } };
 export const Invalid: Story = { args: { value: 120, error: 'Не больше 100%' } };
 
+
+/**
+ * Пустое поле как самостоятельное значение: «вклада нет» — не то же, что «вклад 0».
+ * Очистка сообщает `null`, шаг от пустого начинает с нижней границы.
+ */
+export const Empty: Story = {
+  render: (args) => {
+    const [v, setV] = useState<number | null>(null);
+    return (
+      <NumberInput
+        {...args}
+        allowEmpty
+        label="Вклад в шкалу"
+        hint="Пусто — вопрос в шкалу не вносит вклад"
+        suffix={undefined}
+        value={v}
+        onChange={(n) => { setV(n); args.onChange?.(n); }}
+      />
+    );
+  },
+};

@@ -153,8 +153,109 @@ describe("вход отчёта пакета несёт источники бл�
     expect(topic.recommendedAssets).toEqual(SECTION_ASSETS);
   });
 
-  it("обратная связь теста и признак порога уходят вместе с входом", () => {
-    expect(inputs().meta()).toEqual({ feedback: TEST_FEEDBACK, hasPassThreshold: true });
+  it("признак порога уходит вместе с входом, обратной связи теста в нём больше нет", () => {
+    // PRD-61 §10: `pdfReportMeta` перестал читать обратную связь ТЕСТА — её сняли целиком.
+    expect(inputs().meta()).toEqual({ hasPassThreshold: true });
+  });
+});
+
+/**
+ * ТОЛКОВАНИЯ в отчёте ПАКЕТА (PRD-51 §5.2).
+ *
+ * Экран итогов дописывает их в строку темы читателем `vrWithInterpretations`
+ * (`viewResults.js`), и отчёт обязан звать ТОТ ЖЕ читатель: собранный своим набором полей,
+ * он молча печатал компетенцию с пустой правой колонкой — при заполненном толковании в
+ * базе. Проверяется на настоящем читателе рантайма, а не на двойнике: подмена читателя
+ * здесь означала бы проверку той самой копии правила, которой быть не должно.
+ */
+describe("вход отчёта пакета несёт толкования", () => {
+  const VIEW_SRC = fs.readFileSync(
+    path.resolve(process.cwd(), "server/scorm/template/app/render/viewResults.js"),
+    "utf8",
+  );
+
+  const TOPIC = { format: "plain", text: "Толкование самой темы" };
+  const SECTION = { format: "html", text: "<p>Толкование этого теста</p>" };
+  const KEYS = { "ПДн": { format: "plain", text: "Толкование подтемы" } };
+
+  const TEST_DATA = {
+    mode: "standard",
+    sections: [
+      {
+        topicId: "t1",
+        topicName: "Тема 1",
+        interpretation: TOPIC,
+        sectionInterpretation: SECTION,
+        breakdownInterpretation: KEYS,
+      },
+    ],
+  };
+
+  /** Настоящий читатель экрана итогов на этих же `TEST_DATA`. */
+  function liftWithInterpretations() {
+    const match = VIEW_SRC.match(/function vrWithInterpretations\([\s\S]*?\n\}/);
+    if (!match) throw new Error("vrWithInterpretations not found in viewResults.js");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    return new Function("TEST_DATA", `${match[0]}\n;return vrWithInterpretations;`)(TEST_DATA) as (
+      row: Record<string, unknown>,
+      tr: unknown,
+    ) => Record<string, unknown>;
+  }
+
+  /** Сборщики входа с подставленным читателем толкований. */
+  function inputs() {
+    const factory = new Function(
+      "TEST_DATA",
+      "vrWithInterpretations",
+      `${SRC}\nreturn { std: pdfStandardInput, adaptive: pdfAdaptiveInput };`,
+    );
+    return factory(TEST_DATA, liftWithInterpretations()) as {
+      std: (r: unknown) => { topicResults: Array<Record<string, unknown>> };
+      adaptive: (r: unknown) => { topicResults: Array<Record<string, unknown>> };
+    };
+  }
+
+  const result = {
+    passed: false,
+    percent: 60,
+    totalQuestions: 5,
+    totalCorrect: 3,
+    topicResults: [
+      { topicId: "t1", topicName: "Тема 1", correct: 3, total: 5, percent: 60, passed: false },
+    ],
+  };
+
+  it("стандартный вход несёт все три поля под именами общего построителя", () => {
+    const topic = inputs().std(result).topicResults[0];
+    expect(topic.interpretation).toEqual(TOPIC);
+    expect(topic.sectionInterpretation).toEqual(SECTION);
+    expect(topic.breakdownInterpretation).toEqual(KEYS);
+  });
+
+  it("раздел без толкований оставляет строку прежней — полей не появляется", () => {
+    const factory = new Function(
+      "TEST_DATA",
+      "vrWithInterpretations",
+      `${SRC}\nreturn pdfStandardInput;`,
+    );
+    const bare = { mode: "standard", sections: [{ topicId: "t1", topicName: "Тема 1" }] };
+    const match = VIEW_SRC.match(/function vrWithInterpretations\([\s\S]*?\n\}/)!;
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const reader = new Function("TEST_DATA", `${match[0]}\n;return vrWithInterpretations;`)(bare);
+    const std = factory(bare, reader) as (r: unknown) => { topicResults: Array<Record<string, unknown>> };
+    const topic = std(result).topicResults[0];
+    expect(topic).not.toHaveProperty("interpretation");
+    expect(topic).not.toHaveProperty("sectionInterpretation");
+    expect(topic).not.toHaveProperty("breakdownInterpretation");
+  });
+
+  it("пакет СТАРОЙ сборки без читателя не падает", () => {
+    // `vrWithInterpretations` появился вместе с толкованиями; отчёт пакета, собранного до
+    // них, обязан собираться прежним — без полей и без исключения.
+    const factory = new Function("TEST_DATA", `${SRC}\nreturn pdfStandardInput;`);
+    const std = factory(TEST_DATA) as (r: unknown) => { topicResults: Array<Record<string, unknown>> };
+    expect(() => std(result)).not.toThrow();
+    expect(std(result).topicResults[0]).not.toHaveProperty("interpretation");
   });
 });
 

@@ -17,7 +17,22 @@ import { randomUUID } from "crypto";
 import { eq, inArray, and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { questions, type Question, type InsertQuestion } from "@shared/schema";
+import { computePsychoHash } from "@shared/questions/psycho-hash";
 import { touchTopics } from "./shared";
+
+/**
+ * The PRD-66 FR-09a content stamp of a question, computed HERE and never taken from
+ * the caller.
+ *
+ * Every path that writes a question — the editor, the workbook import, the copy button —
+ * goes through this repository, and one that forgot to stamp would silently produce
+ * answers that cannot be grouped into an observation series. Computing it at the single
+ * write point is what makes «every create and update» true by construction rather than
+ * by everyone remembering.
+ */
+function stampOf(content: { type: string; prompt: string; dataJson: unknown; correctJson: unknown }): string {
+  return computePsychoHash(content);
+}
 
 /** Repository for the `questions` table. */
 export class QuestionsRepository {
@@ -95,9 +110,13 @@ export class QuestionsRepository {
         topicId: question.topicId,
         type: question.type,
         prompt: question.prompt,
+        // PRD-57 §4.3: формат текста задания. Перечень колонок здесь ЯВНЫЙ, и поле, не
+        // названное в нём, молча не сохраняется — этой граблей трек уже ловил себя трижды.
+        promptFormat: question.promptFormat ?? "markdown",
         dataJson: question.dataJson,
         correctJson: question.correctJson,
-        difficulty: question.difficulty ?? 50,
+        // PRD-16 FR-10: `null` — «Не задано» и сохраняется как NULL; 50 — только когда поля нет.
+        difficulty: question.difficulty === undefined ? 50 : question.difficulty,
         mediaUrl: question.mediaUrl || null,
         mediaType: question.mediaType || null,
         shuffleAnswers: question.shuffleAnswers ?? true,
@@ -105,7 +124,16 @@ export class QuestionsRepository {
         feedbackMode: question.feedbackMode || "general",
         feedbackCorrect: question.feedbackCorrect || null,
         feedbackIncorrect: question.feedbackIncorrect || null,
+        optionFeedbackJson: question.optionFeedbackJson ?? null,
         contentHash: question.contentHash || null,
+        // PRD-66 FR-09a: the stamp is derived from the content being written, so a
+        // value supplied by the caller is deliberately ignored.
+        psychoHash: stampOf({
+          type: question.type,
+          prompt: question.prompt,
+          dataJson: question.dataJson,
+          correctJson: question.correctJson,
+        }),
         tags: question.tags ?? [],
         // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index, only an
         // absent value means «not set».
@@ -129,6 +157,7 @@ export class QuestionsRepository {
         topicId: original.topicId,
         type: original.type,
         prompt: original.prompt + " (копия)",
+        promptFormat: original.promptFormat,
         dataJson: original.dataJson,
         correctJson: original.correctJson,
         difficulty: original.difficulty,
@@ -136,9 +165,18 @@ export class QuestionsRepository {
         feedbackMode: original.feedbackMode,
         feedbackCorrect: original.feedbackCorrect,
         feedbackIncorrect: original.feedbackIncorrect,
+        optionFeedbackJson: original.optionFeedbackJson,
         mediaUrl: original.mediaUrl,
         mediaType: original.mediaType,
         shuffleAnswers: original.shuffleAnswers,
+        // The copy carries the «(копия)» suffix, so it is a different instrument and
+        // gets a stamp of its own — not the original's, and not an empty column.
+        psychoHash: stampOf({
+          type: original.type,
+          prompt: original.prompt + " (копия)",
+          dataJson: original.dataJson,
+          correctJson: original.correctJson,
+        }),
         tags: original.tags,
         // PRD-30: the copy keeps the original's index. It lands in the same
         // group of equals right next to its source, which is where the author
@@ -155,13 +193,33 @@ export class QuestionsRepository {
       // The question's topic has to be read BEFORE the patch: a question can be
       // moved between topics, and the topic it LEAVES changed too — without this
       // read it would never learn that it lost a question.
+      // The content fields come along for the PRD-66 stamp: a patch is PARTIAL, so the
+      // new fingerprint is computed over the row as it will be — the patched fields plus
+      // the ones it leaves alone. Recomputing it unconditionally keeps an edit that does
+      // not touch the content (feedback, media, difficulty) on the SAME stamp, so the
+      // observation series survives it.
       const [before] = await tx
-        .select({ topicId: questions.topicId })
+        .select({
+          topicId: questions.topicId,
+          type: questions.type,
+          prompt: questions.prompt,
+          dataJson: questions.dataJson,
+          correctJson: questions.correctJson,
+        })
         .from(questions)
         .where(eq(questions.id, id));
       if (!before) return undefined;
 
-      const [updated] = await tx.update(questions).set(updates).where(eq(questions.id, id)).returning();
+      const patch = {
+        ...updates,
+        psychoHash: stampOf({
+          type: updates.type ?? before.type,
+          prompt: updates.prompt ?? before.prompt,
+          dataJson: updates.dataJson ?? before.dataJson,
+          correctJson: updates.correctJson ?? before.correctJson,
+        }),
+      };
+      const [updated] = await tx.update(questions).set(patch).where(eq(questions.id, id)).returning();
       if (!updated) return undefined;
       // Same id twice when the topic did not change — touchTopics dedupes.
       await touchTopics(tx, [before.topicId, updated.topicId]);

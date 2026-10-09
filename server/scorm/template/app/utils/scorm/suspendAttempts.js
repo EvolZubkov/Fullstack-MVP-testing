@@ -64,27 +64,48 @@ function fmtInstantHuman(iso) {
     ' в ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
+// PRD-36 FR-24: outcome of the last read ('empty' | 'parsed' | 'corrupt') and the sacrifices
+// applied by the last write (§6.2). Both are surfaced to the debug player: a state that had to
+// be cut, or one that came back unreadable, must be VISIBLE — the failure mode this work ends
+// is precisely the silent one.
+var lastReadOutcome = 'empty';
+var lastWriteSacrifices = [];
+
+function runStateDiagnostics() {
+  return { readOutcome: lastReadOutcome, sacrifices: lastWriteSacrifices.slice() };
+}
+
 function readSuspendObj() {
+  var raw = '';
   try {
-    var raw = SCORM.getValue('cmi.suspend_data') || '';
-    if (!raw) return { attemptsUsed: 0, attempts: [] };
-    var obj = JSON.parse(raw);
-    // Миграция со старого формата
-    if (!obj.attempts) {
-      obj.attempts = [];
-    }
-    return obj;
+    raw = SCORM.getValue('cmi.suspend_data') || '';
   } catch (e) {
-    return { attemptsUsed: 0, attempts: [] };
+    raw = '';
   }
+  var parsed = TBRunState.parseState(raw);
+  lastReadOutcome = parsed.outcome;
+  if (parsed.outcome === 'corrupt') {
+    console.log('⚠️ suspend_data повреждён (' + raw.length + ' симв.) — состояние не восстановлено');
+  }
+  // FR-12: whatever the LMS hands back is brought to format 2 before anyone reads it —
+  // one place, so no consumer ever branches on the format version.
+  return TBRunState.migrate(parsed.state, TEST_DATA);
 }
 
 function writeSuspendObj(obj) {
   try {
-    var raw = JSON.stringify(obj || {});
+    var budget = TBRunState.budgetFor(TEST_DATA);
+    var fitted = TBRunState.fitToBudget(obj || {}, budget);
+    lastWriteSacrifices = fitted.sacrifices;
+    if (fitted.sacrifices.length) {
+      console.log('⚠️ Бюджет suspend_data исчерпан, пожертвовано:', fitted.sacrifices.join(', '));
+    }
+    var raw = JSON.stringify(fitted.state);
     SCORM.setValue('cmi.suspend_data', raw);
     SCORM.commit();
-    console.log('🔵 writeSuspendObj: сохранено', obj.attempts ? obj.attempts.length : 0, 'попыток, attemptsUsed:', obj.attemptsUsed);
+    // Проектная цель 4096 печатается рядом: по ней судят, влезет ли тест в профиль 1.2.
+    console.log('🔵 writeSuspendObj: ' + raw.length + ' из ' + budget + ' симв. (цель ' +
+      TBRunState.DESIGN_BUDGET + ')');
   } catch (e) {
     console.log('⚠️ Ошибка writeSuspendObj:', e);
   }
@@ -159,9 +180,44 @@ function hasAttemptsLeft() {
   return getAttemptsUsed() < TEST_DATA.maxAttempts;
 }
 
+/**
+ * PRD-54, решение 13: номер и начало попытки — для блоков `meta_attempt` и `meta_duration`
+ * отчёта LMS.
+ *
+ * Отдельно от `attemptsUsed`: тот растёт только при лимите попыток, а `attemptsUsed > 0`
+ * служит признаком «попытка уже была» на стартовой странице и в проверке допуска — считать его
+ * всегда значило бы поменять поведение тестов без лимита. `an` нумерует попытки регистрации
+ * SCO всегда, `as` — время старта по часам машины (нужна только разность).
+ */
+function markAttemptStart() {
+  try {
+    var s = readSuspendObj();
+    s.an = (typeof s.an === 'number' ? s.an : 0) + 1;
+    s.as = Date.now();
+    writeSuspendObj(s);
+  } catch (e) { /* без номера отчёт уйдёт без блока — «не сообщено» */ }
+}
+
+/**
+ * Номер и длительность ТЕКУЩЕЙ попытки (секунды); `null` — неизвестно.
+ *
+ * @returns {{ number: (number|null), seconds: (number|null) }}
+ */
+function currentAttemptMeta() {
+  try {
+    var s = readSuspendObj();
+    var number = typeof s.an === 'number' && s.an > 0 ? s.an : null;
+    var seconds = typeof s.as === 'number' && s.as > 0 ? Math.max(0, Math.round((Date.now() - s.as) / 1000)) : null;
+    return { number: number, seconds: seconds };
+  } catch (e) {
+    return { number: null, seconds: null };
+  }
+}
+
 // Увеличиваем попытку 1 раз на запуск теста
 function registerAttemptStart() {
   console.log('🔵 registerAttemptStart вызван, maxAttempts:', TEST_DATA.maxAttempts);
+  markAttemptStart();
   
   if (!TEST_DATA.maxAttempts) {
     console.log('🔵 maxAttempts не задан, лимит не применяется');
@@ -181,83 +237,109 @@ function registerAttemptStart() {
   return true;
 }
 
+/**
+ * PRD-54 BR-54-35: метка РЕГИСТРАЦИИ SCO для блока `meta_registration` отчёта LMS.
+ *
+ * Одна на регистрацию, а не на попытку: строка отчёта LMS соответствует регистрации, и внутри неё
+ * пакет проводит несколько попыток, отдавая в LMS одну. Создаётся при первом обращении и живёт в
+ * `suspend_data` (`rk`) — поэтому одинакова у всех попыток и сессий регистрации и переживает
+ * пересборку пакета. Новая регистрация приходит с пустым `suspend_data` и получает новую метку.
+ *
+ * Время по часам машины и случайный хвост в base36: метке нужна только неповторимость, а не
+ * доверенное время. Пустая строка — состояние недоступно; отчёт тогда идёт без метки, и импорт
+ * различит строку по отпечатку содержимого.
+ *
+ * @returns {string} метка регистрации или пустая строка
+ */
+function registrationMark() {
+  try {
+    var s = readSuspendObj();
+    if (typeof s.rk === 'string' && s.rk) return s.rk;
+    var tail = '';
+    for (var i = 0; i < 4; i++) tail += Math.floor(Math.random() * 36).toString(36);
+    s.rk = Date.now().toString(36) + tail;
+    writeSuspendObj(s);
+    return s.rk;
+  } catch (e) {
+    return '';
+  }
+}
+
 // ===== НОВЫЕ ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ РЕЗУЛЬТАТОВ =====
 
-// Сохранить результат попытки
+/**
+ * PRD-36 FR-03/FR-05/FR-22: persist a FINISHED attempt. The state keeps a counter, the best
+ * summary and the last one — never a list: every consumer reads a maximum, a tail or a length,
+ * and the unbounded array is what silently blew the 64000-character limit on the third attempt
+ * of a long test. The summary itself is built in ONE place (TBRunState.buildSummary) no matter
+ * which of the five finish paths got here, so «лучшая» cannot depend on how the test ended.
+ */
 function saveAttemptResult(resultData) {
-  console.log('🔵 saveAttemptResult вызван, percent:', resultData.percent);
-  
   var s = readSuspendObj();
-  if (!s.attempts) s.attempts = [];
-  
-  var attemptRecord = {
-    attemptNumber: s.attemptsUsed,
+  var current = currentAttemptMeta();
+  var summary = TBRunState.buildSummary(resultData, TEST_DATA, {
+    // Номер регистрации SCO, если пакет его ведёт (`an`); у состояния до этой работы — прежний
+    // счётчик лимита.
+    attemptNumber: current.number !== null ? current.number : s.attemptsUsed,
+    durationSeconds: current.seconds,
     // PRD-31: the portal clock, not the machine's — this mark is what barrier B
     // measures the next attempt against.
     completedAt: nowIso(),
-    completedAtSource: trustedNowSource(),
-    percent: resultData.percent,
-    totalCorrect: resultData.correct,
-    totalQuestions: resultData.totalQuestions,
-    earnedPoints: parseFloat(resultData.earnedPoints) || 0,
-    possiblePoints: parseFloat(resultData.possiblePoints) || 0,
-    passed: resultData.passed,
-    // PRD-2 (A7): persisted result.* values + per-formula errors for this attempt,
-    // so a recovered session restores the same computed variables (NFR-04).
-    resultValues: (resultData.resultComputation && resultData.resultComputation.values) || {},
-    formulaErrors: (resultData.resultComputation && resultData.resultComputation.errors) || [],
-    // PRD-5 (B5): persisted scale.* values + per-scale errors for this attempt
-    // (suspend_data.custom.scale, §8.1); recomputed deterministically on recovery.
-    scaleValues: (resultData.scaleComputation && resultData.scaleComputation.values) || {},
-    scaleErrors: (resultData.scaleComputation && resultData.scaleComputation.errors) || [],
-    topicResults: resultData.topicResults,
-    answers: JSON.parse(JSON.stringify(state.answers)),
-    flatQuestions: JSON.parse(JSON.stringify(state.flatQuestions))
-  };
-  
-  s.attempts.push(attemptRecord);
-  console.log('🔵 Сохранена попытка #' + attemptRecord.attemptNumber + ', всего попыток:', s.attempts.length);
-  
+    source: trustedNowSource(),
+    deliveredForms: (typeof state !== 'undefined' && state.deliveredForms) || {},
+  });
+  // PRD-2 (A7) / PRD-5 (B5): formula and scale errors are diagnostic and belong with the
+  // result that is actually shown — i.e. only with the best attempt.
+  summary.fe = (resultData.resultComputation && resultData.resultComputation.errors) || undefined;
+  summary.se = (resultData.scaleComputation && resultData.scaleComputation.errors) || undefined;
+  if (summary.fe && !summary.fe.length) summary.fe = undefined;
+  if (summary.se && !summary.se.length) summary.se = undefined;
+  // Повопросные ряды нужны РОВНО одному потребителю — сборке interactions по ЛУЧШЕЙ
+  // попытке. Когда тест настроен отдавать в LMS последнюю, отчёт строится по прогону,
+  // который ещё в памяти, и хранить детализацию не для кого.
+  if (TEST_DATA.lmsAttemptResult !== 'last') {
+    summary.d = TBRunState.buildDetail(state);
+  }
+
+  var best = TBRunState.pickBest(TBRunState.bestOf(s), summary);
+  // FR-06: only the best keeps its per-question rows; the last one is a summary alone.
+  if (best !== summary) delete summary.d;
+  s.best = best;
+  s.last = (best === summary) ? 0 : summary;
   writeSuspendObj(s);
-  
-  console.log('🔵 suspend_data обновлен. Текущие попытки:', s.attempts.map(function(a) { return Math.round(a.percent) + '%'; }));
+  console.log('🔵 Попытка #' + summary.n + ' сохранена: ' + Math.round(summary.pc) + '%');
 }
 
-// Получить все попытки
-function getAllAttempts() {
-  var s = readSuspendObj();
-  return s.attempts || [];
-}
-
-// Получить лучшую попытку (по %, потом по дате)
+/**
+ * PRD-36 FR-03/FR-09: the BEST attempt in the shape every screen and the LMS builder already
+ * speak. No list is scanned and no maximum recomputed — the best is decided once, when an
+ * attempt finishes (FR-05), and the summary is expanded back against TEST_DATA on read.
+ */
 function getBestAttempt() {
-  var attempts = getAllAttempts();
-  console.log('📊 Все попытки для выбора:', attempts.length);
-  attempts.forEach(function(a, i) {
-    console.log('  Попытка ' + (i+1) + ': ' + Math.round(a.percent) + '%');
-  });
-  
-  if (attempts.length === 0) return null;
-  
-  var sorted = attempts.slice().sort(function(a, b) {
-    if (a.percent !== b.percent) {
-      return b.percent - a.percent;
-    }
-    return new Date(b.completedAt) - new Date(a.completedAt);
-  });
-  
-  console.log('✅ Лучшая попытка: ' + Math.round(sorted[0].percent) + '%');
-  return sorted[0];
+  var s = readSuspendObj();
+  return s.best ? TBRunState.expandSummary(s.best, TEST_DATA) : null;
 }
 
-// Получить последнюю попытку
+/** FR-03: the LAST attempt; `last: 0` means it IS the best one (the common case). */
 function getLastAttempt() {
-  var attempts = getAllAttempts();
-  if (attempts.length === 0) return null;
-  return attempts[attempts.length - 1];
+  var s = readSuspendObj();
+  if (!s.best) return null;
+  var summary = (s.last === 0 || !s.last) ? s.best : s.last;
+  return TBRunState.expandSummary(summary, TEST_DATA);
 }
 
-// Есть ли завершенные попытки?
+/** The RAW best summary, rows included — the LMS interactions builder needs them. */
+function getBestAttemptDetail() {
+  var s = readSuspendObj();
+  return (s.best && s.best.d) || null;
+}
+
+/**
+ * Whether a FINISHED attempt exists — «Мой результат» has something to show. Judged by the
+ * best summary (written only when an attempt finishes, PRD-36 FR-03), not by the counter: the
+ * counter grows on START so an abandoned attempt still spends the limit, and it is not kept
+ * at all for a test without `maxAttempts`.
+ */
 function hasCompletedAttempts() {
-  return getAllAttempts().length > 0;
+  return !!readSuspendObj().best;
 }

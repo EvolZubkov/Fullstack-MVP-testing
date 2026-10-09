@@ -91,7 +91,7 @@ describe("<VariantsEditor /> — toggle & state copy", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     const next = onChange.mock.calls[0][0] as FormSet;
     expect(next.forms).toHaveLength(2);
-    expect(next.forms.map((f) => f.label)).toEqual(["Вариант 1", "Вариант 2"]);
+    expect(next.forms.map((f) => f.label)).toEqual(["Вариант A", "Вариант B"]);
   });
 
   it("turning the switch OFF clears the variant set (null)", () => {
@@ -121,7 +121,7 @@ describe("<VariantsEditor /> — summary block", () => {
     expect(screen.queryByTestId("topic-variants-balance-t1")).toBeNull();
   });
 
-  it("coverage line warns about orphan questions and flags unequal sizes", () => {
+  it("coverage line warns about orphan questions", () => {
     const formSet: FormSet = {
       forms: [form("f1", "Вариант 1", ["q1", "q2"]), form("f2", "Вариант 2", ["q3"])],
     };
@@ -130,11 +130,12 @@ describe("<VariantsEditor /> — summary block", () => {
     );
     // Exact match targets the warning Tag, not the longer coverage sentence.
     expect(screen.getByText("1 не используются")).toBeInTheDocument();
-    const balance = screen.getByTestId("topic-variants-balance-t1");
-    expect(balance).toHaveTextContent(/неравные/i);
+    // Строка итога ОДНА. О неравных вариантах говорит общий контур ящика —
+    // предупреждение `variants_unequal`, а не приписка под карточкой темы.
+    expect(screen.queryByTestId("topic-variants-balance-t1")).toBeNull();
   });
 
-  it("coverage line reports full usage and a balanced set", () => {
+  it("coverage line reports full usage", () => {
     const formSet: FormSet = {
       forms: [form("f1", "Вариант 1", ["q1", "q2"]), form("f2", "Вариант 2", ["q3", "q4"])],
     };
@@ -142,7 +143,7 @@ describe("<VariantsEditor /> — summary block", () => {
       <VariantsEditor topicId="t1" topicName="Тема А" formSet={formSet} onChange={() => {}} />,
     );
     expect(screen.getByText(/все задействованы/i)).toBeInTheDocument();
-    expect(screen.getByTestId("topic-variants-balance-t1")).toHaveTextContent(/сбалансировано/i);
+    expect(screen.queryByTestId("topic-variants-balance-t1")).toBeNull();
   });
 
   it("renders the validation error when the error prop is set", () => {
@@ -206,7 +207,7 @@ describe("<VariantsEditor /> — configure modal", () => {
     fireEvent.click(removeBtn);
     const next = onChange.mock.calls.at(-1)![0] as FormSet;
     expect(next.forms).toHaveLength(2);
-    expect(next.forms.map((f) => f.label)).toEqual(["Вариант 1", "Вариант 2"]);
+    expect(next.forms.map((f) => f.label)).toEqual(["Вариант A", "Вариант B"]);
   });
 
   it("assigns the whole bank into the active variant via «Назначить всех»", async () => {

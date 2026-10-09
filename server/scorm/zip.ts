@@ -1,27 +1,33 @@
-import archiver from "archiver";
-import { Writable } from "stream";
+/**
+ * @module server/scorm/zip
+ * @description In-memory ZIP builder shared by the SCORM export, the test transfer
+ * package and the design-template package. Built on `jszip` (already used across the
+ * server for reading archives), so the project needs no second ZIP library.
+ */
 
-export function buildZip(files: Record<string, string | Buffer>): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const writable = new Writable({
-      write(chunk, _encoding, callback) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        callback();
-      },
-    });
+import JSZip from "jszip";
 
-    const archive = archiver("zip", { zlib: { level: 9 } });
+/**
+ * Builds a ZIP archive from a flat map of entries.
+ *
+ * Entries are written in the map's insertion order with maximum DEFLATE compression.
+ * Only file entries are emitted: intermediate directory entries are NOT created for
+ * nested paths (`createFolders: false`), matching what the archive always contained.
+ *
+ * @param {Record<string, string | Buffer>} files - Archive path -> content. A string is
+ *   stored as UTF-8, a Buffer is stored byte for byte.
+ * @returns {Promise<Buffer>} The complete ZIP archive.
+ */
+export async function buildZip(files: Record<string, string | Buffer>): Promise<Buffer> {
+  const zip = new JSZip();
 
-    archive.on("error", reject);
-    archive.on("end", () => resolve(Buffer.concat(chunks)));
+  for (const [name, content] of Object.entries(files)) {
+    zip.file(name, content, { createFolders: false });
+  }
 
-    archive.pipe(writable);
-
-    for (const [name, content] of Object.entries(files)) {
-      archive.append(content, { name });
-    }
-
-    archive.finalize();
+  return zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 9 },
   });
 }

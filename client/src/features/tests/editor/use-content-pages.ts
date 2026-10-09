@@ -19,7 +19,7 @@
  * The design / template queries reuse the same React Query keys as
  * {@link useDesignSettings} so the two hooks share one network round-trip.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   SEQUENCE_SETTING_KEY,
@@ -27,6 +27,16 @@ import {
   collectSequenceIds,
   type SequencePlacement,
 } from "@shared/template/page-sequences";
+import {
+  SYSTEM_KINDS,
+  legacyTypeForKind,
+  planSystemPages,
+  positionForKind,
+  type ContentPageInsert,
+  type FlowMode,
+  type SystemKind,
+} from "@shared/content-pages/lifecycle";
+import type { TemplateManifest } from "@shared/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +63,8 @@ export type ContentPage = {
   settingsJson?: Record<string, unknown>;
   autoAdvance: boolean;
   autoAdvanceDelayMs: number | null;
+  /** Экран есть в тесте, но ученику не выдаётся (решение владельца 2026-09-20). */
+  hidden?: boolean;
   createdAt: string;
   updatedAt: string;
   /** Server-side flag: true when the saved templateKey no longer exists in the active template. */
@@ -136,6 +148,8 @@ export type ContentPageInput = {
   autoAdvance?: boolean;
   autoAdvanceDelayMs?: number | null;
   sortOrder?: number;
+  /** Скрыть экран от ученика; сервер отказывает для вопросов и маршрутизатора. */
+  hidden?: boolean;
 };
 
 // ─── Network helpers ──────────────────────────────────────────────────────────
@@ -268,6 +282,7 @@ function pageToInput(page: ContentPage): ContentPageInput {
     autoAdvance: page.autoAdvance,
     autoAdvanceDelayMs: page.autoAdvanceDelayMs,
     sortOrder: page.sortOrder,
+    hidden: page.hidden === true,
   };
 }
 
@@ -348,6 +363,9 @@ function pageChanged(a: ContentPage, b: ContentPage): boolean {
     a.type !== b.type ||
     a.autoAdvance !== b.autoAdvance ||
     a.autoAdvanceDelayMs !== b.autoAdvanceDelayMs ||
+    // Скрытие — такая же правка страницы, как остальные: без этой строки «Сохранить»
+    // оставался бы неактивным и решение автора терялось бы при закрытии ящика.
+    (a.hidden === true) !== (b.hidden === true) ||
     canonicalValues(a.valuesJson) !== canonicalValues(b.valuesJson) ||
     // PRD-22: settings are a separate field with their own rules, so an edit that
     // touches only a page property (e.g. the sequence identifier) must still count
@@ -446,10 +464,83 @@ export type UseContentPagesResult = {
    * server-side sanitiser diagnostics produced during the commit (keyed by page
    * id) and refetches so the draft re-syncs to the persisted state.
    */
-  commit: () => Promise<Record<string, SanitizeDiagnostics>>;
+  commit: (createdId?: string) => Promise<Record<string, SanitizeDiagnostics>>;
   /** Discards all buffered draft edits, resetting to the saved server state (Drawer «Отмена»). */
   discard: () => void;
 };
+
+/**
+ * Режим СОЗДАНИЯ: теста ещё нет, а структуру автор настраивает уже сейчас. Системные
+ * узлы предсказываются ТЕМ ЖЕ планировщиком, которым сервер раскладывает их в
+ * транзакции INSERT ({@link module:shared/content-pages/lifecycle}), — поэтому перед
+ * сохранением автор видит именно то, что получит.
+ *
+ * Состав узлов зависит от сценария и набора тем, и оба меняются по ходу правки: хук
+ * пересогласовывает предсказание тем же планом «создать/удалить», так что правки в
+ * уже нарисованных узлах не теряются.
+ */
+export type ContentPagesCreatePlan = {
+  flowMode: FlowMode;
+  /** Темы теста в авторском порядке. */
+  topicIds: string[];
+};
+
+function isSystemKind(kind: ContentPageKind): kind is SystemKind {
+  return (SYSTEM_KINDS as readonly string[]).includes(kind);
+}
+
+/**
+ * Запланированная вставка → строка черновика. Поля, которые сервер выводит из вида
+ * узла (`position`, `type`, `mode`), берутся из ОБЩЕГО модуля — иначе предсказанная
+ * строка встала бы в интерфейсе не туда, куда её потом положит транзакция.
+ *
+ * Идентификатор черновой: строки в базе ещё нет. При сохранении она не создаётся, а
+ * СОПОСТАВЛЯЕТСЯ с настоящей — по паре «вид + тема» (см. `adoptRealSystemIds`).
+ */
+function predictedPage(insert: ContentPageInsert, id: string, sortOrder: number): ContentPage {
+  const now = new Date().toISOString();
+  return {
+    id,
+    testId: "",
+    topicId: insert.topicId,
+    position: positionForKind(insert.kind),
+    mode: "template",
+    type: legacyTypeForKind(insert.kind),
+    kind: insert.kind,
+    templateKey: insert.templateKey,
+    sortOrder,
+    valuesJson: (insert.valuesJson ?? {}) as ContentPage["valuesJson"],
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Сопоставляет предсказанные системные строки с настоящими, созданными транзакцией
+ * INSERT, по паре «вид + тема» — той же, по которой планировщик их и различает.
+ * Строка, которой на сервере не нашлось, отбрасывается, а серверная, которой не
+ * нашлось предсказания, ДОБАВЛЯЕТСЯ: сервер здесь главный, и его строку нельзя
+ * потерять — иначе разбор сохранения принял бы её за удалённую автором.
+ */
+function adoptRealSystemIds(draft: ContentPage[], server: ContentPage[]): ContentPage[] {
+  const key = (p: { kind: string; topicId: string | null }) => `${p.kind}|${p.topicId ?? ""}`;
+  const realByKey = new Map(server.filter((p) => isSystemKind(p.kind)).map((p) => [key(p), p]));
+  const adopted: ContentPage[] = [];
+  for (const page of draft) {
+    if (!isSystemKind(page.kind)) {
+      adopted.push(page);
+      continue;
+    }
+    const real = realByKey.get(key(page));
+    if (!real) continue;
+    realByKey.delete(key(page));
+    adopted.push({ ...page, id: real.id, testId: real.testId });
+  }
+  for (const orphan of realByKey.values()) adopted.push({ ...orphan });
+  return adopted;
+}
 
 /** True when a placeholder value counts as unfilled for required-field checks. */
 function isPlaceholderEmpty(value: unknown): boolean {
@@ -497,9 +588,12 @@ export function hasStructureWarnings(
 export function useContentPages(
   testId: string | undefined,
   draftTemplateId?: string,
+  createPlan?: ContentPagesCreatePlan,
 ): UseContentPagesResult {
   const queryClient = useQueryClient();
   const enabled = typeof testId === "string" && testId.length > 0;
+  /** Теста ещё нет: структура ПРЕДСКАЗЫВАЕТСЯ, а не читается. */
+  const planning = !enabled && createPlan !== undefined;
 
   // Include the draft template id so switching the template in «Оформление»
   // refetches the list — its `templateKeyMissing` flags are recomputed against
@@ -521,7 +615,7 @@ export function useContentPages(
   // updates «Структура» variants — the «Сменить вариант» control and the add-page
   // options — IMMEDIATELY, before save. Falls back to the persisted design, then
   // `default`. The pages themselves still come from the saved content-pages API.
-  const templateId = enabled
+  const templateId = enabled || planning
     ? draftTemplateId || designQuery.data?.templateId || "default"
     : undefined;
 
@@ -529,6 +623,16 @@ export function useContentPages(
     queryKey: ["templates", templateId, "content-templates"],
     queryFn: () => fetchTemplateVariants(templateId!),
     enabled: Boolean(templateId),
+  });
+
+  // Каталог ВСТРОЕННОГО шаблона: планировщик берёт из него вариант, которого нет у
+  // шаблона теста (PRD-1 §4.3.2), и без этого предсказание разошлось бы с сервером
+  // ровно в том случае, ради которого правило и написано. Нужен только при
+  // предсказании и только когда шаблон теста — не встроенный.
+  const defaultTemplateQuery = useQuery({
+    queryKey: ["templates", "default", "content-templates"],
+    queryFn: () => fetchTemplateVariants("default"),
+    enabled: planning && templateId !== "default",
   });
 
   const contentTemplates = templateQuery.data ?? [];
@@ -553,6 +657,53 @@ export function useContentPages(
     setSyncedFrom(serverPages);
     setDraftPages(serverPages.map((p) => ({ ...p })));
   }
+
+  // ── Предсказание системных узлов для НЕсохранённого теста ─────────────────
+  //
+  // Тем же планировщиком, которым сервер раскладывает строки в транзакции INSERT, и
+  // с тем же входом (сценарий, темы, каталог шаблона + каталог встроенного). План
+  // применяется как «удалить/добавить», а не «собрать заново»: автор мог уже сменить
+  // вариант узла или заполнить его поля, и пересборка на каждое изменение состава
+  // тем стёрла бы эту работу — сервер на своей стороне ведёт себя точно так же.
+  //
+  // Не помечает черновик изменённым: предсказание — не авторская правка, и
+  // «Сохранить» от появления узлов зажигаться не должно.
+  const planTopicKey = (createPlan?.topicIds ?? []).join(",");
+  const planFlowMode = createPlan?.flowMode;
+  const defaultVariants = defaultTemplateQuery.data;
+  useEffect(() => {
+    if (!planning || planFlowMode === undefined || contentTemplates.length === 0) return;
+    const manifest = { contentTemplates } as unknown as TemplateManifest;
+    const fallback = (
+      defaultVariants && defaultVariants.length > 0
+        ? { contentTemplates: defaultVariants }
+        : manifest
+    ) as unknown as TemplateManifest;
+    setDraftPages((prev) => {
+      const existing = prev
+        .filter((p) => isSystemKind(p.kind))
+        .map((p) => ({
+          id: p.id,
+          kind: p.kind as SystemKind,
+          topicId: p.topicId,
+          templateKey: p.templateKey,
+          valuesJson: (p.valuesJson ?? {}) as Record<string, unknown>,
+        }));
+      const plan = planSystemPages(existing, {
+        flowMode: planFlowMode,
+        topicIds: planTopicKey === "" ? [] : planTopicKey.split(","),
+        template: manifest,
+        defaultTemplate: fallback,
+      });
+      if (plan.create.length === 0 && plan.delete.length === 0) return prev;
+      const dropped = new Set(plan.delete.map((d) => d.id));
+      const kept = prev.filter((p) => !dropped.has(p.id));
+      const added = plan.create.map((insert, index) =>
+        predictedPage(insert, `${DRAFT_ID_PREFIX}sys-${tempSeq.current++}`, kept.length + index),
+      );
+      return [...kept, ...added];
+    });
+  }, [planning, planFlowMode, planTopicKey, contentTemplates, defaultVariants]);
 
   const [sanitizeDiagnostics, setSanitizeDiagnostics] = useState<
     Record<string, SanitizeDiagnostics>
@@ -663,6 +814,7 @@ export function useContentPages(
             ...(input.autoAdvanceDelayMs !== undefined
               ? { autoAdvanceDelayMs: input.autoAdvanceDelayMs }
               : {}),
+            ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
           };
           return updated;
         }),
@@ -718,22 +870,32 @@ export function useContentPages(
   }, []);
 
   // ── Commit / discard ──────────────────────────────────────────────────────
-  const commit = useCallback(async (): Promise<Record<string, SanitizeDiagnostics>> => {
-    if (!enabled) return {};
-    const server = serverPages ?? [];
-    const draft = draftPages;
+  const commit = useCallback(async (
+    createdId?: string,
+  ): Promise<Record<string, SanitizeDiagnostics>> => {
+    // `createdId` — тест, только что созданный этим же сохранением. До него структура
+    // была ПРЕДСКАЗАНИЕМ: системные строки уже созданы транзакцией INSERT, поэтому их
+    // читают с сервера и подставляют настоящие идентификаторы предсказанным узлам.
+    // Дальше работает тот же разбор, что у существующего теста, — второй ветки
+    // «создание» здесь нет намеренно: она бы разошлась с первой.
+    const target = enabled ? testId! : createdId;
+    if (!target) return {};
+    const server = enabled
+      ? serverPages ?? []
+      : ((await fetchContentPages(target, draftTemplateId)) as ContentPage[]);
+    const draft = enabled ? draftPages : adoptRealSystemIds(draftPages, server);
     const draftIds = new Set(draft.map((p) => p.id));
     const diag: Record<string, SanitizeDiagnostics> = {};
     try {
       // 1) Deletes — server pages no longer in the draft.
       for (const s of server) {
-        if (!draftIds.has(s.id)) await deleteContentPage(testId!, s.id);
+        if (!draftIds.has(s.id)) await deleteContentPage(target, s.id);
       }
       // 2) Creates — new (draft-id) pages → POST; remember the real id.
       const realId: Record<string, string> = {};
       for (const p of draft) {
         if (isDraftId(p.id)) {
-          const created = await postContentPage(testId!, pageToInput(p), draftTemplateId);
+          const created = await postContentPage(target, pageToInput(p), draftTemplateId);
           realId[p.id] = created.id;
         }
       }
@@ -743,27 +905,35 @@ export function useContentPages(
         if (isDraftId(p.id)) continue;
         const s = serverById.get(p.id);
         if (s && pageChanged(s, p)) {
-          const res = await putContentPage(testId!, p.id, pageToInput(p), draftTemplateId);
+          const res = await putContentPage(target, p.id, pageToInput(p), draftTemplateId);
           const d = (res as { sanitizeDiagnostics?: SanitizeDiagnostics }).sanitizeDiagnostics;
           if (d && Object.keys(d).length > 0) diag[p.id] = d;
         }
       }
       // 4) Reorder — final order with resolved ids (idempotent; covers add/delete).
-      const finalIds = draft.map((p) => (isDraftId(p.id) ? realId[p.id] : p.id)).filter(Boolean) as string[];
+      // The order is the DRAFT's `sortOrder`, not the array position: a drag in «Структура»
+      // only rewrites `sortOrder` (see `reorder`), and numbering by the array — the order
+      // the list was LOADED in — silently undid every drag on save. That is how «Как читать
+      // отчёт», moved back below «Итоги теста», kept returning above them (2026-10-01).
+      // The sort is stable, so equal numbers keep their array order.
+      const finalIds = [...draft]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((p) => (isDraftId(p.id) ? realId[p.id] : p.id))
+        .filter(Boolean) as string[];
       if (finalIds.length > 0) {
-        await putReorder(testId!, finalIds.map((id, i) => ({ id, sortOrder: i })));
+        await putReorder(target, finalIds.map((id, i) => ({ id, sortOrder: i })));
       }
 
       setCommitError(null);
       setDirty(false);
       setSanitizeDiagnostics(diag);
-      await queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
+      await queryClient.invalidateQueries({ queryKey: ["tests", target, "content-pages"] });
       return diag;
     } catch (err) {
       setCommitError(err as Error);
       // Re-sync the draft to whatever actually persisted, then surface the error.
       setDirty(false);
-      await queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
+      await queryClient.invalidateQueries({ queryKey: ["tests", target, "content-pages"] });
       throw err;
     }
   }, [draftPages, draftTemplateId, enabled, queryClient, serverPages, testId]);

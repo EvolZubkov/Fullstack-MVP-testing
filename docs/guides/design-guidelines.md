@@ -3,9 +3,9 @@
 **Статус:** актуально (указатель на источники истины дизайна)  
 **Дата актуализации:** 2026-06-06
 
-Проект использует дизайн-систему UniversityRT. Локального дизайн-гайда, дублирующего токены и
+Проект использует дизайн-систему Skillum. Локального дизайн-гайда, дублирующего токены и
 компоненты DS, в репозитории нет: единый источник истины — хэндбук дизайн-системы и его React-реализация
-`@universityrt/ui-kit`. Этот документ не повторяет DS, а указывает, где искать канон и какие
+`@skillum/ui-kit`. Этот документ не повторяет DS, а указывает, где искать канон и какие
 проектные слои поверх него существуют.
 
 ## Источники истины (репозиторий ENGINERING_HANDBOOK)
@@ -13,16 +13,19 @@
 - `handbook/design-system/DESIGN_SYSTEM_RT.md` — токены и компоненты DS.
 - `handbook/design-system/DESIGN_SYSTEM_RT_API.md` — API компонентов DS.
 - `handbook/design-system/AI-AGENT.md` — правила работы с DS для агентов (читать до любой работы с UI).
-- `ui-kit/README.md` — локальная React-реализация дизайн-системы (`@universityrt/ui-kit`).
+- `ui-kit/README.md` — локальная React-реализация дизайн-системы (`@skillum/ui-kit`).
 
 ## Правила применения в этом проекте
 
-- Использовать готовые React-компоненты из `@universityrt/ui-kit` (NumberInput, Select, Combobox,
+- Использовать готовые React-компоненты из `@skillum/ui-kit` (NumberInput, Select, Combobox,
   Switch, Tag, Drawer, Tabs, ColorPicker и другие). Не писать руками `.ou-*` DS-разметку и не
   оборачивать нативные `<select>` / `<input type=number>` в `.ou-field`.
 - Иконки — `lucide-react`.
-- Брендовый шрифт `RostelecomBasis` вендорится в `client/public/fonts/` и подключается из
-  `client/src/styles/vendor/university-rt.css`.
+- Базовый шрифт `Roboto` (SIL OFL 1.1) вендорится в `client/public/fonts/` и подключается из
+  `client/src/styles/vendor/skillum-ds.css`. Это вариативный woff2: один файл на подмножество
+  Unicode (latin, latin-ext, cyrillic, cyrillic-ext) покрывает всю шкалу насыщенности 100-900,
+  поэтому начертания не докачиваются отдельными файлами. Фирменную гарнитуру подменяет шаблон
+  оформления через свой `@font-face` и токен `--ou-font-family-base` в `styles/theme.css`.
 
 ## Цвет
 

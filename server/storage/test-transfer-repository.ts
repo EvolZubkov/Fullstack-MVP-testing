@@ -17,11 +17,13 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { freeTopicName, normalizeTopicName } from "@shared/topics/naming";
+import { computePsychoHash } from "@shared/questions/psycho-hash";
 import {
   tests,
   topics,
   questions,
   testSections,
+  testScenarios,
   scales,
   resultVariables,
   questionMeasurements,
@@ -72,6 +74,7 @@ const TABLES = [
   ["test", tests],
   ["question", questions],
   ["section", testSections],
+  ["scenario", testScenarios],
   ["scale", scales],
   ["measurement", questionMeasurements],
   ["resultVariable", resultVariables],
@@ -90,6 +93,28 @@ function insertable<T extends Record<string, unknown>>(row: T): Record<string, u
   const out: Record<string, unknown> = { ...row };
   for (const key of STRIPPED) delete out[key];
   return out;
+}
+
+/**
+ * A question row carrying the PRD-66 FR-09a content stamp.
+ *
+ * A package exported before the column existed brings no stamp, and a question written
+ * without one drops out of every psychometric statistic. Computing it from the content
+ * cannot diverge from the source installation: the same content yields the same
+ * fingerprint everywhere, so the two stay ONE observation series either way. A stamp
+ * that DID travel with the package is kept as it is.
+ */
+function stamped(row: Record<string, unknown>): Record<string, unknown> {
+  if (typeof row.psychoHash === "string" && row.psychoHash) return row;
+  return {
+    ...row,
+    psychoHash: computePsychoHash({
+      type: String(row.type ?? ""),
+      prompt: String(row.prompt ?? ""),
+      dataJson: row.dataJson,
+      correctJson: row.correctJson,
+    }),
+  };
 }
 
 export class TestTransferRepository {
@@ -125,11 +150,15 @@ export class TestTransferRepository {
 
       const questionRows = Object.values(content.questionsByTopic ?? {})
         .flat()
-        .map((q) => insertable(q as unknown as Record<string, unknown>));
+        .map((q) => stamped(insertable(q as unknown as Record<string, unknown>)));
       if (questionRows.length) await tx.insert(questions).values(questionRows as never);
 
       const sectionRows = (content.sections ?? []).map((s) => insertable(s as unknown as Record<string, unknown>));
       if (sectionRows.length) await tx.insert(testSections).values(sectionRows as never);
+
+      // «Сценарий в ИС»: пункты-сценарии — после вопросов: фиксированный пункт ссылается на вопрос.
+      const scenarioRows = (content.scenarios ?? []).map((s) => insertable(s as unknown as Record<string, unknown>));
+      if (scenarioRows.length) await tx.insert(testScenarios).values(scenarioRows as never);
 
       const scaleRows = (content.scales ?? []).map((s) => insertable(s as unknown as Record<string, unknown>));
       if (scaleRows.length) await tx.insert(scales).values(scaleRows as never);
@@ -172,6 +201,7 @@ export class TestTransferRepository {
           topics: topicRows.length,
           questions: questionRows.length,
           sections: sectionRows.length,
+          scenarios: scenarioRows.length,
           scales: scaleRows.length,
           measurements: measurementRows.length,
           resultVariables: variableRows.length,

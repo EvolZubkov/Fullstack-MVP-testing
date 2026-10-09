@@ -4,7 +4,7 @@
  * ring buffer: a filter row (level, debounced text search, refresh, live-tail) above a
  * monospace, auto-scrolling output. There is no date/history access by design — full
  * historical log viewing lives outside the application. Rendered entirely with the
- * UniversityRT design system: layout via Stack/Cluster/Box, typography via Text
+ * Skillum design system: layout via Stack/Cluster/Box, typography via Text
  * (mono-s for log lines), level badges via Tag, the empty/loading state via EmptyState.
  */
 import { useState, useEffect, useRef } from "react";
@@ -21,7 +21,7 @@ import {
   Stack,
   Tag,
   Text,
-} from "@universityrt/ui-kit";
+} from "@skillum/ui-kit";
 import { ScrollText, RefreshCw, Play, Square } from "lucide-react";
 
 type LogLevel = "all" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
