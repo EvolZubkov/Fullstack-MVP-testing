@@ -390,7 +390,11 @@ function restart() {
     state.currentIndex > 0 &&
     getAttemptsUsed() > 0;
 
-  if (hasRealProgress) {
+  if (typeof attemptReported !== 'undefined' && attemptReported) {
+    // The finished attempt already went out on entry to the results (`reportAttempt`):
+    // saving it and sending its telemetry `finish` again would record it twice.
+    reopenLearningForRetry();
+  } else if (hasRealProgress) {
     console.log('💾 Сохраняем текущую попытку перед перезапуском');
     var results = calculateResults();
     saveAttemptResult(results);

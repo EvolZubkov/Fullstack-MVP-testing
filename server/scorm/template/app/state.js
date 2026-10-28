@@ -37,7 +37,6 @@ var state = {
   submitted: false,
   answerConfirmed: false,
   feedbackShown: false,
-  attemptSavedForThisSession: false,
 
   // PRD-19 (Block B): per-question navigation status, keyed by question.id.
   // 'unanswered' (initial) | 'answered' (explicit fixation via confirmAnswer)

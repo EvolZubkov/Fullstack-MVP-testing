@@ -380,6 +380,9 @@ function renderAdaptiveResults() {
     state.adaptiveState.result = result;
   }
 
+  // The attempt reaches the LMS on entry to the results, not on «Завершить» (resultsPage.js).
+  if (typeof reportAttempt === 'function') reportAttempt();
+
   var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
   var layout = layouts && layouts['results.adaptive'];
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
@@ -545,8 +548,11 @@ function restartAdaptive() {
     return;
   }
 
-  // Сохраняем текущую попытку если ещё не сохранена
-  if (state.adaptiveState && state.adaptiveState.result) {
+  if (typeof attemptReported !== 'undefined' && attemptReported) {
+    // The finished attempt already went out on entry to the results (`reportAttempt`):
+    // its telemetry `finish` is not sent a second time.
+    reopenLearningForRetry();
+  } else if (state.adaptiveState && state.adaptiveState.result) {
     var results = getAdaptiveResultForScorm();
     results.achievedLevels = state.adaptiveState.result.topicResults.map(function (tr) {
       return {

@@ -19,11 +19,16 @@ const resultsSrc = readFileSync(
   "utf8",
 );
 
-/** The shipped `finishAndClose` body, cut out of the runtime file. */
-function finishAndCloseSource(): string {
-  const match = resultsSrc.match(/function finishAndClose\(\)\s*\{[\s\S]*?\n\}/);
-  if (!match) throw new Error("finishAndClose not found in resultsPage.js");
+/** One shipped runtime function, cut out of the runtime file. */
+function functionSource(name: string): string {
+  const match = resultsSrc.match(new RegExp(`function ${name}\\(\\)\\s*\\{[\\s\\S]*?\\n\\}`));
+  if (!match) throw new Error(`${name} not found in resultsPage.js`);
   return match[0];
+}
+
+/** `finishAndClose` and the `reportAttempt` that now resolves the verdict it ships. */
+function finishAndCloseSource(): string {
+  return `${functionSource("finishAndClose")}\n${functionSource("reportAttempt")}`;
 }
 
 interface Scenario {
@@ -100,7 +105,7 @@ function run(s: Scenario): Outcome {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const factory = new Function(
     ...names,
-    `var scormFinished = false;\n${finishAndCloseSource()}\n;return finishAndClose;`,
+    `var scormFinished = false;\nvar attemptReported = false;\n${finishAndCloseSource()}\n;return finishAndClose;`,
   );
   const finishAndClose = factory(...names.map((n) => deps[n as keyof typeof deps])) as () => void;
   finishAndClose();

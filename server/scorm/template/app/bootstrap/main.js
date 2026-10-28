@@ -18,22 +18,27 @@
       Telemetry.init(TEST_DATA.telemetry);
     }
 
-    window.addEventListener("beforeunload", function (e) {
+    // Leaving the SCO without «Завершить»: the learner closed the window, or the LMS closed
+    // the course from its side. `beforeunload` does not fire when the LMS just removes the
+    // frame, so `pagehide` is listened to as well; whichever comes first does the work.
+    var unloadHandled = false;
+    function onLeave() {
+      if (unloadHandled) return;
+      unloadHandled = true;
       // A viewing reports nothing: the learning is closed and its result already stands.
       if (state.reviewLaunch) {
         if (!state.reviewClosed) closeReviewLaunch();
         return;
       }
       if (typeof scormFinished === 'undefined' || !scormFinished) {
-        // Тест завершён (submit), но "Завершить и закрыть" не нажали — сохраняем попытку
-        if (state.submitted) {
+        // The results were reached, so the attempt was reported on entry to them. This is
+        // the safety net for a results screen that never got that far; a repeat is a no-op.
+        var adaptiveFinished = !!(state.adaptiveState && state.adaptiveState.isFinished);
+        if ((state.submitted || adaptiveFinished) && typeof reportAttempt === 'function') {
           try {
-            var isAdaptive = TEST_DATA.mode === 'adaptive' && state.adaptiveState;
-            var _r = isAdaptive ? getAdaptiveResultForScorm() : calculateResults();
-            saveAttemptResult(_r);
-            clearCurrentSession();
+            reportAttempt();
           } catch (e) {
-            console.log('⚠️ beforeunload: ошибка сохранения попытки:', e);
+            console.log('⚠️ Ошибка отчёта о попытке при уходе со страницы:', e);
           }
         }
 
@@ -54,30 +59,21 @@
           saveCurrentSession();
         }
 
-        // Отправляем лучший результат в LMS
-        if (typeof getBestAttempt === 'function') {
-          var bestAttempt = getBestAttempt();
-          if (bestAttempt) {
-            var percentScore = Math.round(bestAttempt.percent);
-            var passed = !!bestAttempt.passed;
-            try {
-              SCORM.setValue('cmi.score.raw', percentScore);
-              SCORM.setValue('cmi.score.min', 0);
-              SCORM.setValue('cmi.score.max', 100);
-              SCORM.setValue('cmi.score.scaled', percentScore / 100);
-              SCORM.setValue('cmi.completion_status', 'completed');
-              SCORM.setValue('cmi.success_status', passed ? 'passed' : 'failed');
-              SCORM.setValue('cmi.exit', 'suspend');
-            } catch (err) {
-              console.log('⚠️ beforeunload ошибка SCORM:', err);
-            }
-          }
+        // A retry left half-way after an attempt that already finished. Score, verdict and
+        // answers of that attempt reached the LMS when it was reported, and the retry
+        // reopened the learning as `incomplete` (`reopenLearningForRetry`) — nothing about
+        // the result is rewritten here. Only `suspend`, so the retry resumes next launch.
+        var _reported = typeof attemptReported !== 'undefined' && attemptReported;
+        if (!_reported && typeof hasCompletedAttempts === 'function' && hasCompletedAttempts()) {
+          try { SCORM.setValue('cmi.exit', 'suspend'); } catch (err) { }
         }
       }
 
       try { SCORM.commit(); } catch (e) { }
       try { SCORM.terminate(); } catch (e) { }
-    });
+    }
+    window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("pagehide", onLeave);
 
     var templateReady = typeof loadDesignTemplate === "function"
       ? loadDesignTemplate()
@@ -281,32 +277,3 @@ function closeReviewLaunch() {
     try { window.close(); } catch (e) { }
   }, typeof RESULTS_CLOSE_DELAY_MS !== 'undefined' ? RESULTS_CLOSE_DELAY_MS : 0);
 }
-
-// ===== ОТПРАВКА ЛУЧШЕЙ ПОПЫТКИ В LMS =====
-function sendBestAttemptToLMS(bestAttempt) {
-  if (!bestAttempt) return;
-  
-  var percentScore = Math.round(bestAttempt.percent);
-  var passed = !!bestAttempt.passed;
-  
-  // Objectives
-  var objectives = [];
-  if (bestAttempt.topicResults) {
-    objectives = bestAttempt.topicResults.map(function(tr) {
-      return {
-        id: 'topic_' + tr.topicId,
-        score: Math.round(tr.percent || 0),
-        status: tr.passed === null ? 'unknown' : (tr.passed ? 'passed' : 'failed')
-      };
-    });
-  }
-  
-  // Отправляем в SCORM
-  try {
-    SCORM.finish(percentScore, 100, passed, objectives, []);
-  } catch (e) {
-    console.log('⚠️ Ошибка отправки в LMS:', e);
-  }
-}
-
-window.sendBestAttemptToLMS = sendBestAttemptToLMS;

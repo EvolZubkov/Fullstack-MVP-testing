@@ -164,6 +164,29 @@ var SCORM = (function() {
 
 
     /**
+     * Neutralize ONE interaction left over from an earlier report of this SCO session.
+     *
+     * SCORM 2004 has no way to delete an interaction: the collection only grows, and
+     * `_count` is read-only. A retry whose report is shorter than the previous one would
+     * leave that report's tail in the record, read by the LMS report and by the PRD-54
+     * import as answers of the CURRENT attempt. The row is therefore rewritten as a
+     * `void_<n>` marker the import skips. If the LMS refuses to rename or retype a row it
+     * already holds, the old id and type stay and only the answer, outcome and description
+     * are cleared — the row then no longer claims an answer the learner gave.
+     *
+     * @param {number} index position in `cmi.interactions`
+     */
+    voidInteraction: function(index) {
+      var base = 'cmi.interactions.' + index + '.';
+      var renamed = this.setValue(base + 'id', 'void_' + index);
+      var retyped = renamed && this.setValue(base + 'type', 'other');
+      if (retyped) this.setValue(base + 'correct_responses.0.pattern', '');
+      this.setValue(base + 'result', 'neutral');
+      this.setValue(base + 'learner_response', '');
+      this.setValue(base + 'description', 'Не относится к попытке');
+    },
+
+    /**
      * Close the attempt: score, verdict, objectives, interactions.
      *
      * `earnedPoints === null` means the run had NOTHING to grade (a questionnaire, an
@@ -180,6 +203,10 @@ var SCORM = (function() {
      *   отчёте LMS по непроверенной работе — это претензия участника, а не неточность.
      */
     finish: function(earnedPoints, possiblePoints, passed, objectives, interactions) {
+      // Rows already in the record: a retry inside the same SCO session reports again, and
+      // whatever the previous report wrote beyond the new set must be neutralized below.
+      var previousCount = parseInt(this.getValue('cmi.interactions._count'), 10) || 0;
+
       // Report earned points as raw score, possible points as max, scaled as ratio
       if (earnedPoints !== null && earnedPoints !== undefined) {
         var scaled = possiblePoints > 0 ? earnedPoints / possiblePoints : 0;
@@ -208,6 +235,10 @@ var SCORM = (function() {
           int.description,  // ✅ новое поле
           int.latency       // время на задании, пусто = не измерялось
         );
+      }
+
+      for (var k = interactions.length; k < previousCount; k++) {
+        this.voidInteraction(k);
       }
 
       this.commit();

@@ -348,6 +348,28 @@ describe("версия формата ответов", () => {
   });
 });
 
+describe("обезвреженный хвост прежнего отчёта (`void_<n>`)", () => {
+  /** Та же выгрузка плюс строка, которую пакет переименовал при повторном отчёте. */
+  function withVoid(): string[][] {
+    const sheet = SHEET.map((r) => [...r]);
+    sheet[0].push("void_3", "", "", "");
+    sheet[1].push("Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ");
+    sheet[2].push("другое", "", "neutral", "");
+    return sheet;
+  }
+
+  it("не попадает ни в вопросы, ни в неопознанные колонки", () => {
+    const book = parseLmsExport(withVoid());
+    expect(book.unknownColumns).toEqual([]);
+    expect(book.questionIds).toEqual(["80a5957f-cdc7-4490-b4c9-bcedcb973c26"]);
+  });
+
+  it("не даёт строке ответа", () => {
+    const [row] = parseLmsExport(withVoid()).rows;
+    expect(Object.keys(row.answers)).toEqual(["80a5957f-cdc7-4490-b4c9-bcedcb973c26"]);
+  });
+});
+
 describe("версия публикации и выданные варианты (PRD-56 FR-19a)", () => {
   /** Та же выгрузка плюс два служебных блока, как их шлёт пакет после этой работы. */
   function withRunMeta(version: string, variant: string): string[][] {
