@@ -232,3 +232,53 @@ describe("determineRecovery with a pending anchor", () => {
     expect(determineRecoveryIn({ limitMinutes: 45, baselineTotalSec: null, pending: true }, 0).action).not.toBe("restore");
   });
 });
+
+describe("adaptive test: «Начать заново» and the results screen", () => {
+  const adaptiveSrc = read("server/scorm/template/app/render/adaptiveRender.js");
+  const lift = (name: string) => {
+    const m = adaptiveSrc.match(new RegExp(`function ${name}\\([\\s\\S]*?\\r?\\n\\}`));
+    if (!m) throw new Error(`${name} not found in adaptiveRender.js`);
+    return m[0];
+  };
+
+  /** One of the two functions over recording stubs: what it calls, in order, and the state. */
+  function run(name: string, state: Record<string, unknown>) {
+    const calls: string[] = [];
+    const stub = (n: string) => () => { calls.push(n); return true; };
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "state", "hasAttemptsLeft", "showToast", "Telemetry", "registerAttemptStart",
+      "resetSectionRunState", "stopTestTimer", "armTestTimer", "initAdaptiveTest", "render",
+      "buildAdaptiveResult", "renderAdaptiveResultsFallback", "renderAdaptiveResultsTemplated",
+      "getAdaptiveResultForScorm", "document", "window",
+      `${lift(name)}\nreturn ${name};`,
+    );
+    factory(
+      state, stub("hasAttemptsLeft"), stub("showToast"),
+      { finish: stub("Telemetry.finish"), startNewAttempt: stub("Telemetry.startNewAttempt") },
+      stub("registerAttemptStart"), stub("resetSectionRunState"),
+      () => { calls.push("stopTestTimer"); state.testTimerArmed = false; },
+      () => { calls.push("armTestTimer"); state.testTimerArmed = true; },
+      stub("initAdaptiveTest"), stub("render"),
+      () => ({}), stub("renderAdaptiveResultsFallback"), stub("renderAdaptiveResultsTemplated"),
+      () => ({}), { getElementById: () => null }, {},
+    )();
+    return calls;
+  }
+
+  it("«Начать заново» stops the old countdown and arms a new one before the first question", () => {
+    const state: Record<string, unknown> = { adaptiveState: null, remainingSeconds: 42, timeExpired: true };
+    const calls = run("restartAdaptive", state);
+    expect(calls.indexOf("stopTestTimer")).toBeGreaterThan(calls.indexOf("registerAttemptStart"));
+    expect(calls.indexOf("armTestTimer")).toBeGreaterThan(calls.indexOf("stopTestTimer"));
+    expect(calls.indexOf("armTestTimer")).toBeLessThan(calls.indexOf("render"));
+    expect(state.remainingSeconds).toBeNull();
+    expect(state.timeExpired).toBe(false);
+    expect(state.testTimerArmed).toBe(true);
+  });
+
+  it("the results screen stops the countdown of the finished attempt", () => {
+    const state: Record<string, unknown> = { adaptiveState: { result: {} }, templateLayouts: {} };
+    expect(run("renderAdaptiveResults", state)).toContain("stopTestTimer");
+  });
+});

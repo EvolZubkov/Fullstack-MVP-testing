@@ -371,6 +371,9 @@ function continueAfterTransition() {
  */
 function renderAdaptiveResults() {
   var app = document.getElementById('app');
+  // The attempt is over: its countdown stops here, as the standard `submit()` stops it.
+  // Left running it would later «expire» a finished attempt through the standard submit.
+  if (typeof stopTestTimer === 'function') stopTestTimer();
   var result = state.adaptiveState.result;
   if (!result) {
     result = buildAdaptiveResult();
@@ -569,6 +572,13 @@ function restartAdaptive() {
   registerAttemptStart();
   // A new attempt starts with clean section budgets and no closed sections (PRD-67).
   if (typeof resetSectionRunState === 'function') resetSectionRunState();
+
+  // The new attempt gets its own test countdown, armed like «Начать» arms it: it starts
+  // on the first question (timer.js). Restarting used to leave the attempt untimed.
+  stopTestTimer();
+  state.remainingSeconds = null;
+  state.timeExpired = false;
+  armTestTimer();
 
   // Переинициализация адаптивного теста
   initAdaptiveTest();
