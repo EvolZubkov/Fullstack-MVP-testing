@@ -602,6 +602,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
             description: model.basic.description,
             descriptionFormat: model.basic.descriptionFormat,
             passPercent: model.passRules.overall.type === "percent" ? model.passRules.overall.value : null,
+            overallPassRule: model.passRules.overall,
             timeLimitMinutes: model.runtime.timeLimitMinutes,
             maxAttempts: model.runtime.maxAttempts,
             topics: model.sections.map((s) => ({ id: s.topicId, title: s.topicName })),

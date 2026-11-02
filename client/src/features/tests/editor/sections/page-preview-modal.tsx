@@ -28,6 +28,7 @@ import {
 import { buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTemplateCssVars, buildTemplateDataAttrs } from "@shared/template/params-css";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
+import { hiddenStartFacts, hideStartFactsInContext } from "@shared/template/start-facts";
 import type { RichTextFormat } from "@shared/template/rich-text";
 import { useTemplateBundle } from "./use-template-bundle";
 
@@ -71,6 +72,8 @@ export type PagePreviewModalProps = {
     descriptionFormat?: RichTextFormat | null;
     /** Pass threshold percent (null when the rule is absolute/none). */
     passPercent?: number | null;
+    /** The overall pass rule as authored — a points threshold is previewed in points. */
+    overallPassRule?: unknown;
     timeLimitMinutes?: number | null;
     maxAttempts?: number | null;
     topics?: Array<{ id: string; title: string }>;
@@ -170,6 +173,7 @@ export function PagePreviewModal({
           ? { description: realData.description, descriptionFormat: realData.descriptionFormat ?? null }
           : {}),
         ...(realData.passPercent !== undefined ? { passPercent: realData.passPercent } : {}),
+        ...(realData.overallPassRule !== undefined ? { overallPassRule: realData.overallPassRule } : {}),
         ...(realData.timeLimitMinutes !== undefined ? { timeLimitMinutes: realData.timeLimitMinutes } : {}),
         ...(realData.maxAttempts !== undefined ? { maxAttempts: realData.maxAttempts } : {}),
       },
@@ -200,10 +204,13 @@ export function PagePreviewModal({
       const declaration = (bundle.manifest.contentTemplates ?? []).find(
         (ct) => ct.key === page.templateKey,
       ) as StartVariantDecl | undefined;
-      const design = previewDesign(params, declaration, page.settingsJson as Record<string, unknown> | null);
+      const pageSettings = page.settingsJson as Record<string, unknown> | null;
+      const design = previewDesign(params, declaration, pageSettings);
+      // The fact switches of the page, by the rule both hosts apply in a run.
+      const context = hideStartFactsInContext(chosen.input?.context ?? {}, hiddenStartFacts(declaration, pageSettings));
       return {
         ...chosen,
-        input: { ...chosen.input, context: { ...(chosen.input?.context ?? {}), design } },
+        input: { ...chosen.input, context: { ...(context as object), design } },
       };
     }
     if (
