@@ -2112,6 +2112,20 @@ export function showsSetting(settings: Record<string, unknown>) {
 }
 
 /**
+ * The option a `select` property shows: the saved value, else the declared default when it
+ * is one of the options, else nothing (the trigger's «Выберите…»).
+ *
+ * @param st The property declaration.
+ * @param value The saved value; `undefined`/`null`/`""` mean «never set».
+ * @returns The option key to show, or `""` for none.
+ */
+export function selectShownValue(st: ContentTemplateSetting, value: unknown): string {
+  if (typeof value === "string" && value !== "") return value;
+  const fallback = st.default;
+  return typeof fallback === "string" && (st.options ?? []).includes(fallback) ? fallback : "";
+}
+
+/**
  * Control for one page PROPERTY (`settings[]`, PRD-22). Property types are their
  * own closed registry — `number` / `boolean` / `select` live here rather than
  * among placeholders, because they configure the page instead of filling the
@@ -2160,7 +2174,10 @@ export function SettingControl(props: {
       return (
         <NumberInput
           label={label}
-          value={typeof value === "number" ? value : 0}
+          hint={st.description}
+          // PRD-22 FR-45, as for the switch below: an unset number shows the declared
+          // default it resolves to, not a zero that is in force nowhere.
+          value={typeof value === "number" ? value : typeof st.default === "number" ? st.default : 0}
           onChange={(v) => onChange(v)}
           fullWidth
           data-testid={testId}
@@ -2191,7 +2208,11 @@ export function SettingControl(props: {
           label={label}
           size="m"
           fullWidth
-          value={(value as string) || ""}
+          hint={st.description}
+          // PRD-22 FR-45, as for the switch above: an unset value is the declared default in
+          // force, so the trigger names it instead of «Выберите…». Nothing is written until the
+          // author picks — an empty setting stays empty in storage.
+          value={selectShownValue(st, value)}
           options={(st.options ?? []).map((o) => ({ value: o, label: st.optionLabels?.[o] ?? o }))}
           onChange={(next) => onChange(next)}
           data-testid={testId}
