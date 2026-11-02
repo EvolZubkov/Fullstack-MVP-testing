@@ -109,7 +109,9 @@ describe("оба пути завершения решают про балл ОД
     const start = resultsSrc.indexOf("function finishScormLmsOnly(");
     const body = resultsSrc.slice(start).match(/^function [^\n]*\n[\s\S]*?\n\}/)![0];
     expect(body).toContain("passed: (results.gradingComplete === false || typeof verdictForLms !== 'boolean') ? null : verdictForLms");
-    expect(body).toContain("lmsThreshold: TEST_DATA.passPercent");
+    // Порог в процентах ЭТОЙ попытки: порог в баллах пересчитывается по её максимуму, а не
+    // по числу вопросов при сборке (тот давал «125 %» и балл выше max).
+    expect(body).toContain("lmsThreshold: window.TBTemplate.lmsThresholdFor(TEST_DATA.overallPassRule, results.possiblePoints)");
   });
 
   it("безусловной отправки процента больше нет ни в одном пути", () => {

@@ -1484,7 +1484,9 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
     percent: percentScore,
     possiblePoints: results.possiblePoints,
     passed: (results.gradingComplete === false || typeof verdictForLms !== 'boolean') ? null : verdictForLms,
-    lmsThreshold: TEST_DATA.passPercent
+    // The threshold in percent of THIS run: a points rule has no fixed percent, the
+    // delivered questions decide the maximum.
+    lmsThreshold: window.TBTemplate.lmsThresholdFor(TEST_DATA.overallPassRule, results.possiblePoints)
   });
   SCORM.finish(
     lmsScore ? lmsScore.raw : null,

@@ -257,12 +257,13 @@ export function buildTestJson(data: ExportData): string {
     for (const q of s.questions) for (const tag of q.tags ?? []) noteBreakdownKey(tag);
   }
 
-  const passPercent =
-    overallPassRule.type === "percent"
-      ? overallPassRule.value
-      : totalQuestions > 0
-        ? Math.round((overallPassRule.value / totalQuestions) * 100)
-        : 80;
+  // Only a percent rule HAS a percent. An `absolute` rule is a number of POINTS (the grader
+  // compares it with Σ earned, `aggregate.ts`), and the possible points depend on the
+  // delivered questions and their prices — a percent derived here (it used to be
+  // `value / totalQuestions`) printed «125 %» on the cover and pushed the LMS score past
+  // `max`. The runtime converts a points rule per attempt (`TBTemplate.lmsThresholdFor`)
+  // and the cover states it in points (`course.passPoints`).
+  const passPercent = overallPassRule.type === "percent" ? overallPassRule.value : null;
 
   // PRD-4 v1.1: export `flowPolicy` so the runtime can switch traversal
   // strategy (legacy_flat / linear_by_topics / router_by_topics) and apply

@@ -166,13 +166,26 @@ describe("buildTestJson — standard mode", () => {
     expect(data.passPercent).toBe(70);
   });
 
-  it("calculates passPercent from overallPassRule count type", () => {
-    const countTest = {
+  it("порог в баллах не превращается в процент — у него нет постоянного процента", () => {
+    // Судья сравнивает такой порог с набранными БАЛЛАМИ. Деление на число вопросов давало
+    // «125 %» на обложке (5 баллов при 4 вопросах) и балл выше max в LMS.
+    for (const type of ["absolute", "count"]) {
+      const pointsTest = {
+        ...exportData,
+        test: { ...exportData.test, overallPassRuleJson: { type, value: 5 } },
+      };
+      const data = JSON.parse(buildTestJson(pointsTest));
+      expect(data.passPercent).toBeNull();
+      expect(data.overallPassRule).toEqual({ type, value: 5 });
+    }
+  });
+
+  it("без порога (none) процента тоже нет", () => {
+    const noneTest = {
       ...exportData,
-      test: { ...exportData.test, overallPassRuleJson: { type: "count", value: 1 } },
+      test: { ...exportData.test, overallPassRuleJson: { type: "none", value: 0 } },
     };
-    const data = JSON.parse(buildTestJson(countTest));
-    expect(data.passPercent).toBe(100); // 1/1 * 100
+    expect(JSON.parse(buildTestJson(noneTest)).passPercent).toBeNull();
   });
 
   it("контрольный тест не несёт флага hasGradedContent — пакет байт-в-байт прежний", () => {
