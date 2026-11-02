@@ -63,7 +63,7 @@ export function sanitizePastedHtml(html: string): string {
 
 /**
  * Inline style properties a paste brings from its SOURCE's look rather than from the
- * author's intent: a page in dark mode copies as `background-color: #11151e; color: #fff`,
+ * author's intent: a dark-mode page copies its own dark `background-color` and light `color`,
  * Word as `font-family: 'Times New Roman'; font-size: 12pt`. Printed as is, they beat the
  * template's CSS and ignore its theme — a dark plaque on a light cover.
  */
