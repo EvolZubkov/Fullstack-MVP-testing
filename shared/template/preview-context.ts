@@ -43,6 +43,7 @@ import {
 } from "./page-sequences";
 import type { ScreenRenderInput, PlaceholderDef } from "./render-screen";
 import type { RichTextFormat } from "./rich-text";
+import type { ResultsBlockSettings } from "./results-blocks";
 import {
   buildRouterHubHtml,
   type RouterSection,
@@ -577,7 +578,12 @@ function buildPagePreviewContext(
 }
 
 /** Build the {@link ScreenSpec} for one route target. */
-function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manifest: PreviewManifest): ScreenSpec {
+function buildOne(
+  target: PreviewRouteTarget,
+  dataset: PreviewDemoDataset,
+  manifest: PreviewManifest,
+  options: ScreenInputsOptions = {},
+): ScreenSpec {
   const route = target.route;
   const c = dataset.course;
   const boundPage = route.startsWith("content") ? findContentPage(dataset, target) : undefined;
@@ -619,6 +625,9 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
             // Отсутствие ключа сохраняет прежний вид для шаблонов, чей демо-набор
             // измерений не объявил, — экран тогда рисуется как контрольный тест.
             ...(dataset.runtime?.measures ? { measures: dataset.runtime.measures } : {}),
+            // The score switches of the page being previewed, read by the SAME builder as in
+            // a run — otherwise the author would hide the ring and still see it here.
+            ...(options.resultsSettings ? { scoreDisplay: options.resultsSettings } : {}),
           });
     // Both runtime hosts fill `result.nav`, so a preview WITHOUT it falls into the
     // layout's legacy single-button branch — a footer neither host renders any more.
@@ -861,6 +870,15 @@ function buildContentVariant(
   };
 }
 
+/** What a preview of ONE real page adds to the demo screens. */
+export interface ScreenInputsOptions {
+  /**
+   * Settings of the test's «Итоги теста» page (`content_pages.settings_json`): the results
+   * screen reads its score switches from them. Absent — the template's own defaults.
+   */
+  resultsSettings?: Pick<ResultsBlockSettings, "scoreSummary" | "scoreBar"> | null;
+}
+
 /**
  * Build a {@link ScreenSpec} per preview screen. Non-content screens (start,
  * question.*, results, system.*) come from `manifest.preview.routes[]`. Content
@@ -870,7 +888,11 @@ function buildContentVariant(
  * `contentTemplates` that no route references is appended so it still
  * renders + smoke-checks. The smoke-runner attaches each layout's HTML.
  */
-export function buildScreenInputs(dataset: PreviewDemoDataset, manifest: PreviewManifest): ScreenSpec[] {
+export function buildScreenInputs(
+  dataset: PreviewDemoDataset,
+  manifest: PreviewManifest,
+  options: ScreenInputsOptions = {},
+): ScreenSpec[] {
   const targets = (manifest.preview?.routes ?? []).map(normalizeTarget);
   const specs: ScreenSpec[] = [];
   // Variant keys already shown via a preview.routes entry — so we don't list
@@ -878,7 +900,7 @@ export function buildScreenInputs(dataset: PreviewDemoDataset, manifest: Preview
   const coveredVariantKeys = new Set<string>();
 
   for (const t of targets) {
-    const spec = buildOne(t, dataset, manifest);
+    const spec = buildOne(t, dataset, manifest, options);
     specs.push(spec);
     if (t.route.startsWith("content")) {
       const page = findContentPage(dataset, t);

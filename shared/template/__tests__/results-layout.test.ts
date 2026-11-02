@@ -122,6 +122,14 @@ describe("results layout (PRD-49)", () => {
 
   // The separator is the LOOP's business now: one `{{#unless @first}}` instead of the old
   // per-block conditions. Two sub-blocks = exactly one rule between them.
+  it("prints the score bar unless the context hides it", () => {
+    expect(compileTemplate(LAYOUT)(CTX)).toContain("tb-scene__progress");
+    const html = compileTemplate(LAYOUT)({ ...CTX, result: { ...CTX.result, hideScoreBar: true } });
+    expect(html).not.toContain("tb-scene__progress");
+    // The verdict tag in the header does not depend on the bar.
+    expect(html).toContain('data-path="result.statusLabel"');
+  });
+
   it("puts exactly one separator between two sub-blocks", () => {
     const html = compileTemplate(LAYOUT)(CTX);
     const body = html.slice(html.indexOf("По темам"));

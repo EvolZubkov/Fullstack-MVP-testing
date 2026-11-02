@@ -422,6 +422,12 @@ export interface CtxResult {
    */
   hideScoreSummary?: boolean;
   /**
+   * The score bar under the results header («Полоса балла»), NEGATIVE for the same reason
+   * as {@link hideScoreSummary}: absent = shown. Follows the summary unless the author set
+   * the bar on its own.
+   */
+  hideScoreBar?: boolean;
+  /**
    * PRD-49. The visible sub-blocks of the results umbrella, already ordered and already
    * carrying their heading. The layout walks this ONE array instead of printing four
    * fixed sections, so the author's order is expressed in DATA — the print pipeline of

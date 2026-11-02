@@ -8,7 +8,9 @@
       </div>
       <div class="tb-scene__headtag">{{#if result.statusLabel}}<span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span>{{/if}}</div>
     </div>
-    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>
+    <!-- «Полоса балла»: гасится вместе со сводкой или своим переключателем; флаг отрицательный,
+         поэтому контекст без него (старый хост) полосу печатает. -->
+    {{#unless result.hideScoreBar}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>{{/unless}}
   </header>
 
   <main class="tb-scene__body">

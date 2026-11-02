@@ -330,6 +330,76 @@ describe("сводка баллов", () => {
   });
 });
 
+describe("сводка и полоса балла контрольного теста", () => {
+  // Контрольный тест: порог есть, измерений нет. Переключатели приходят ВНЕ `measures`.
+  const CONTROL = { ...BASE, passed: false, percent: 13, earnedPoints: 3, possiblePoints: 22 };
+  const LABELS = { labels: { "results.summary": "Общий балл" } };
+  const keys = (ctx: ReturnType<typeof buildResultContext>) =>
+    ((ctx.result.blocks ?? []) as Array<{ key: string }>).map((b) => b.key);
+
+  it("без переключателей показывает сводку и полосу, как прежде", () => {
+    const ctx = buildResultContext(CONTROL, "Контрольный", { hasPassThreshold: true, ...LABELS });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+    expect(ctx.result.hideScoreBar).toBeUndefined();
+    expect(keys(ctx)).toContain("summary");
+  });
+
+  it("«Скрывать» убирает сводку и полосу, вердикт остаётся", () => {
+    const ctx = buildResultContext(CONTROL, "Контрольный", {
+      hasPassThreshold: true,
+      scoreDisplay: { scoreSummary: "hide" },
+      ...LABELS,
+    });
+    expect(ctx.result.hideScoreSummary).toBe(true);
+    expect(ctx.result.hideScoreBar).toBe(true);
+    expect(keys(ctx)).not.toContain("summary");
+    expect(ctx.result.statusLabel).toBe("Не пройден");
+  });
+
+  it("полоса «Показывать» остаётся при скрытой сводке", () => {
+    const ctx = buildResultContext(CONTROL, "Контрольный", {
+      hasPassThreshold: true,
+      scoreDisplay: { scoreSummary: "hide", scoreBar: "show" },
+    });
+    expect(ctx.result.hideScoreSummary).toBe(true);
+    expect(ctx.result.hideScoreBar).toBeUndefined();
+  });
+
+  it("полоса «Скрывать» уходит при видимой сводке", () => {
+    const ctx = buildResultContext(CONTROL, "Контрольный", {
+      hasPassThreshold: true,
+      scoreDisplay: { scoreBar: "hide" },
+      ...LABELS,
+    });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+    expect(ctx.result.hideScoreBar).toBe(true);
+    expect(keys(ctx)).toContain("summary");
+  });
+
+  it("скрытая сводка гасит строку «Баллов» у темы и в контрольном тесте", () => {
+    const ctx = buildResultContext(
+      { ...CONTROL, topicResults: [{ topicId: "t1", topicName: "Тема 1", correct: 3, total: 4, percent: 75, earnedPoints: 3, possiblePoints: 4, passed: null }] },
+      "Контрольный",
+      { withTopicPoints: true, hasPassThreshold: true, scoreDisplay: { scoreSummary: "hide" } },
+    );
+    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
+  });
+
+  it("у измерительного теста без порога полоса уходит вместе со сводкой", () => {
+    const ctx = buildResultContext(BASE, "Маслач", { measures: MEASURES });
+    expect(ctx.result.hideScoreSummary).toBe(true);
+    expect(ctx.result.hideScoreBar).toBe(true);
+  });
+
+  it("переключатели вне `measures` важнее копии внутри", () => {
+    const ctx = buildResultContext(BASE, "Маслач", {
+      measures: { ...MEASURES, blockSettings: { scoreSummary: "hide" as const } },
+      scoreDisplay: { scoreSummary: "show" },
+    });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+  });
+});
+
 describe("строка «Баллов» темы следует за настройкой сводки (issue #30)", () => {
   const withTopic = { ...BASE, topicResults: [{ topicId: "t1", topicName: "Тема 1", correct: 3, total: 4, percent: 75, earnedPoints: 3, possiblePoints: 4, passed: null }] };
 

@@ -17,7 +17,12 @@
 import { useMemo } from "react";
 import { Banner, Button, ModalDialog } from "@skillum/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
-import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
+import {
+  buildContentPageScreen,
+  buildScreenInputs,
+  type PreviewDemoDataset,
+  type ScreenInputsOptions,
+} from "@shared/template/preview-context";
 import {
   buildPageContext,
   sectionSubtitleOf,
@@ -219,7 +224,10 @@ export function PagePreviewModal({
       page.kind === "review" ||
       page.kind === "section-results"
     ) {
-      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
+      // The results page previews its own score switches («Сводка баллов», «Полоса балла»).
+      const screenOptions =
+        page.kind === "results" ? { resultsSettings: page.settingsJson as ScreenInputsOptions["resultsSettings"] } : {};
+      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest, screenOptions) : [];
       const matches =
         page.kind === "results"
           ? (r: string) => r === "results" || r === "results.adaptive"

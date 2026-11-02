@@ -269,6 +269,26 @@ function barFillOption(measures?: MeasuresSource): { barFill?: BarFillSetting } 
   return barFill ? { barFill } : {};
 }
 
+/**
+ * Переключатели «Сводка баллов» и «Полоса балла» страницы «Итоги теста».
+ *
+ * Едут ВНЕ `measures`, как заголовки итога: `blockSettings` доезжает до построителя только
+ * у теста со шкалами или показателями, а скрыть кольцо должен мочь и контрольный тест.
+ * Пустой объект, когда автор не трогал ни один из двух, — контекст тогда прежний.
+ */
+function scoreDisplayOption(
+  measures?: MeasuresSource,
+): { scoreDisplay?: Pick<ResultsBlockSettings, "scoreSummary" | "scoreBar"> } {
+  const settings = measures?.blockSettings;
+  if (!settings?.scoreSummary && !settings?.scoreBar) return {};
+  return {
+    scoreDisplay: {
+      ...(settings.scoreSummary ? { scoreSummary: settings.scoreSummary } : {}),
+      ...(settings.scoreBar ? { scoreBar: settings.scoreBar } : {}),
+    },
+  };
+}
+
 // Рампа уровней теста собирается ОБЩЕЙ `rampFromParams` (`@shared/template/level-ramp`): по
 // ней красит зоны линейки участник и полосы уровней аналитика (PRD-56 FR-21a), и две копии
 // правила означали бы два цвета у одного уровня.
@@ -505,6 +525,7 @@ export function buildResultContext(
     testTitle,
     {
       ...(measures?.resultHeadings ? { headings: measures.resultHeadings } : {}),
+      ...scoreDisplayOption(measures),
       ...(recommendedCourses.length ? { recommendedCourses } : {}),
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
       ...(testFeedback ? { testFeedback } : {}),
