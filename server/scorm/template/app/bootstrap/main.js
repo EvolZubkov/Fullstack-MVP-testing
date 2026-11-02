@@ -41,12 +41,14 @@
         // PRD-4 v1.1 / Phase 4f: router-mode sessions persist `routerTopicStates`
         // + `sectionResults` regardless of phase, so the learner can resume
         // with completed topics intact. Legacy linear sessions still only
-        // persist mid-question state (timer/adaptive guarded inside save).
+        // persist mid-run state — a question or a page of the run (timer/adaptive
+        // guarded inside save).
         var _isRouterMode =
           TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode === 'router_by_topics';
         var _shouldSave = !state.submitted && (
           _isRouterMode ||
-          (state.phase === 'question' && state.flatQuestions && state.flatQuestions.length > 0)
+          ((state.phase === 'question' || state.phase === 'content') &&
+            state.flatQuestions && state.flatQuestions.length > 0)
         );
         if (_shouldSave) {
           saveCurrentSession();
@@ -122,11 +124,8 @@
         restoreSession(recovery.session);
         if (typeof rebuildPageSequence === 'function') {
           rebuildPageSequence();
-          var qIndex = state.currentIndex || 0;
-          var itemIndex = state.pageSequence.findIndex(function (item) {
-            return item.kind === 'question' && item.questionIndex === qIndex;
-          });
-          goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+          // Back to the page the run was saved on: an intro or section page, or the question.
+          goToPageSequenceIndex(resumePageIndex(recovery.session));
         }
         // PRD-20 (5.6/5.12): resume the test timer from the active-time anchor.
         // initTimer expires-and-submits if the limit was exhausted while away; a

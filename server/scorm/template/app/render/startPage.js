@@ -368,6 +368,9 @@ function startTest() {
   else state.phase = 'question';
   // The countdown starts on the first question, not here (timer.js).
   armTestTimer();
+  // The attempt is already counted: checkpoint it now, so a reload on an intro page
+  // resumes this run instead of spending another attempt.
+  if (typeof saveSessionOnPage === 'function') saveSessionOnPage();
   render();
 }
 
@@ -463,6 +466,9 @@ function restart() {
   else state.phase = 'question';
   // The countdown starts on the first question, not here (timer.js).
   armTestTimer();
+  // The attempt is already counted: checkpoint it now, so a reload on an intro page
+  // resumes this run instead of spending another attempt.
+  if (typeof saveSessionOnPage === 'function') saveSessionOnPage();
   render();
 }
 
@@ -500,12 +506,8 @@ function continueSession() {
   // section (answerCommitScope='section').
   if (typeof rebuildPageSequence === 'function') {
     rebuildPageSequence();
-    var qIndex = state.currentIndex || 0;
-    var itemIndex = (state.pageSequence || []).findIndex(function (item) {
-      return item && item.kind === 'question' && item.questionIndex === qIndex;
-    });
     if (typeof goToPageSequenceIndex === 'function') {
-      goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+      goToPageSequenceIndex(resumePageIndex(recovery.session));
     }
   }
   render();

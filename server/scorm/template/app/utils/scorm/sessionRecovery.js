@@ -5,6 +5,10 @@
 // Design:
 //   - Save the current question index + answers on every question advance and restore
 //     them on the next load (the learner continues where they left off).
+//   - Linear modes checkpoint the PAGES too — from «Начать» on, before the first
+//     question and between sections — and come back to the page the learner was on.
+//     The attempt is counted on «Начать», so a reload on an intro page used to drop
+//     the run and spend that attempt for nothing.
 //   - Timed tests resume too (PRD-20 5.12): the remaining time comes back from the
 //     active-time anchor, not from a fresh limit.
 //   - Adaptive   → mid-session state is too complex to restore. Show last attempt.
@@ -247,6 +251,38 @@ function applySessionRows(session) {
   }
   state.currentIndex = session.i || 0;
   state.sectionCommitted = session.sc || {};
+}
+
+/**
+ * Checkpoint a page of a linear run (`saveSessionOnPage`): «Начать» and every page
+ * change call it, so a reload on an intro page, a section intro or between sections
+ * finds the run. Router mode saves on its own, a finished attempt has nothing to keep.
+ */
+function saveSessionOnPage() {
+  if (state.submitted) return;
+  if (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode === 'router_by_topics') return;
+  if (state.phase !== 'content' && state.phase !== 'question') return;
+  saveCurrentSession();
+}
+
+/**
+ * Where a restored linear run resumes in the page sequence: on the content page it
+ * was saved on (`cpi`), otherwise on the question it was at. Call after
+ * `rebuildPageSequence()` — the sequence is rebuilt from the same delivery and pages,
+ * so the stored position addresses the same item.
+ * @param {object} session the stored checkpoint
+ * @returns {number}
+ */
+function resumePageIndex(session) {
+  var seq = state.pageSequence || [];
+  var cpi = (session && typeof session.cpi === 'number') ? session.cpi : -1;
+  var item = seq[cpi];
+  if (item && item.kind === 'content' && !item.isRouter) return cpi;
+  var qIndex = state.currentIndex || 0;
+  var itemIndex = seq.findIndex(function (it) {
+    return it && it.kind === 'question' && it.questionIndex === qIndex;
+  });
+  return itemIndex >= 0 ? itemIndex : 0;
 }
 
 /** Restores state from a saved session and moves to question phase. */
