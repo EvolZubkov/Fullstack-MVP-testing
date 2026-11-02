@@ -19,6 +19,7 @@ import {
 } from "@shared/scoring/engine";
 import { applyDeliveryOrder } from "@shared/draw/assemble-delivery";
 import { buildStartState } from "@shared/template/start-state";
+import type { StartFact } from "@shared/template/start-facts";
 import { feedbackBanner, feedbackDesc, feedbackTextFor } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
@@ -631,6 +632,8 @@ export default function TakeTestPage() {
     /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
     themed?: boolean;
     design?: { logoUrl?: string };
+    /** The start facts the author switched off on the start page (resolved by the server). */
+    hiddenFacts?: StartFact[];
   } | null>(null);
   // PRD-12 / PRD-6: retake block-wall template + cooldown data (set on 403).
   const [blockedTpl, setBlockedTpl] = useState<{
@@ -3198,6 +3201,7 @@ export default function TakeTestPage() {
       // bounce to /login), so the ghost «К списку тестов» button is not offered
       // at all in that case.
       showBack: !magicScoped,
+      hiddenFacts: startTpl.hiddenFacts,
     });
     return (
       <div

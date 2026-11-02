@@ -177,8 +177,37 @@ function buildScormStartContext() {
       maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null
     } : null,
     canDownloadReport: !!best,
-    showBack: false
+    showBack: false,
+    // The tiles the author switched off on the start page («Показывать число вопросов» …),
+    // by the same shared rule the web reads them with.
+    hiddenFacts: scormHiddenStartFacts()
   });
+}
+
+/**
+ * The start page and its variant as the manifest declares it — what the page properties
+ * (the illustration, the fact switches) belong to. `variant` is null when the page names
+ * no variant or the manifest does not know it.
+ */
+function scormStartPageAndVariant() {
+  var startPage = ((typeof TEST_DATA !== 'undefined' && TEST_DATA.contentPages) || [])
+    .filter(function (pg) { return pg && pg.kind === 'start'; })[0] || null;
+  var manifest = (typeof state !== 'undefined' && state && state.templateManifest) || {};
+  var variant = null;
+  if (startPage && startPage.templateKey) {
+    variant = (manifest.contentTemplates || []).filter(function (ct) {
+      return ct && ct.key === startPage.templateKey;
+    })[0] || null;
+  }
+  return { page: startPage, variant: variant };
+}
+
+/** The start facts the author hid; none from a bundle without the shared helper. */
+function scormHiddenStartFacts() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || typeof TB.hiddenStartFacts !== 'function') return [];
+  var sv = scormStartPageAndVariant();
+  return TB.hiddenStartFacts(sv.variant, sv.page ? sv.page.settings : null);
 }
 
 /** Wire a data-action button (if present) to a runtime handler. */
@@ -221,18 +250,10 @@ function scormDesignContext() {
  * shared `startImageForVariant` is the single rule for both hosts.
  */
 function resolveStartImage(designParams) {
-  var startPage = ((typeof TEST_DATA !== 'undefined' && TEST_DATA.contentPages) || [])
-    .filter(function (pg) { return pg && pg.kind === 'start'; })[0];
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (TB && typeof TB.startImageForVariant === 'function') {
-    var manifest = (typeof state !== 'undefined' && state && state.templateManifest) || {};
-    var variant = null;
-    if (startPage && startPage.templateKey) {
-      variant = (manifest.contentTemplates || []).filter(function (ct) {
-        return ct && ct.key === startPage.templateKey;
-      })[0] || null;
-    }
-    return TB.startImageForVariant(variant, startPage ? startPage.settings : null, designParams);
+    var sv = scormStartPageAndVariant();
+    return TB.startImageForVariant(sv.variant, sv.page ? sv.page.settings : null, designParams);
   }
   // Bundle without the shared helper (older package): the branding param alone.
   var v = designParams ? designParams.startImageUrl : null;

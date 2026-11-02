@@ -12,6 +12,7 @@ import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } 
 import { withTemplateAssetBase } from "@shared/template/asset-base";
 import { declaredThemes, isTestTheme, supportsThemes, TEST_THEMES } from "@shared/template/themes";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
+import { hiddenStartFacts } from "@shared/template/start-facts";
 import { colorParamKeys } from "@shared/template/theme-params";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
@@ -651,6 +652,13 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
         ...payload,
         design: { ...restDesign, ...(startImageUrl ? { startImageUrl } : {}) },
       };
+      // The facts the author switched off on the page — the client's start builder drops
+      // them, by the same shared rule the SCORM runtime applies. Absent when none are off.
+      const hiddenFacts = hiddenStartFacts(startVariant, startPageSettings);
+      if (hiddenFacts.length) {
+        res.json({ ...payload, hiddenFacts });
+        return;
+      }
     }
     // PRD-12 FR-6: the content screen also carries the manifest's placeholder
     // declarations — the web host builds its page skeleton from them through the
