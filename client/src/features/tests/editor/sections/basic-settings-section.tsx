@@ -56,6 +56,7 @@ import {
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
+import { stripPastedPresentation } from "./rte-paste";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import type {
   AdaptiveLevelConfig,
@@ -160,6 +161,7 @@ export function MainPane({
             toPlain: (html) => richTextToPlain(html, "richText"),
           }}
           sanitize={(html) => sanitizeContentHtml(html, { scope: DESCRIPTION_SCOPE })}
+          transformPaste={stripPastedPresentation}
           onChange={(value) =>
             updateModel((m) => ({ ...m, basic: { ...m.basic, description: value } }))
           }

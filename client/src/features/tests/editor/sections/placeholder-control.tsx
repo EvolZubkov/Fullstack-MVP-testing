@@ -22,6 +22,7 @@ import {
 import { isPlaceholderType, inputModesFor } from "@shared/template/field-types";
 import { sanitizeHtml as sanitizeContentHtml, placeholderScope } from "@shared/security/html-sanitize";
 import type { ContentTemplatePlaceholder } from "../use-content-pages";
+import { stripPastedPresentation } from "./rte-paste";
 import { IMAGE_UPLOAD_ACCEPT, IMAGE_UPLOAD_MAX_KB, formatUploadLimit, imageUploadHint } from "../image-upload-limit";
 
 export function PlaceholderControl(props: {
@@ -73,6 +74,7 @@ export function PlaceholderControl(props: {
           onChange={(next) => onChange(next)}
           modes={inputModesFor(ph.type) as RichTextMode[]}
           sanitize={(html) => sanitizeContentHtml(html, { scope: placeholderScope(ph.key) })}
+          transformPaste={stripPastedPresentation}
           rows={ph.type === "html" ? 6 : 5}
           fullWidth
           data-testid={testId}

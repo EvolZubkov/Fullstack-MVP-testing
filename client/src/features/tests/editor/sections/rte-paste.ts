@@ -9,6 +9,9 @@
  * и в отчёте чужим шрифтом. Чистить нужно на входе: оставляем только то, что умеет сам
  * редактор (абзацы, жирный, курсив, подчёркивание, ссылки, списки), остальное — текст.
  *
+ * `stripPastedPresentation` is the softer variant for content fields (test description,
+ * content-page fields): structure stays, only the source's colours and fonts go.
+ *
  * Чистый модуль относительно React; DOM нужен только для разбора разметки.
  */
 
@@ -56,6 +59,54 @@ export function sanitizePastedHtml(html: string): string {
   const out = Array.from(doc.body.childNodes).map(walk).join("");
   // Пустые абзацы, оставшиеся от обёрток Word, не нужны.
   return out.replace(/<p>(?:\s|<br>)*<\/p>/g, "");
+}
+
+/**
+ * Inline style properties a paste brings from its SOURCE's look rather than from the
+ * author's intent: a page in dark mode copies as `background-color: #11151e; color: #fff`,
+ * Word as `font-family: 'Times New Roman'; font-size: 12pt`. Printed as is, they beat the
+ * template's CSS and ignore its theme — a dark plaque on a light cover.
+ */
+const PASTED_PRESENTATION = new Set([
+  "color",
+  "background",
+  "background-color",
+  "background-image",
+  "font-family",
+  "font-size",
+]);
+
+/** Legacy presentational attributes that carry the same look outside `style`. */
+const PRESENTATION_ATTRS = ["bgcolor"];
+const FONT_ATTRS = ["color", "face", "size"];
+
+/**
+ * Pasted markup → the same markup without the source's colours and fonts.
+ *
+ * Unlike {@link sanitizePastedHtml}, the structure is kept whole: headings, tables,
+ * images and the remaining inline styles (alignment, weight, indents) stay. Meant for
+ * content fields whose formatted mode accepts more than the editor's own toolbar
+ * produces — the test description and content-page fields. Applied to the PASTED
+ * fragment only: colours the author wrote deliberately in HTML mode are not touched.
+ *
+ * @param html Fragment from the clipboard (`text/html`).
+ * @returns The fragment with colour and font declarations removed; an attribute left
+ *   without declarations is dropped.
+ */
+export function stripPastedPresentation(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  for (const el of Array.from(doc.body.querySelectorAll("*"))) {
+    const style = (el as HTMLElement).style;
+    if (style && el.hasAttribute("style")) {
+      for (const prop of Array.from(style)) {
+        if (PASTED_PRESENTATION.has(prop) || prop.startsWith("background-")) style.removeProperty(prop);
+      }
+      if (!style.length) el.removeAttribute("style");
+    }
+    for (const attr of PRESENTATION_ATTRS) el.removeAttribute(attr);
+    if (el.tagName === "FONT") for (const attr of FONT_ATTRS) el.removeAttribute(attr);
+  }
+  return doc.body.innerHTML;
 }
 
 /** Обычный текст из буфера → абзацы по строкам. */
