@@ -130,6 +130,11 @@ export interface PreviewDemoDataset {
     descriptionFormat?: RichTextFormat | null;
     questionCount?: number;
     passPercent?: number | null;
+    /**
+     * `tests.overall_pass_rule_json` — the editor preview overlays the real test's rule, so a
+     * threshold in points shows as `course.passPoints`. Absent in a demo dataset.
+     */
+    overallPassRule?: unknown;
     timeLimitMinutes?: number | null;
     maxAttempts?: number | null;
     topics?: Array<{ id: string; title: string; status?: string }>;
@@ -590,6 +595,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
         descriptionFormat: c.descriptionFormat,
         questionCount: c.questionCount,
         passPercent: c.passPercent,
+        overallPassRule: c.overallPassRule,
         timeLimitMinutes: c.timeLimitMinutes,
         maxAttempts: c.maxAttempts,
       },

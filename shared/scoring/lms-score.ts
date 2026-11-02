@@ -6,7 +6,8 @@
  * One rule, one place, because the package has TWO finish paths — the adaptive one and the
  * standard one — and they used to send the score independently.
  */
-import { nothingToGrade } from "./pass-rule";
+import { nothingToGrade, resolveOverallRule } from "./pass-rule";
+import { thresholdPercentOf } from "../breakdown/gate";
 
 /** The run, reduced to what the score decision actually reads. */
 export interface LmsScoreInput {
@@ -80,4 +81,18 @@ function alignWithVerdict(raw: number, passed: boolean | null | undefined, thres
   if (!passed && raw >= t) return Math.max(0, Math.ceil(t) - 1);
   if (passed && raw < t) return Math.ceil(t);
   return raw;
+}
+
+/**
+ * The passing score, 0..100, the LMS compares this run's points with — `lmsThreshold` of
+ * {@link lmsScoreFor}. A percent rule is its own value; a points rule (`absolute`) is
+ * converted against THIS run's possible points, because the delivered questions and their
+ * prices decide the maximum. `null` — no rule, or a points rule with nothing to convert
+ * against: the score then goes out unaligned, as for a test without a threshold.
+ *
+ * @param overallPassRule `tests.overall_pass_rule_json`, as baked into the package.
+ * @param possiblePoints The run's total possible points.
+ */
+export function lmsThresholdFor(overallPassRule: unknown, possiblePoints: number | null | undefined): number | null {
+  return thresholdPercentOf(resolveOverallRule(overallPassRule), Number(possiblePoints));
 }

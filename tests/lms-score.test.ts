@@ -12,7 +12,7 @@
  * These tests hold the root score to the same rule.
  */
 import { describe, it, expect } from "vitest";
-import { lmsScoreFor } from "@shared/scoring/lms-score";
+import { lmsScoreFor, lmsThresholdFor } from "@shared/scoring/lms-score";
 
 describe("lmsScoreFor", () => {
   it("a graded run reports its percent out of 100", () => {
@@ -85,5 +85,36 @@ describe("lmsScoreFor — the verdict carried through the points", () => {
 
   it("a measurement run still reports no score, whatever the verdict", () => {
     expect(lmsScoreFor({ percent: 0, possiblePoints: 0, passed: true, lmsThreshold: 80 })).toBeNull();
+  });
+});
+
+// A points threshold (`absolute`) has no fixed percent: the delivered questions and their
+// prices decide the maximum. The package used to divide it by the QUESTION count at build
+// time — 5 points over 4 questions became «125 %», and every pass below that went out as
+// `raw = 125 / max = 100`.
+describe("lmsThresholdFor — the threshold in percent of THIS run", () => {
+  it("a percent rule is its own value, whatever the points", () => {
+    expect(lmsThresholdFor({ type: "percent", value: 70 }, 12)).toBe(70);
+    expect(lmsThresholdFor({ type: "percent", value: 70 }, null)).toBe(70);
+  });
+
+  it("a points rule is converted against the run's possible points", () => {
+    expect(lmsThresholdFor({ type: "absolute", value: 5 }, 8)).toBe(62.5);
+    expect(lmsThresholdFor({ type: "count", value: 5 }, 10)).toBe(50);
+  });
+
+  it("a points rule with unknown or zero possible points has no threshold", () => {
+    expect(lmsThresholdFor({ type: "absolute", value: 5 }, null)).toBeNull();
+    expect(lmsThresholdFor({ type: "absolute", value: 5 }, 0)).toBeNull();
+  });
+
+  it("no rule, no threshold", () => {
+    expect(lmsThresholdFor({ type: "none", value: 0 }, 10)).toBeNull();
+    expect(lmsThresholdFor(null, 10)).toBeNull();
+  });
+
+  it("a pass below a points threshold never goes out above max", () => {
+    const threshold = lmsThresholdFor({ type: "absolute", value: 5 }, 8);
+    expect(lmsScoreFor({ percent: 50, possiblePoints: 8, passed: true, lmsThreshold: threshold })).toEqual({ raw: 63, max: 100 });
   });
 });

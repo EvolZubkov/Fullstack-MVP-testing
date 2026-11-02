@@ -21,7 +21,8 @@ import type { CtxCourse, CtxState, CtxStartCooldown } from "./context";
 import { buildCourseSubtitle } from "./course-subtitle";
 import { formatMinutesHuman } from "./duration";
 import { richTextToHtml, type RichTextFormat } from "./rich-text";
-import { buildCoursePassCondition, type PassConditionSection } from "./pass-condition";
+import { buildCoursePassCondition, buildCoursePassPoints, type PassConditionSection } from "./pass-condition";
+import { hideStartFacts, type StartFact } from "./start-facts";
 
 /** Test info shown on the start screen (maps to `course.*`). */
 export interface StartInfo {
@@ -58,7 +59,8 @@ export interface StartInfo {
   passDecisionPolicy?: string | null;
   /**
    * `tests.overall_pass_rule_json` and the sections — what the topic part of the pass
-   * condition (`course.passCondition`) is counted from. Absent — no topic tile.
+   * condition (`course.passCondition`) is counted from, and the source of the points
+   * threshold (`course.passPoints`). Absent — neither tile.
    */
   overallPassRule?: unknown;
   sections?: PassConditionSection[] | null;
@@ -105,6 +107,11 @@ export interface StartStateInput {
   } | null;
   /** PRD-19 Block F (FR-20): the prior attempt's report is downloadable («Скачать отчёт»). */
   canDownloadReport?: boolean;
+  /**
+   * The facts the author switched off on the start page — resolved by the host with
+   * `hiddenStartFacts(variant, pageSettings)`. Absent — every fact the test has is shown.
+   */
+  hiddenFacts?: readonly StartFact[] | null;
 }
 
 /** Built `{ course, state }` for the start layout. */
@@ -202,6 +209,10 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
   // The topic tile of the cover: a measurement method has no condition to state at all.
   const passCondition =
     i.hasGradedContent === false ? null : buildCoursePassCondition(i.passDecisionPolicy, i.overallPassRule, i.sections);
+  // The overall threshold is stated under the same two conditions whatever its unit.
+  const overallShown = i.hasGradedContent !== false && overallThresholdDecides(i.passDecisionPolicy);
+  // A threshold in points is stated in points; the percent tile stays for a percent rule.
+  const passPoints = overallShown ? buildCoursePassPoints(i.overallPassRule) : null;
   const course: CtxCourse = {
     title: i.title,
     // Header subtitle "Попытка N из M": the upcoming attempt is one past those
@@ -224,7 +235,9 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     // the layouts' `{{#if course.passPercent}}` already gates on.
     // Nor is it shown when the topics, not the overall result, decide the outcome: the
     // cover would name a condition the test does not have.
-    passPercent: i.hasGradedContent === false || !overallThresholdDecides(i.passDecisionPolicy) ? null : i.passPercent,
+    // A points rule never reaches the percent tile, whatever percent a host derived from
+    // it: the package once divided the points by the question count and printed «125 %».
+    passPercent: !overallShown || passPoints ? null : i.passPercent,
     timeLimitMinutes: i.timeLimitMinutes,
     // The unit is decided by the ONE formatter both hosts share, not by each
     // layout: a layout can only print the raw number, which reads «20160 мин»
@@ -237,7 +250,10 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     // Only when the topics decide: a test under «Только общий результат» keeps exactly
     // the context it had.
     ...(passCondition ? { passCondition } : {}),
+    // Only for a points rule: a percent test keeps exactly the context it had.
+    ...(passPoints ? { passPoints } : {}),
   };
 
-  return { course, state };
+  // The author's switches go last, over the facts the test actually has.
+  return { course: hideStartFacts(course, input.hiddenFacts), state };
 }

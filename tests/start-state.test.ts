@@ -254,6 +254,50 @@ describe("buildStartState", () => {
     });
   });
 
+  describe("порог в баллах на обложке — в баллах, а не в процентах", () => {
+    // Судья сравнивает порог `absolute` с набранными баллами, а максимум баллов зависит от
+    // выданных вопросов и их цены, поэтому постоянного процента у такого порога нет. Пакет
+    // делил его на число вопросов и печатал «125 %» (5 баллов при 4 вопросах).
+    const base = { maxAttempts: 1, completedAttempts: 0, resume: null, hasCompletedResults: false, canStartNew: true };
+    const points = { type: "absolute", value: 5 };
+
+    it("плитка «5 баллов для прохождения», процента нет", () => {
+      const { course } = buildStartState({ info: { ...info, passPercent: 125, overallPassRule: points }, ...base });
+      expect(course.passPercent).toBeNull();
+      expect(course.passPoints).toEqual({ value: 5, valueLabel: "5", label: "баллов для прохождения" });
+    });
+
+    it("подпись согласуется с числом, дробный порог печатается с запятой", () => {
+      const label = (value: number) =>
+        buildStartState({ info: { ...info, overallPassRule: { type: "absolute", value } }, ...base }).course.passPoints;
+      expect(label(1)?.label).toBe("балл для прохождения");
+      expect(label(3)?.label).toBe("балла для прохождения");
+      expect(label(7.5)).toMatchObject({ valueLabel: "7,5", label: "балла для прохождения" });
+    });
+
+    it("процентный порог — прежний контекст, без поля", () => {
+      const { course } = buildStartState({ info: { ...info, overallPassRule: { type: "percent", value: 70 } }, ...base });
+      expect(course.passPercent).toBe(70);
+      expect("passPoints" in course).toBe(false);
+    });
+
+    it("гасится там же, где процент: решают темы или нечего оценивать", () => {
+      const byTopics = buildStartState({
+        info: { ...info, overallPassRule: points, passDecisionPolicy: "required_topics_only" },
+        ...base,
+      }).course;
+      expect("passPoints" in byTopics).toBe(false);
+      const measurement = buildStartState({ info: { ...info, overallPassRule: points, hasGradedContent: false }, ...base }).course;
+      expect("passPoints" in measurement).toBe(false);
+    });
+
+    it("без порога (none) — ни плитки баллов, ни процента из него", () => {
+      const { course } = buildStartState({ info: { ...info, passPercent: null, overallPassRule: { type: "none", value: 0 } }, ...base });
+      expect(course.passPercent).toBeNull();
+      expect("passPoints" in course).toBe(false);
+    });
+  });
+
   describe("PRD-29 §6.7 на обложке — порог только у теста, который оценивает", () => {
     it("измерительный тест: «проходной балл» не показывается", () => {
       const { course } = buildStartState({

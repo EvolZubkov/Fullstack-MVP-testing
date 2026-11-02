@@ -22,7 +22,7 @@ import type { CtxMeasureView } from "./measure-view";
 import type { CtxScalesChart } from "./scales-chart";
 import type { CtxScaleBars } from "./scale-bars";
 import type { CtxRecommendations } from "./recommendations";
-import type { CtxCoursePassCondition } from "./pass-condition";
+import type { CtxCoursePassCondition, CtxCoursePassPoints } from "./pass-condition";
 
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
@@ -74,6 +74,14 @@ export interface CtxCourse {
    * measurement method and when no topic carries a threshold. Contract 3.14.0.
    */
   passCondition?: CtxCoursePassCondition;
+  /**
+   * The overall threshold when the author set it in POINTS: `{ value, valueLabel, label }` —
+   * the cover tile «5 / баллов для прохождения». `passPercent` is then `null`: a points
+   * threshold has no fixed percent. Absent for a percent rule and under the same conditions
+   * that drop `passPercent` (a measurement method, topics deciding the outcome).
+   * Contract 3.17.0.
+   */
+  passPoints?: CtxCoursePassPoints;
 }
 
 /** A recommended course/event link for failed-topic guidance (SCORM-extra). */
