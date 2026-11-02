@@ -75,6 +75,28 @@ export class AttemptsRepository {
   }
 
   /**
+   * Stamp the start of the test-wide countdown — once. The first call on an
+   * unfinished attempt writes the server's clock; every later call (a second tab,
+   * a re-render, a reload) leaves the stamp alone and gets the stored one back. A
+   * dedicated column and a single conditional UPDATE, so no concurrent whole-row
+   * write (save-progress rewrites `variant_json`) can drop the stamp.
+   * @returns the stamp, or null when the attempt is missing or already finished.
+   */
+  async startAttemptTimer(id: string): Promise<Date | null> {
+    const [stamped] = await db
+      .update(attempts)
+      // The app clock, like `startedAt`: the column has no time zone, and the database
+      // session's zone would shift a `now()` written there against the rest.
+      .set({ timerStartedAt: new Date() })
+      .where(and(eq(attempts.id, id), isNull(attempts.timerStartedAt), isNull(attempts.finishedAt)))
+      .returning({ timerStartedAt: attempts.timerStartedAt });
+    if (stamped?.timerStartedAt) return stamped.timerStartedAt;
+    const existing = await this.getAttempt(id);
+    if (!existing || existing.finishedAt) return null;
+    return existing.timerStartedAt ?? null;
+  }
+
+  /**
    * PRD-66 FR-06: попытки, НАЗВАННЫЕ поимённо, — разложение выборки до уровня ответа.
    *
    * Отбор уже сделан слоем наблюдений; здесь дочитывается то, чего в наблюдении нет: карта

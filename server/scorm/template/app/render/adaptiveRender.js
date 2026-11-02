@@ -12,6 +12,8 @@ function renderAdaptiveQuestion() {
     return;
   }
   ensureAdaptiveShuffleMapping(qData.question);
+  // The test countdown starts on the first question shown (timer.js).
+  if (typeof ensureTestTimerStarted === 'function') ensureTestTimerStarted();
 
   // Время на задании: адаптивный путь ведёт лестница уровней и рендер у него свой, поэтому
   // засечка ставится здесь, а не в общем `render()`.

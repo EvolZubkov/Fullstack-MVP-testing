@@ -27,6 +27,9 @@ var state = {
   rankingTouched: {},
   timerInterval: null,
   timerStartPerfMs: null,
+  // The attempt started but its countdown waits for the first question (timer.js).
+  testTimerArmed: false,
+  sessionCommitStartPerfMs: null,
   timerCommitInterval: null,
   timerAnchorTampered: false,
   remainingSeconds: null,

@@ -442,6 +442,13 @@
       "when": 1793434423776,
       "tag": "0062_test_show_attempts_count",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793627367777,
+      "tag": "0063_attempt_timer_started_at",
+      "breakpoints": true
     }
   ]
 }

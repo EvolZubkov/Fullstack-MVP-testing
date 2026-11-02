@@ -1140,6 +1140,15 @@ export const attempts = pgTable("attempts", {
    */
   sectionTimerJson: jsonb("section_timer_json"),
   startedAt: timestamp("started_at").notNull(),
+  /**
+   * When the test-wide countdown started: on the FIRST QUESTION shown, not on
+   * «Начать» (`startedAt`) — intro pages and the router hub before the first topic
+   * do not spend the limit. Stamped once, by the server's clock
+   * (`startAttemptTimer`), so a reload resumes from it. NULL = the attempt has not
+   * reached a question yet; migration `0063` backfilled unfinished legacy attempts
+   * with `startedAt`, so a run begun before the rule keeps its old clock.
+   */
+  timerStartedAt: timestamp("timer_started_at"),
   finishedAt: timestamp("finished_at"),
 }, (table) => ({
   // Attempts is the fastest-growing table; these back the hot read/delete paths.

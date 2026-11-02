@@ -764,6 +764,11 @@ export default function TakeTestPage() {
   // Timer state
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // The test countdown starts on the FIRST QUESTION, not on «Начать»: intro pages and
+  // the hub before the first topic do not spend the limit. Until that question shows,
+  // the limit waits here (seconds), and the server stamps the start when it does.
+  const [armedLimitSeconds, setArmedLimitSeconds] = useState<number | null>(null);
+  const timerStartRequested = useRef(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [flatQuestions, setFlatQuestions] = useState<FlatQuestion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1338,9 +1343,13 @@ export default function TakeTestPage() {
         setCurrentRouterTopic(cutScenario ? null : (hub.current ?? null));
       }
 
-      // Инициализация таймера (с учётом прошедшего времени)
-      if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
-        const startedAt = new Date(data.attempt.startedAt).getTime();
+      // Инициализация таймера (с учётом прошедшего времени). The clock runs from the
+      // first question (`timerStartedAt`); an attempt that never reached one waits
+      // for it again.
+      if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0 && !data.attempt.timerStartedAt) {
+        armTestTimer(data.attempt.timeLimitMinutes);
+      } else if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
+        const startedAt = new Date(data.attempt.timerStartedAt).getTime();
         const now = Date.now();
         const elapsedSeconds = Math.floor((now - startedAt) / 1000);
         const totalSeconds = data.attempt.timeLimitMinutes * 60;
@@ -1544,10 +1553,8 @@ export default function TakeTestPage() {
     });
     setQuestionStatus({});
 
-    // Инициализация таймера
-    if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
-      setRemainingSeconds(data.timeLimitMinutes * 60);
-    }
+    // Таймер ждёт первого вопроса
+    armTestTimer(data.timeLimitMinutes);
     const variant = data.variantJson as any;
     const questions: FlatQuestion[] = [];
     const mappings: Record<string, any> = {};
@@ -1684,10 +1691,8 @@ export default function TakeTestPage() {
       questionsAnswered: 0,
     });
 
-    // Инициализация таймера
-    if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
-      setRemainingSeconds(data.timeLimitMinutes * 60);
-    }
+    // Таймер ждёт первого вопроса
+    armTestTimer(data.timeLimitMinutes);
   };
 
   // PRD-19 (Block B): persist progress including per-question status (web
@@ -1989,6 +1994,50 @@ export default function TakeTestPage() {
     phase, showReview, sectionResultView, currentIndex, flatQuestions,
     testMode, adaptiveState?.currentQuestion?.id, questionTime,
   ]);
+
+  /** Arm the test countdown of a fresh (or not yet started) attempt; it starts on the first question. */
+  function armTestTimer(limitMinutes: number | null | undefined) {
+    timerStartRequested.current = false;
+    setArmedLimitSeconds(limitMinutes && limitMinutes > 0 ? limitMinutes * 60 : null);
+  }
+
+  // The first question on screen starts the armed countdown. The SERVER stamps the
+  // start (once, by its clock) and answers with it, so the remainder is counted the
+  // same way after a reload. Content pages, the hub, the обзор and section results are
+  // not a question: the clock waits through them.
+  const timerAttemptId = attempt?.id ?? adaptiveState?.attemptId ?? null;
+  const questionOnScreen =
+    !showHub &&
+    phase === "question" &&
+    (testMode === "adaptive"
+      ? !!adaptiveState?.currentQuestion && !adaptiveState.isFinished && !showTransition
+      : !!attempt && flatQuestions.length > 0 && currentIndex < flatQuestions.length &&
+        !showReview && !sectionResultView);
+  useEffect(() => {
+    if (armedLimitSeconds === null || !questionOnScreen || !timerAttemptId) return;
+    if (timerStartRequested.current) return;
+    timerStartRequested.current = true;
+    const limit = armedLimitSeconds;
+    const begin = (left: number) => {
+      setArmedLimitSeconds(null);
+      setRemainingSeconds(left);
+    };
+    fetch(`/api/attempts/${timerAttemptId}/timer-start`, { method: "POST", credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { timerStartedAt: string; serverNow: string };
+        // Both readings come from the server clock, so the learner's clock cannot skew it.
+        const elapsed = Math.floor(
+          (new Date(body.serverNow).getTime() - new Date(body.timerStartedAt).getTime()) / 1000,
+        );
+        begin(Math.max(0, limit - Math.max(0, elapsed)));
+      })
+      .catch((err) => {
+        // The run must not stall without a clock: count locally from the full limit.
+        reportClientError("take-test", `timer-start failed: ${(err as Error)?.message}`);
+        begin(limit);
+      });
+  }, [armedLimitSeconds, questionOnScreen, timerAttemptId]);
 
   // Автор мог скрыть системный экран целиком (решение владельца 2026-09-20). Признак
   // читается ТЕМ ЖЕ общим хелпером, которым пользуется пакет: иначе хосты разойдутся в
@@ -3574,8 +3623,11 @@ export default function TakeTestPage() {
     // часов. Их ведёт сервер, а плеер берёт лимит один раз, при монтировании, — поэтому плеер ждёт,
     // пока сервер назовёт остаток именно этого пункта (одна короткая сверка), а не берёт число
     // прежнего пункта или лимит теста. Полный экран уже запрошен в щелчке по карточке.
+    // The same holds for the test clock: a scenario that is the first task starts it, and the
+    // player must not mount before the server has named the remainder.
     const itemClockPending =
-      !scenarioTest && !!flatQuestions[scenarioTaskIndex].sectionTimeLimitMinutes && sectionTimerTopicId !== itemKey;
+      (!scenarioTest && !!flatQuestions[scenarioTaskIndex].sectionTimeLimitMinutes && sectionTimerTopicId !== itemKey) ||
+      armedLimitSeconds !== null;
     if (scenario && !scenarioDone && itemClockPending) {
       return <LoadingState message="Открываем сценарий…" />;
     }

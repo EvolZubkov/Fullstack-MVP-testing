@@ -129,8 +129,9 @@
           goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
         }
         // PRD-20 (5.6/5.12): resume the test timer from the active-time anchor.
-        // initTimer expires-and-submits if the limit was exhausted while away.
-        if (TEST_DATA.timeLimitMinutes && typeof initTimer === 'function') initTimer();
+        // initTimer expires-and-submits if the limit was exhausted while away; a
+        // session that never reached a question re-arms it instead.
+        if (TEST_DATA.timeLimitMinutes && typeof resumeTestTimer === 'function') resumeTestTimer();
         if (!state.submitted) render();
       } else if (recovery.action === 'restore_router') {
         // PRD-4 v1.1 §3.2 / Phase 4f — router-mode recovery: re-apply the
@@ -152,8 +153,9 @@
         if (_sess.dl && TEST_DATA.mode !== 'adaptive') applySessionRows(_sess);
         if (typeof rebuildPageSequence === 'function') rebuildPageSequence();
         // PRD-20 (5.6): resume the test timer from the active-time anchor
-        // (may expire-and-submit if the limit ran out while away).
-        if (TEST_DATA.timeLimitMinutes && typeof initTimer === 'function') initTimer();
+        // (may expire-and-submit if the limit ran out while away; re-arms it when
+        // the previous session never reached a question).
+        if (TEST_DATA.timeLimitMinutes && typeof resumeTestTimer === 'function') resumeTestTimer();
         var _resumed = false;
         if (!state.submitted && _sess.crt && TEST_DATA.mode !== 'adaptive' &&
             typeof RouterFlow !== 'undefined' && RouterFlow.resumeRouterTopic) {

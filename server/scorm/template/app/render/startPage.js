@@ -366,7 +366,8 @@ function startTest() {
 
   if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
   else state.phase = 'question';
-  initTimer();
+  // The countdown starts on the first question, not here (timer.js).
+  armTestTimer();
   render();
 }
 
@@ -460,7 +461,8 @@ function restart() {
   // ===== ЗАПУСК ТЕСТА =====
   if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
   else state.phase = 'question';
-  initTimer();
+  // The countdown starts on the first question, not here (timer.js).
+  armTestTimer();
   render();
 }
 

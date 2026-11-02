@@ -176,7 +176,11 @@ function determineRecovery() {
   if (TEST_DATA.timeLimitMinutes) {
     var anchor = (typeof readTimerAnchor === 'function') ? readTimerAnchor() : null;
     var totalNow = (typeof readTotalTimeSec === 'function') ? readTotalTimeSec() : null;
-    var canRestoreTimer = !!(anchor &&
+    // A PENDING anchor (the countdown waits for the first question) has nothing to
+    // restore yet: the attempt resumes and the clock starts on its first question.
+    var pendingTimer = !!(anchor && anchor.pending &&
+      anchor.limitMinutes === TEST_DATA.timeLimitMinutes);
+    var canRestoreTimer = pendingTimer || !!(anchor &&
       anchor.limitMinutes === TEST_DATA.timeLimitMinutes &&
       typeof anchor.baselineTotalSec === 'number' &&
       totalNow !== null);

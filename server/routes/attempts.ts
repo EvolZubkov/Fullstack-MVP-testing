@@ -1844,6 +1844,26 @@ router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.ta
   }
 });
 
+// POST /api/attempts/:attemptId/timer-start — the test-wide countdown starts on the
+// FIRST QUESTION shown, not on «Начать». The host calls this when that question
+// appears; the server stamps the start once, by its own clock, and answers with the
+// stored stamp on every call, so a second tab or a reload cannot restart the clock.
+router.post("/attempts/:attemptId/timer-start", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+    if (attempt.finishedAt) return res.status(400).json({ error: "Attempt already finished" });
+
+    const timerStartedAt = await storage.startAttemptTimer(attempt.id);
+    if (!timerStartedAt) return res.status(400).json({ error: "Attempt already finished" });
+    res.json({ timerStartedAt: timerStartedAt.toISOString(), serverNow: new Date().toISOString() });
+  } catch (error) {
+    logger.error("Timer start error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to start the test timer" });
+  }
+});
+
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
 router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {

@@ -326,6 +326,8 @@ export interface IStorage {
   createAttempt(attempt: InsertAttempt): Promise<Attempt>;
   getAttempt(id: string): Promise<Attempt | undefined>;
   updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined>;
+  /** Stamp the start of the test-wide countdown once; returns the stored stamp. */
+  startAttemptTimer(id: string): Promise<Date | null>;
   getAttemptsByIds(ids: string[]): Promise<Attempt[]>;
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
@@ -1187,6 +1189,10 @@ export class DatabaseStorage implements IStorage {
 
   updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
     return this.attemptsRepo.updateAttempt(id, updates);
+  }
+
+  startAttemptTimer(id: string): Promise<Date | null> {
+    return this.attemptsRepo.startAttemptTimer(id);
   }
 
   getAttemptsByIds(ids: string[]): Promise<Attempt[]> {

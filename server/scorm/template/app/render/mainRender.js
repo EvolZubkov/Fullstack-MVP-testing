@@ -134,6 +134,10 @@ function renderScreen() {
     var qData = state.flatQuestions[current];
     var progress = ((current + 1) / total) * 100;
 
+    // The test countdown starts on the first question shown (timer.js). Before the
+    // scenario branch: its player takes its limit from the time left.
+    if (typeof ensureTestTimerStarted === 'function') ensureTestTimerStarted();
+
     // Время на задании (`cmi.interactions.n.latency`): заход открывается здесь и суммируется
     // по возвратам — учащийся, вернувшийся к пропущенному вопросу, думал над ним дважды.
     if (typeof TBQuestionTime !== 'undefined' && qData && qData.question) {

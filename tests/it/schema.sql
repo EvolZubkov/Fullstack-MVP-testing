@@ -63,6 +63,7 @@ CREATE TABLE "attempts" (
 	"result_json" jsonb,
 	"section_timer_json" jsonb,
 	"started_at" timestamp NOT NULL,
+	"timer_started_at" timestamp,
 	"finished_at" timestamp
 );
 

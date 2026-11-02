@@ -18,6 +18,7 @@ const { storageMock } = vi.hoisted(() => ({
     getTest: vi.fn(), getTests: vi.fn(),
     getTestSections: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
+    startAttemptTimer: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
     getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getUsers: vi.fn().mockResolvedValue([]),
@@ -652,6 +653,57 @@ describe("POST .../save-progress — branches", () => {
     }));
     expect(res.status).toBe(200);
     expect(storageMock.updateAttempt.mock.calls[0][1].answersJson).toEqual({ q1: 0 });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /attempts/:id/timer-start — the test clock starts on the first question
+// ─────────────────────────────────────────────────────────────────────────────
+describe("POST .../timer-start — branches", () => {
+  it("stamps the start and answers with it and the server clock", async () => {
+    const stamp = new Date("2026-11-02T10:00:00.000Z");
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.startAttemptTimer.mockResolvedValue(stamp);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/timer-start"));
+    expect(res.status).toBe(200);
+    expect(storageMock.startAttemptTimer).toHaveBeenCalledWith("atmp1");
+    expect(res.body.timerStartedAt).toBe(stamp.toISOString());
+    expect(typeof res.body.serverNow).toBe("string");
+  });
+
+  it("returns 404 for a missing attempt", async () => {
+    storageMock.getAttempt.mockResolvedValue(undefined);
+    const res = await asLearner(request(app).post("/api/attempts/nope/timer-start"));
+    expect(res.status).toBe(404);
+    expect(storageMock.startAttemptTimer).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for somebody else's attempt", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, userId: "someone-else" });
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/timer-start"));
+    expect(res.status).toBe(403);
+    expect(storageMock.startAttemptTimer).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a finished attempt", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, finishedAt: new Date() });
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/timer-start"));
+    expect(res.status).toBe(400);
+    expect(storageMock.startAttemptTimer).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the attempt finished between the read and the stamp", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.startAttemptTimer.mockResolvedValue(null);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/timer-start"));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 500 when the stamp throws", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.startAttemptTimer.mockRejectedValue(new Error("boom"));
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/timer-start"));
+    expect(res.status).toBe(500);
   });
 });
 
