@@ -1,7 +1,7 @@
 {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.21.1",
+  "version": "1.22.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "themes": [
@@ -302,7 +302,37 @@
       "pageKind": "start",
       "layoutFile": "layouts/start.html",
       "isDefault": true,
-      "placeholders": []
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "questionCountShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число вопросов",
+          "description": "Плитка «вопросов» на обложке."
+        },
+        {
+          "key": "passConditionShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать условие прохождения",
+          "description": "Плитка проходного балла или числа тем для прохождения. Выключение убирает только плитку — порог и вердикт не меняются."
+        },
+        {
+          "key": "timeLimitShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать ограничение времени",
+          "description": "Плитка «на прохождение». Таймер в тесте работает как прежде."
+        },
+        {
+          "key": "maxAttemptsShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число попыток",
+          "description": "Плитка «попыток». Строка «Попытка N из M» над заголовком остаётся."
+        }
+      ]
     },
     {
       "key": "start.image-right",
@@ -316,6 +346,34 @@
           "key": "image",
           "type": "image",
           "label": "Изображение"
+        },
+        {
+          "key": "questionCountShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число вопросов",
+          "description": "Плитка «вопросов» на обложке."
+        },
+        {
+          "key": "passConditionShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать условие прохождения",
+          "description": "Плитка проходного балла или числа тем для прохождения. Выключение убирает только плитку — порог и вердикт не меняются."
+        },
+        {
+          "key": "timeLimitShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать ограничение времени",
+          "description": "Плитка «на прохождение». Таймер в тесте работает как прежде."
+        },
+        {
+          "key": "maxAttemptsShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число попыток",
+          "description": "Плитка «попыток». Строка «Попытка N из M» над заголовком остаётся."
         }
       ]
     },
