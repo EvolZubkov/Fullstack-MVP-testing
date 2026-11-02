@@ -293,7 +293,12 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__lead { font: var(--ou-text-body-l); color: var(--ou-fg-soft); text-wrap: pretty; }
 .tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
-.tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+.tb-scene__headtag { margin-left: auto; align-self: center; flex: 0 1 auto; min-width: 0; max-width: 40%; }
+/* The verdict chip carries the AUTHOR's «Заголовок при успехе/неуспехе», and nothing stops
+   that from being a sentence. A chip that neither shrinks nor wraps took the whole row and
+   squeezed the test title into a sliver, so it now wraps inside a bounded share of the row:
+   the title keeps the rest, the author's text is shown in full, never cut. */
+.tb-scene__headtag > .ou-tag { white-space: normal; text-align: right; }
 /* The chip and the timers both used to push themselves right with `margin-left:auto`,
    and TWO auto margins SHARE the free space — which parked the chip in the middle of
    the header instead of at its edge. When a chip is present it is the one that takes
