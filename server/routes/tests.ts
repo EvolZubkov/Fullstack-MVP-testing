@@ -1524,8 +1524,12 @@ router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope
       const outcome = await publishTest(req.params.id, req.currentUser?.id ?? null);
       if (!outcome) return res.status(404).json({ error: "Test not found" });
       if (!outcome.ok) return res.status(409).json(publishInfeasibleBody(outcome.findings));
-      const { updated, breakdownWarnings } = outcome;
-      return res.json(breakdownWarnings.length > 0 ? { ...updated, breakdownWarnings } : updated);
+      const { updated, breakdownWarnings, scoringWarnings } = outcome;
+      return res.json({
+        ...updated,
+        ...(breakdownWarnings.length > 0 ? { breakdownWarnings } : {}),
+        ...(scoringWarnings.length > 0 ? { scoringWarnings } : {}),
+      });
     }
 
     const updated = await storage.patchTestStatus(req.params.id, status as "draft" | "archived");
@@ -1687,6 +1691,9 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
         logger.info(`Published by SCORM export: test ${req.params.id} version ${plan.version} by user=${req.session.userId}`, "scorm-export");
         if (outcome.breakdownWarnings.length > 0) {
           logger.warn(`Breakdown publish warnings for test ${req.params.id}: ${outcome.breakdownWarnings.length}`, "scorm-export");
+        }
+        if (outcome.scoringWarnings.length > 0) {
+          logger.warn(`Scoring publish warnings for test ${req.params.id}: ${outcome.scoringWarnings.length}`, "scorm-export");
         }
       }
     }

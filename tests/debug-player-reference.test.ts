@@ -79,6 +79,65 @@ describe("Эталон overlay — applyReference", () => {
     expect(marks()).toHaveLength(2);
   });
 
+  // «Веса опций»: баллы считаются по весам, а `correctIndex` в подсчёте не участвует,
+  // поэтому эталон — варианты с наибольшим весом, даже если поле верного ответа с ними
+  // разошлось (вопрос `e8dca236` теста «Лидирует изменения»).
+  const radioCards = (n: number) =>
+    Array.from({ length: n }, (_, i) => `<label class="ou-radio-card" data-index="${i}"></label>`).join("");
+  const markedIndices = () =>
+    Array.from(marks()).map((m) => m.closest("[data-index]")?.getAttribute("data-index"));
+
+  it("weighted single: marks the top-weight option, not a diverging correctIndex", () => {
+    document.body.innerHTML = radioCards(4);
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: {
+        id: "qw", type: "single", correct: { correctIndex: 3 },
+        scoring: { kind: "weighted", weights: [0, 2, 1, 1] },
+      } }],
+    }));
+    expect(markedIndices()).toEqual(["1"]);
+  });
+
+  it("weighted single: marks every option that shares the top weight", () => {
+    document.body.innerHTML = radioCards(4);
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: {
+        id: "qt", type: "single", correct: { correctIndex: 0 },
+        scoring: { kind: "weighted", weights: [2, 2, 1, 0] },
+      } }],
+    }));
+    expect(markedIndices()).toEqual(["0", "1"]);
+  });
+
+  it("weighted single: marks nothing when every weight is zero", () => {
+    document.body.innerHTML = radioCards(3);
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: {
+        id: "qz", type: "single", correct: { correctIndex: 0 },
+        scoring: { kind: "weighted", weights: [0, 0, 0] },
+      } }],
+    }));
+    expect(marks()).toHaveLength(0);
+  });
+
+  it("weighted scale: marks the top-weight graduation", () => {
+    document.body.innerHTML =
+      '<div class="ou-stepper--choice">' +
+      [0, 1, 2].map((i) => `<div class="ou-stepper__step" data-index="${i}"></div>`).join("") +
+      "</div>";
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: {
+        id: "qs", type: "scale", correct: { correctIndex: 0 },
+        scoring: { kind: "weighted", weights: [1, 0, 3] },
+      } }],
+    }));
+    expect(markedIndices()).toEqual(["2"]);
+  });
+
   it("marks ranking items with their correct 1-based position (by data-item)", () => {
     // Rows displayed A,B,C; correct order is items [2,0,1] → A(0)→pos2, B(1)→pos3, C(2)→pos1.
     document.body.innerHTML =

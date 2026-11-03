@@ -78,3 +78,10 @@ export type {
   BreakdownWarning,
   BreakdownWarningCode,
 } from "@shared/breakdown/publish-warnings";
+
+/**
+ * A scoring trap reported after a successful publication: a «Веса опций» question whose
+ * largest weight is not on the option marked correct. Re-exported for the same reason as
+ * {@link BreakdownWarning}.
+ */
+export type { ScoringWarning } from "@shared/scoring/reference-mismatch";

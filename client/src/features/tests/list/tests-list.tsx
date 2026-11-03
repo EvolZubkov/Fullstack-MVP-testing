@@ -96,8 +96,9 @@ import type {
   BreakdownWarning,
   PublishCheckFinding,
   PublishInfeasibleError,
+  ScoringWarning,
 } from "@/features/content-protection/types";
-import { describeBreakdownWarning } from "@/features/content-protection/issue-text";
+import { describeBreakdownWarning, describeScoringWarning } from "@/features/content-protection/issue-text";
 import { TestEditor } from "@/features/tests/editor/test-editor";
 import { describeDeleteImpact, type TestDeleteImpact } from "./delete-impact";
 import { SaveAsDialog } from "@/features/tests/export/save-as-dialog";
@@ -409,11 +410,15 @@ export function TestsListPage(): React.JSX.Element {
       const res = await apiRequest("PATCH", `/api/tests/${args.id}/status`, { status: args.status });
       // PRD-50: тело публикации может нести предупреждения (FR-45 - FR-47); их показывает
       // onSuccess. Разбор здесь, а не там, потому что onSuccess получает то, что вернул mutationFn.
-      return (await res.json()) as { breakdownWarnings?: BreakdownWarning[] };
+      return (await res.json()) as { breakdownWarnings?: BreakdownWarning[]; scoringWarnings?: ScoringWarning[] };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
-      if (data.breakdownWarnings?.length) setPublishNotes(data.breakdownWarnings.map(describeBreakdownWarning));
+      const notes = [
+        ...(data.breakdownWarnings ?? []).map(describeBreakdownWarning),
+        ...(data.scoringWarnings ?? []).map(describeScoringWarning),
+      ];
+      if (notes.length > 0) setPublishNotes(notes);
     },
     onError: (error: Error, args) => {
       // apiRequest throws "409: <json>"; surface a publish-infeasible 409 as the

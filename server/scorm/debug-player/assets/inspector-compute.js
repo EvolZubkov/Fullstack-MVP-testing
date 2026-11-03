@@ -1084,6 +1084,24 @@
     var curFq = (st.flatQuestions || [])[st.currentIndex];
     return (curFq && curFq.question) || null;
   }
+  // The reference of a one-index question (single / scale). Under «Веса опций» the
+  // score is `weights[chosen]` and `correctIndex` takes no part in it, so the options
+  // that earn the most ARE the reference: marking `correctIndex` there sent the author
+  // to a cheaper option whenever the two fields disagreed. Ties mark every top option;
+  // all-zero weights mark none, since no option earns anything.
+  function singleReference(q) {
+    var c = q.correct || {};
+    var s = q.scoring;
+    if (s && s.kind === "weighted" && Array.isArray(s.weights)) {
+      var top = 0;
+      for (var w = 0; w < s.weights.length; w++) if (Number(s.weights[w]) > top) top = Number(s.weights[w]);
+      var best = [];
+      if (top > 0) for (var b = 0; b < s.weights.length; b++) if (Number(s.weights[b]) === top) best.push(b);
+      return best;
+    }
+    return typeof c.correctIndex === "number" ? [c.correctIndex] : [];
+  }
+
   function applyReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
     var st = null;
@@ -1105,7 +1123,7 @@
     // rows keyed by `data-index`, in the shuffled display order.
     if (curQ.type === "single" || curQ.type === "multiple") {
       var correctSet = curQ.type === "single"
-        ? (typeof c.correctIndex === "number" ? [c.correctIndex] : [])
+        ? singleReference(curQ)
         : (Array.isArray(c.correctIndices) ? c.correctIndices : []);
       var opts = doc.querySelectorAll(".ou-radio-card[data-index]");
       for (var i = 0; i < opts.length; i++) {
@@ -1122,9 +1140,10 @@
     // MEASUREMENT-only scale carries no `correctIndex`, so nothing is marked — there
     // is no reference answer to show.
     if (curQ.type === "scale" && typeof c.correctIndex === "number") {
+      var scaleSet = singleReference(curQ);
       var steps = doc.querySelectorAll(".ou-stepper--choice .ou-stepper__step[data-index]");
       for (var si = 0; si < steps.length; si++) {
-        if (parseInt(steps[si].getAttribute("data-index"), 10) === c.correctIndex) {
+        if (scaleSet.indexOf(parseInt(steps[si].getAttribute("data-index"), 10)) !== -1) {
           steps[si].style.position = "relative";
           steps[si].appendChild(tbRefBadge(doc, "✓", "ok"));
         }

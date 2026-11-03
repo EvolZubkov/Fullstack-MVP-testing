@@ -15,6 +15,7 @@ import { storage } from "../storage";
 import { logger } from "../logger";
 import { assessTestPublish, type PublishCheckFinding } from "./draw-feasibility";
 import { assessBreakdownPublish } from "./breakdown-warnings";
+import { assessScoringPublish, type ScoringWarning } from "./scoring-warnings";
 import { createTestSnapshot, getPublicationState } from "./test-snapshot";
 
 /** Result of {@link publishTest}. */
@@ -25,6 +26,8 @@ export type PublishOutcome =
     updated: { id: string; status: string; version: number };
     /** PRD-50 FR-45 - FR-47: advisory notes, never a reason to refuse. */
     breakdownWarnings: Awaited<ReturnType<typeof assessBreakdownPublish>>;
+    /** Advisory notes about answer scoring (weighted reference mismatch); never a refusal. */
+    scoringWarnings: ScoringWarning[];
   }
   | {
     ok: false;
@@ -62,7 +65,14 @@ export async function publishTest(testId: string, publishedBy: string | null): P
   } catch (error) {
     logger.error("breakdown publish warnings failed: " + (error as Error).message, "tests");
   }
-  return { ok: true, updated, breakdownWarnings };
+  // Same policy for the scoring notes: they speak after the fact and never fail the publish.
+  let scoringWarnings: ScoringWarning[] = [];
+  try {
+    scoringWarnings = await assessScoringPublish(testId);
+  } catch (error) {
+    logger.error("scoring publish warnings failed: " + (error as Error).message, "tests");
+  }
+  return { ok: true, updated, breakdownWarnings, scoringWarnings };
 }
 
 /** What a SCORM export of a test does with its publication (decision Р7а). */
