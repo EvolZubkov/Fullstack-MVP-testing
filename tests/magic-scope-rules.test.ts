@@ -77,6 +77,20 @@ describe("matchMagicScopeRule", () => {
     expect(m?.params.testId).toBe("T1");
   });
 
+  describe("медиа вопросов по каноническому адресу", () => {
+    it("пускает GET /api/media/:id без привязки к тесту", () => {
+      const m = matchMagicScopeRule("GET", "/api/media/9eb72c08-1f00-4030-97c2-297fca9d0a31");
+      expect(m?.rule.bind).toBe("none");
+    });
+
+    it("не открывает загрузку и вложенные пути медиатеки", () => {
+      expect(matchMagicScopeRule("POST", "/api/media/upload")).toBeNull();
+      expect(matchMagicScopeRule("DELETE", "/api/media/abc")).toBeNull();
+      expect(matchMagicScopeRule("GET", "/api/media/abc/extra")).toBeNull();
+      expect(matchMagicScopeRule("GET", "/api/media")).toBeNull();
+    });
+  });
+
   describe("файлы шаблона для отчёта (PRD-27 FR-05)", () => {
     it("пропускает вложенный путь ассета: подложка отчёта лежит в подкаталоге шаблона", () => {
       const m = matchMagicScopeRule("GET", "/api/templates/default/assets/assets/report/bg.png");

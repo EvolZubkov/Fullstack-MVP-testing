@@ -7,9 +7,10 @@
  * admits only the paths named in {@link MAGIC_SCOPE_RULES} and verifies the object
  * binding itself, so the individual handlers need no awareness of the restriction.
  *
- * Only `/api/*` is policed. The client bundle and `/uploads/media/*` (question
- * media, without which a question cannot render) are deliberately outside: data
+ * Only `/api/*` is policed. The client bundle and the legacy `/uploads/media/*` alias
+ * (question media, without which a question cannot render) are deliberately outside: data
  * travels solely through the API, and a media file carries no test binding to check.
+ * The canonical `/api/media/:id` lives under `/api`, so it is admitted by an explicit rule.
  *
  * Express 5 itself routes case-insensitively, so both the `/api/` prefix gate and
  * the rule-table match must be case-insensitive too — otherwise `/API/...` would

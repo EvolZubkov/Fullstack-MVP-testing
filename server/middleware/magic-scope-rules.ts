@@ -82,6 +82,12 @@ export const MAGIC_SCOPE_RULES: MagicScopeRule[] = [
   { method: "GET", pattern: "/api/tests/:testId/review/comments", bind: "test" },
   { method: "POST", pattern: "/api/tests/:testId/review/comments", bind: "test" },
   { method: "PATCH", pattern: "/api/tests/:testId/review/comments/:commentId", bind: "test" },
+  // Question media by its canonical address. The legacy `/uploads/media/*` sat outside
+  // `/api` and so outside this guard; `/api/media/<id>` does not, and without this line a
+  // learner who came by an invitation link got a 403 instead of the question's picture.
+  // A media file carries no test binding to check, and the route itself still demands
+  // an authenticated session. Upload and the rest of the library stay closed.
+  { method: "GET", pattern: "/api/media/:id", bind: "none" },
   { method: "GET", pattern: "/api/report/lib/:file", bind: "none" },
   // PRD-27 FR-05: подложка и логотип отчёта — файлы ШАБЛОНА, а не ассеты продукта
   // (прежний `/api/report/asset/:file` удалён вместе с ними). Без этой строки ученик,
