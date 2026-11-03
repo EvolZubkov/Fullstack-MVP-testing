@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.53.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.53.0...v2.53.1)
+
+### Fixes
+
+- **fix**(access): ссылка-приглашение снова отдаёт картинки вопросов по /api/media/:id (2026-11-03) [`518f40eb645afc4c42754c9c27c1649535957d08`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/518f40eb645afc4c42754c9c27c1649535957d08)
+  Канонический адрес медиа лежит под /api, а сессия по ссылке пускалась только
+  на пути из списка: картинка отвечала 403 MAGIC_SCOPE и вопрос рисовался с
+  пустым изображением. Старый /uploads/media стоял вне /api и потому работал.
+  Загрузка и прочие маршруты медиатеки для такой сессии по-прежнему закрыты.
+
 ## [2.53.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.52.0...v2.53.0)
 
 ### Features
