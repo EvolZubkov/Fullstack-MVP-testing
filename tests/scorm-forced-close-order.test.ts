@@ -149,8 +149,17 @@ describe("finishAndClose — the forced close is applied after the indicator ver
     expect(out.written["cmi.comments_from_learner.0.comment"]).toBe(FORCED);
   });
 
-  it("time ran out: no forced close, the failure is reported as is", () => {
-    const out = run({ standardPassed: false, indicator: false, attemptsExhausted: true, timeExpired: true });
+  it("time ran out on the last attempt: force-closed like any spent failed attempt", () => {
+    // Seen live on testuniver.rt.ru 2026-11-05: the exemption for an expired timer left the
+    // course «in progress» with «Продолжить» after the only attempt ran out of time.
+    const out = run({ standardPassed: false, attemptsExhausted: true, timeExpired: true });
+    expect(out.passedForLms).toBe(true);
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBe(FORCED);
+    expect(out.verdictForLms).toBe(false);
+  });
+
+  it("time ran out with attempts left: the failure is reported as is, the course stays open", () => {
+    const out = run({ standardPassed: false, attemptsExhausted: false, timeExpired: true });
     expect(out.passedForLms).toBe(false);
     expect(out.written["cmi.comments_from_learner.0.comment"]).toBeUndefined();
   });

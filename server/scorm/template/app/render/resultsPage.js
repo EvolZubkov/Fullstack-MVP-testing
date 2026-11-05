@@ -350,8 +350,11 @@ function reportAttempt() {
   var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
   var realPassed = (typeof rcStatus.success === 'boolean') ? rcStatus.success : !!results.passed;
 
+  // An attempt ended by the time limit is closed the same way: it is just as spent and just
+  // as failed. Exempting it (the rule until 2026-11-05) left the course «in progress» with
+  // a «Продолжить» button in WebTutor after the last attempt ran out of time.
   var forcePassedHack = false;
-  if (attemptsExhausted && !realPassed && !state.timeExpired) {
+  if (attemptsExhausted && !realPassed) {
     console.log('🔴 Попытки кончились, принудительно закрываем с passed=true');
     forcePassedHack = true;
     try {
