@@ -6,7 +6,7 @@
     <!--
     Wireframe: этап Э5 UX-аудита аналитики — экспорт по задаче.
     Решения владельца 2026-10-05: Р6 — окно «Сохранить как…» вместо трёх пунктов меню теста;
-    Р7 — выбор версии у SCORM и .tbtest, книга Excel из текущего черновика; Р8 — телеметрия в окне
+    Р7 — выбор версии у SCORM и .tbtest (для SCORM заменено решением 2026-10-31: выгрузка = публикация), книга Excel из текущего черновика; Р8 — телеметрия в окне
     только показом настройки теста. Окна «Экспорт» уровня теста и вопроса — по образцу окна реестра
     (registry/export-dialog.tsx): условия фильтра подставляются, число строк названо.
     -->
@@ -422,7 +422,8 @@
     <nav class="wf-nav" aria-label="Wireframe state switcher">
       <span class="wf-nav-title">Э5 экспорт:</span>
       <button type="button" class="active" onclick="showState(this, 'tests-menu')">Меню теста</button>
-      <button type="button" onclick="showState(this, 'save-scorm')">SCORM</button>
+      <button type="button" onclick="showState(this, 'save-scorm')">SCORM: есть изменения</button>
+      <button type="button" onclick="showState(this, 'save-scorm-same')">SCORM: без изменений</button>
       <button type="button" onclick="showState(this, 'save-xlsx')">Книга Excel</button>
       <button type="button" onclick="showState(this, 'save-tbtest')">Пакет .tbtest</button>
       <button type="button" onclick="showState(this, 'save-author')">Без права на SCORM</button>
@@ -719,7 +720,56 @@
           <div class="ou-modal__body">
             <div class="ou-stack ou-stack--gap-4">
               <fieldset class="ou-choice-card-group"><legend class="ou-choice-card-group__legend">Формат</legend><div class="ou-choice-card-group__items"><label class="ou-choice-card ou-choice-card--radio is-selected"><input type="radio" class="ou-choice-card__input" name="wf-r" checked><span class="ou-choice-card__body"><span class="ou-choice-card__title">Курс для LMS — SCORM 2004 (.zip)</span><span class="ou-choice-card__desc">Загружается в LMS. Обратно в Skill'Ум не загружается</span></span><span class="ou-choice-card__radio" aria-hidden="true"></span></label><label class="ou-choice-card ou-choice-card--radio"><input type="radio" class="ou-choice-card__input" name="wf-r"><span class="ou-choice-card__body"><span class="ou-choice-card__title">Книга для правки в Excel (.xlsx)</span><span class="ou-choice-card__desc">Правка вопросов и настроек в таблице, загрузка обратно через «Импорт»</span></span><span class="ou-choice-card__radio" aria-hidden="true"></span></label><label class="ou-choice-card ou-choice-card--radio"><input type="radio" class="ou-choice-card__input" name="wf-r"><span class="ou-choice-card__body"><span class="ou-choice-card__title">Пакет теста (.tbtest)</span><span class="ou-choice-card__desc">Тест целиком — для переноса на другую инсталляцию через «Импорт»</span></span><span class="ou-choice-card__radio" aria-hidden="true"></span></label></div></fieldset>
-              <div class="wf-facts"><span class="ou-text ou-text--body-s ou-text--tone-muted">Версия</span><div><div class="ou-select ou-field--s ou-field--full wf-select"><div class="ou-select__control"><button type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Версия"><span class="ou-select__value">Опубликованная — версия 4 от 28.09.2026</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div></div><span class="ou-text ou-text--body-s ou-text--tone-muted">Телеметрия</span><div><div class="ou-stack ou-stack--gap-1 ou-stack--ai-start"><span class="ou-text ou-text--body-s">включена — прохождения придут в аналитику</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Меняется в настройках теста</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Основное · Интеграция</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button></div></div></div>
+              <div class="wf-facts"><span class="ou-text ou-text--body-s ou-text--tone-muted">Версия</span><div><div class="ou-stack ou-stack--gap-1 ou-stack--ai-start"><span class="ou-text ou-text--body-s">будет опубликована версия 5</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Выгрузка публикует текущий черновик: правки после версии 4 фиксируются новой версией</span></div></div><span class="ou-text ou-text--body-s ou-text--tone-muted">Телеметрия</span><div><div class="ou-stack ou-stack--gap-1 ou-stack--ai-start"><span class="ou-text ou-text--body-s">включена — прохождения придут в аналитику</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Меняется в настройках теста</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Основное · Интеграция</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button></div></div></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span>Отмена</span></button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-download" /></svg></span><span>Сохранить</span></button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <div id="wf-save-scorm-same" class="wf-state">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side-tests></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="wf-page-head">
+            <h1 class="ou-text ou-text--heading-l">Тесты</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Создавайте тесты из тем с настраиваемыми критериями и экспортом в SCORM.</p>
+          </div>
+          <div class="wf-grid-wrap">
+          <div class="ou-grid">
+            <div class="ou-grid__scroll">
+              <table class="ou-grid__table">
+                <thead><tr><th><div class="ou-grid__th">Название</div></th><th><div class="ou-grid__th">Владелец</div></th><th><div class="ou-grid__th">Статус</div></th><th><div class="ou-grid__th">Режим</div></th><th></th></tr></thead>
+                <tbody>
+                  <tr><td class="ou-grid__cell-strong">Сертификация руководителей</td><td>Ирина Ковалёва</td><td><span class="ou-tag ou-tag--success ou-tag--s">Опубликован</span></td><td>Стандарт</td><td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Ещё действия"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-more" /></svg></span></button></td></tr>
+                  <tr><td class="ou-grid__cell-strong">Антикоррупционный минимум</td><td>Ирина Ковалёва</td><td><span class="ou-tag ou-tag--neutral ou-tag--s">Черновик</span></td><td>Стандарт</td><td></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          </div>
+        </main>
+      </div>
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-save-scorm-same-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="wf-save-scorm-same-title">Сохранить как…</h2>
+              <p class="ou-modal__desc">Сертификация руководителей</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-stack ou-stack--gap-4">
+              <fieldset class="ou-choice-card-group"><legend class="ou-choice-card-group__legend">Формат</legend><div class="ou-choice-card-group__items"><label class="ou-choice-card ou-choice-card--radio is-selected"><input type="radio" class="ou-choice-card__input" name="wf-r" checked><span class="ou-choice-card__body"><span class="ou-choice-card__title">Курс для LMS — SCORM 2004 (.zip)</span><span class="ou-choice-card__desc">Загружается в LMS. Обратно в Skill'Ум не загружается</span></span><span class="ou-choice-card__radio" aria-hidden="true"></span></label><label class="ou-choice-card ou-choice-card--radio"><input type="radio" class="ou-choice-card__input" name="wf-r"><span class="ou-choice-card__body"><span class="ou-choice-card__title">Книга для правки в Excel (.xlsx)</span><span class="ou-choice-card__desc">Правка вопросов и настроек в таблице, загрузка обратно через «Импорт»</span></span><span class="ou-choice-card__radio" aria-hidden="true"></span></label><label class="ou-choice-card ou-choice-card--radio"><input type="radio" class="ou-choice-card__input" name="wf-r"><span class="ou-choice-card__body"><span class="ou-choice-card__title">Пакет теста (.tbtest)</span><span class="ou-choice-card__desc">Тест целиком — для переноса на другую инсталляцию через «Импорт»</span></span><span class="ou-choice-card__radio" aria-hidden="true"></span></label></div></fieldset>
+              <div class="wf-facts"><span class="ou-text ou-text--body-s ou-text--tone-muted">Версия</span><div><div class="ou-stack ou-stack--gap-1 ou-stack--ai-start"><span class="ou-text ou-text--body-s">опубликованная — версия 4 от 28.09.2026</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Изменений после публикации нет — новая версия не создаётся</span></div></div><span class="ou-text ou-text--body-s ou-text--tone-muted">Телеметрия</span><div><div class="ou-stack ou-stack--gap-1 ou-stack--ai-start"><span class="ou-text ou-text--body-s">включена — прохождения придут в аналитику</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Меняется в настройках теста</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Основное · Интеграция</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button></div></div></div>
             </div>
           </div>
           <footer class="ou-modal__foot">
@@ -972,7 +1022,8 @@
             <tbody>
               <tr><td>Меню теста</td><td>Один пункт «Сохранить как…» вместо «Экспорт SCORM», «Экспорт в Excel», «Экспорт пакета (.tbtest)». Короткий путь на главной открывает это же окно</td><td>Р6 (2026-10-05). Заметка эскиза PRD-55 «окна экспорта в продукте не существует» снимается</td></tr>
               <tr><td>Формат</td><td>Три варианта по задаче: курс для LMS, книга для правки, пакет для переноса. У каждого — назначение и как загрузить обратно. Последний выбор запоминается</td><td>Вариант без права скрыт: без «Экспорт SCORM» его нет вовсе (состояние «Без права на SCORM»)</td></tr>
-              <tr><td>Версия</td><td>SCORM и .tbtest: «Опубликованная — версия N от даты» или «Текущий черновик»; по умолчанию опубликованная. Неопубликованный тест — только черновик, список выключен с пояснением</td><td>Р7. Параметр <code>source</code> у ручек SCORM и .tbtest</td></tr>
+              <tr><td>Версия: SCORM</td><td>Выбора нет: выгрузка в SCORM — это публикация. Черновик и тест с правками после публикации публикуются при выгрузке, и пакет собирается из новой версии: «будет опубликована версия N». Опубликованный тест без правок выгружается из действующей версии: «опубликованная — версия N от даты». Невыполнимая выдача — отказ с причинами, как у кнопки публикации; пакет не собирается</td><td>Решение владельца 2026-10-31 заменяет Р7 для SCORM. Параметра <code>source</code> у ручки SCORM нет. Архивный тест — вне решения: поведение прежнее, вопрос отложен до проработки архива</td></tr>
+              <tr><td>Версия: .tbtest</td><td>«Опубликованная — версия N от даты» или «Текущий черновик»; по умолчанию опубликованная. Неопубликованный тест — только черновик, список выключен с пояснением</td><td>Р7. Параметр <code>source</code> у ручки .tbtest</td></tr>
               <tr><td>Книга Excel</td><td>Версия — всегда текущий черновик, окно говорит это прямо. «Не переносит» — по К3 плана: вложения, ссылки и мероприятия исходов, файлы шаблона, ссылки и вложения рекомендаций</td><td>Р7: книга из снимка — в долг отдельной строкой</td></tr>
               <tr><td>Телеметрия</td><td>Только показ настройки теста со ссылкой на вкладку, где она меняется</td><td>Р8: переопределения на одну выгрузку нет</td></tr>
               <tr><td>Экспорт: уровень теста</td><td>Кнопка «Экспорт Excel» в шапке открывает окно. Условия фильтра страницы подставлены и названы, число прохождений названо. Книга результатов (листы на выбор), психометрический отчёт или матрица ответов</td><td>Попутно дефект: выгрузка теста сейчас не читает фильтр. Ссылки «Психометрический отчёт» и «Матрица ответов» из подвала карточки переходят сюда</td></tr>
@@ -989,7 +1040,8 @@
             <tbody>
               <tr><td>Окна</td><td><code>ModalDialog</code></td><td>—</td><td>«Сохранить как…» и «Экспорт» теста — m, вопроса — s</td></tr>
               <tr><td>Формат, «Что выгрузить»</td><td><code>ChoiceCardGroup</code> + <code>ChoiceCard</code> (<code>showRadio</code>)</td><td><code>--ou-space-4</code> между блоками окна</td><td>Стили <code>ChoiceCard</code> возвращены в ДС 2026-10-06 (были потеряны при переносе бандла); до этого эскиз и код брали <code>RadioGroup</code></td></tr>
-              <tr><td>Версия</td><td><code>Select</code></td><td>—</td><td>Выключенный — у неопубликованного теста</td></tr>
+              <tr><td>Версия: .tbtest</td><td><code>Select</code></td><td>—</td><td>Выключенный — у неопубликованного теста</td></tr>
+              <tr><td>Версия: SCORM</td><td><code>Text</code> body-s + <code>Text</code> body-s muted</td><td><code>--ou-space-1</code></td><td>Значение и пояснение столбиком, как у телеметрии</td></tr>
               <tr><td>Подробности варианта</td><td><code>Text</code> в сетке «подпись — значение»</td><td><code>--ou-space-2</code> / <code>--ou-space-4</code></td><td>Сетка — две колонки, без своего компонента</td></tr>
               <tr><td>Условия, число строк</td><td><code>Chip</code> xs, <code>Banner</code> subtle info</td><td>—</td><td>Как в окне «Сохранить как срез» (approved/e3-test-and-question.html)</td></tr>
               <tr><td>Листы книги</td><td><code>Checkbox</code></td><td>—</td><td>Видны только у «Книги результатов»</td></tr>

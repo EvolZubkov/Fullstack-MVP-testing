@@ -51,6 +51,8 @@ import { CSS } from "@dnd-kit/utilities";
 import type { DrawBlueprint, Folder, FormSet, SectionGroup, Topic } from "@shared/schema";
 import { useOptionalAuth } from "@/lib/auth";
 import { TopicDrawer, type TopicDrawerTarget } from "@/features/topics/topic-drawer";
+import { FeedbackEditorModal } from "./feedback-editor-modal";
+import { FeedbackPreview } from "./feedback-preview";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import { expectedExposure } from "@shared/draw/expected-exposure";
 import {
@@ -532,6 +534,17 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
       sectionGroups: (m.sectionGroups ?? []).map((g) => (g.key === key ? { ...g, label } : g)),
     }));
 
+  /** Пояснение к группе; пустой текст снимает его вовсе, как и у толкования темы. */
+  const setGroupDescription = (key: string, description: { format: "plain" | "richText" | "html"; text: string } | null) =>
+    updateModel((m) => ({
+      ...m,
+      sectionGroups: (m.sectionGroups ?? []).map((g) => {
+        if (g.key !== key) return g;
+        const { description: _old, ...rest } = g;
+        return description && description.text.trim() !== "" ? { ...rest, description } : rest;
+      }),
+    }));
+
   /**
    * Удаление группы. Темы НЕ удаляются — они уезжают «вне групп» (решение владельца
    * 2026-09-21): группа описывает подачу итога, а не состав теста, и снимать вместе с ней
@@ -851,6 +864,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
                 open={groupFold.isOpen(group.key)}
                 onToggleOpen={() => groupFold.toggle(group.key)}
                 onRename={(label) => renameGroup(group.key, label)}
+                onDescription={(description) => setGroupDescription(group.key, description)}
                 onRemove={() => removeGroup(group.key)}
                 onAddTopic={() => openPickerFor(group.key)}
                 onAddScenario={routerScenarios ? () => setScenarioPickerGroup(group.key) : undefined}
@@ -933,6 +947,8 @@ function GroupCard(props: {
   open: boolean;
   onToggleOpen: () => void;
   onRename?: (label: string) => void;
+  /** Пояснение под заголовком группы на экране итогов и в отчёте. */
+  onDescription?: (description: { format: "plain" | "richText" | "html"; text: string } | null) => void;
   onRemove?: () => void;
   onAddTopic: () => void;
   /** «Добавить сценарий» в подвале группы — только у теста с роутером и у настоящей группы. */
@@ -940,6 +956,7 @@ function GroupCard(props: {
   renderEntry: (entry: NumberedEntry) => React.ReactNode;
 }) {
   const key = props.group?.key ?? UNGROUPED;
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
   /**
    * Зона приёма у настоящей группы — её же сортируемый узел (`group:<ключ>`), а НЕ второй
    * `useDroppable` на том же элементе: два приёмника на одном узле дают одинаковый
@@ -1031,6 +1048,45 @@ function GroupCard(props: {
       </header>
       {props.open && (
         <div className="ou-card__body">
+          {props.group && props.onDescription && (
+            <div className="tb-group-card__description">
+              <p className="tb-card-desc">
+                Пояснение печатается под названием группы на экране итогов и в отчёте при любом вердикте.
+              </p>
+              <FeedbackPreview
+                format={props.group.description?.format ?? "plain"}
+                text={props.group.description?.text ?? ""}
+                links={[]}
+                assets={[]}
+                events={[]}
+                emptyLabel="Без пояснения"
+                onEdit={() => setDescriptionOpen(true)}
+                editAriaLabel={`Редактировать пояснение группы «${props.group.label}»`}
+                testId={`composition-group-description-${key}`}
+              />
+              <FeedbackEditorModal
+                open={descriptionOpen}
+                title={`Пояснение к группе «${props.group.label}»`}
+                description="Текст печатается под названием группы на экране итогов и в отчёте — общий для любого вердикта."
+                value={{
+                  format: props.group.description?.format ?? "richText",
+                  text: props.group.description?.text ?? "",
+                  links: [],
+                  assets: [],
+                }}
+                hideLinks
+                hideAssets
+                hideEvents
+                textLabel="Текст пояснения"
+                onCancel={() => setDescriptionOpen(false)}
+                onSave={(v) => {
+                  props.onDescription?.(v.text.trim() === "" ? null : { format: v.format, text: v.text });
+                  setDescriptionOpen(false);
+                }}
+                testId={`composition-group-description-modal-${key}`}
+              />
+            </div>
+          )}
           {count === 0 ? (
             // Не `EmptyState`: у пустой группы нет ошибки и нет действия, кроме кнопки
             // ниже, — есть только объяснение, что с ней делать.

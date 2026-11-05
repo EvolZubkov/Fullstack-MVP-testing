@@ -180,3 +180,22 @@ describe("aggregateStandardResult + блоки разделов", () => {
     expect(agg.sectionGroups!.map((g) => g.key)).toEqual(["knowledge"]);
   });
 });
+
+describe("описание группы (пояснение автора)", () => {
+  it("normalizeSectionGroups сохраняет непустое пояснение и отбрасывает пустое или битое", () => {
+    const list = normalizeSectionGroups([
+      { key: "a", label: "A", description: { format: "richText", text: "<p>Текст</p>" } },
+      { key: "b", label: "B", description: { format: "plain", text: "   " } },
+      { key: "c", label: "C", description: "мусор" },
+    ]);
+    expect(list[0].description).toEqual({ format: "richText", text: "<p>Текст</p>" });
+    expect(list[1]).not.toHaveProperty("description");
+    expect(list[2]).not.toHaveProperty("description");
+  });
+
+  it("groupSections несёт пояснение в печатаемую группу", () => {
+    const withDesc = [{ key: "k", label: "K", description: { format: "plain" as const, text: "Пояснение" } }];
+    const { groups: out } = groupSections(withDesc, [sec("t1", true, "k")]);
+    expect(out[0].description).toEqual({ format: "plain", text: "Пояснение" });
+  });
+});

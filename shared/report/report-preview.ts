@@ -68,6 +68,16 @@ export interface ReportPreviewTest {
    */
   breakdownDisplay?: BreakdownDisplaySetting;
   /**
+   * Печатать ли карточки тем (`tests.show_topic_results`) — из черновика, как и настройка
+   * показа выше: предпросмотр не вправе решать это за автора. Отсутствие = печатать.
+   */
+  showTopicResults?: boolean;
+  /**
+   * Печатать ли строку «Лучший результат за N попыток» (`tests.show_attempts_count`) — из
+   * черновика, по той же причине. Отсутствие = печатать.
+   */
+  showAttemptsCount?: boolean;
+  /**
    * Окраска полос подтем — из параметров оформления, которые автор правит в этом же окне
    * настроек ({@link module:shared/template/bar-fill barFillFromParams}). Отсутствие =
    * «по вердикту».
@@ -245,6 +255,8 @@ export function buildReportPreviewInput(
     attemptsCount: DEMO_ATTEMPTS,
     ...(test.headings ? { headings: test.headings } : {}),
     ...(test.breakdownDisplay ? { breakdownDisplay: test.breakdownDisplay } : {}),
+    ...(test.showTopicResults === false ? { showTopicResults: false } : {}),
+    ...(test.showAttemptsCount === false ? { showAttemptsCount: false } : {}),
     ...(test.barFill ? { barFill: test.barFill } : {}),
     // PRD-61 FR-23: вводный блок отчёта. Текст исхода выберет построитель — по вердикту
     // образца, который задаёт переключатель окна.
@@ -296,6 +308,8 @@ export function buildAdaptiveReportPreviewInput(
     testName: test.testName || "Тест",
     learnerName: PREVIEW_LEARNER_NAME,
     attemptsCount: DEMO_ATTEMPTS,
+    ...(test.showTopicResults === false ? { showTopicResults: false } : {}),
+    ...(test.showAttemptsCount === false ? { showAttemptsCount: false } : {}),
     // PRD-61: вводный блок печатается и здесь, но БЕЗ текстов исхода — адаптивный режим
     // вердикта не выносит (FR-14b), и построитель их не возьмёт.
     ...(resolveReportIntro(test.intro) ? { intro: resolveReportIntro(test.intro)! } : {}),

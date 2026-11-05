@@ -16,6 +16,7 @@
       {{#if label}}<div class="tb-report__topic-group-title">{{ label }}</div>{{/if}}
       {{#if counterLabel}}<div class="tb-report__topic-group-counter">{{ counterLabel }}</div>{{/if}}
     </div>
+    {{#if descriptionHtml}}<div class="tb-report__topic-group-description">{{& descriptionHtml }}</div>{{/if}}
     <div class="tb-report__topics" style="grid-template-columns: repeat({{ @root.report.gridColumns }}, 1fr);">
       {{#each topics}}
       <div class="tb-report__topic {{ passClass }}">

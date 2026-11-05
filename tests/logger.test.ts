@@ -110,6 +110,15 @@ describe("request context propagation", () => {
     expect(entry.reqId).toBe("R1");
     expect(entry.userId).toBe("U1");
   });
+
+  it("finds an entry by its userId or reqId, which are not in the message", () => {
+    const tag = `who-${Math.round(performance.now())}`;
+    requestContext.run({ reqId: `req-${tag}`, userId: `user-${tag}` }, () => {
+      logger.warn("PUT /api/tests/x 400");
+    });
+    expect(getRecentLogs({ search: `user-${tag}` }).entries).toHaveLength(1);
+    expect(getRecentLogs({ search: `REQ-${tag}` }).entries).toHaveLength(1);
+  });
 });
 
 describe("audit trail", () => {

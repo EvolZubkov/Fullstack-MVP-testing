@@ -30,6 +30,13 @@ export interface RichTextEditorProps {
    */
   sanitize?: (html: string) => string;
   /**
+   * Transform applied to a pasted fragment ONLY, before `sanitize`. Unlike `sanitize`,
+   * it never runs over the whole value, so it may remove what a paste drags in from its
+   * source (colours, fonts) without erasing the same markup the author wrote on purpose
+   * in `html` mode.
+   */
+  transformPaste?: (html: string) => string;
+  /**
    * Opt-in: in `plain` mode the value is the author's SOURCE text — real newlines, no
    * escaping — instead of markup. Mode switches route through these converters, so the
    * markup policy stays with the host and the DS keeps no second copy of it.
@@ -156,7 +163,7 @@ export const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(
     {
       label, hint, error, required, size = 'm', fullWidth, disabled,
       value, onChange, modes = ['plain', 'rich', 'html'], mode, onModeChange,
-      sanitize, sourceMode, rows = 4, maxRows, id, className, ...rest
+      sanitize, transformPaste, sourceMode, rows = 4, maxRows, id, className, ...rest
     },
     ref,
   ) => {
@@ -225,11 +232,11 @@ export const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(
     };
 
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-      if (!sanitize) return;
+      if (!sanitize && !transformPaste) return;
       const html = e.clipboardData.getData('text/html');
       if (!html) return;
       e.preventDefault();
-      document.execCommand('insertHTML', false, clean(html));
+      document.execCommand('insertHTML', false, clean(transformPaste ? transformPaste(html) : html));
       const el = areaRef.current;
       if (el) onChange(clean(el.innerHTML));
     };

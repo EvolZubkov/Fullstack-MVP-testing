@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "show_attempts_count" boolean DEFAULT true NOT NULL;

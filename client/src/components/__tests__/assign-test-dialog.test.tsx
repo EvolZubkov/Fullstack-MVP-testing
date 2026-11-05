@@ -10,7 +10,7 @@
  */
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { AssignTestDialog } from "../assign-test-dialog";
@@ -47,6 +47,8 @@ let assignmentsData: unknown[] = [];
 let usersData: unknown[] = [];
 let groupsData: unknown[] = [];
 let groupUsersData: unknown[] = [];
+let candidatesData: unknown[] = [];
+let candidatesOk = true;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -54,6 +56,8 @@ beforeEach(() => {
   usersData = [learner, learner2, author];
   groupsData = [groupA];
   groupUsersData = [];
+  candidatesData = [{ id: "u-expert", email: "expert@example.com", name: "Ирина", status: "active" }];
+  candidatesOk = true;
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method || "GET").toUpperCase();
@@ -62,6 +66,10 @@ beforeEach(() => {
       if (url === "/api/users") return jsonRes(usersData);
       if (url === "/api/groups") return jsonRes(groupsData);
       if (url.endsWith("/group-users")) return jsonRes(groupUsersData);
+      if (url === "/api/tests/test1/review/reviewers") return jsonRes([]);
+      if (url === "/api/tests/test1/review/candidates") {
+        return candidatesOk ? jsonRes(candidatesData) : jsonRes({ error: "Forbidden" }, false, 403);
+      }
     }
     // Mutations (bulk assign / remove / resend / revoke) all return ok JSON.
     return jsonRes({ sent: 2 });
@@ -87,6 +95,18 @@ function renderDialog(props: Partial<React.ComponentProps<typeof AssignTestDialo
     </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onOpenChange };
+}
+
+/** The dialog footer (`ou-modal__foot`), where the tab actions live (approved wireframe 2026-10-20). */
+function footer(): HTMLElement {
+  const el = document.querySelector<HTMLElement>(".ou-modal__foot");
+  if (!el) throw new Error("dialog footer not rendered");
+  return el;
+}
+
+/** A button of the dialog footer, by its accessible name. */
+function footerButton(name: RegExp | string): HTMLElement {
+  return within(footer()).getByRole("button", { name });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -180,7 +200,7 @@ describe("<AssignTestDialog /> — current assignments tab", () => {
 });
 
 describe("<AssignTestDialog /> — users tab", () => {
-  it("lists available learners and assigns a selected user via bulk POST", async () => {
+  it("lists available learners and assigns the people put into the basket", async () => {
     renderDialog();
     await screen.findByText("Управление назначениями");
     fireEvent.click(screen.getByRole("tab", { name: /Пользователи/ }));
@@ -189,9 +209,10 @@ describe("<AssignTestDialog /> — users tab", () => {
     expect(await screen.findByText("learner@example.com")).toBeInTheDocument();
     expect(screen.queryByText("author@example.com")).toBeNull();
 
-    // Select the first row, then assign.
-    fireEvent.click(screen.getByRole("checkbox", { name: "Выбрать строку 1" }));
-    fireEvent.click(screen.getByRole("button", { name: /Назначить \(1\)/ }));
+    // Tick a person on the left, move them into the basket, then assign from the footer.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Иван Ученик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить отмеченных" }));
+    fireEvent.click(footerButton(/Назначить \(1\)/));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -285,16 +306,139 @@ describe("AssignTestDialog — режим рецензирования", () => {
   });
 
   it("пустой список пользователей объясняется приглашением, а не назначением", async () => {
-    usersData = [];
+    candidatesData = [];
     renderDialog({ mode: "review" });
     fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
 
     expect(await screen.findByText("Все пользователи уже приглашены")).toBeInTheDocument();
   });
 
+  // PRD-52 раздел 14.7: у автора нет `users.read`, поэтому реестр пользователей
+  // ему закрыт — кандидатов отдаёт маршрут под правом приглашения.
+  it("берёт кандидатов из маршрута рецензирования, а не из реестра пользователей", async () => {
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+
+    expect(await screen.findByText("expert@example.com")).toBeInTheDocument();
+    const gets = fetchMock.mock.calls
+      .filter(([, init]) => !init?.method || init.method === "GET")
+      .map(([u]) => String(u));
+    expect(gets).not.toContain("/api/users");
+    expect(gets).not.toContain("/api/groups");
+  });
+
+  it("приглашает выбранного кандидата поимённо", async () => {
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+    await screen.findByText("expert@example.com");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ирина" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить отмеченных" }));
+    fireEvent.click(footerButton(/Пригласить \(1\)/));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([u]) => String(u) === "/api/tests/test1/review/invite");
+      expect(call).toBeTruthy();
+      expect(JSON.parse((call![1] as RequestInit).body as string).rows).toEqual([{ userId: "u-expert" }]);
+    });
+  });
+
+  it("отказ при чтении кандидатов не выдаёт себя за «все уже приглашены»", async () => {
+    candidatesOk = false;
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+
+    expect(await screen.findByText("Не удалось загрузить список пользователей")).toBeInTheDocument();
+    expect(screen.queryByText("Все пользователи уже приглашены")).toBeNull();
+  });
+
   it("обычный режим заголовка и предупреждения не меняет", async () => {
     renderDialog();
     expect(screen.queryByText("Отправить на рецензирование")).not.toBeInTheDocument();
     expect(screen.queryByText(/видят комментарии друг друга/i)).not.toBeInTheDocument();
+  });
+});
+
+// ─── Approved wireframe assign-dialog-user-picker.html (2026-10-20) ──────────
+
+describe("AssignTestDialog — выбор двумя половинами, подвал, высота", () => {
+  it("окно держит одну высоту: ModalDialog и вкладки в режиме fill", async () => {
+    renderDialog();
+    await screen.findByText("Управление назначениями");
+    expect(document.querySelector(".ou-modal")).toHaveClass("ou-modal--fill");
+    expect(document.querySelector(".ou-tabs")).toHaveClass("ou-tabs--fill");
+  });
+
+  it("на «Назначено» в подвале только «Отмена»", async () => {
+    renderDialog();
+    await screen.findByText("Нет назначений");
+    expect(within(footer()).getAllByRole("button").map((b) => b.textContent)).toEqual(["Отмена"]);
+  });
+
+  it("«Пользователи»: слева кандидаты, справа корзина «К назначению», сроки над половинами", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+    await screen.findByText("learner@example.com");
+
+    expect(screen.getByRole("heading", { name: "Пользователи" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "К назначению" })).toBeInTheDocument();
+    expect(document.querySelector(".ou-transfer")).toHaveClass("ou-transfer--fill", "ou-transfer--has-above");
+    const left = document.querySelector(".ou-transfer__above--left")!;
+    const right = document.querySelector(".ou-transfer__above--right")!;
+    expect(within(left as HTMLElement).getByLabelText("Срок выполнения")).toBeInTheDocument();
+    expect(within(right as HTMLElement).getByLabelText("Ссылка активна до")).toBeInTheDocument();
+    // The action lives in the footer and counts the basket, which starts empty.
+    expect(footerButton(/Назначить \(0\)/)).toBeDisabled();
+  });
+
+  it("новый поиск слева корзину не трогает", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+    await screen.findByText("learner@example.com");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Иван Ученик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить отмеченных" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Поиск в «Пользователи»" }), { target: { value: "second" } });
+
+    expect(footerButton(/Назначить \(1\)/)).toBeEnabled();
+    const basket = document.querySelectorAll(".ou-transfer__pane")[1] as HTMLElement;
+    expect(within(basket).getByText("Иван Ученик")).toBeInTheDocument();
+  });
+
+  it("после назначения корзина пустеет", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+    await screen.findByText("learner@example.com");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Иван Ученик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить отмеченных" }));
+    fireEvent.click(footerButton(/Назначить \(1\)/));
+
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Назначено/ })).toHaveAttribute("aria-selected", "true"));
+    fireEvent.click(screen.getByRole("tab", { name: /Пользователи/ }));
+    expect(await within(footer()).findByRole("button", { name: /Назначить \(0\)/ })).toBeDisabled();
+  });
+
+  it("на «Группах» действие тоже в подвале", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("tab", { name: /Группы/ }));
+    await screen.findByText("Отдел продаж");
+    expect(footerButton(/Назначить \(0\)/)).toBeDisabled();
+  });
+
+  it("на «Списком» «Проверить список» стоит в подвале", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("tab", { name: /Списком/ }));
+    expect(await within(footer()).findByRole("button", { name: "Проверить список" })).toBeDisabled();
+  });
+
+  it("рецензирование: корзина «К приглашению», одно поле срока во всю ширину", async () => {
+    renderDialog({ mode: "review" });
+    fireEvent.click(await screen.findByRole("tab", { name: /Пользователи/ }));
+    await screen.findByText("expert@example.com");
+
+    expect(screen.getByRole("heading", { name: "К приглашению" })).toBeInTheDocument();
+    const span = document.querySelector(".ou-transfer__above--span") as HTMLElement;
+    expect(within(span).getByLabelText("Ссылка активна до")).toBeInTheDocument();
+    expect(footerButton(/Пригласить \(0\)/)).toBeDisabled();
   });
 });

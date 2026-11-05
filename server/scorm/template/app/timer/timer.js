@@ -11,8 +11,16 @@
  * Runs inside the concatenated IIFE bundle, so it shares scope with `state`,
  * `TEST_DATA`, `submit()` and the DOM instead of importing them.
  *
+ * The test-wide countdown starts on the FIRST QUESTION of the attempt, never on
+ * «Начать»: intro pages, section intros and the router hub before the first topic
+ * are read before the learner decided to begin, and the limit must not be spent on
+ * them. «Начать» only ARMS the timer; the first question screen starts it.
+ *
  * Contract consumed by other bundle modules (kept stable):
- *   initTimer()                             - startPage on attempt start
+ *   armTestTimer()                          - startPage on attempt start
+ *   ensureTestTimerStarted()                - mainRender / adaptiveRender on a question
+ *   resumeTestTimer()                       - bootstrap on session restore
+ *   initTimer()                             - starts the countdown (via the three above)
  *   stopTestTimer()                         - answers / startPage on reset
  *   startSectionTimer(topicId, min, onExp)  - contentFlow / routerFlow
  *   stopSectionTimer()                      - contentFlow / routerFlow
@@ -21,6 +29,10 @@
  *   state.timerInterval    - active interval handle; kept here because reset
  *                            paths historically stop the timer through it.
  *   state.timerStartPerfMs - monotonic start reading of the test timer.
+ *   state.testTimerArmed   - the attempt started, the countdown waits for the
+ *                            first question.
+ *   state.sessionCommitStartPerfMs - monotonic reading the committed
+ *                            cmi.session_time counts from (once per SCO session).
  *   state.remainingSeconds - test seconds left; read by renderers and results.
  *   state.timeExpired      - set when the test limit runs out.
  *   state.sectionTimer     - { topicId, limitMinutes, remainingSeconds,
@@ -83,8 +95,8 @@ function secondsToIsoDuration(sec) {
 function commitSessionTime() {
   try {
     if (typeof SCORM === 'undefined' || !SCORM.setValue) return;
-    if (state.timerStartPerfMs === null) return;
-    var elapsed = Math.floor((timerNowMs() - state.timerStartPerfMs) / 1000);
+    var elapsed = sessionElapsedSec();
+    if (elapsed === null) return;
     SCORM.setValue('cmi.session_time', secondsToIsoDuration(elapsed));
     SCORM.commit();
   } catch (e) {
@@ -92,10 +104,28 @@ function commitSessionTime() {
   }
 }
 
-/** Start the periodic session-time commit (kill-resistance). */
+/**
+ * Whole seconds of this SCO session as the committed cmi.session_time counts them,
+ * or null before the commit ever started.
+ * @returns {number|null}
+ */
+function sessionElapsedSec() {
+  if (state.sessionCommitStartPerfMs === null || state.sessionCommitStartPerfMs === undefined) return null;
+  return Math.floor((timerNowMs() - state.sessionCommitStartPerfMs) / 1000);
+}
+
+/**
+ * Start the periodic session-time commit (kill-resistance). It runs from «Начать»,
+ * not from the first question: the LMS is owed the time spent on intro pages too,
+ * even though the test limit is not. The session-time origin is set once per SCO
+ * session, so a new attempt in the same session keeps counting the same session.
+ */
 function startTimerCommit() {
   stopTimerCommit();
   if (typeof SCORM === 'undefined' || !SCORM.setValue) return; // standalone / no RTE
+  if (state.sessionCommitStartPerfMs === null || state.sessionCommitStartPerfMs === undefined) {
+    state.sessionCommitStartPerfMs = timerNowMs();
+  }
   state.timerCommitInterval = setInterval(commitSessionTime, TIMER_COMMIT_MS);
 }
 
@@ -232,9 +262,12 @@ function initTimer() {
     }
   } else {
     // Fresh attempt: establish the anchor (phase 2a) and use the full limit.
+    // The session time committed so far (intro pages read since «Начать») will
+    // reach cmi.total_time too, so it belongs to the baseline: a later resume must
+    // count only the time since this first question.
     startSeconds = totalSeconds;
     if (totalNow !== null && typeof writeTimerAnchor === 'function') {
-      writeTimerAnchor({ limitMinutes: minutes, baselineTotalSec: totalNow });
+      writeTimerAnchor({ limitMinutes: minutes, baselineTotalSec: totalNow + (sessionElapsedSec() || 0) });
     }
   }
 
@@ -262,12 +295,57 @@ function initTimer() {
 }
 
 /**
+ * «Начать»: the attempt is on, its countdown waits for the first question. Writes
+ * the PENDING anchor so a reload before that question still resumes the attempt,
+ * and starts the session-time commit right away.
+ */
+function armTestTimer() {
+  state.testTimerArmed = false;
+  var minutes = TEST_DATA.timeLimitMinutes;
+  if (!minutes || minutes <= 0) return;
+  state.testTimerArmed = true;
+  if (typeof writeTimerAnchor === 'function') {
+    writeTimerAnchor({ limitMinutes: minutes, pending: true });
+  }
+  startTimerCommit();
+}
+
+/**
+ * Start the armed countdown. Called by every screen that shows a question —
+ * standard, scenario and adaptive — so the first one shown starts the clock and
+ * every later one is a no-op.
+ */
+function ensureTestTimerStarted() {
+  if (!state.testTimerArmed || state.submitted) return;
+  state.testTimerArmed = false;
+  initTimer();
+}
+
+/**
+ * Session restore: a pending anchor means the previous session never reached a
+ * question, so the countdown is armed again rather than started; anything else
+ * resumes (or degrades) exactly as before.
+ */
+function resumeTestTimer() {
+  var minutes = TEST_DATA.timeLimitMinutes;
+  if (!minutes || minutes <= 0) return;
+  var anchor = (typeof readTimerAnchor === 'function') ? readTimerAnchor() : null;
+  if (anchor && anchor.pending && anchor.limitMinutes === minutes) {
+    state.testTimerArmed = true;
+    startTimerCommit();
+    return;
+  }
+  initTimer();
+}
+
+/**
  * Single entry point to stop the test timer; called by reset paths too.
  * Clears the active-time anchor so the next attempt starts fresh. A reload
  * never calls this, so the anchor survives a reload (enabling resume), but a
  * submit / restart / expiry does clear it.
  */
 function stopTestTimer() {
+  state.testTimerArmed = false;
   stopTimerCommit();
   if (state.timerInterval) {
     clearInterval(state.timerInterval);

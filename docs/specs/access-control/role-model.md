@@ -298,6 +298,7 @@ canDebugTest(u, t)    := canEditTest(u, t)   // право tests.debug.play — 
 
 canAssignTest(u, t):
   isAdminOrSuper(u)                                            -> true
+  hasRole(u, MG) AND hasAuthoring(u) AND canEditTest(u, t)     -> true   // владелец или грант edit
   hasRole(u, MG) AND grant(t, u, assign|edit)                  -> true
   else                                                         -> false
 

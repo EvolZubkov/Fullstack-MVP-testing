@@ -46,7 +46,7 @@ import type { BlankRuleSet } from "@shared/questions/blanks-render";
 import { allocationSpec, seedAllocation } from "@shared/questions/allocation";
 import { distributesBudget, isOpenText, isSimulation, isTextEntry } from "@shared/questions/question-type";
 import { renderSimCover, simCoverShot, simCoverState, SIM_OPEN_ACTION } from "@shared/sim/cover";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 import { questionFont, optionFont } from "@shared/template/fit-font";
 import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import type { SceneTimersState } from "@shared/template/scene-timers";
@@ -117,7 +117,7 @@ function interactionHtml(
   // «Сценарий в ИС» в обычном разделе (техдолг №5): на месте ответа — обложка со скриншотом первой
   // сцены и «Пройти»; сам прогон хост играет на весь экран (`onSimOpen`). Разметка — общая с пакетом.
   if (isSimulation(question.type)) {
-    const scenario = (question.dataJson as { scenario?: Scenario } | null)?.scenario ?? null;
+    const scenario = scenarioOf(question.dataJson);
     return renderSimCover({
       state: simCoverState(answer),
       shotUrl: simCoverShot(scenario),

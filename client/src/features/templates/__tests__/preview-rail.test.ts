@@ -9,7 +9,7 @@
  *
  * Taxonomy: TWO top sections — «Системные экраны» (`system`) and «Пользовательские
  * страницы» (`user`). Within a section the middle level is the TYPE; question kinds,
- * learning pages and galleries collapse under one type node («варианты одного типа»),
+ * router design variants, learning pages and galleries collapse under one type node («варианты одного типа»),
  * so a variant is a demonstration leaf, not a separate middle level.
  */
 import { describe, expect, it } from "vitest";
@@ -179,6 +179,24 @@ describe("classify — route → (section, group) grouping", () => {
     expect(a.group.label).toBe("Маршрутизатор");
     expect(single("router").section.key).toBe("system");
     expect(single("router").group.key).toBe("content.router");
+  });
+
+  it("router design variants collapse under ONE «Маршрутизатор» type node, not separate entities", () => {
+    const rail = buildRail([
+      spec("content.router", "router-menu", "Меню карточек", { key: "router.menu", label: "Меню карточек" }),
+      spec("content.router", "router-menu-images", "Меню с изображениями", {
+        key: "router.menu-images",
+        label: "Меню с изображениями",
+      }),
+    ]);
+    expect(rail).toHaveLength(1);
+    expect(rail[0].key).toBe("system");
+    expect(rail[0].variants).toHaveLength(1);
+    const group = rail[0].variants[0];
+    expect(group.key).toBe("content.router");
+    expect(group.label).toBe("Маршрутизатор");
+    expect(group.fromManifest).toBe(false);
+    expect(group.screens.map((s) => s.label)).toEqual(["Меню карточек", "Меню с изображениями"]);
   });
 
   it("learning-page variants collapse under «Учебная страница» in the user section", () => {

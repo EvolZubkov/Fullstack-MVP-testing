@@ -407,6 +407,48 @@
       "when": 1791475258431,
       "tag": "0057_scenario_pass_rule",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791829676816,
+      "tag": "0058_test_public_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1792089038478,
+      "tag": "0059_drop_scenario_image_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792442442811,
+      "tag": "0060_test_grants_work_review_slots",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793221193984,
+      "tag": "0061_test_show_topic_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793434423776,
+      "tag": "0062_test_show_attempts_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793627367777,
+      "tag": "0063_attempt_timer_started_at",
+      "breakpoints": true
     }
   ]
 }

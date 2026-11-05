@@ -56,6 +56,7 @@ import {
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
+import { stripPastedPresentation } from "./rte-paste";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import type {
   AdaptiveLevelConfig,
@@ -160,6 +161,7 @@ export function MainPane({
             toPlain: (html) => richTextToPlain(html, "richText"),
           }}
           sanitize={(html) => sanitizeContentHtml(html, { scope: DESCRIPTION_SCOPE })}
+          transformPaste={stripPastedPresentation}
           onChange={(value) =>
             updateModel((m) => ({ ...m, basic: { ...m.basic, description: value } }))
           }
@@ -573,6 +575,11 @@ export function ReportContentPane({ model, updateModel, design }: SettingsSectio
         testName={model.basic.title}
         headings={Object.keys(reportHeadings).length > 0 ? reportHeadings : undefined}
         breakdownDisplay={model.runtime.breakdownDisplay}
+        showTopicResults={model.runtime.showTopicResults}
+        showAttemptsCount={model.runtime.showAttemptsCount}
+        onShowAttemptsCountChange={(checked) =>
+          updateModel((m) => ({ ...m, runtime: { ...m.runtime, showAttemptsCount: checked } }))
+        }
         intro={model.intro}
         sectionGroups={model.sectionGroups}
         sections={model.sections.map((s) => ({
@@ -1432,6 +1439,28 @@ export function ProtectionPane({ model, updateModel }: SettingsSectionProps) {
 export function BreakdownDisplayPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
+      {/* Карточки тем — один переключатель на экран итогов и отчёт. Гасит ТОЛЬКО карточки:
+          вердикт, «Рекомендации» и сводный блок подытогов от него не зависят. */}
+      <FormSection title="Результаты по темам" stacked>
+        <div className="ou-formfield">
+          <Switch
+            label="Показывать результаты по темам"
+            description={
+              model.runtime.showTopicResults === false &&
+              (model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).visibility !== "hidden" &&
+              (model.runtime.breakdownDisplay ?? DEFAULT_BREAKDOWN_DISPLAY).placement !== "block"
+                ? "Выключено: карточки не печатаются ни на экране итогов, ни в отчёте. Подытоги по подтемам настроены «В карточках тем» и нигде не покажутся — выберите «Сводным блоком»."
+                : "Карточки с результатом по каждой теме — на экране итогов и в отчёте. Выключение не влияет на вердикт, рекомендации и сводный блок подытогов."
+            }
+            checked={model.runtime.showTopicResults !== false}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              updateModel((m) => ({ ...m, runtime: { ...m.runtime, showTopicResults: checked } }));
+            }}
+            data-testid="settings-show-topic-results-switch"
+          />
+        </div>
+      </FormSection>
       {/* Э5.3: группа названа предметом — подтемами, а не «ключами» движка (эскиз
           `s-feedback`, решение 23). «Ключ» остаётся в коде и в спецификациях. */}
       <FormSection title="Подытоги по подтемам" stacked>

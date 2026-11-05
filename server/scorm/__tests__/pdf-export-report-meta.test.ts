@@ -83,4 +83,13 @@ describe("pdfReportMeta (пакетная сторона отчёта)", () => {
 
     expect(pdfReportMeta().intro).toEqual(report);
   });
+
+  // Строка «Лучший результат за N попыток»: пакет выпекает только `false` (см. `test-json.ts`),
+  // и документ гасит строку ровно тогда.
+  it("гасит строку числа попыток только по выпеченному `false`", () => {
+    const off = loadPdfReportMeta({ window: {}, TEST_DATA: { showAttemptsCount: false } });
+    expect(off().showAttemptsCount).toBe(false);
+    const absent = loadPdfReportMeta({ window: {}, TEST_DATA: {} });
+    expect("showAttemptsCount" in absent()).toBe(false);
+  });
 });

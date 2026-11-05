@@ -24,7 +24,7 @@ import { storage } from "../../storage";
 import { loadTestScoringContext } from "../../services/effective-scoring";
 import { liveDataSource } from "../../services/test-snapshot";
 import { isSimulation } from "@shared/questions/question-type";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 import { questionLabel } from "@shared/questions/question-label";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
 import { analyticsScope, formatCorrectAnswerText } from "./helpers";
@@ -93,7 +93,7 @@ router.get(
       // Сценарий: задание, название, пункт и выдача — как в «Составе» (эскиз Э5б).
       let scenario: { title: string; task: string; itemTitle: string; delivery: string } | null = null;
       if (isSimulation(question.type)) {
-        const stored = (question.dataJson as { scenario?: Scenario } | null)?.scenario;
+        const stored = scenarioOf(question.dataJson);
         const item = items.find(i => i.questionId === question.id) ?? items.find(i => !i.questionId) ?? items[0];
         const bankSize = item && !item.questionId
           ? (await storage.getQuestionsByTopic(question.topicId)).filter(q => isSimulation(q.type)).length

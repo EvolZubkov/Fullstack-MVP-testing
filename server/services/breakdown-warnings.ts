@@ -38,5 +38,7 @@ export async function assessBreakdownPublish(testId: string): Promise<BreakdownW
     // Отсутствие настройки = подытоги скрыты: ровно то, что печатает тест, который её не
     // трогал (FR-13).
     breakdownVisible: !!test.breakdownDisplayJson && test.breakdownDisplayJson.visibility !== "hidden",
+    showTopicResults: test.showTopicResults !== false,
+    breakdownPlacement: test.breakdownDisplayJson?.placement,
   });
 }

@@ -63,6 +63,7 @@ CREATE TABLE "attempts" (
 	"result_json" jsonb,
 	"section_timer_json" jsonb,
 	"started_at" timestamp NOT NULL,
+	"timer_started_at" timestamp,
 	"finished_at" timestamp
 );
 
@@ -390,6 +391,14 @@ CREATE TABLE "test_folders" (
 	"created_by" varchar(36)
 );
 
+CREATE TABLE "test_public_links" (
+	"id" varchar(36) PRIMARY KEY NOT NULL,
+	"test_id" varchar(36) NOT NULL,
+	"token" varchar(64) NOT NULL,
+	"created_by" varchar(36),
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+
 CREATE TABLE "test_question_scoring" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"test_id" varchar(36) NOT NULL,
@@ -430,11 +439,10 @@ CREATE TABLE "test_scenarios" (
 	"title" text,
 	"required" boolean DEFAULT true NOT NULL,
 	"time_limit_minutes" integer,
-	"image_url" text,
 	"group_key" text,
 	"default_points" integer,
-	"sort_order" integer DEFAULT 0 NOT NULL,
-	"pass_rule_json" jsonb
+	"pass_rule_json" jsonb,
+	"sort_order" integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE "test_sections" (
@@ -512,6 +520,8 @@ CREATE TABLE "tests" (
 	"intro_json" jsonb,
 	"breakdown_display_json" jsonb,
 	"breakdown_gate_enabled" boolean DEFAULT false NOT NULL,
+	"show_topic_results" boolean DEFAULT true NOT NULL,
+	"show_attempts_count" boolean DEFAULT true NOT NULL,
 	"section_groups_json" jsonb
 );
 
@@ -589,6 +599,7 @@ ALTER TABLE "report_blocks" ADD CONSTRAINT "report_blocks_test_id_tests_id_fk" F
 ALTER TABLE "result_variables" ADD CONSTRAINT "result_variables_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "saved_list_filters" ADD CONSTRAINT "saved_list_filters_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "scales" ADD CONSTRAINT "scales_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "test_public_links" ADD CONSTRAINT "test_public_links_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_question_scoring" ADD CONSTRAINT "test_question_scoring_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_question_scoring" ADD CONSTRAINT "test_question_scoring_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_review_comments" ADD CONSTRAINT "test_review_comments_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
@@ -626,10 +637,13 @@ CREATE UNIQUE INDEX "scorm_attempts_session_attempt_idx" ON "scorm_attempts" USI
 CREATE UNIQUE INDEX "scorm_attempts_import_row_idx" ON "scorm_attempts" USING btree ("test_id","participant_key","started_at","attempt_key") WHERE "scorm_attempts"."origin" = 'import';
 CREATE INDEX "scorm_attempts_test_id_idx" ON "scorm_attempts" USING btree ("test_id");
 CREATE INDEX "scorm_packages_test_id_idx" ON "scorm_packages" USING btree ("test_id");
-CREATE UNIQUE INDEX "test_access_grants_test_user_idx" ON "test_access_grants" USING btree ("test_id","user_id");
+CREATE UNIQUE INDEX "test_access_grants_work_idx" ON "test_access_grants" USING btree ("test_id","user_id") WHERE "test_access_grants"."access_level" <> 'review';
+CREATE UNIQUE INDEX "test_access_grants_review_idx" ON "test_access_grants" USING btree ("test_id","user_id") WHERE "test_access_grants"."access_level" = 'review';
 CREATE INDEX "test_assignments_test_id_idx" ON "test_assignments" USING btree ("test_id");
 CREATE INDEX "test_assignments_user_id_idx" ON "test_assignments" USING btree ("user_id");
 CREATE INDEX "test_assignments_group_id_idx" ON "test_assignments" USING btree ("group_id");
+CREATE UNIQUE INDEX "test_public_links_test_idx" ON "test_public_links" USING btree ("test_id");
+CREATE UNIQUE INDEX "test_public_links_token_idx" ON "test_public_links" USING btree ("token");
 CREATE UNIQUE INDEX "test_question_scoring_test_question_idx" ON "test_question_scoring" USING btree ("test_id","question_id");
 CREATE INDEX "test_question_scoring_question_id_idx" ON "test_question_scoring" USING btree ("question_id");
 CREATE INDEX "test_review_comments_test_idx" ON "test_review_comments" USING btree ("test_id","created_at");

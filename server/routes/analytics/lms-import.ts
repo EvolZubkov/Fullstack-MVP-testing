@@ -10,6 +10,7 @@ import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { config } from "../../config";
+import { runInTransaction } from "../../db";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { respondWorkbookReadError, workbookUploadSingle } from "../../middleware/upload";
@@ -63,29 +64,45 @@ async function handleUpload(req: Request, res: Response, dryRun: boolean) {
     return res.status(403).json({ error: IMPORT_DENIED_ERROR });
   }
 
-  // Новая группа заводится ДО импорта: строки должны лечь уже с меткой, иначе при отказе на
-  // полпути часть партии осталась бы без группы. При сухом прогоне не заводится ничего.
-  let groupId: string | null = String(req.body?.groupId ?? "").trim() || null;
-  const newGroupName = String(req.body?.newGroupName ?? "").trim();
-  if (!groupId && newGroupName && !dryRun) {
-    const group = await storage.createGroup({ name: newGroupName, createdBy: req.currentUser!.id });
-    groupId = group.id;
-  }
+  /**
+   * Группа и запись партии — ОДНА транзакция: сбой посреди загрузки не оставляет ни половины
+   * строк, ни пустой партии, ни заведённой впустую группы. Сухой прогон ничего не пишет,
+   * поэтому идёт без неё.
+   */
+  const execute = async () => {
+    // Новая группа заводится ДО импорта: строки должны лечь уже с меткой. При сухом прогоне
+    // не заводится ничего.
+    let groupId: string | null = String(req.body?.groupId ?? "").trim() || null;
+    const newGroupName = String(req.body?.newGroupName ?? "").trim();
+    if (!groupId && newGroupName && !dryRun) {
+      const group = await storage.createGroup({ name: newGroupName, createdBy: req.currentUser!.id });
+      groupId = group.id;
+    }
 
-  const result = await runImport(
-    book,
-    // PRD-54 BR-54-38: связывание больше не выбирается — каждое прохождение получает учётную запись.
-    { anonymize: config.analytics.lmsImport.anonymizeParticipants },
-    {
-      testId: choice.testId,
-      groupId,
-      fileName: req.file.originalname,
-      fileBuffer: req.file.buffer,
-      userId: req.currentUser!.id,
-      dryRun,
-    },
-    storage,
-  );
+    return runImport(
+      book,
+      // PRD-54 BR-54-38: связывание больше не выбирается — каждое прохождение получает учётную запись.
+      { anonymize: config.analytics.lmsImport.anonymizeParticipants },
+      {
+        testId: choice.testId,
+        groupId,
+        fileName: req.file!.originalname,
+        fileBuffer: req.file!.buffer,
+        userId: req.currentUser!.id,
+        dryRun,
+      },
+      storage,
+    );
+  };
+  let result: Awaited<ReturnType<typeof runImport>>;
+  try {
+    result = dryRun ? await execute() : await runInTransaction(execute);
+  } catch (error) {
+    // Файл разобран и тест определён — это уже не «не удалось прочитать файл», а сбой записи.
+    // Транзакция откатилась, и сообщение может обещать «ничего не записано» по праву.
+    logger.error(`LMS import ${dryRun ? "dry-run" : "write"} error: ` + ((error as Error).stack ?? (error as Error).message), "analytics");
+    return res.status(500).json({ error: dryRun ? "Не удалось выполнить проверку." : "Не удалось записать загрузку." });
+  }
 
   res.json({ testId: choice.testId, testTitle: test.title, ...result });
 }

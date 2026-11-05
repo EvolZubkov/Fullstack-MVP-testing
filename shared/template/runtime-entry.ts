@@ -61,7 +61,7 @@ export { parseScaleInterpretation, parseIndicatorInterpretation } from "../scale
 // SCORM runtime (resultsPage.js) and the web grader (attempts.ts).
 export { aggregateStandardResult, aggregateAdaptiveResult, adaptiveResultAsStandard } from "../scoring/aggregate";
 export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/pass-rule";
-export { lmsScoreFor } from "../scoring/lms-score";
+export { lmsScoreFor, lmsThresholdFor } from "../scoring/lms-score";
 // PRD-57 FR-28s: the open-answer comparison, shipped to the package instead of copied
 // into it. The ES5 scoring twin (app/scoring/engine.js) calls `TBTemplate.checkRuleSet`
 // rather than carrying its own matcher, so the rule the author saved is the rule the
@@ -69,6 +69,8 @@ export { lmsScoreFor } from "../scoring/lms-score";
 export { checkRuleSet, hasRules, normalizeForCompare } from "../answer-check";
 export { computeBreakdowns, sectionScope, TEST_SCOPE } from "../breakdown/compute";
 export { buildStartState } from "./start-state";
+// Плитки обложки, которые автор выключил на странице старта: одно правило на оба хоста.
+export { hiddenStartFacts } from "./start-facts";
 // Условие прохождения на обложке и на вводной раздела: одна формулировка на оба хоста.
 export {
   buildCoursePassCondition,
@@ -229,6 +231,13 @@ export {
   statusLabel,
   pluralQuestions,
 } from "../flow/router-hub";
+// Pictures of the hub's cards: a property of the ROUTER PAGE that only a variant declaring it
+// shows — resolved by the SAME rule on both hosts and in the previews.
+export {
+  cardImagesForVariant,
+  variantDeclaresCardImages,
+  CARD_IMAGES_SETTING_KEY,
+} from "./router-card-images";
 // PRD-12 FR-6: the SINGLE page-sequence builder — which screens the learner gets
 // and in what order. Both hosts consume it so «Структура» and the run cannot drift.
 export {

@@ -177,8 +177,12 @@
       copy.drawCount = typeof deliveredQuestionCount === "function" ? deliveredQuestionCount(s) : s.drawCount;
       return copy;
     });
+    // Card pictures are a property of the router page, shown only through a variant that
+    // declares them — the variant resolved exactly as the page itself renders.
+    var hubVariant = TBTemplate.resolveContentTemplate(page, manifest.contentTemplates || []).template;
     hub.innerHTML = TBTemplate.buildRouterHubHtml(hubSections, hubState(), {
       deadline: TEST_DATA.deadline || null,
+      images: TBTemplate.cardImagesForVariant(hubVariant, page ? page.settings : null),
     });
     host.appendChild(hub);
 

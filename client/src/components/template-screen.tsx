@@ -28,9 +28,48 @@ import dsCss from "@/styles/vendor/skillum-ds.css?raw";
  * `.ou`/`.ou--dark` semantic layers are class-based and inherit into the tree
  * unchanged. Computed once: the source is a build-time constant.
  */
-const DS_SHADOW_CSS = dsCss
+export const DS_SHADOW_CSS = dsCss
   .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
   .replace(/:root/g, ":host");
+
+/**
+ * A template stylesheet remapped for a shadow root.
+ *
+ * Template CSS targets :root / body (light DOM). Inside the shadow root those
+ * selectors don't match, so map them to :host and seed the theme basics — the
+ * design CSS variables (theme.css :root) and base body styles then apply in
+ * isolation. Tokens are HSL COMPONENTS (unified convention, PRD-12), so colors
+ * wrap them as hsl(var(--x)). The mapped `body` rule may carry page padding
+ * meant for the SCORM document; neutralise it on the embedded :host below.
+ * Shared by every web surface that renders inside a template shadow root — the
+ * scene and the «Сценарий в ИС» player layer — so both read the template alike.
+ *
+ * @param css Template CSS as the host receives it.
+ * @returns The stylesheet text to put into the shadow root.
+ */
+export function templateCssForShadow(css: string): string {
+  return (
+    ":host{display:block;background:hsl(var(--background));color:hsl(var(--foreground));" +
+    "font-family:var(--font-sans);line-height:1.55;height:100%;padding:0;}\n" +
+    // `:root[data-theme="dark"]` must become `:host([data-theme="dark"])`, not
+    // `:host[...]` — the suffix form is invalid on a shadow host and the browser
+    // drops the whole rule, which is how a themed template lost its dark palette
+    // on the web while keeping it in the package (PRD-23).
+    css
+      .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
+      .replace(/:root/g, ":host")
+      .replace(/\bbody\b(?=\s*\{)/g, ":host")
+      // The palette bridge declares itself on `.ou` — the DS theme provider,
+      // which in the package is `<html>` and here is the shadow HOST. A bare
+      // `.ou` inside the shadow tree matches nothing (the class lives outside
+      // it), so the test's brand colours were printed and then never applied:
+      // the scene kept the DS default accent while `--primary` already held the
+      // author's. Only the standalone selector is remapped — `.ou-btn`,
+      // `.ou--dark` and descendant rules like `.ou .x` are left alone.
+      .replace(/(^|[},])(\s*)\.ou(?=\s*\{)/g, "$1$2:host") +
+    "\n:host{padding:0;}"
+  );
+}
 
 /** A complete `@font-face` rule. Its body holds no nested braces, data URIs included. */
 const FONT_FACE_RULE = /@font-face\s*\{[^}]*\}/g;
@@ -283,32 +322,7 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
     if (css) {
       hoistFontFaces(css);
       const style = document.createElement("style");
-      // Template CSS targets :root / body (light DOM). Inside the shadow root those
-      // selectors don't match, so map them to :host and seed the theme basics — the
-      // design CSS variables (theme.css :root) and base body styles then apply in
-      // isolation. Tokens are HSL COMPONENTS (unified convention, PRD-12), so colors
-      // wrap them as hsl(var(--x)). The mapped `body` rule may carry page padding
-      // meant for the SCORM document; neutralise it on the embedded :host below.
-      style.textContent =
-        ":host{display:block;background:hsl(var(--background));color:hsl(var(--foreground));" +
-        "font-family:var(--font-sans);line-height:1.55;height:100%;padding:0;}\n" +
-        // `:root[data-theme="dark"]` must become `:host([data-theme="dark"])`, not
-        // `:host[...]` — the suffix form is invalid on a shadow host and the browser
-        // drops the whole rule, which is how a themed template lost its dark palette
-        // on the web while keeping it in the package (PRD-23).
-        css
-          .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
-          .replace(/:root/g, ":host")
-          .replace(/\bbody\b(?=\s*\{)/g, ":host")
-          // The palette bridge declares itself on `.ou` — the DS theme provider,
-          // which in the package is `<html>` and here is the shadow HOST. A bare
-          // `.ou` inside the shadow tree matches nothing (the class lives outside
-          // it), so the test's brand colours were printed and then never applied:
-          // the scene kept the DS default accent while `--primary` already held the
-          // author's. Only the standalone selector is remapped — `.ou-btn`,
-          // `.ou--dark` and descendant rules like `.ou .x` are left alone.
-          .replace(/(^|[},])(\s*)\.ou(?=\s*\{)/g, "$1$2:host") +
-        "\n:host{padding:0;}";
+      style.textContent = templateCssForShadow(css);
       shadow.appendChild(style);
     }
     // PRD-23: per-theme colours go in AFTER the template stylesheet — same

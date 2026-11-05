@@ -28,7 +28,12 @@ export type BreakdownWarningCode =
    * получит «Не пройдена» без единой видимой причины. Правило уровня ТЕСТА, поэтому темы
    * у предупреждения нет.
    */
-  | "gate_without_display";
+  | "gate_without_display"
+  /**
+   * Карточки тем выключены, а подытоги по подтемам печатаются «В карточках тем»: строки
+   * живут внутри карточек и не покажутся нигде. Правило уровня ТЕСТА.
+   */
+  | "breakdown_inside_hidden_cards";
 
 export interface BreakdownWarning {
   code: BreakdownWarningCode;
@@ -67,6 +72,10 @@ export interface BreakdownPublishInput {
   breakdownGateEnabled?: boolean;
   /** Видны ли подытоги по подтемам: `breakdown_display_json.visibility !== "hidden"`. */
   breakdownVisible?: boolean;
+  /** `tests.show_topic_results`: только явное `false` гасит карточки тем. */
+  showTopicResults?: boolean;
+  /** `breakdown_display_json.placement`; отсутствие = «в карточках тем». */
+  breakdownPlacement?: "topics" | "block" | "both";
 }
 
 /** Distinct normalised keys of one question. */
@@ -91,6 +100,22 @@ export function checkBreakdownPublish(input: BreakdownPublishInput): BreakdownWa
       topicName: null,
       message:
         "Подтемы учитываются в вердикте темы, но подытоги по подтемам скрыты — участник не увидит причину.",
+    });
+  }
+
+  // Строки подытогов, настроенные «В карточках тем», печатаются внутри карточек: когда карточки
+  // выключены, автор настроил то, что нигде не появится. «Блоком» и «Везде» остаются видимыми.
+  if (
+    input.showTopicResults === false &&
+    input.breakdownVisible &&
+    (input.breakdownPlacement ?? "topics") === "topics"
+  ) {
+    out.push({
+      code: "breakdown_inside_hidden_cards",
+      topicId: null,
+      topicName: null,
+      message:
+        "Карточки тем выключены, а подытоги по подтемам настроены «В карточках тем» — они нигде не покажутся. Выберите «Сводным блоком» или включите карточки.",
     });
   }
 

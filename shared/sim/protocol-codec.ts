@@ -9,7 +9,7 @@
  * pseudo-interactions next to `scale_*` and `var_*`.
  *
  * Only the INPUTS of the run are written: actions and refusals by id, misses by coordinates,
- * committed values, exit and timeout, each with its time. Entering scenes, hints and goals are
+ * committed values, «Я закончил», exit and timeout, each with its time. Entering scenes, hints and goals are
  * derived by the engine, and the import restores them by replaying the inputs against the scenario
  * (`replayRun`) — the same way the server already re-derives a web run. This keeps the protocol
  * several times shorter than the full event list.
@@ -20,9 +20,14 @@
  * - `a<id>` — action, `b<id>` — refused action;
  * - `m<x>,<y>` — miss at stage coordinates;
  * - `v<field>=<value>` — committed value;
+ * - `d` — «Я закончил» (research scenarios, version 2 only);
  * - `x` — exit, `o` — timeout;
  * - `z` — the end of the run, last: its time makes the duration, which a replay cannot know (the
  *   run ends after its last input — on the goal screen, or later on exit).
+ *
+ * Versions. Version 2 adds `d`. A protocol without it is still written as version 1, so packages
+ * of control scenarios stay byte-identical with those built before version 2; the decoder reads
+ * both.
  *
  * Ids, fields and values are escaped: `%`, `;`, `@`, `=`, `,`, `~` and whitespace become `%XX`.
  * Whitespace matters because the report parser trims cells, and a chunk boundary may fall on it.
@@ -36,8 +41,10 @@
  */
 import type { SimEvent } from "./contract";
 
-/** Format version, the first field of the encoded string. */
-export const PROTOCOL_CODEC_VERSION = 1;
+/** Newest format version, the first field of the encoded string. */
+export const PROTOCOL_CODEC_VERSION = 2;
+/** The version written when nothing of version 2 is in the protocol. */
+const PLAIN_VERSION = 1;
 /**
  * Characters of protocol per pseudo-interaction, without the `~` marker.
  *
@@ -60,7 +67,7 @@ export const SIM_PROTOCOL_PREFIX = "sim_";
 const CHUNK_MARK = "~";
 
 /** An input event of the protocol — what a replay needs. */
-export type ProtocolInput = Extract<SimEvent, { type: "action" | "blocked" | "miss" | "value" | "exit" | "timeout" }>;
+export type ProtocolInput = Extract<SimEvent, { type: "action" | "blocked" | "miss" | "value" | "declare" | "exit" | "timeout" }>;
 
 /** A decoded protocol. */
 export interface DecodedProtocol {
@@ -93,6 +100,7 @@ export function encodeProtocol(events: readonly SimEvent[] | null | undefined, d
   if (!Array.isArray(events)) return "";
   const parts: string[] = [];
   let last = 0;
+  let newer = false;
   for (const event of events) {
     if (!event || typeof event.t !== "number") continue;
     let body: string;
@@ -101,6 +109,7 @@ export function encodeProtocol(events: readonly SimEvent[] | null | undefined, d
       case "blocked": body = `b${escape(event.id)}`; break;
       case "miss": body = `m${escape(String(event.x))},${escape(String(event.y))}`; break;
       case "value": body = `v${escape(event.field)}=${escape(event.value)}`; break;
+      case "declare": body = "d"; newer = true; break;
       case "exit": body = "x"; break;
       case "timeout": body = "o"; break;
       default: continue;
@@ -113,7 +122,7 @@ export function encodeProtocol(events: readonly SimEvent[] | null | undefined, d
   if (typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0) {
     parts.push(`z@${Math.max(0, Math.round(durationMs) - last).toString(36)}`);
   }
-  return `${PROTOCOL_CODEC_VERSION};${parts.join(";")}`;
+  return `${newer ? PROTOCOL_CODEC_VERSION : PLAIN_VERSION};${parts.join(";")}`;
 }
 
 /**
@@ -130,7 +139,7 @@ export function encodeProtocol(events: readonly SimEvent[] | null | undefined, d
 export function decodeProtocol(encoded: string | null | undefined): DecodedProtocol | null {
   if (typeof encoded !== "string" || encoded === "") return null;
   const [version, ...items] = encoded.split(";");
-  if (version !== String(PROTOCOL_CODEC_VERSION)) return null;
+  if (version !== String(PLAIN_VERSION) && version !== String(PROTOCOL_CODEC_VERSION)) return null;
   const out: ProtocolInput[] = [];
   let durationMs: number | null = null;
   let t = 0;
@@ -168,6 +177,10 @@ export function decodeProtocol(encoded: string | null | undefined): DecodedProto
         out.push({ t, type: "value", scene: "", field: unescape(body.slice(0, eq)), value: unescape(body.slice(eq + 1)), correct: null });
         break;
       }
+      case "d":
+        if (body || version === String(PLAIN_VERSION)) return null;
+        out.push({ t, type: "declare" });
+        break;
       case "x":
         out.push({ t, type: "exit" });
         break;

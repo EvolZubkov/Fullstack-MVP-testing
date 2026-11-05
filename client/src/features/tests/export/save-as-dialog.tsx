@@ -8,17 +8,21 @@
  * курс для LMS не загружается в Skill'Ум вовсе, книга — через «Импорт», пакет — тоже через
  * «Импорт», но на другой инсталляции.
  *
- * Версия выбирается у SCORM и пакета (Р7): опубликованная — тот снимок, который выдаёт веб, или
- * текущий черновик. Книга собирается только из черновика, и окно говорит это прямо. Телеметрия
- * пакета — настройка теста; окно её показывает и ведёт к ней, но не переопределяет (Р8).
+ * Версия выбирается у пакета (Р7): опубликованная — тот снимок, который выдаёт веб, или текущий
+ * черновик. У SCORM выбора нет (Р7а, 2026-10-31): выгрузка в SCORM — это публикация, черновик
+ * фиксируется новой версией, и окно заранее называет её номер. Книга собирается только из
+ * черновика, и окно говорит это прямо. Телеметрия пакета — настройка теста; окно её показывает
+ * и ведёт к ней, но не переопределяет (Р8).
  * Формат без права (SCORM у автора) не показывается вовсе. Последний выбранный формат
  * запоминается в браузере.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Download } from "lucide-react";
 
 import { Banner, Button, ChoiceCard, ChoiceCardGroup, ModalDialog, Select, Stack, Text } from "@skillum/ui-kit";
+import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
+import type { PublishCheckFinding, PublishInfeasibleError } from "@/features/content-protection/types";
 
 /** Формат выгрузки. */
 export type SaveAsFormat = "scorm" | "xlsx" | "tbtest";
@@ -29,6 +33,12 @@ export type SaveAsVersion = "published" | "draft";
 export interface ExportOptions {
   published: { version: number; publishedAt: string } | null;
   telemetry: { draft: boolean; published: boolean | null };
+  /**
+   * Что выгрузка в SCORM сделает с публикацией (Р7а): опубликует тест версией `version` или
+   * соберёт пакет из действующей версии `version`. `version: null` — пакет без версии (тест в
+   * архиве: вне решения Р7а).
+   */
+  scorm: { publishes: boolean; version: number | null } | null;
 }
 
 /** Ключ запомненного формата. */
@@ -70,13 +80,14 @@ function rememberFormat(format: SaveAsFormat): void {
  *
  * @param testId тест
  * @param format формат
- * @param version версия (у книги не передаётся: она всегда из черновика)
+ * @param version версия; передаётся только у пакета: книга всегда из черновика, а SCORM
+ * публикует тест и версию не выбирает (Р7а)
  */
 export function saveAsUrl(testId: string, format: SaveAsFormat, version: SaveAsVersion): string {
   const id = encodeURIComponent(testId);
   if (format === "xlsx") return `/api/tests/${id}/workbook/export`;
-  const path = format === "scorm" ? `/api/tests/${id}/export/scorm` : `/api/tests/${id}/transfer`;
-  return `${path}?source=${version}`;
+  if (format === "scorm") return `/api/tests/${id}/export/scorm`;
+  return `/api/tests/${id}/transfer?source=${version}`;
 }
 
 /** Имя файла из `Content-Disposition`: сначала `filename*` (UTF-8), потом `filename`. */
@@ -105,6 +116,29 @@ function versionLabel(published: NonNullable<ExportOptions["published"]>): strin
   return `Опубликованная — версия ${published.version} от ${date}`;
 }
 
+/**
+ * Версия SCORM-пакета (Р7а): значение и пояснение. `null` — у выгрузки нет версии (архив), и
+ * окно показывает прежний список.
+ */
+function scormVersionText(options: ExportOptions | undefined): { value: string; note: string } | null {
+  const plan = options?.scorm;
+  if (!plan || plan.version === null) return null;
+  if (plan.publishes) {
+    const previous = options?.published?.version;
+    return {
+      value: `будет опубликована версия ${plan.version}`,
+      note: previous
+        ? `Выгрузка публикует текущий черновик: правки после версии ${previous} фиксируются новой версией`
+        : "Выгрузка публикует текущий черновик: он фиксируется новой версией",
+    };
+  }
+  const date = options?.published ? ` от ${new Date(options.published.publishedAt).toLocaleDateString("ru-RU")}` : "";
+  return {
+    value: `опубликованная — версия ${plan.version}${date}`,
+    note: "Изменений после публикации нет — новая версия не создаётся",
+  };
+}
+
 /** Свойства окна. */
 export interface SaveAsDialogProps {
   open: boolean;
@@ -130,12 +164,14 @@ export function SaveAsDialog({ open, onClose, test, canExportScorm, onOpenSettin
   const [version, setVersion] = useState<SaveAsVersion>("draft");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  /** Причины отказа публикации при выгрузке SCORM (409 `publish_infeasible`). */
+  const [publishImpact, setPublishImpact] = useState<PublishCheckFinding[] | null>(null);
 
-  const { data: options } = useQuery<ExportOptions>({
-    queryKey: [`/api/tests/${encodeURIComponent(test.id)}/export/options`],
-    enabled: open,
-  });
+  const optionsKey = [`/api/tests/${encodeURIComponent(test.id)}/export/options`];
+  const { data: options } = useQuery<ExportOptions>({ queryKey: optionsKey, enabled: open });
   const published = options?.published ?? null;
+  const scormVersion = scormVersionText(options);
+  const queryClient = useQueryClient();
 
   // Каждое открытие начинается с запомненного формата (если он доступен) и с опубликованной
   // версии, когда она есть: выгружать обычно нужно то, что получают участники.
@@ -150,7 +186,12 @@ export function SaveAsDialog({ open, onClose, test, canExportScorm, onOpenSettin
     if (open) setVersion(published ? "published" : "draft");
   }, [open, published]);
 
-  const telemetryOn = version === "published" ? options?.telemetry.published : options?.telemetry.draft;
+  // SCORM-пакет несёт телеметрию той редакции, из которой собирается: новой версии из черновика
+  // или действующей опубликованной.
+  const scormFromPublished = options?.scorm?.publishes === false && options.scorm.version !== null;
+  const telemetryOn = (format === "scorm" ? scormFromPublished : version === "published")
+    ? options?.telemetry.published
+    : options?.telemetry.draft;
 
   const save = async () => {
     setBusy(true);
@@ -160,6 +201,12 @@ export function SaveAsDialog({ open, onClose, test, canExportScorm, onOpenSettin
       const response = await fetch(saveAsUrl(test.id, format, version), { credentials: "include" });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
+        // Р7а: выгрузка SCORM публикует тест, и невыполнимая выдача отказывает так же, как
+        // кнопка публикации, — с теми же причинами по темам.
+        if (response.status === 409 && data.error === "publish_infeasible") {
+          setPublishImpact((data as PublishInfeasibleError).findings ?? []);
+          return;
+        }
         throw new Error(data.error ?? "Не удалось собрать файл");
       }
       const blob = await response.blob();
@@ -170,6 +217,12 @@ export function SaveAsDialog({ open, onClose, test, canExportScorm, onOpenSettin
       link.download = fileNameOf(response.headers.get("Content-Disposition"), `${test.title}.${extension}`);
       link.click();
       URL.revokeObjectURL(url);
+      // Выгрузка в SCORM могла опубликовать тест: статус в списке, редакторе и на главной устарел.
+      if (format === "scorm" && options?.scorm?.publishes) {
+        void queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
+        void queryClient.invalidateQueries({ queryKey: ["/api/home"] });
+        void queryClient.invalidateQueries({ queryKey: optionsKey });
+      }
       onClose();
     } catch (error) {
       setFailed((error as Error).message);
@@ -196,86 +249,104 @@ export function SaveAsDialog({ open, onClose, test, canExportScorm, onOpenSettin
   );
 
   return (
-    <ModalDialog
-      open={open}
-      onClose={onClose}
-      size="m"
-      title="Сохранить как…"
-      description={test.title}
-      footer={(
-        <>
-          <Button variant="ghost" size="m" onClick={onClose}>Отмена</Button>
-          <Button
-            variant="primary"
-            size="m"
-            leadingIcon={<Download size={16} />}
-            disabled={busy}
-            onClick={() => void save()}
-          >
-            {busy ? "Собираем…" : "Сохранить"}
-          </Button>
-        </>
-      )}
-    >
-      <Stack gap={4}>
-        {/* Формат — карточками выбора: у каждого задача и путь обратно читаются сразу. */}
-        <ChoiceCardGroup legend="Формат" value={format} onChange={(next) => setFormat(next as SaveAsFormat)}>
-          {formats.map((option) => (
-            <ChoiceCard key={option.value} value={option.value} title={option.label} description={option.description} showRadio />
-          ))}
-        </ChoiceCardGroup>
-
-        <div className="tb-saveas-facts">
-          {format === "xlsx" ? (
-            <>
-              <Text variant="body-s" tone="muted">Версия</Text>
-              <Text variant="body-s">текущий черновик</Text>
-              <Text variant="body-s" tone="muted">Не переносит</Text>
-              <Text variant="body-s">{XLSX_NOT_CARRIED}</Text>
-            </>
-          ) : (
-            <>
-              <Text variant="body-s" tone="muted">Версия</Text>
-              <div className="tb-saveas-select">{versionSelect}</div>
-              {format === "scorm" ? (
-                <>
-                  <Text variant="body-s" tone="muted">Телеметрия</Text>
-                  <Stack gap={1} align="start">
-                    <Text variant="body-s">
-                      {telemetryOn ? "включена — прохождения придут в аналитику" : "выключена"}
-                    </Text>
-                    <Text variant="body-s" tone="muted">Меняется в настройках теста</Text>
-                    {onOpenSettings && (
-                      <Button
-                        variant="ghost"
-                        size="s"
-                        trailingIcon={<ChevronRight size={14} />}
-                        onClick={onOpenSettings}
-                      >
-                        Основное · Интеграция
-                      </Button>
-                    )}
-                  </Stack>
-                </>
-              ) : (
-                <>
-                  <Text variant="body-s" tone="muted">Переносит</Text>
-                  <Text variant="body-s">{TBTEST_CARRIES}</Text>
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {format === "xlsx" && (
-          <Banner
-            tone="info"
-            size="sm"
-            description="Книга собирается из текущего черновика: правки после публикации в неё попадут, даже если тест ещё не опубликован заново."
-          />
+    <>
+      <ModalDialog
+        open={open}
+        onClose={onClose}
+        size="m"
+        title="Сохранить как…"
+        description={test.title}
+        footer={(
+          <>
+            <Button variant="ghost" size="m" onClick={onClose}>Отмена</Button>
+            <Button
+              variant="primary"
+              size="m"
+              leadingIcon={<Download size={16} />}
+              disabled={busy}
+              onClick={() => void save()}
+            >
+              {busy ? "Собираем…" : "Сохранить"}
+            </Button>
+          </>
         )}
-        {failed && <Banner tone="error" size="sm" title="Файл не собран" description={failed} />}
-      </Stack>
-    </ModalDialog>
+      >
+        <Stack gap={4}>
+          {/* Формат — карточками выбора: у каждого задача и путь обратно читаются сразу. */}
+          <ChoiceCardGroup legend="Формат" value={format} onChange={(next) => setFormat(next as SaveAsFormat)}>
+            {formats.map((option) => (
+              <ChoiceCard key={option.value} value={option.value} title={option.label} description={option.description} showRadio />
+            ))}
+          </ChoiceCardGroup>
+
+          <div className="tb-saveas-facts">
+            {format === "xlsx" ? (
+              <>
+                <Text variant="body-s" tone="muted">Версия</Text>
+                <Text variant="body-s">текущий черновик</Text>
+                <Text variant="body-s" tone="muted">Не переносит</Text>
+                <Text variant="body-s">{XLSX_NOT_CARRIED}</Text>
+              </>
+            ) : (
+              <>
+                <Text variant="body-s" tone="muted">Версия</Text>
+                {format === "scorm" && scormVersion ? (
+                  <Stack gap={1} align="start">
+                    <Text variant="body-s">{scormVersion.value}</Text>
+                    <Text variant="body-s" tone="muted">{scormVersion.note}</Text>
+                  </Stack>
+                ) : (
+                  <div className="tb-saveas-select">{versionSelect}</div>
+                )}
+                {format === "scorm" ? (
+                  <>
+                    <Text variant="body-s" tone="muted">Телеметрия</Text>
+                    <Stack gap={1} align="start">
+                      <Text variant="body-s">
+                        {telemetryOn ? "включена — прохождения придут в аналитику" : "выключена"}
+                      </Text>
+                      <Text variant="body-s" tone="muted">Меняется в настройках теста</Text>
+                      {onOpenSettings && (
+                        <Button
+                          variant="ghost"
+                          size="s"
+                          trailingIcon={<ChevronRight size={14} />}
+                          onClick={onOpenSettings}
+                        >
+                          Основное · Интеграция
+                        </Button>
+                      )}
+                    </Stack>
+                  </>
+                ) : (
+                  <>
+                    <Text variant="body-s" tone="muted">Переносит</Text>
+                    <Text variant="body-s">{TBTEST_CARRIES}</Text>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {format === "xlsx" && (
+            <Banner
+              tone="info"
+              size="sm"
+              description="Книга собирается из текущего черновика: правки после публикации в неё попадут, даже если тест ещё не опубликован заново."
+            />
+          )}
+          {failed && <Banner tone="error" size="sm" title="Файл не собран" description={failed} />}
+        </Stack>
+      </ModalDialog>
+      {/* Тот же отказ, что у кнопки публикации (PRD-15 FR-06): пакет не собран, тест не опубликован. */}
+      <ContentImpactDialog
+        open={publishImpact !== null}
+        mode="publish"
+        title="Тест нельзя опубликовать: выдача вопросов невыполнима"
+        description="Выгрузка в SCORM публикует тест, а при текущем составе тем он не сможет собрать вариант для прохождения. Пакет не собран."
+        findings={publishImpact ?? []}
+        onClose={() => setPublishImpact(null)}
+      />
+    </>
   );
 }

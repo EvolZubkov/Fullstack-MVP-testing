@@ -87,6 +87,8 @@ function renderCard(
         value={value}
         onChange={over.onChange ?? onChange}
         readOnly={over.readOnly}
+        showAttemptsCount={over.showAttemptsCount}
+        onShowAttemptsCountChange={over.onShowAttemptsCountChange}
       />
     </QueryClientProvider>,
   );
@@ -307,5 +309,40 @@ describe("две стороны настроек отчёта", () => {
     renderCard({ scope: "content" });
     const toggle = (await screen.findByTestId("report-enabled-switch")) as HTMLInputElement;
     expect(toggle.checked).toBe(true);
+  });
+});
+
+// Строка «Лучший результат за N попыток»: переключатель содержания документа, рядом с выбором
+// вида. Печатается и у стандартного вида без каталога — значит, и переключатель там нужен.
+describe("ReportSettingsCard: число попыток в отчёте", () => {
+  it("содержание: переключатель включён по умолчанию и пишет выключение наружу", async () => {
+    mockFetch({ certification: MANIFEST });
+    const onShowAttemptsCountChange = vi.fn();
+    renderCard({ scope: "content", onShowAttemptsCountChange });
+    const toggle = (await screen.findByTestId("report-attempts-count-switch")) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    fireEvent.click(toggle);
+    expect(onShowAttemptsCountChange).toHaveBeenCalledWith(false);
+  });
+
+  it("выключенное значение показывается выключенным", async () => {
+    mockFetch({ certification: MANIFEST });
+    renderCard({ scope: "content", showAttemptsCount: false, onShowAttemptsCountChange: vi.fn() });
+    const toggle = (await screen.findByTestId("report-attempts-count-switch")) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+  });
+
+  it("шаблон без видов отчёта: переключатель всё равно есть", async () => {
+    mockFetch({ "my-template": BARE });
+    renderCard({ scope: "content", draftTemplateId: "my-template", onShowAttemptsCountChange: vi.fn() });
+    expect(await screen.findByText("Шаблон не предлагает видов отчёта")).toBeTruthy();
+    expect(screen.getByTestId("report-attempts-count-switch")).toBeTruthy();
+  });
+
+  it("оформление переключателя не показывает", async () => {
+    mockFetch({ certification: MANIFEST });
+    renderCard({ scope: "appearance", onShowAttemptsCountChange: vi.fn() });
+    expect(await screen.findByLabelText("Подложка страницы")).toBeTruthy();
+    expect(screen.queryByTestId("report-attempts-count-switch")).toBeNull();
   });
 });

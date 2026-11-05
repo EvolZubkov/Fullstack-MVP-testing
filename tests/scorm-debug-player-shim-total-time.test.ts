@@ -97,3 +97,16 @@ describe("RTE shim: cmi.total_time", () => {
     expect(shim.api.GetValue("cmi.total_time")).toBe("PT0H0M0S");
   });
 });
+
+describe("RTE shim: collection _count", () => {
+  it("reads one past the highest written index, as an LMS reports it", () => {
+    const { api } = loadShim(new Map());
+    api.Initialize("");
+    expect(api.GetValue("cmi.interactions._count")).toBe("0");
+    api.SetValue("cmi.interactions.0.id", "q_a");
+    api.SetValue("cmi.interactions.2.id", "q_c");
+    api.SetValue("cmi.objectives.0.id", "topic_x");
+    expect(api.GetValue("cmi.interactions._count")).toBe("3");
+    expect(api.GetValue("cmi.objectives._count")).toBe("1");
+  });
+});

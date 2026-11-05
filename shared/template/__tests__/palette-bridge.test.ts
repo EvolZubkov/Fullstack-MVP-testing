@@ -14,8 +14,8 @@ describe("buildPaletteBridge", () => {
     // Якорь 500 = primary теста.
     expect(css).toContain("--ou-purple-500:hsl(var(--primary))");
     // Крайние шаги выведены color-mix от того же якоря.
-    expect(css).toContain("--ou-purple-50:color-mix(in oklch, #fff 92%, hsl(var(--primary)))");
-    expect(css).toContain("--ou-purple-900:color-mix(in oklch, #000 68%, hsl(var(--primary)))");
+    expect(css).toContain("--ou-purple-50:color-mix(in oklab, #fff 92%, hsl(var(--primary)))");
+    expect(css).toContain("--ou-purple-900:color-mix(in oklab, #000 68%, hsl(var(--primary)))");
     // Ровно десять шагов рампы.
     expect(css.match(/--ou-purple-\d+:/g)).toHaveLength(10);
     // Объявляется на .ou, не на :root.

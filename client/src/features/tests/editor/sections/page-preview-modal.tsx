@@ -17,7 +17,12 @@
 import { useMemo } from "react";
 import { Banner, Button, ModalDialog } from "@skillum/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
-import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
+import {
+  buildContentPageScreen,
+  buildScreenInputs,
+  type PreviewDemoDataset,
+  type ScreenInputsOptions,
+} from "@shared/template/preview-context";
 import {
   buildPageContext,
   sectionSubtitleOf,
@@ -28,6 +33,8 @@ import {
 import { buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTemplateCssVars, buildTemplateDataAttrs } from "@shared/template/params-css";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
+import { hiddenStartFacts, hideStartFactsInContext } from "@shared/template/start-facts";
+import type { RichTextFormat } from "@shared/template/rich-text";
 import { useTemplateBundle } from "./use-template-bundle";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -66,14 +73,24 @@ export type PagePreviewModalProps = {
     courseTitle?: string;
     /** Real test description → «Старт» subtitle. */
     description?: string;
+    /** PRD-59: the format of {@link description}; absent = `plain`. */
+    descriptionFormat?: RichTextFormat | null;
     /** Pass threshold percent (null when the rule is absolute/none). */
     passPercent?: number | null;
+    /** The overall pass rule as authored — a points threshold is previewed in points. */
+    overallPassRule?: unknown;
     timeLimitMinutes?: number | null;
     maxAttempts?: number | null;
     topics?: Array<{ id: string; title: string }>;
     questionCount?: number;
     /** Per-section data for the «Введение раздела» preview (topic name + count). */
     sections?: Array<{ topicId: string; topicName: string; questionCount: number }>;
+    /**
+     * The hub's items in hub order — topics AND scenario items — for the router preview. `id`
+     * is the item key the run uses (a bare topic id, `scenario:<id>`), so the card pictures of
+     * the page's `cardImages` property land on the right cards.
+     */
+    routerItems?: Array<{ id: string; title: string; questionCount?: number | null; required?: boolean }>;
   };
   /**
    * PRD-22: the page's place in its sequence, computed by the editor over the whole
@@ -155,8 +172,13 @@ export function PagePreviewModal({
         // Start-screen facts: overlaid whenever the editor provides them (using
         // `!== undefined` so a real `null` — e.g. "no time limit" — overrides the
         // demo value instead of leaving the demo's number).
-        ...(realData.description !== undefined ? { description: realData.description } : {}),
+        // The format travels WITH the text: a rich description rendered as plain shows
+        // its tags verbatim, an html one is never escaped in a run either.
+        ...(realData.description !== undefined
+          ? { description: realData.description, descriptionFormat: realData.descriptionFormat ?? null }
+          : {}),
         ...(realData.passPercent !== undefined ? { passPercent: realData.passPercent } : {}),
+        ...(realData.overallPassRule !== undefined ? { overallPassRule: realData.overallPassRule } : {}),
         ...(realData.timeLimitMinutes !== undefined ? { timeLimitMinutes: realData.timeLimitMinutes } : {}),
         ...(realData.maxAttempts !== undefined ? { maxAttempts: realData.maxAttempts } : {}),
       },
@@ -187,10 +209,13 @@ export function PagePreviewModal({
       const declaration = (bundle.manifest.contentTemplates ?? []).find(
         (ct) => ct.key === page.templateKey,
       ) as StartVariantDecl | undefined;
-      const design = previewDesign(params, declaration, page.settingsJson as Record<string, unknown> | null);
+      const pageSettings = page.settingsJson as Record<string, unknown> | null;
+      const design = previewDesign(params, declaration, pageSettings);
+      // The fact switches of the page, by the rule both hosts apply in a run.
+      const context = hideStartFactsInContext(chosen.input?.context ?? {}, hiddenStartFacts(declaration, pageSettings));
       return {
         ...chosen,
-        input: { ...chosen.input, context: { ...(chosen.input?.context ?? {}), design } },
+        input: { ...chosen.input, context: { ...(context as object), design } },
       };
     }
     if (
@@ -199,7 +224,10 @@ export function PagePreviewModal({
       page.kind === "review" ||
       page.kind === "section-results"
     ) {
-      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
+      // The results page previews its own score switches («Сводка баллов», «Полоса балла»).
+      const screenOptions =
+        page.kind === "results" ? { resultsSettings: page.settingsJson as ScreenInputsOptions["resultsSettings"] } : {};
+      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest, screenOptions) : [];
       const matches =
         page.kind === "results"
           ? (r: string) => r === "results" || r === "results.adaptive"
@@ -268,12 +296,17 @@ export function PagePreviewModal({
       sequencePlacement,
       courseTitle: realData?.courseTitle ?? effectiveDemo?.course.title ?? "",
       result,
-      // Real topics → the router preview renders the actual topic-menu cards.
-      routerTopics: (effectiveDemo?.course.topics ?? []).map((t) => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-      })),
+      // Real items → the router preview renders the actual topic-menu cards, with the
+      // pictures of this page's `cardImages`; without them, the demo topics (and their
+      // demo pictures) of the template.
+      routerTopics: realData?.routerItems?.length
+        ? realData.routerItems.map((t) => ({ ...t }))
+        : (effectiveDemo?.course.topics ?? []).map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            ...((t as { image?: string }).image ? { image: (t as { image?: string }).image } : {}),
+          })),
     });
   }, [bundle, page, effectiveDemo, realData, sequencePlacement, params]);
 

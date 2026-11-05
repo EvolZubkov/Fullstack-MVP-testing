@@ -12,6 +12,8 @@ function renderAdaptiveQuestion() {
     return;
   }
   ensureAdaptiveShuffleMapping(qData.question);
+  // The test countdown starts on the first question shown (timer.js).
+  if (typeof ensureTestTimerStarted === 'function') ensureTestTimerStarted();
 
   // Время на задании: адаптивный путь ведёт лестница уровней и рендер у него свой, поэтому
   // засечка ставится здесь, а не в общем `render()`.
@@ -369,11 +371,17 @@ function continueAfterTransition() {
  */
 function renderAdaptiveResults() {
   var app = document.getElementById('app');
+  // The attempt is over: its countdown stops here, as the standard `submit()` stops it.
+  // Left running it would later «expire» a finished attempt through the standard submit.
+  if (typeof stopTestTimer === 'function') stopTestTimer();
   var result = state.adaptiveState.result;
   if (!result) {
     result = buildAdaptiveResult();
     state.adaptiveState.result = result;
   }
+
+  // The attempt reaches the LMS on entry to the results, not on «Завершить» (resultsPage.js).
+  if (typeof reportAttempt === 'function') reportAttempt();
 
   var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
   var layout = layouts && layouts['results.adaptive'];
@@ -476,6 +484,8 @@ function renderAdaptiveResultsTemplated(app, result) {
   // PRD-50 FR-13: настройка показа, выпеченная в TEST_DATA только когда автор её включил —
   // тот же признак, что читает обычный экран (`viewResults.js`). Без неё блока нет.
   if (TEST_DATA.breakdownDisplay) adaptiveOpts.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  // Карточки «Результаты по темам»: в TEST_DATA попадает только явное `false`; отсутствие — печатать.
+  if (TEST_DATA.showTopicResults === false) adaptiveOpts.showTopicResults = false;
   // Окраска полос сводного блока — тем же правилом, что у обычного экрана (`viewResults.js`).
   var adaptiveBarFill = (typeof resultsBarFill === 'function') ? resultsBarFill() : null;
   if (adaptiveBarFill) adaptiveOpts.barFill = adaptiveBarFill;
@@ -538,8 +548,11 @@ function restartAdaptive() {
     return;
   }
 
-  // Сохраняем текущую попытку если ещё не сохранена
-  if (state.adaptiveState && state.adaptiveState.result) {
+  if (typeof attemptReported !== 'undefined' && attemptReported) {
+    // The finished attempt already went out on entry to the results (`reportAttempt`):
+    // its telemetry `finish` is not sent a second time.
+    reopenLearningForRetry();
+  } else if (state.adaptiveState && state.adaptiveState.result) {
     var results = getAdaptiveResultForScorm();
     results.achievedLevels = state.adaptiveState.result.topicResults.map(function (tr) {
       return {
@@ -565,6 +578,13 @@ function restartAdaptive() {
   registerAttemptStart();
   // A new attempt starts with clean section budgets and no closed sections (PRD-67).
   if (typeof resetSectionRunState === 'function') resetSectionRunState();
+
+  // The new attempt gets its own test countdown, armed like «Начать» arms it: it starts
+  // on the first question (timer.js). Restarting used to leave the attempt untimed.
+  stopTestTimer();
+  state.remainingSeconds = null;
+  state.timeExpired = false;
+  armTestTimer();
 
   // Переинициализация адаптивного теста
   initAdaptiveTest();

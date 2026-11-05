@@ -60,6 +60,15 @@ export function parseItemKey(key: string): TestItemRef {
 }
 
 /**
+ * Ключ пункта в КАНОНИЧЕСКОЙ форме: `topic:<id>` / `scenario:<id>`. Голый идентификатор темы
+ * (так ключуются разделы выдачи и старые правила) приводится к `topic:<id>`, поэтому один пункт
+ * не может оказаться под двумя ключами в карте, ключуемой пунктами.
+ */
+export function canonicalItemKey(key: string): string {
+  return matchTestItem(parseItemKey(key), { topic: (id) => topicItemKey(id), scenario: (id) => scenarioItemKey(id) });
+}
+
+/**
  * Ветвление по виду пункта. Обработчик для каждого вида обязателен; появление третьего вида
  * сломает сборку здесь, а не молча в одном из потребителей.
  */
@@ -91,8 +100,7 @@ export function matchTestItem<R>(
  */
 export function orderTestItems<T extends { key: string }>(items: T[], itemOrder?: readonly string[] | null): T[] {
   if (!itemOrder || itemOrder.length === 0) return items;
-  const canonical = (key: string) =>
-    matchTestItem(parseItemKey(key), { topic: (id) => topicItemKey(id), scenario: (id) => scenarioItemKey(id) });
+  const canonical = canonicalItemKey;
   const rank = new Map(itemOrder.map((key, i) => [canonical(key), i]));
   return items
     .map((item, index) => ({ item, index, rank: rank.get(canonical(item.key)) }))

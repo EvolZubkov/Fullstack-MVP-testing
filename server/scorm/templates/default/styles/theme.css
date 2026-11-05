@@ -197,6 +197,12 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   overflow: hidden;
 }
 .tb-scene__logo img { width: 100%; height: 100%; object-fit: contain; }
+/* An author's own logo is an arbitrary picture, most often a horizontal wordmark.
+   The 44x44 tinted tile above is made for a monogram / placeholder: a wide logo was
+   squeezed into it as an unreadable strip on a tinted square. With an image the slot
+   keeps the header height, takes the picture's own proportions and drops the tint. */
+.tb-scene__logo:has(> img) { width: auto; max-width: 240px; background: none; border-radius: 0; }
+.tb-scene__logo:has(> img) img { width: auto; max-width: 100%; }
 /* Logo placeholder: the slot stays in the top-left even without a branding image,
    showing a subtle picture icon so the logo's place is clear. */
 .tb-scene__logo-ph { color: var(--ou-accent-default); opacity: 0.75; }
@@ -287,7 +293,12 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__lead { font: var(--ou-text-body-l); color: var(--ou-fg-soft); text-wrap: pretty; }
 .tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
-.tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+.tb-scene__headtag { margin-left: auto; align-self: center; flex: 0 1 auto; min-width: 0; max-width: 40%; }
+/* The verdict chip carries the AUTHOR's «Заголовок при успехе/неуспехе», and nothing stops
+   that from being a sentence. A chip that neither shrinks nor wraps took the whole row and
+   squeezed the test title into a sliver, so it now wraps inside a bounded share of the row:
+   the title keeps the rest, the author's text is shown in full, never cut. */
+.tb-scene__headtag > .ou-tag { white-space: normal; text-align: right; }
 /* The chip and the timers both used to push themselves right with `margin-left:auto`,
    and TWO auto margins SHARE the free space — which parked the chip in the middle of
    the header instead of at its edge. When a chip is present it is the one that takes
@@ -806,6 +817,12 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-topic-group__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ou-space-2); }
 .tb-topic-group__title { font: var(--ou-text-heading-s); color: var(--ou-fg-default); margin: 0; }
 .tb-topic-group__counter { font: var(--ou-text-body-m); color: var(--ou-fg-muted); white-space: nowrap; }
+/* Пояснение автора к группе: подпись под заголовком, а не второй заголовок. Абзацы — теги
+   `richTextToHtml`, поэтому крайние поля гасим, а между абзацами оставляем воздух. */
+.tb-topic-group__description { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-topic-group__description > :first-child { margin-top: 0; }
+.tb-topic-group__description > :last-child { margin-bottom: 0; }
+.tb-topic-group__description p, .tb-topic-group__description ul, .tb-topic-group__description ol { margin: 0 0 var(--ou-space-2); }
 .tb-topic-group + .tb-topic-group { margin-top: var(--ou-space-6); }
 .tb-topic-group + .tb-topics-grid { margin-top: var(--ou-space-6); }
 .tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); }
@@ -1328,7 +1345,9 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    page-content slot, on both hosts and in the «Структура» preview. */
 /* Same footprint as the results «Результаты по темам» grid (.tb-topics-grid): min
    column 340px and the DS card spacing, so hub cards read at the same size. */
-.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
+/* Every card of the hub is the same size, whatever row it lands in: rows share the height of
+   the tallest card (a long name, a picture), so the grid reads as one set of tiles. */
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); grid-auto-rows: 1fr; gap: var(--ou-space-4); margin-top: 24px; }
 .router-progress { margin: 18px 0 4px; }
 .router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
@@ -1364,9 +1383,31 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .router-topic-card--passed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
 .router-topic-card--failed .router-topic-card__status { color: var(--ou-error-default); font-weight: 500; }
 .router-topic-card__optional { font-weight: 400; font-size: 11px; color: var(--ou-fg-muted); }
-.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.router-topic-card__img { flex: 0 0 auto; }
-.router-topic-card__img img { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+/* The name takes the free height of the card, so the chips and the status row always sit at
+   its bottom — the same place on every card of the hub, with or without a picture (cards of one
+   hub share a height, see .router-topic-cards). */
+.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; flex: 1 1 auto; }
+/* Card picture («Меню карточек с картинками», property `cardImages`). The card is fluid, so
+   the picture takes a SHARE of the card's width (`--router-card-img-share`) rather than a
+   fixed size, and keeps its own proportions (`contain`). A picture larger than the limit
+   (`--router-card-img-max`) is scaled down to it. A card without a picture keeps the plain
+   column. */
+.router-topic-card { --router-card-img-share: 28%; --router-card-img-max: 160px; }
+.router-topic-card--with-img {
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--router-card-img-share);
+  grid-template-areas: "top img" "meta img" "foot foot";
+  grid-template-rows: 1fr auto auto;
+  align-items: start; column-gap: var(--ou-space-4);
+}
+.router-topic-card--with-img .router-topic-card__top { grid-area: top; }
+.router-topic-card--with-img .router-topic-card__meta { grid-area: meta; }
+.router-topic-card--with-img .router-topic-card__foot { grid-area: foot; }
+.router-topic-card__img { grid-area: img; }
+.router-topic-card__img img {
+  display: block; width: 100%; height: auto; aspect-ratio: 1 / 1;
+  max-width: var(--router-card-img-max); max-height: var(--router-card-img-max);
+  margin-left: auto; object-fit: contain;
+}
 .router-topic-card__meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .router-topic-card__chip { font-size: 11px; color: var(--ou-fg-muted); background: var(--ou-bg-surface-3); border-radius: 999px; padding: 2px 8px; }
 .router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

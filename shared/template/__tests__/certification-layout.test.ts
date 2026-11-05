@@ -286,8 +286,10 @@ describe("certification section-results layout (PRD-49 task 15)", () => {
       html = compileTemplate(SECTION_LAYOUT)(ctxWithoutLabels);
     }).not.toThrow();
     expect(html).not.toContain("Итог раздела");
-    // Content itself still prints — only the labels are gone.
-    expect(html).toContain('data-path="sectionResult.total"');
+    // The screen itself still prints. The fact tiles do not: since 1.30.3 a tile whose
+    // label is off drops its number too, so a context without `labels` has none.
+    expect(html).toContain('data-path="course.title"');
+    expect(html).not.toContain('data-path="sectionResult.total"');
   });
 });
 

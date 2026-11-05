@@ -9,14 +9,14 @@
  */
 import { Maximize2 } from "lucide-react";
 import { Button, ModalDialog } from "@skillum/ui-kit";
-import type { Scenario } from "@shared/sim/contract";
+import type { ScenarioInput } from "@shared/sim/upgrade";
 import type { SimPenalties } from "@shared/sim/scoring";
 import { simRules } from "@shared/sim/cover";
 import { requestScenarioFullscreen } from "./scenario-run";
 
 export interface SimRulesDialogProps {
   open: boolean;
-  scenario: Scenario;
+  scenario: ScenarioInput;
   /** Действующие штрафы вопроса в этом тесте; `null` — неизвестны, строки о балле не будет. */
   penalties: SimPenalties | null;
   onCancel: () => void;

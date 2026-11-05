@@ -433,6 +433,19 @@ function resultHeadingsOf() {
   return Object.keys(out).length > 0 ? out : null;
 }
 
+/**
+ * «Сводка баллов» и «Полоса балла» — переключатели того же узла «Итоги теста». Едут ВНЕ
+ * `measures`, как и на вебе: `measures` у контрольного теста нет вовсе, а кольцо он скрыть
+ * обязан мочь. Null, когда автор не трогал ни один из двух, — контекст тогда прежний.
+ */
+function scoreDisplayOf() {
+  var settings = resultsBlockSettings();
+  var out = {};
+  if (settings.scoreSummary) out.scoreSummary = settings.scoreSummary;
+  if (settings.scoreBar) out.scoreBar = settings.scoreBar;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** Rows in the author's order — the same ORDER BY the web host reads them with. */
 function measuresBySortOrder(rows) {
   return rows.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
@@ -650,12 +663,16 @@ function renderViewResultsTemplated(app, results) {
   // when turned on (`build-export-data`/`test-json.ts`) — absent keeps this context
   // byte-identical to what it was before this PRD.
   if (TEST_DATA.breakdownDisplay) opts.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  // Карточки «Результаты по темам»: в TEST_DATA попадает только явное `false`; отсутствие — печатать.
+  if (TEST_DATA.showTopicResults === false) opts.showTopicResults = false;
   var barFill = resultsBarFill();
   if (barFill) opts.barFill = barFill;
   // Заголовки итога: их читает ТОТ ЖЕ построитель, что на вебе, — расхождение шапки между
   // хостами было бы расхождением в том, как тест называет свой результат.
   var headings = resultHeadingsOf();
   if (headings) opts.headings = headings;
+  var scoreDisplay = scoreDisplayOf();
+  if (scoreDisplay) opts.scoreDisplay = scoreDisplay;
   var measures = buildResultsMeasures(
     { values: results.scaleValues || {} },
     { values: results.resultValues || {} }
@@ -772,12 +789,16 @@ function renderResultsTemplated(app, results) {
   // when turned on (`build-export-data`/`test-json.ts`) — absent keeps this context
   // byte-identical to what it was before this PRD.
   if (TEST_DATA.breakdownDisplay) opts.breakdownDisplay = TEST_DATA.breakdownDisplay;
+  // Карточки «Результаты по темам»: в TEST_DATA попадает только явное `false`; отсутствие — печатать.
+  if (TEST_DATA.showTopicResults === false) opts.showTopicResults = false;
   var barFill = resultsBarFill();
   if (barFill) opts.barFill = barFill;
   // Заголовки итога: их читает ТОТ ЖЕ построитель, что на вебе, — расхождение шапки между
   // хостами было бы расхождением в том, как тест называет свой результат.
   var headings = resultHeadingsOf();
   if (headings) opts.headings = headings;
+  var scoreDisplay = scoreDisplayOf();
+  if (scoreDisplay) opts.scoreDisplay = scoreDisplay;
   // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
   // which leaves the context byte-identical to what it has always been).
   var measures = currentAttemptMeasures(results);

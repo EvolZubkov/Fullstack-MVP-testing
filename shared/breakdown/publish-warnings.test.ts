@@ -80,6 +80,34 @@ describe("checkBreakdownPublish", () => {
     expect(out.map((w) => w.code)).not.toContain("gate_without_display");
   });
 
+  it("карточки тем выключены, подытоги «в карточках» — предупреждение уровня теста", () => {
+    for (const placement of [undefined, "topics" as const]) {
+      const out = checkBreakdownPublish({
+        sections: [section()],
+        showTopicResults: false,
+        breakdownVisible: true,
+        breakdownPlacement: placement,
+      });
+      expect(out.find((w) => w.code === "breakdown_inside_hidden_cards")).toMatchObject({
+        topicId: null,
+        topicName: null,
+      });
+    }
+  });
+
+  it("карточки выключены, но подытоги блоком, скрыты или карточки включены — молчание", () => {
+    const quiet = (extra: object) =>
+      checkBreakdownPublish({ sections: [section()], ...extra }).map((w) => w.code);
+    expect(quiet({ showTopicResults: false, breakdownVisible: true, breakdownPlacement: "block" })).not.toContain(
+      "breakdown_inside_hidden_cards",
+    );
+    expect(quiet({ showTopicResults: false, breakdownVisible: true, breakdownPlacement: "both" })).not.toContain(
+      "breakdown_inside_hidden_cards",
+    );
+    expect(quiet({ showTopicResults: false, breakdownVisible: false })).not.toContain("breakdown_inside_hidden_cards");
+    expect(quiet({ showTopicResults: true, breakdownVisible: true })).not.toContain("breakdown_inside_hidden_cards");
+  });
+
   it("вопрос не входит ни в один вариант (FR-47)", () => {
     const out = checkBreakdownPublish({ sections: [
       section({

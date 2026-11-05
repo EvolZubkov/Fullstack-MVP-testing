@@ -85,3 +85,95 @@ describe("buildScreenInputs — question preview text", () => {
     );
   });
 });
+
+describe("buildScreenInputs — start description format", () => {
+  const manifest = {
+    layouts: { start: "layouts/start.html" },
+    preview: { routes: [{ route: "start" }] },
+  } as unknown as PreviewManifest;
+  const startHtml = (format?: "plain" | "richText" | "html") => {
+    const dataset = {
+      course: { title: "Тест", description: "Текст<br><ul><li>Пункт</li></ul>", descriptionFormat: format },
+    } as Parameters<typeof buildScreenInputs>[0];
+    const start = buildScreenInputs(dataset, manifest).find((s) => s.route === "start");
+    return (start?.input.context as { course: { descriptionHtml: string } }).course.descriptionHtml;
+  };
+
+  it("keeps a rich description's markup, as the learner start screen does", () => {
+    expect(startHtml("richText")).toBe("Текст<br><ul><li>Пункт</li></ul>");
+    expect(startHtml("html")).toBe("Текст<br><ul><li>Пункт</li></ul>");
+  });
+
+  it("escapes a plain (or format-less demo) description", () => {
+    expect(startHtml()).toContain("&lt;br&gt;");
+    expect(startHtml("plain")).toContain("&lt;br&gt;");
+  });
+});
+
+describe("router preview — card pictures follow the variant", () => {
+  const routerManifest = {
+    layouts: { content: "layouts/content.html" },
+    contentTemplates: [
+      { key: "router.menu", kind: "router", pageKind: "content.router", isDefault: true, placeholders: [] },
+      {
+        key: "router.menu-images",
+        kind: "router",
+        pageKind: "content.router",
+        placeholders: [],
+        settings: [{ key: "cardImages", type: "itemImages" }],
+      },
+    ],
+  } as unknown as PreviewManifest;
+
+  const items = [
+    { id: "t1", title: "О компании", questionCount: 16 },
+    { id: "scenario:s1", title: "Работа в CRM" },
+  ];
+  const settings = { cardImages: { "topic:t1": { url: "/api/media/a", name: "a.png" } } };
+
+  const pageContent = (templateKey: string) =>
+    String(
+      buildContentPageScreen({
+        manifest: routerManifest,
+        route: "content.router",
+        templateKey,
+        values: {},
+        settings,
+        courseTitle: "Курс",
+        routerTopics: items,
+      }).input.slots?.["page-content"] ?? "",
+    );
+
+  it("shows the page's pictures through the variant with pictures, on the right card", () => {
+    const html = pageContent("router.menu-images");
+    expect(html).toContain('<img src="/api/media/a" alt="">');
+    expect(html.match(/router-topic-card__img/g)).toHaveLength(1);
+    // The run's cards: the scenario item keeps its own words and its card is built too.
+    expect(html).toContain("router-topic-card--scenario");
+    expect(html).toContain("16 вопросов");
+  });
+
+  it("shows no picture through the variant without them, though the page holds some", () => {
+    const html = pageContent("router.menu");
+    expect(html).not.toContain("router-topic-card__img");
+  });
+
+  it("dresses the template's demo topics only in the variant with pictures", () => {
+    const dataset = {
+      course: {
+        title: "Демо",
+        topics: [
+          { id: "topic-1", title: "Базовые угрозы", status: "available", image: "data:image/svg+xml,x" },
+          { id: "topic-2", title: "Пароли", status: "locked" },
+        ],
+      },
+    } as unknown as Parameters<typeof buildScreenInputs>[0];
+    const specs = buildScreenInputs(dataset, routerManifest);
+    const withImages = specs.find((s) => s.variantKey === "router.menu-images");
+    const plain = specs.find((s) => s.variantKey === "router.menu");
+    expect(String(withImages?.input.slots?.["page-content"])).toContain('<img src="data:image/svg+xml,x" alt="">');
+    expect(String(plain?.input.slots?.["page-content"])).not.toContain("router-topic-card__img");
+    // A locked demo card stays locked, as before the preview moved to the shared builder.
+    expect(String(plain?.input.slots?.["page-content"])).toContain("router-topic-card--locked");
+  });
+});

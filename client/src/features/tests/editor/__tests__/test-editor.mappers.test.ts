@@ -25,6 +25,7 @@ import {
   applyFormSetChange,
 } from "../test-editor.mappers";
 import type { TestEditorModel } from "../test-editor.types";
+import { retakePolicySchema } from "@shared/schema";
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
@@ -182,6 +183,41 @@ describe("1. apiToEditorModel — standard test with sections", () => {
     });
     expect(model.passRules.breakdownGateEnabled).toBe(true);
     expect(editorModelToPayload(model).breakdownGateEnabled).toBe(true);
+  });
+
+  // Карточки «Результаты по темам»: переключатель живёт в `runtime` и обязан пережить круг
+  // «ответ API → модель → payload»; тест до колонки печатал карточки, и читается он так же.
+  it("карточки тем: выключенный переключатель читается и пишется, отсутствие = печатать", () => {
+    const base = {
+      id: "t",
+      title: "T",
+      mode: "standard" as const,
+      status: "draft" as const,
+      overallPassRuleJson: { type: "percent" as const, value: 70 },
+    };
+    const off = apiToEditorModel({ ...base, showTopicResults: false });
+    expect(off.runtime.showTopicResults).toBe(false);
+    expect(editorModelToPayload(off).showTopicResults).toBe(false);
+    const legacy = apiToEditorModel(base);
+    expect(legacy.runtime.showTopicResults).toBe(true);
+    expect(editorModelToPayload(legacy).showTopicResults).toBe(true);
+  });
+
+  // Строка «Лучший результат за N попыток» в отчёте — тем же кругом, что карточки тем выше.
+  it("число попыток в отчёте: выключенный переключатель читается и пишется, отсутствие = печатать", () => {
+    const base = {
+      id: "t",
+      title: "T",
+      mode: "standard" as const,
+      status: "draft" as const,
+      overallPassRuleJson: { type: "percent" as const, value: 70 },
+    };
+    const off = apiToEditorModel({ ...base, showAttemptsCount: false });
+    expect(off.runtime.showAttemptsCount).toBe(false);
+    expect(editorModelToPayload(off).showAttemptsCount).toBe(false);
+    const legacy = apiToEditorModel(base);
+    expect(legacy.runtime.showAttemptsCount).toBe(true);
+    expect(editorModelToPayload(legacy).showAttemptsCount).toBe(true);
   });
 
   // Тест, сохранённый до §16, судится ровно как судился: колонка `NOT NULL DEFAULT false`,
@@ -899,6 +935,25 @@ describe("PRD-6 — retakePolicy mapping", () => {
       cooldownPeriodDays: 30,
       eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     });
+  });
+
+  it("a test with no policy, switched to outcome-split with the periods untouched, passes the server schema", () => {
+    // Regression: the period inputs SHOW 30 when the model has no value, but the
+    // default policy carried none — the save went out without
+    // `cooldownPeriodDaysPassed` and the server answered 400 on every attempt.
+    const fresh = apiToEditorModel({ id: "t", mode: "standard", sections: [] });
+    const payload = editorModelToPayload({
+      ...fresh,
+      retakePolicy: {
+        ...fresh.retakePolicy,
+        enabled: true,
+        cooldownByOutcome: true,
+        // The author edited only the «после неуспешной» period, as in the incident.
+        cooldownPeriodDaysFailed: 7,
+      },
+    });
+    expect(retakePolicySchema.safeParse(payload.retakePolicyJson).success).toBe(true);
+    expect(payload.retakePolicyJson).toMatchObject({ cooldownPeriodDaysPassed: 30, cooldownPeriodDaysFailed: 7 });
   });
 });
 

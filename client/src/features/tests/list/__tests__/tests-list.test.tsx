@@ -284,6 +284,34 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     expect(screen.queryByTestId("test-more-t-1")).toBeNull();
   });
 
+  it("a manager without scope on THIS test (canAssign=false) gets no assign button", async () => {
+    authMock.can = canForRoles([ROLES.MANAGER]);
+    mockMany({
+      "/api/tests": [buildApiTestRow({ canAssign: false })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    expect(screen.queryByTestId("test-assign-t-1")).toBeNull();
+    // The rest of the row's actions are not affected by the assign scope.
+    expect(screen.getByTestId("test-analytics-t-1")).toBeInTheDocument();
+  });
+
+  it("canAssign=true keeps the button, and so does an answer that omits the field", async () => {
+    authMock.can = canForRoles([ROLES.MANAGER]);
+    mockMany({
+      "/api/tests": [
+        buildApiTestRow({ canAssign: true }),
+        buildApiTestRow({ id: "t-2", title: "Второй тест" }),
+      ],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    expect(screen.getByTestId("test-assign-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("test-assign-t-2")).toBeInTheDocument();
+  });
+
   it("«Общий доступ» shows for the test owner (author, BRC-27)", async () => {
     authMock.can = canForRoles([ROLES.AUTHOR]);
     authMock.roles = [ROLES.AUTHOR];

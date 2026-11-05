@@ -35,7 +35,7 @@ import {
 } from "@skillum/ui-kit";
 
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
-import { isSimulation } from "@shared/questions/question-type";
+import { isDeliverable, isSimulation, type DeliveryMode } from "@shared/questions/question-type";
 import { questionLabel } from "@shared/questions/question-label";
 import { resolveSimScoring } from "@shared/sim/scoring";
 import type { Question, SimScoringSettings } from "@shared/schema";
@@ -206,13 +206,16 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
     }));
   };
 
+  const deliveryMode: DeliveryMode = model.mode === "adaptive" ? "adaptive" : "standard";
+
   /** Карточки в порядке состава: темы и пункты-сценарии; у теста «Сценарий» — только пункт. */
   const cards: ScoringCard[] = (() => {
     const topicCard = (topicId: string): ScoringCard | null => {
       const section = model.sections.find((s) => s.topicId === topicId);
       if (!section) return null;
-      // Обычный раздел сценариев пока не выдаёт (техдолг трека, п. 5) — и в оценке их нет.
-      const questions = (questionsByTopic.get(section.topicId) ?? []).filter((q) => !isSimulation(q.type));
+      // В оценке — ровно то, что раздел выдаёт: сценарий идёт в обычный раздел (техдолг трека №5),
+      // но не в адаптивный обход. Правило то же, что у выдачи (`isDeliverable`).
+      const questions = (questionsByTopic.get(section.topicId) ?? []).filter((q) => isDeliverable(q.type, deliveryMode));
       const poolSize = section.maxQuestions || questions.length;
       return {
         key: section.topicId,
@@ -245,6 +248,12 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
     });
   })();
 
+  /**
+   * В тесте есть сценарии — пункты-сценарии или вопрос-сценарий в обычном разделе: тогда нужен
+   * блок «Штрафы сценариев по умолчанию» (user-journey.md, раздел 4, шаг 1).
+   */
+  const hasScenarios = activeItems.length > 0 || cards.some((c) => c.questions.some((q) => isSimulation(q.type)));
+
   // ── Per-section folding (ephemeral view state, all expanded on open) ──────────
   const fold = useSectionFold(cards.map((c) => c.key));
 
@@ -276,14 +285,14 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
         </span>
         {/* С блоком штрафов кнопки свёртки уходят под него, к карточкам, которые сворачивают
             (эскиз sim-e5-answer); без него стоят здесь, как прежде. */}
-        {cards.length > 0 && activeItems.length === 0 && (
+        {cards.length > 0 && !hasScenarios && (
           <FoldAllButtons fold={fold} testIdPrefix="scoring" />
         )}
       </div>
 
       {/* «Сценарий в ИС» (Э5а, эскиз sim-e5-answer): штрафы сценариев теста по умолчанию — только
           когда в тесте есть сценарий. Пустое поле — системное умолчание, оно в подсказке. */}
-      {activeItems.length > 0 && (
+      {hasScenarios && (
         <>
           <div className="tb-qscoring__price">
             <span className="tb-qscoring__price-lbl">Штрафы сценариев по умолчанию</span>

@@ -44,7 +44,12 @@ import {
   resolveBreakdownInterpretation,
   type InterpretationText,
 } from "../interpretation/resolve";
-import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
+import {
+  resolveResultsBlocks,
+  resolveScoreDisplay,
+  type ResultsBlocks,
+  type ResultsBlockSettings,
+} from "./results-blocks";
 // PRD-29 §6.7 lives in the scoring layer, not here: the results screen was its first
 // reader, not its owner (see the two gates in `buildResultContext`).
 import { hasGradedScore as isGradedRun, hasPronouncedVerdict, type ResolvedRule } from "../scoring/pass-rule";
@@ -739,10 +744,28 @@ export interface ResultContextOptions {
   /** Add the per-topic "Баллов" row (`pointsLabel`) — SCORM shows it, web omits. */
   withTopicPoints?: boolean;
   /**
+   * Печатать ли карточки «Результаты по темам» (`tests.show_topic_results`). ТОЛЬКО явное
+   * `false` гасит их; отсутствие значит «печатать», то есть контекст теста до этого
+   * переключателя остаётся прежним. Гасятся сами карточки вместе с блоками разделов и
+   * вложенными строками разреза: вердикт, «Рекомендации» и сводный блок разреза читают
+   * `input.topicResults` напрямую и от переключателя не зависят.
+   */
+  showTopicResults?: boolean;
+  /**
    * Заголовки итога этого теста (см. {@link ResultHeadings}). Отсутствие оставляет
    * контекст прежним до поля.
    */
   headings?: ResultHeadings;
+  /**
+   * The score switches of the «Итоги» variant: «Сводка баллов» (`scoreSummary`) and
+   * «Полоса балла» (`scoreBar`).
+   *
+   * Lives OUTSIDE {@link measures}, like {@link headings}: the same switches also travel in
+   * {@link MeasuresInput.blockSettings}, but that copy reaches the builder only for a test
+   * with scales or indicators, so a control test — the commonest one — could not hide its
+   * score ring at all. Absent falls back to that copy, then to «Автоматически».
+   */
+  scoreDisplay?: Pick<ResultsBlockSettings, "scoreSummary" | "scoreBar">;
   /**
    * Keep the per-topic "Баллов" row even when the test's score-summary block is
    * switched off (`blockSettings.scoreSummary: "hide"`). Set by the PDF report ONLY:
@@ -984,6 +1007,15 @@ function breakdownRow(
     // наличие текста. Автор может написать тексты заранее и не показывать их участнику.
     ...(display.showInterpretation === true ? breakdownInterpretationHtml(e.key, interpretations) : {}),
   };
+}
+
+/** Разметка пояснения группы тем, или пустой объект (поле должно ОТСУТСТВОВАТЬ, а не быть ""). */
+function groupDescriptionHtml(
+  description?: { format: "plain" | "richText" | "html"; text: string },
+): { descriptionHtml?: string } {
+  if (!description) return {};
+  const html = richTextToHtml(description.text, description.format as RichTextFormat);
+  return html ? { descriptionHtml: html } : {};
 }
 
 /**
@@ -1257,14 +1289,21 @@ export function buildResultContext(
   // The SAME resolver the adaptive builder runs (issue #33).
   const resolvedMeasures = opts.measures ? resolveMeasures(opts.measures, hasGradedScore) : undefined;
   const blocks = resolvedMeasures?.blocks;
+  // The score summary and the score bar, for EVERY test. `auto` of the summary keeps what
+  // each kind of test has always shown: a measurement test derives it from whether it
+  // grades (PRD-29), a control test shows it — only the author's explicit «Скрывать»
+  // takes it down. The bar follows the summary unless the author parted the two.
+  const scoreDisplay = resolveScoreDisplay(
+    opts.scoreDisplay ?? opts.measures?.blockSettings ?? {},
+    opts.measures ? hasGradedScore : true,
+  );
   // The score-summary toggle governs «the block with points» as a whole, not only the
   // test-level ring: a hidden summary must hide the SAME points at topic granularity too
   // (issue #30 — the SCORM package kept printing «Баллов» per topic while the summary
-  // was switched off). No `measures` (a control test) leaves `withTopicPoints` exactly as
-  // the caller set it — the toggle only exists for a measurement test. The report opts
-  // out via {@link ResultContextOptions.topicPointsIgnoreScoreSummary}.
+  // was switched off). The report opts out via
+  // {@link ResultContextOptions.topicPointsIgnoreScoreSummary}.
   const withTopicPoints =
-    !!opts.withTopicPoints && (opts.topicPointsIgnoreScoreSummary || !blocks || blocks.scoreSummary);
+    !!opts.withTopicPoints && (opts.topicPointsIgnoreScoreSummary || scoreDisplay.summary);
   // A topic with nothing to report brings no card — see {@link topicHasContent}. The
   // filter runs BEFORE the mapping so the array can end up empty, which is what takes
   // the whole «Результаты по темам» section down with it.
@@ -1272,7 +1311,7 @@ export function buildResultContext(
   // The card is kept PAIRED with the input it came from: the groups below are resolved off
   // the input's `groupKey` and `passed`, which the presentational view no longer carries
   // (it holds a class and a label instead — deliberately, so the layout cannot judge).
-  const topicCards = (input.topicResults || [])
+  const topicCards = (opts.showTopicResults === false ? [] : input.topicResults || [])
     .filter(topicHasContent)
     .map((t) => ({
       groupKey: t.groupKey ?? null,
@@ -1310,6 +1349,7 @@ export function buildResultContext(
       (g): CtxTopicGroup => ({
         key: g.key,
         label: g.label,
+        ...groupDescriptionHtml(g.description),
         topics: g.sections.map((c) => c.view),
         passedCount: g.passedCount,
         totalCount: g.totalCount,
@@ -1384,12 +1424,6 @@ export function buildResultContext(
     // attempts finished earlier.) The verdict tag is NOT gated here: it belongs to every
     // test, so it is resolved above `result` for the measurement and the control screen
     // alike — this branch only ever adds what measurements bring.
-    // INVERTED on purpose. A control test never passes `measures`, so a positive
-    // flag would be absent — and `{{#if result.showScoreSummary}}` would erase the
-    // score ring from every control test in every package and in the preview. The
-    // absent state has to mean «show», so only the suppression is recorded.
-    if (!blocks.scoreSummary) result.hideScoreSummary = true;
-
     // Order matters: the test's own block (already first in the list) then the profile,
     // then the scales — dedup keeps the first occurrence, so a general recommendation
     // outranks its specific copy. The cards and that order come from the shared
@@ -1410,10 +1444,17 @@ export function buildResultContext(
   recommendationSources.push(...collectBreakdownFeedback(input.topicResults || []));
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
+  // INVERTED on purpose. A host that sends no score switches must keep the ring and the
+  // bar — a positive flag would be absent there and `{{#if result.showScoreSummary}}`
+  // would erase them from every older package and preview. The absent state has to mean
+  // «show», so only the suppression is recorded.
+  if (!scoreDisplay.summary) result.hideScoreSummary = true;
+  if (!scoreDisplay.bar) result.hideScoreBar = true;
   // PRD-49. The umbrella's sub-blocks + resolved labels, via the ONE rule shared with the
   // adaptive builder (see `attachBlocksAndLabels`). `summary` reads the INVERTED flag the
   // screen itself reads, so the list says «visible» exactly where the summary prints —
-  // including a control test, which never reaches the toggle and has always shown it.
+  // a control test included, which reads the same toggle since the score switches moved
+  // outside `measures`.
   const labelsTreeOut = attachBlocksAndLabels(result, opts, !result.hideScoreSummary);
   // Заголовок документа заменяет название теста — и на экране, и в отчёте: обе поверхности
   // печатают одно и то же поле `course.title`, и расхождение здесь было бы расхождением
@@ -1697,6 +1738,8 @@ export interface AdaptiveResultContextOptions {
    * would be worse than telling them what the mode can do.
    */
   breakdownDisplay?: BreakdownDisplaySetting | null;
+  /** Печатать ли карточки тем — см. {@link ResultContextOptions.showTopicResults}. */
+  showTopicResults?: boolean;
   /** Bar colouring of the summary block — see {@link ResultContextOptions.barFill}. */
   barFill?: BarFillSetting | null;
   /**
@@ -1807,7 +1850,7 @@ export function buildAdaptiveResultContext(
   const result: CtxResult = {
     passed: !!input.passed,
     adaptive: true,
-    topicResults: (input.topicResults || []).map(adaptiveTopicView),
+    topicResults: (opts.showTopicResults === false ? [] : input.topicResults || []).map(adaptiveTopicView),
   };
   // PRD-50 FR-28: сводный блок разреза — ТОТ ЖЕ заполнитель, что у стандартного экрана.
   // Записи для адаптивной попытки считаются и хранятся давно (FR-17/FR-39), но до этого

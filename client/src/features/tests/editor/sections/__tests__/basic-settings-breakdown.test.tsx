@@ -253,3 +253,48 @@ describe("Показ толкований подтем", () => {
     });
   });
 });
+
+describe("BreakdownDisplayPane: переключатель «Показывать результаты по темам»", () => {
+  const withRuntime = (runtime: Record<string, unknown>) => {
+    const base = baseModel();
+    return baseModel({ runtime: { ...base.runtime, ...runtime } });
+  };
+
+  it("по умолчанию включён: тест без поля печатал карточки всегда", () => {
+    render(<BreakdownDisplayPane model={baseModel()} updateModel={() => {}} />);
+    expect(screen.getByTestId("settings-show-topic-results-switch")).toBeChecked();
+  });
+
+  it("выключение пишет `showTopicResults: false` и не трогает остальные настройки", () => {
+    const updateModel = vi.fn();
+    const model = baseModel();
+    render(<BreakdownDisplayPane model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("settings-show-topic-results-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.runtime.showTopicResults).toBe(false);
+    expect(next.runtime.showSectionResults).toBe(model.runtime.showSectionResults);
+  });
+
+  it("выключенные карточки при подытогах «в карточках тем» сопровождаются предупреждением", () => {
+    render(
+      <BreakdownDisplayPane
+        model={withRuntime({ showTopicResults: false, breakdownDisplay: { visibility: "bar", basis: "units" } })}
+        updateModel={() => {}}
+      />,
+    );
+    expect(screen.getByText(/нигде не покажутся/)).toBeInTheDocument();
+  });
+
+  it("подытоги блоком — предупреждения нет", () => {
+    render(
+      <BreakdownDisplayPane
+        model={withRuntime({
+          showTopicResults: false,
+          breakdownDisplay: { visibility: "bar", basis: "units", placement: "block" },
+        })}
+        updateModel={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/нигде не покажутся/)).not.toBeInTheDocument();
+  });
+});

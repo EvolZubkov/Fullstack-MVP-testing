@@ -21,8 +21,8 @@ import {
   tests, testSections, testScenarios, testSnapshots, attempts,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
   testAssignments, testAccessGrants, questions, questionMeasurements, contentPages,
-  assignmentAccessTokens, analyticsSlices, questionExposure,
-  type Test, type InsertTest, type TestSection, type TestScenario, type TestSnapshot,
+  assignmentAccessTokens, analyticsSlices, questionExposure, testPublicLinks,
+  type Test, type TestPublicLink, type InsertTest, type TestSection, type TestScenario, type TestSnapshot,
 } from "@shared/schema";
 import { countTestLmsTrail, purgeTestLmsData, type TestLmsTrailCounts } from "./scorm-repository";
 
@@ -186,6 +186,35 @@ export class TestsRepository {
   async getTest(id: string): Promise<Test | undefined> {
     const [row] = await db.select().from(tests).where(eq(tests.id, id));
     return row ? mapLegacyTest(row) : undefined;
+  }
+
+  /** The public link of a test, if one is enabled. */
+  async getTestPublicLink(testId: string): Promise<TestPublicLink | undefined> {
+    const [row] = await db.select().from(testPublicLinks).where(eq(testPublicLinks.testId, testId));
+    return row;
+  }
+
+  /** Resolve a public-link token to its link row. */
+  async getTestPublicLinkByToken(token: string): Promise<TestPublicLink | undefined> {
+    const [row] = await db.select().from(testPublicLinks).where(eq(testPublicLinks.token, token));
+    return row;
+  }
+
+  /** Issue or rotate the test's public link: one row per test, the token is replaced. */
+  async upsertTestPublicLink(testId: string, token: string, createdBy: string): Promise<TestPublicLink> {
+    const [row] = await db.insert(testPublicLinks)
+      .values({ id: randomUUID(), testId, token, createdBy })
+      .onConflictDoUpdate({
+        target: testPublicLinks.testId,
+        set: { token, createdBy, createdAt: new Date() },
+      })
+      .returning();
+    return row;
+  }
+
+  /** Disable the test's public link. */
+  async deleteTestPublicLink(testId: string): Promise<void> {
+    await db.delete(testPublicLinks).where(eq(testPublicLinks.testId, testId));
   }
 
   /**

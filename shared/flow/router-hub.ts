@@ -14,6 +14,7 @@
  * Framework-free and browser-safe: bundled verbatim into the SCORM package.
  */
 import { matchTestItem, parseItemKey } from "../test-items";
+import { cardImageFor, type CardImages } from "../template/router-card-images";
 
 /** Per-section state as the run progresses. */
 export type RouterTopicStatus = "notStarted" | "inProgress" | "completed";
@@ -25,7 +26,6 @@ export interface RouterSection {
   required?: boolean;
   drawCount?: number | null;
   timeLimitMinutes?: number | null;
-  image?: string | { url?: string } | null;
 }
 
 /** A frozen section result, as far as the hub cares about it. */
@@ -216,11 +216,21 @@ const CARD_CHECK =
  * the section-results screen it gates with `showSectionResults` (PRD-19 FR-05a) and on the
  * results screen, whose wording the author controls through the PRD-49 label dictionary —
  * two surfaces that the hub, which reads no dictionary, could only contradict.
+ *
+ * A card picture comes from `options.images`, the hub's design property keyed by item key
+ * (`shared/template/router-card-images`). A card with a picture carries the
+ * `router-topic-card--with-img` modifier and the picture as its own `__img` child, so the
+ * template places it with CSS alone; a card without one carries neither, and its text keeps
+ * the whole width. The picture is decorative (`alt=""`): the card's name already says what it is.
  */
 export function buildRouterHubHtml(
   sections: RouterSection[] | null | undefined,
   state: RouterHubState,
-  options?: { deadline?: { date?: string | null; time?: string | null } | null },
+  options?: {
+    deadline?: { date?: string | null; time?: string | null } | null;
+    /** Card pictures by item key — see {@link cardImagesForVariant}. */
+    images?: CardImages | null;
+  },
 ): string {
   const list = sections || [];
   let html = "";
@@ -279,10 +289,7 @@ export function buildRouterHubHtml(
         "</span>"
       : "";
 
-    const imgUrl =
-      section.image && typeof section.image === "object"
-        ? section.image.url || ""
-        : (section.image as string) || "";
+    const imgUrl = cardImageFor(options?.images, section.topicId);
     const imgHtml = imgUrl
       ? '<span class="router-topic-card__img"><img src="' + escHtml(imgUrl) + '" alt=""></span>'
       : "";
@@ -294,6 +301,7 @@ export function buildRouterHubHtml(
       '<button type="button" role="listitem"' +
       ' class="router-topic-card router-topic-card--' + status +
       (words.isScenario ? " router-topic-card--scenario" : "") +
+      (imgUrl ? " router-topic-card--with-img" : "") +
       (locked ? " router-topic-card--locked" : "") + '"' +
       ' data-topic-id="' + escHtml(section.topicId) + '"' +
       ' data-router-status="' + status + '"' +
@@ -307,8 +315,8 @@ export function buildRouterHubHtml(
         ? ' <span class="router-topic-card__optional">' + words.optional + "</span>"
         : "") +
       "</span>" +
-      imgHtml +
       "</span>" +
+      imgHtml +
       metaHtml +
       '<span class="router-topic-card__foot">' +
       '<span class="router-topic-card__status">' +

@@ -87,8 +87,9 @@ import type {
   SavedListFilter, InsertSavedListFilter, SavedFilterScope,
   Group, InsertGroup,
   UserGroup,
-  TestAccessGrant, InsertTestAccessGrant,
+  TestAccessGrant, InsertTestAccessGrant, TestGrantSlot,
   TestSnapshot,
+  TestPublicLink,
   TopicAccessGrant,
   TestAssignment, InsertTestAssignment,
   PasswordResetToken,
@@ -154,9 +155,12 @@ export interface IStorage {
   getTestIdsByOwner(ownerId: string): Promise<string[]>;
   getTestAccessGrants(testId: string): Promise<TestAccessGrant[]>;
   getUserTestGrants(userId: string): Promise<TestAccessGrant[]>;
+  /** The working grant (`edit` | `assign`); the review grant has its own slot. */
   getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined>;
+  /** The review grant (PRD-52), held independently of the working one. */
+  getTestReviewGrant(testId: string, userId: string): Promise<TestAccessGrant | undefined>;
   upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant>;
-  removeTestAccessGrant(testId: string, userId: string): Promise<boolean>;
+  removeTestAccessGrant(testId: string, userId: string, slot: TestGrantSlot): Promise<boolean>;
 
   // "Where used" lookups (PRD-15 FR-03): tests depending on shared content.
   getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]>;
@@ -300,6 +304,10 @@ export interface IStorage {
 
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
+  getTestPublicLink(testId: string): Promise<TestPublicLink | undefined>;
+  getTestPublicLinkByToken(token: string): Promise<TestPublicLink | undefined>;
+  upsertTestPublicLink(testId: string, token: string, createdBy: string): Promise<TestPublicLink>;
+  deleteTestPublicLink(testId: string): Promise<void>;
   getMigrationHealth(): Promise<{ legacyStartPageCount: number }>;
   updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
   /** Updates only the status field without bumping the version counter (PRD-7 §9). */
@@ -318,6 +326,8 @@ export interface IStorage {
   createAttempt(attempt: InsertAttempt): Promise<Attempt>;
   getAttempt(id: string): Promise<Attempt | undefined>;
   updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined>;
+  /** Stamp the start of the test-wide countdown once; returns the stored stamp. */
+  startAttemptTimer(id: string): Promise<Date | null>;
   getAttemptsByIds(ids: string[]): Promise<Attempt[]>;
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
@@ -777,12 +787,16 @@ export class DatabaseStorage implements IStorage {
     return this.accessRepo.getTestGrantForUser(testId, userId);
   }
 
+  getTestReviewGrant(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
+    return this.accessRepo.getTestReviewGrant(testId, userId);
+  }
+
   upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
     return this.accessRepo.upsertTestAccessGrant(grant);
   }
 
-  removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
-    return this.accessRepo.removeTestAccessGrant(testId, userId);
+  removeTestAccessGrant(testId: string, userId: string, slot: TestGrantSlot): Promise<boolean> {
+    return this.accessRepo.removeTestAccessGrant(testId, userId, slot);
   }
 
   // ============================================
@@ -1095,6 +1109,22 @@ export class DatabaseStorage implements IStorage {
     return this.testsRepo.getTest(id);
   }
 
+  getTestPublicLink(testId: string): Promise<TestPublicLink | undefined> {
+    return this.testsRepo.getTestPublicLink(testId);
+  }
+
+  getTestPublicLinkByToken(token: string): Promise<TestPublicLink | undefined> {
+    return this.testsRepo.getTestPublicLinkByToken(token);
+  }
+
+  upsertTestPublicLink(testId: string, token: string, createdBy: string): Promise<TestPublicLink> {
+    return this.testsRepo.upsertTestPublicLink(testId, token, createdBy);
+  }
+
+  deleteTestPublicLink(testId: string): Promise<void> {
+    return this.testsRepo.deleteTestPublicLink(testId);
+  }
+
   getMigrationHealth(): Promise<{ legacyStartPageCount: number }> {
     return this.testsRepo.getMigrationHealth();
   }
@@ -1159,6 +1189,10 @@ export class DatabaseStorage implements IStorage {
 
   updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
     return this.attemptsRepo.updateAttempt(id, updates);
+  }
+
+  startAttemptTimer(id: string): Promise<Date | null> {
+    return this.attemptsRepo.startAttemptTimer(id);
   }
 
   getAttemptsByIds(ids: string[]): Promise<Attempt[]> {

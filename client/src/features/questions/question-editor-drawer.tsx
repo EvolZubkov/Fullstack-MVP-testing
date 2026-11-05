@@ -21,6 +21,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isAllocationFeasible } from "@shared/questions/allocation";
 import { isSimulation, isTextEntry } from "@shared/questions/question-type";
 import { ScenarioBlock, type ScenarioData } from "./scenario/scenario-block";
+import { scenarioOf } from "@shared/sim/upgrade";
 import { AnswerRulesBlock } from "./answer-rules/answer-rules-block";
 import { BlanksBlock } from "./answer-rules/blanks-block";
 import type { BlankRuleSet } from "@shared/questions/blanks-render";
@@ -456,7 +457,7 @@ export function QuestionEditorDrawer({
         setAnswerRules(createAnswerRulesDraft(correct as AnswerRuleSet));
         setShortMaxLength(typeof data?.maxLength === "number" ? data.maxLength : undefined);
       } else if (isSimulation(question.type)) {
-        setScenarioData(data?.scenario ? (data as ScenarioData) : null);
+        setScenarioData(scenarioOf(data) ? (data as ScenarioData) : null);
       } else if (question.type === "scale") {
         setSingleOptions(data.options || ["", "", "", ""]);
         // Наличие correctIndex И ЕСТЬ положение переключателя (FR-03).

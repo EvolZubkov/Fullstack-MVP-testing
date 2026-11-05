@@ -15,14 +15,14 @@
 import { useRef, useState } from "react";
 import { Download, MonitorPlay, Play, Trash2, Upload } from "lucide-react";
 import { Banner, Button, Cluster, FileItem, FileUploader, Label, Stack, Tag, Text, useToast } from "@skillum/ui-kit";
-import type { Scenario } from "@shared/sim/contract";
+import type { ScenarioInput } from "@shared/sim/upgrade";
 import { summarizeScenario, type ScenarioSummary } from "@shared/sim/validate";
 import { ScenarioRun, requestScenarioFullscreen } from "./scenario-run";
 import { megabytes, plural, summaryTags } from "./scenario-summary";
 
 /** The question content of the type: the scenario with media-library addresses. */
 export interface ScenarioData {
-  scenario: Scenario;
+  scenario: ScenarioInput;
 }
 
 /** What the archive route answers. */

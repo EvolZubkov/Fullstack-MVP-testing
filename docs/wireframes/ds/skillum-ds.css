@@ -5111,6 +5111,18 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-modal--l { max-width: 720px; }
 .ou-modal--xl { max-width: 960px; }
 
+/* fill: the dialog keeps one height instead of growing with its content (tabs and steps
+   do not make it jump). The body takes the rest as a column, 4x between its blocks; it
+   scrolls itself, the footer stays at the bottom.
+   The height leaves the toast zone free: toasts stack at the bottom right, so the footer
+   actions must end above one toast (stack offset + a title-and-description toast, 64px)
+   plus 4x. The dialog is centred, hence the same inset on top. */
+.ou-modal--fill {
+  --ou-modal-fill-inset: calc(var(--ou-space-5) + 64px + var(--ou-space-4));
+  height: calc(100vh - var(--ou-modal-fill-inset) * 2);
+}
+.ou-modal--fill > .ou-modal__body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+
 /* Модульная сетка: от краёв окна 6x, после заголовка 1x — заголовок и содержимое родственны. */
 .ou-modal__head { display: flex; align-items: flex-start; gap: var(--ou-space-4); padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-1); }
 .ou-modal__head-text { flex: 1; min-width: 0; }
@@ -5127,6 +5139,13 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 /* До и после разделителя — 4x. */
 .ou-modal__foot { display: flex; justify-content: flex-end; gap: var(--ou-space-2); padding: var(--ou-space-4) var(--ou-space-6); border-top: 1px solid var(--ou-border-soft); }
 .ou-modal__foot--between { justify-content: space-between; }
+
+/* The 4px grid (1x related, 4x different) inside a fill dialog ONLY. The same intervals
+   are off the grid in the DS defaults everywhere; making them the default is tech debt
+   (ROADMAP, section 0.0.4, item 19), then these scoped rules go. */
+.ou-modal--fill > .ou-modal__foot { gap: var(--ou-space-1); }
+.ou-modal--fill .ou-field { gap: var(--ou-space-1); }
+.ou-modal--fill .ou-tabs__panel { padding-top: var(--ou-space-4); }
 
 /* Icon-led variant (alert / success / info) */
 .ou-modal__head--icon .ou-modal__icon {
@@ -7112,6 +7131,11 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .ou-tabs__panel { padding-top: var(--ou-space-5); }
 
+/* fill: the active panel takes what the tab list leaves and scrolls itself. The parent
+   is a flex column with a bounded height (ModalDialog fill). */
+.ou-tabs--fill { flex: 1; min-height: 0; }
+.ou-tabs--fill > .ou-tabs__panel { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+
 
 /* ─── Tag.css ───────────────────────────────── */
 /* Skillum · Tag — static informational labels (statuses, metadata) */
@@ -7877,6 +7901,36 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-transfer__summary-text { font: var(--ou-text-body-s); color: var(--ou-fg-default); }
 .ou-transfer__summary-text strong { font-weight: 600; }
 .ou-transfer__summary-text strong { color: var(--ou-accent-default); }
+
+/* fill: the panes reach the parent's bottom, the lists scroll inside them. The picker
+   never shrinks below 360px, so a list keeps at least 240px (four and a half rows) under
+   the pane's header, search and toolbar; on a low screen the parent scrolls instead.
+   The minimum is set on the picker itself: the intrinsic minimum of a grid row or a
+   flex column would be the height of ALL the list's rows, not its min-height. */
+.ou-transfer--fill { flex: 1; min-height: 360px; grid-template-rows: minmax(0, 1fr); }
+.ou-transfer--fill .ou-transfer__pane { min-height: 0; }
+
+/* above: a row over the panes in the SAME grid, so its content lines up with the panes
+   edge to edge — left, right, or across both panes and the arrows. */
+.ou-transfer--has-above > .ou-transfer__pane,
+.ou-transfer--has-above > .ou-transfer__controls { grid-row: 2; }
+/* The row above (a 64px field) and its 4x gap add to the minimum. */
+.ou-transfer--fill.ou-transfer--has-above { min-height: 440px; grid-template-rows: auto minmax(0, 1fr); }
+.ou-transfer__above { min-width: 0; }
+.ou-transfer__above--left { grid-row: 1; grid-column: 1; }
+.ou-transfer__above--right { grid-row: 1; grid-column: 3; }
+.ou-transfer__above--span { grid-row: 1; grid-column: 1 / -1; }
+
+/* The 4px grid inside a fill list ONLY (tech debt as above): a pane is a panel, its
+   content sits 6x from the edges; related things in a band 1x, different things 4x. */
+.ou-transfer--fill .ou-transfer__header,
+.ou-transfer--fill .ou-transfer__search,
+.ou-transfer--fill .ou-transfer__toolbar,
+.ou-transfer--fill .ou-transfer__row { padding-left: var(--ou-space-6); padding-right: var(--ou-space-6); }
+.ou-transfer--fill .ou-transfer__search,
+.ou-transfer--fill .ou-transfer__select-all,
+.ou-transfer--fill .ou-transfer__row { gap: var(--ou-space-1); }
+.ou-transfer--fill .ou-transfer__toolbar { gap: var(--ou-space-4); }
 
 
 /* ─── Tree.css ───────────────────────────────── */

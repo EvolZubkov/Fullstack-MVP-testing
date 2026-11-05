@@ -159,8 +159,56 @@ describe("AccessRepository — test ownership & grants", () => {
     await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "edit" } as never);
     // pglite does not report rowCount for DELETE without RETURNING (harness
     // caveat), so assert the observable effect rather than the boolean.
-    await repo.removeTestAccessGrant(testId, userId);
+    await repo.removeTestAccessGrant(testId, userId, "work");
     expect(await repo.getTestGrantForUser(testId, userId)).toBeUndefined();
+  });
+
+  // PRD-52 14.8: two slots per (test, user) - the working grant and the review grant.
+  it("keeps a review grant beside the working one, each in its own slot", async () => {
+    const testId = randomUUID();
+    const userId = randomUUID();
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "assign" } as never);
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "review" } as never);
+
+    expect((await repo.getTestGrantForUser(testId, userId))?.accessLevel).toBe("assign");
+    expect((await repo.getTestReviewGrant(testId, userId))?.accessLevel).toBe("review");
+    expect(await repo.getTestAccessGrants(testId)).toHaveLength(2);
+  });
+
+  it("edit and assign still replace each other; review stays untouched", async () => {
+    const testId = randomUUID();
+    const userId = randomUUID();
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "review" } as never);
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "assign" } as never);
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "edit" } as never);
+
+    const levels = (await repo.getTestAccessGrants(testId)).map((g) => g.accessLevel).sort();
+    expect(levels).toEqual(["edit", "review"]);
+  });
+
+  it("re-inviting a reviewer upserts the same review row", async () => {
+    const testId = randomUUID();
+    const userId = randomUUID();
+    const first = await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "review" } as never);
+    const again = await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "review" } as never);
+    expect(again.id).toBe(first.id);
+    expect(await repo.getTestAccessGrants(testId)).toHaveLength(1);
+  });
+
+  it("removes one slot and leaves the other", async () => {
+    const testId = randomUUID();
+    const userId = randomUUID();
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "assign" } as never);
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "review" } as never);
+
+    await repo.removeTestAccessGrant(testId, userId, "review");
+    expect(await repo.getTestReviewGrant(testId, userId)).toBeUndefined();
+    expect((await repo.getTestGrantForUser(testId, userId))?.accessLevel).toBe("assign");
+
+    await repo.upsertTestAccessGrant({ testId, userId, accessLevel: "review" } as never);
+    await repo.removeTestAccessGrant(testId, userId, "work");
+    expect(await repo.getTestGrantForUser(testId, userId)).toBeUndefined();
+    expect((await repo.getTestReviewGrant(testId, userId))?.accessLevel).toBe("review");
   });
 });
 

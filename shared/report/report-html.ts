@@ -51,6 +51,12 @@ export interface ReportMeta {
   /** How many attempts the «Лучший результат за N попыток» line counts. */
   attemptsCount?: number;
   /**
+   * Печатать ли строку «Лучший результат за N попыток» (`tests.show_attempts_count`).
+   * Свойство только документа: экран итогов этой строки не печатает. Только явное `false`
+   * гасит строку; отсутствие = печатать.
+   */
+  showAttemptsCount?: boolean;
+  /**
    * Обратная связь САМОГО теста (`tests.feedback_json`), уже нормализованная хостом
    * (`normalizeFeedback`) — самый общий источник консолидированного блока рекомендаций
    * и первый в нём.
@@ -94,6 +100,12 @@ export interface ReportMeta {
    * `topicView`, which gates the rows on this flag first).
    */
   breakdownDisplay?: BreakdownDisplaySetting | null;
+  /**
+   * Печатать ли карточки «Результаты по темам» (`tests.show_topic_results`) — тот же класс
+   * факта, что {@link breakdownDisplay}: свойство экрана итогов, которое документ обязан
+   * повторить (PRD-51 §5.2). Только явное `false` гасит карточки; отсутствие = печатать.
+   */
+  showTopicResults?: boolean;
   /**
    * Окраска полос подтем (параметр оформления `breakdownBarFill`, разрешённый
    * {@link module:shared/template/bar-fill barFillFromParams}) — тот же класс факта, что

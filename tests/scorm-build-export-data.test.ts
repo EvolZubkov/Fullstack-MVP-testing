@@ -363,7 +363,7 @@ describe("buildScormExportData — исключённые задания (PRD-56
 });
 
 describe("«Сценарий в ИС»: раздел пункта-сценария в пакете (Э4)", () => {
-  const item = { id: "it1", testId: "t1", topicId: "bank", questionId: null, title: "Работа в СЭД", required: true, timeLimitMinutes: null, imageUrl: null, groupKey: null, sortOrder: 0 };
+  const item = { id: "it1", testId: "t1", topicId: "bank", questionId: null, title: "Работа в СЭД", required: true, timeLimitMinutes: null, groupKey: null, sortOrder: 0 };
   const bankQuestions = [
     { id: "s1", type: "simulation", topicId: "bank" },
     { id: "x1", type: "single", topicId: "bank" },

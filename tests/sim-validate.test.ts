@@ -11,7 +11,7 @@ import { summarizeScenario, validateScenario, type ArchiveImage } from "@shared/
 import type { Scenario } from "@shared/sim/contract";
 
 const ROOT = resolve(process.cwd(), "docs/specs/sim-scenario/example");
-const reference = JSON.parse(readFileSync(resolve(ROOT, "scenario.json"), "utf8")) as Scenario;
+const reference = JSON.parse(readFileSync(resolve(process.cwd(), "tests/fixtures/sim/scenario-v1.json"), "utf8")) as Scenario;
 
 /** The reference archive as the server would see it: every PNG of media/, with its real size. */
 function archiveFiles(): Map<string, ArchiveImage> {
@@ -52,7 +52,7 @@ describe("эталонный сценарий", () => {
 describe("ошибки, которые отклоняют архив", () => {
   it("не тот формат или версия новее поддерживаемой", () => {
     expect(archive({ ...copy(), format: "other" }).errors[0]).toMatch(/format/);
-    expect(archive({ ...copy(), version: 2 }).errors[0]).toMatch(/новее/);
+    expect(archive({ ...copy(), version: 3 }).errors[0]).toMatch(/новее/);
   });
 
   it("элемент ссылается на изображение, которого нет в библиотеке, — называется сцена", () => {

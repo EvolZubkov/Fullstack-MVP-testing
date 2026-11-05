@@ -74,7 +74,7 @@ import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { buildAfterZone, type FlowContentPage } from "@shared/flow/page-sequence";
 import { isDeliverable, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
 import { replayRun } from "@shared/sim/replay";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 // PRD-50 FR-17: элементы разреза адаптивного прогона собирает хост — движок их вывести не может.
 import type { BreakdownItem } from "@shared/breakdown/types";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
@@ -658,6 +658,11 @@ async function resultsMaterialForAttempt(
       // was never set) leaves it `null`, which `buildResultContext` resolves to
       // «hidden» — the byte-identical results screen this test has always shown.
       breakdownDisplayJson: deliveredTest?.breakdownDisplayJson ?? null,
+      // Карточки тем: из той же ВЫДАННОЙ версии. Снимок морозит строку теста целиком, а у
+      // снимка до колонки поля нет — `!== false` читает это как «печатать».
+      showTopicResults: deliveredTest?.showTopicResults !== false,
+      // Строка «Лучший результат за N попыток» в отчёте — тем же приёмом.
+      showAttemptsCount: deliveredTest?.showAttemptsCount !== false,
       // PRD-50 FR-11: блоки разделов теста, из той же ВЫДАННОЙ версии, что и всё
       // остальное здесь. Отсутствие (тест блоков не заводил) оставляет `null`, и экран
       // печатает плоский список тем — ровно тот, что печатал до этого PRD (FR-27).
@@ -1839,6 +1844,26 @@ router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.ta
   }
 });
 
+// POST /api/attempts/:attemptId/timer-start — the test-wide countdown starts on the
+// FIRST QUESTION shown, not on «Начать». The host calls this when that question
+// appears; the server stamps the start once, by its own clock, and answers with the
+// stored stamp on every call, so a second tab or a reload cannot restart the clock.
+router.post("/attempts/:attemptId/timer-start", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+    if (attempt.finishedAt) return res.status(400).json({ error: "Attempt already finished" });
+
+    const timerStartedAt = await storage.startAttemptTimer(attempt.id);
+    if (!timerStartedAt) return res.status(400).json({ error: "Attempt already finished" });
+    res.json({ timerStartedAt: timerStartedAt.toISOString(), serverNow: new Date().toISOString() });
+  } catch (error) {
+    logger.error("Timer start error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to start the test timer" });
+  }
+});
+
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
 router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {
@@ -2135,7 +2160,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
           // ответ с эталоном. Протокол переигрывается тем же движком по хранимому сценарию, и
           // оценивается и сохраняется ТОТ результат (`shared/sim/replay`).
           if (isSimulation(q.type) && answers && answers[q.id] != null) {
-            const scenario = (q.dataJson as { scenario?: Scenario } | null)?.scenario;
+            const scenario = scenarioOf(q.dataJson);
             if (scenario) {
               const verdict = replayRun(scenario, answers[q.id]);
               if (!verdict.consistent) {

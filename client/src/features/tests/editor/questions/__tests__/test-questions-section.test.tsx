@@ -110,9 +110,9 @@ function model(patch: Partial<TestEditorModel> = {}): TestEditorModel {
   } as TestEditorModel;
 }
 
-function client() {
+function client(questions: unknown[] = QUESTIONS) {
   const c = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  c.setQueryData(["/api/questions"], QUESTIONS);
+  c.setQueryData(["/api/questions"], questions);
   c.setQueryData(["/api/topics"], []);
   return c;
 }
@@ -120,9 +120,10 @@ function client() {
 function renderSection(
   m: TestEditorModel,
   handlers: { onOpenQuestion?: (id: string) => void; onCreateQuestion?: (id: string) => void } = {},
+  questions?: unknown[],
 ) {
   return rtlRender(
-    <QueryClientProvider client={client()}>
+    <QueryClientProvider client={client(questions)}>
       <TestQuestionsSection model={m} topicId="law" {...handlers} />
     </QueryClientProvider>,
   );
@@ -163,6 +164,23 @@ describe("<TestQuestionsSection />", () => {
     fireEvent.change(search, { target: { value: "нет такого" } });
     expect(screen.getByText("Ничего не найдено")).toBeInTheDocument();
     expect(screen.queryAllByTestId(/^test-questions-row-/)).toHaveLength(0);
+  });
+
+  it("shows a task written as HTML as readable text and finds it across &nbsp;", () => {
+    const html = {
+      ...QUESTIONS[1],
+      id: "q5",
+      promptFormat: "html",
+      prompt: "<div>Какие из&nbsp;перечисленных мер?</div><div>1. Данное СИ&nbsp;не&nbsp;используется.</div>",
+    };
+    renderSection(model(), {}, [html]);
+    const row = screen.getByTestId("test-questions-row-q5");
+    expect(row).toHaveTextContent("Какие из перечисленных мер?");
+    expect(row.textContent).not.toMatch(/<div>|&nbsp;/);
+    const search = screen.getByTestId("test-questions-search").querySelector("input") ??
+      screen.getByTestId("test-questions-search");
+    fireEvent.change(search, { target: { value: "из перечисленных" } });
+    expect(rowIds()).toEqual(["test-questions-row-q5"]);
   });
 
   it("shows deviation flags, including the delivery exclusion", () => {

@@ -40,6 +40,7 @@ import {
   Textarea,
 } from "@skillum/ui-kit";
 import type { FeedbackAsset } from "../test-editor.types";
+import { plainTextToHtml, sanitizePastedHtml } from "./rte-paste";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -350,6 +351,17 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                   if (rteRef.current) {
                     setDraft((d) => ({ ...d, text: rteRef.current!.innerHTML }));
                   }
+                }}
+                onPaste={(e) => {
+                  // Чужие встроенные стили (Word, письмо) не должны попадать в текст: он
+                  // печатается как есть и перебил бы шрифт шаблона. Остаётся то, что умеет
+                  // сам редактор.
+                  e.preventDefault();
+                  const html = e.clipboardData.getData("text/html");
+                  const clean = html
+                    ? sanitizePastedHtml(html)
+                    : plainTextToHtml(e.clipboardData.getData("text/plain"));
+                  if (clean) document.execCommand("insertHTML", false, clean);
                 }}
                 data-testid="feedback-editor-rte-area"
                 suppressContentEditableWarning

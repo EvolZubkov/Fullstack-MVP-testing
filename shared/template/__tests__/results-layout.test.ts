@@ -122,6 +122,14 @@ describe("results layout (PRD-49)", () => {
 
   // The separator is the LOOP's business now: one `{{#unless @first}}` instead of the old
   // per-block conditions. Two sub-blocks = exactly one rule between them.
+  it("prints the score bar unless the context hides it", () => {
+    expect(compileTemplate(LAYOUT)(CTX)).toContain("tb-scene__progress");
+    const html = compileTemplate(LAYOUT)({ ...CTX, result: { ...CTX.result, hideScoreBar: true } });
+    expect(html).not.toContain("tb-scene__progress");
+    // The verdict tag in the header does not depend on the bar.
+    expect(html).toContain('data-path="result.statusLabel"');
+  });
+
   it("puts exactly one separator between two sub-blocks", () => {
     const html = compileTemplate(LAYOUT)(CTX);
     const body = html.slice(html.indexOf("По темам"));
@@ -243,7 +251,37 @@ describe("section-results layout (PRD-49)", () => {
       html = compileTemplate(SECTION_LAYOUT)(ctxWithoutLabels);
     }).not.toThrow();
     expect(html).not.toContain("Итоги раздела");
-    // Content itself still prints — only the labels are gone.
-    expect(html).toContain('data-path="sectionResult.total"');
+    // A fact whose label is gone is gone with its number: a bare figure explains nothing.
+    expect(html).not.toContain('data-path="sectionResult.total"');
+  });
+
+  it("drops the whole fact, number included, when its label is switched off", () => {
+    const html = compileTemplate(SECTION_LAYOUT)({
+      ...SECTION_CTX,
+      labels: { ...SECTION_CTX.labels, facts: { questions: "", correct: "верно" } },
+    });
+    expect(html).not.toContain('data-path="sectionResult.total"');
+    expect(html).toContain("верно");
+  });
+});
+
+describe("results layout facts (switched-off labels)", () => {
+  const withFacts = (facts: Record<string, string>) =>
+    compileTemplate(LAYOUT)({
+      ...CTX,
+      result: { ...CTX.result, blocks: [{ key: "summary", heading: "Общий балл", isSummary: true }] },
+      labels: { ...CTX.labels, facts },
+    });
+
+  it("drops only the fact whose label is switched off, number included", () => {
+    const html = withFacts({ questions: "вопросов", correct: "", points: "баллов" });
+    expect(html).toContain('data-path="result.totalQuestions"');
+    expect(html).not.toContain('data-path="result.correct"');
+    expect(html).toContain('data-path="result.earnedPoints"');
+  });
+
+  it("prints no fact numbers when all three labels are switched off", () => {
+    const html = withFacts({ questions: "", correct: "", points: "" });
+    expect(html).not.toContain("tb-facts__num");
   });
 });

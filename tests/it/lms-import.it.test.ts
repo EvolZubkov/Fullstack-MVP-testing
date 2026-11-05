@@ -13,7 +13,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
-import { scormAttempts, scormPackages, users } from "@shared/schema";
+import { sql } from "drizzle-orm";
+import { scormAnswers, scormAttempts, scormPackages, users } from "@shared/schema";
 import { createHarness, type Harness } from "./db-harness";
 
 const h = vi.hoisted(() => ({ current: null as Harness | null }));
@@ -294,5 +295,28 @@ describe("updateLmsImportBatch", () => {
     expect(batch.rowsCreated).toBe(2);
     expect(batch.rowsLinked).toBe(1);
     expect(batch.warningsJson).toEqual(["Не разобраны колонки: topic_x."]);
+  });
+});
+
+describe("replaceImportedAnswers — пропущенное задание", () => {
+  /** Ответ в той же форме, в какой его собирает `runImport`. */
+  const answer = (attemptId: string, userAnswerJson: unknown) => ({
+    id: randomUUID(), attemptId, questionId: randomUUID(), questionPrompt: "Вопрос", questionType: "single" as const,
+    topicId: null, userAnswerJson: userAnswerJson as never, result: "incorrect" as const, isCorrect: false,
+    points: null, maxPoints: null, correctAnswerJson: null, latencyMs: null, answeredAt: new Date("2026-09-09T13:39:00Z"),
+  });
+
+  it("JS null колонка отвергает: так загрузка и падала на пропуске", async () => {
+    const { id } = await repo.upsertImportedAttempt(importedRow());
+    await expect(repo.replaceImportedAnswers(id, [answer(id, null)])).rejects.toThrow();
+  });
+
+  it("JSON null колонка принимает и отдаёт назад как null", async () => {
+    const { id } = await repo.upsertImportedAttempt(importedRow());
+    await repo.replaceImportedAnswers(id, [answer(id, sql`'null'::jsonb`)]);
+
+    const rows = await h.current!.db.select().from(scormAnswers);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userAnswerJson).toBeNull();
   });
 });

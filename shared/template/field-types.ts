@@ -55,6 +55,12 @@ export const SETTING_TYPES = [
    * editor cannot draw is a template error instead of a silently degraded input.
    */
   "scaleAppearance",
+  /**
+   * Pictures of the router hub's cards, as a MAP keyed by item key — `topic:<id>` /
+   * `scenario:<id>` (`shared/template/router-card-images`). Like `scaleAppearance`, the control
+   * is a row per item of the test, not a text box over JSON.
+   */
+  "itemImages",
 ] as const;
 
 export type SettingType = (typeof SETTING_TYPES)[number];

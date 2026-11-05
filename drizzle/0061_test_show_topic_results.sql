@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "show_topic_results" boolean DEFAULT true NOT NULL;

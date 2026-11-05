@@ -8,7 +8,9 @@
       </div>
       <div class="tb-scene__headtag">{{#if result.statusLabel}}<span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span>{{/if}}</div>
     </div>
-    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>
+    <!-- «Полоса балла»: гасится вместе со сводкой или своим переключателем; флаг отрицательный,
+         поэтому контекст без него (старый хост) полосу печатает. -->
+    {{#unless result.hideScoreBar}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>{{/unless}}
   </header>
 
   <main class="tb-scene__body">
@@ -47,9 +49,9 @@
           </div>
         </div>
         <div class="tb-facts">
-          <div class="tb-facts__item"><div class="tb-facts__num" data-path="result.totalQuestions"></div><div class="tb-facts__lbl">{{ @root.labels.facts.questions }}</div></div>
-          <div class="tb-facts__item"><div class="tb-facts__num"><span data-path="result.correct"></span>/<span data-path="result.totalQuestions"></span></div><div class="tb-facts__lbl">{{ @root.labels.facts.correct }}</div></div>
-          <div class="tb-facts__item"><div class="tb-facts__num" data-path="result.earnedPoints"></div><div class="tb-facts__lbl">{{ @root.labels.facts.points }}</div></div>
+          {{#if @root.labels.facts.questions}}<div class="tb-facts__item"><div class="tb-facts__num" data-path="result.totalQuestions"></div><div class="tb-facts__lbl">{{ @root.labels.facts.questions }}</div></div>{{/if}}
+          {{#if @root.labels.facts.correct}}<div class="tb-facts__item"><div class="tb-facts__num"><span data-path="result.correct"></span>/<span data-path="result.totalQuestions"></span></div><div class="tb-facts__lbl">{{ @root.labels.facts.correct }}</div></div>{{/if}}
+          {{#if @root.labels.facts.points}}<div class="tb-facts__item"><div class="tb-facts__num" data-path="result.earnedPoints"></div><div class="tb-facts__lbl">{{ @root.labels.facts.points }}</div></div>{{/if}}
         </div>
       </div>
       {{/if}}
@@ -208,6 +210,7 @@
           {{#if label}}<h4 class="tb-topic-group__title">{{label}}</h4>{{/if}}
           {{#if counterLabel}}<span class="tb-topic-group__counter">{{counterLabel}}</span>{{/if}}
         </div>
+        {{#if descriptionHtml}}<div class="tb-topic-group__description">{{& descriptionHtml}}</div>{{/if}}
           <!-- PRD-49: слот карточки темы гейтится СВОЕЙ надписью. Выключенная надпись —
                это пустая строка, и она убирает не подпись, а ВЕСЬ слот: вердикт уходит
                вместе с цветной пилюлей, «Правильно»/«Баллов» — вместе с числом. Без этого

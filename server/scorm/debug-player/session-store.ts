@@ -54,6 +54,19 @@ function evictOldest(): void {
   if (oldestToken) sessions.delete(oldestToken);
 }
 
+/** Unzip a built package into a path -> bytes map and find its launch file. */
+export async function unzipPackage(zipBuffer: Buffer): Promise<{ files: Map<string, Buffer>; launch: string }> {
+  const zip = await JSZip.loadAsync(zipBuffer);
+  const files = new Map<string, Buffer>();
+  await Promise.all(
+    Object.values(zip.files).map(async (entry) => {
+      if (entry.dir) return;
+      files.set(entry.name, await entry.async("nodebuffer"));
+    }),
+  );
+  return { files, launch: detectLaunch(files) };
+}
+
 /** Unzip the freshly-built debug package and register a token-keyed session for `userId`. */
 export async function createDebugSession(
   testId: string,
@@ -63,16 +76,7 @@ export async function createDebugSession(
   evictExpired(Date.now());
   while (sessions.size >= MAX_SESSIONS) evictOldest();
 
-  const zip = await JSZip.loadAsync(zipBuffer);
-  const files = new Map<string, Buffer>();
-  await Promise.all(
-    Object.values(zip.files).map(async (entry) => {
-      if (entry.dir) return;
-      files.set(entry.name, await entry.async("nodebuffer"));
-    }),
-  );
-
-  const launch = detectLaunch(files);
+  const { files, launch } = await unzipPackage(zipBuffer);
   const token = crypto.randomUUID();
   sessions.set(token, { files, launch, testId, userId, createdAt: Date.now() });
   return { token, launch };

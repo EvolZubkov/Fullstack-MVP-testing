@@ -180,8 +180,10 @@ var TBSimRun = (function () {
     var q = fq.question;
     var scenario = (q.data && q.data.scenario) || null;
     if (!scenario) return;
+    // Без класса `ou`: тему дизайн-системы задаёт `<html>` (`ou` + палитра, applyDsThemeClass).
+    // Голый `.ou` заново объявил бы СВЕТЛЫЕ токены и цвет текста — в тёмной палитре окно
+    // получало тёмный фон с тёмным текстом.
     var host = document.createElement('div');
-    host.className = 'ou';
     host.innerHTML = TBTemplate.renderSimRulesDialog(TBTemplate.simRules(scenario, penaltiesOf(q)));
     host.addEventListener('click', function (e) {
       var el = (e.target && e.target.closest) ? e.target.closest('[data-action]') : null;

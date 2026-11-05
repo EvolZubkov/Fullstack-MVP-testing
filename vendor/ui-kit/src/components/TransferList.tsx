@@ -54,6 +54,50 @@ export interface TransferListProps extends Omit<React.HTMLAttributes<HTMLDivElem
   showSummary?: boolean;
   /** Текст summary (если showSummary). */
   summary?: (state: { available: TransferItem[]; assigned: TransferItem[] }) => React.ReactNode;
+  /**
+   * Stretch the panes to the parent's height; the lists scroll inside them. The parent
+   * has to give the list a bounded height (a flex column with `min-height: 0`).
+   */
+  fill?: boolean;
+  /**
+   * A row above the panes, in the SAME grid, so what stands there lines up with the panes
+   * edge to edge. `{ left, right }` puts content over the left and the right pane; a plain
+   * node spans both panes and the arrows between them.
+   */
+  above?: React.ReactNode | TransferAbove;
+  /**
+   * Accessible names of the four arrows. The defaults speak of assigning; a screen
+   * where the right half is not an assignment (an invitation, a selection) names them
+   * in its own words.
+   */
+  controlLabels?: Partial<TransferControlLabels>;
+}
+
+/** Accessible names of the TransferList arrows. */
+export interface TransferControlLabels {
+  moveSelected: string;
+  moveAll: string;
+  removeSelected: string;
+  removeAll: string;
+}
+
+const DEFAULT_CONTROL_LABELS: TransferControlLabels = {
+  moveSelected: 'Назначить выбранных',
+  moveAll: 'Назначить всех',
+  removeSelected: 'Снять выбранных',
+  removeAll: 'Снять всех',
+};
+
+/** Content above each pane of a TransferList. */
+export interface TransferAbove {
+  left?: React.ReactNode;
+  right?: React.ReactNode;
+}
+
+/** Tells the split form of `above` from a plain node. */
+function isSplitAbove(above: TransferListProps['above']): above is TransferAbove {
+  return typeof above === 'object' && above !== null && !Array.isArray(above)
+    && !React.isValidElement(above) && ('left' in above || 'right' in above);
 }
 
 function initials(name: string): string {
@@ -99,9 +143,10 @@ export const TransferList = forwardRef<HTMLDivElement, TransferListProps>(
     available, assigned, onChange,
     leftTitle = 'Доступно', rightTitle = 'Назначено',
     searchPlaceholder = 'Поиск',
-    filters, compact, renderRow, showSummary, summary,
+    filters, compact, renderRow, showSummary, summary, fill, above, controlLabels,
     className, style, ...rest
   }, ref) => {
+    const labels = { ...DEFAULT_CONTROL_LABELS, ...controlLabels };
     const [qL, setQL] = useState('');
     const [qR, setQR] = useState('');
     const [selL, setSelL] = useState<Set<string>>(new Set());
@@ -264,30 +309,48 @@ export const TransferList = forwardRef<HTMLDivElement, TransferListProps>(
     };
 
     return (
-      <div ref={ref} className={cn('ou-transfer', className, cssStyleClass(style, 'ou-transfer-sx'))} {...rest}>
+      <div
+        ref={ref}
+        className={cn(
+          'ou-transfer',
+          fill && 'ou-transfer--fill',
+          above != null && 'ou-transfer--has-above',
+          className,
+          cssStyleClass(style, 'ou-transfer-sx'),
+        )}
+        {...rest}
+      >
+        {isSplitAbove(above) ? (
+          <>
+            <div className="ou-transfer__above ou-transfer__above--left">{above.left}</div>
+            <div className="ou-transfer__above ou-transfer__above--right">{above.right}</div>
+          </>
+        ) : above != null && (
+          <div className="ou-transfer__above ou-transfer__above--span">{above}</div>
+        )}
         {renderPane('L')}
         <div className="ou-transfer__controls">
           <button
             type="button" className="ou-transfer__btn"
-            aria-label="Назначить выбранных"
+            aria-label={labels.moveSelected}
             disabled={selL.size === 0}
             onClick={() => move('L→R')}
           >{Icons.right}</button>
           <button
             type="button" className="ou-transfer__btn"
-            aria-label="Назначить всех"
+            aria-label={labels.moveAll}
             disabled={visAvail.filter(i => !i.disabled).length === 0}
             onClick={() => move('L→R', true)}
           >{Icons.rightAll}</button>
           <button
             type="button" className="ou-transfer__btn"
-            aria-label="Снять выбранных"
+            aria-label={labels.removeSelected}
             disabled={selR.size === 0}
             onClick={() => move('R→L')}
           >{Icons.left}</button>
           <button
             type="button" className="ou-transfer__btn"
-            aria-label="Снять всех"
+            aria-label={labels.removeAll}
             disabled={visAssign.filter(i => !i.disabled).length === 0}
             onClick={() => move('R→L', true)}
           >{Icons.leftAll}</button>

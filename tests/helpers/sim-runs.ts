@@ -14,7 +14,7 @@ import { boundsOf } from "@shared/sim/geometry";
 import type { Scenario, SimResult, Zone } from "@shared/sim/contract";
 
 export const REFERENCE_SCENARIO = JSON.parse(
-  readFileSync(resolve(process.cwd(), "docs/specs/sim-scenario/example/scenario.json"), "utf8"),
+  readFileSync(resolve(process.cwd(), "tests/fixtures/sim/scenario-v1.json"), "utf8"),
 ) as Scenario;
 
 /** The outcomes a passage can ask for. */

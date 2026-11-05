@@ -208,6 +208,9 @@ describe("permission and scope gates", () => {
     storageMock.getTestGrantForUser.mockResolvedValue(undefined);
     const res = await asAuthor(request(makeApp()).get("/api/tests/test1/assignments"));
     expect(res.status).toBe(403);
+    // The refusal names what is missing instead of a bare «Forbidden».
+    expect(res.body.code).toBe("assign_scope_denied");
+    expect(res.body.error).toMatch(/«Назначение»/);
   });
 
   it("DELETE /assignments/:id → 403 when manager has no grant on the parent test", async () => {

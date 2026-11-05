@@ -23,7 +23,7 @@ import {
   protocolChunks,
 } from "@shared/sim/protocol-codec";
 import { parseLmsExport } from "@shared/lms-export/parse";
-import example from "../docs/specs/sim-scenario/example/scenario.json";
+import example from "./fixtures/sim/scenario-v1.json";
 import { importedSimAnswer } from "../server/services/sim/imported-run";
 import { decodeResultShare } from "@shared/lms-export/response-codec";
 import { buildSimulationStats } from "../server/services/analytics/simulation-stats";
@@ -87,7 +87,7 @@ describe("кодек протокола", () => {
   });
 
   it("испорченная строка и чужая версия не читаются", () => {
-    expect(decodeProtocol("2;a1@0")).toBeNull();
+    expect(decodeProtocol("9;a1@0")).toBeNull();
     expect(decodeProtocol("1;q1@0")).toBeNull();
     expect(decodeProtocol("1;m10@0")).toBeNull();
     expect(decodeProtocol("")).toBeNull();

@@ -10,7 +10,7 @@ import {
   checkDatabaseHealth,
   getDatabaseStatus,
 } from "./db";
-import { logger, requestContext, SLOW_REQUEST_MS } from "./logger";
+import { logger, requestContext, SLOW_REQUEST_MS, type RequestContext } from "./logger";
 import { config, initConfig } from "./config";
 import { loadEnv } from "./config-loader.mjs";
 import { randomUUID } from "crypto";
@@ -70,22 +70,17 @@ app.use((req, res, next) => {
 
   // Запускаем весь обработчик запроса внутри AsyncLocalStorage контекста.
   // userId недоступен сразу (нужна сессия), поэтому дописывается позже.
-  requestContext.run({ reqId, method: req.method, path: reqPath }, () => {
-    // Как только сессия будет прочитана — подтягиваем userId в контекст
-    const originalNext = next;
-    const wrappedNext = (err?: any) => {
-      const ctx = requestContext.getStore();
-      if (ctx && (req.session as any)?.userId && !ctx.userId) {
-        ctx.userId = (req.session as any).userId;
-      }
-      originalNext(err);
-    };
-
+  // userId дописывает в этот же объект middleware сразу после сессии (`routes.ts`):
+  // здесь сессии ещё нет. Строка запроса берёт контекст из замыкания, а не из
+  // `getStore()` — обработчик `finish` не обязан выполняться в контексте запроса.
+  const ctx: RequestContext = { reqId, method: req.method, path: reqPath };
+  requestContext.run(ctx, () => {
     res.on("finish", () => {
       const duration = Date.now() - start;
       if (reqPath.startsWith("/api") && !reqPath.startsWith("/api/logs")) {
-        const ctx = requestContext.getStore();
-        const userTag = ctx?.userId ? ` user:${ctx.userId}` : "";
+        // Вход и выход меняют сессию по ходу запроса — берём итоговое состояние.
+        const userId = ctx.userId ?? req.session?.userId;
+        const userTag = userId ? ` user:${userId}` : "";
         const line = `[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`;
         const code = res.statusCode;
         if (code >= 500) {
@@ -102,7 +97,7 @@ app.use((req, res, next) => {
       }
     });
 
-    wrappedNext();
+    next();
   });
 });
 

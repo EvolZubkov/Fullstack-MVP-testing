@@ -13,7 +13,7 @@ const { scenarioSection, scenarioPool, snapshotDataSource, isScenarioSection } =
 
 const item = {
   id: "item-1", testId: "t", topicId: "bank", questionId: null, title: null,
-  required: true, timeLimitMinutes: 10, imageUrl: null, sortOrder: 0,
+  required: true, timeLimitMinutes: 10, sortOrder: 0,
 };
 const q = (id: string, type: string) => ({ id, type, topicId: "bank" });
 const bankQuestions = [q("s1", "simulation"), q("x1", "single"), q("s2", "simulation"), q("x2", "long")];

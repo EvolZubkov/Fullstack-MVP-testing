@@ -13,7 +13,8 @@
  * the same under every design template, including those living in their own repositories, and a
  * template that never heard of scenarios must not draw a broken cover.
  */
-import type { Scenario } from "./contract";
+import type { ScenarioInput } from "./upgrade";
+import { playable, type PlayableScenario } from "./variant";
 import type { SimPenalties } from "./scoring";
 
 /** What the cover says about the run of this question. */
@@ -27,16 +28,22 @@ export function simCoverState(answer: unknown): SimCoverState {
   const outcome = answer && typeof answer === "object" ? (answer as { outcome?: unknown }).outcome : undefined;
   if (outcome === "exited") return "exited";
   if (outcome === "timeout") return "timeout";
-  if (outcome === "success" || outcome === "partial" || outcome === "fail") return "done";
+  if (outcome === "success" || outcome === "partial" || outcome === "fail" || outcome === "finale" || outcome === "declared") return "done";
   return "fresh";
 }
 
 /** The image of the first scene — what the cover shows blurred; `null` when there is none. */
-export function simCoverShot(scenario: Scenario | null | undefined): string | null {
+export function simCoverShot(scenario: ScenarioInput | PlayableScenario | null | undefined): string | null {
   if (!scenario) return null;
-  const scene = scenario.scenes?.find((s) => s.id === scenario.start) ?? scenario.scenes?.[0];
+  let play: PlayableScenario;
+  try {
+    play = playable(scenario);
+  } catch {
+    return null;
+  }
+  const scene = play.scenes.find((s) => s.id === play.start) ?? play.scenes[0];
   const first = scene?.elements?.find((el) => !el.hidden) ?? scene?.elements?.[0];
-  const media = first ? scenario.media?.find((m) => m.id === first.media) : undefined;
+  const media = first ? play.media.find((m) => m.id === first.media) : undefined;
   return media?.file ?? null;
 }
 
@@ -150,14 +157,15 @@ function duration(seconds: number): string {
  * @param penalties the resolved penalties of the question in this test; `null` — unknown, the
  *   line about the score is left out rather than guessed
  */
-export function simRules(scenario: Scenario, penalties: SimPenalties | null): SimRules {
-  const settings = scenario.settings ?? {};
+export function simRules(scenario: ScenarioInput | PlayableScenario, penalties: SimPenalties | null): SimRules {
+  const play = playable(scenario);
+  const settings = play.settings;
   const items = ["Задание откроется на весь экран. Выполните действия в окне системы так, как делаете это в работе."];
   const limit = typeof settings.limitSeconds === "number" && settings.limitSeconds > 0 ? settings.limitSeconds : null;
   if (limit !== null) {
     items.push(`На задание отводится ${duration(limit)}. Таймер — на панели над окном системы; когда время выйдет, задание завершится.`);
   }
-  if (penalties) {
+  if (penalties && play.kind === "control") {
     const named = PENALTY_WORDS.filter(([key]) => penalties[key] > 0).map(([, words]) => words);
     if (named.length > 0) {
       // Через точку с запятой: у части названий своя запятая внутри («действия, которые …»).
@@ -170,7 +178,7 @@ export function simRules(scenario: Scenario, penalties: SimPenalties | null): Si
     items.push(`После ${after} ${plural(after, "ошибки", "ошибок", "ошибок")} на одном шаге появится подсказка.${hintCosts ? " Подсказка тоже снижает балл." : ""}`);
   }
   items.push("Выйти досрочно можно кнопкой на панели. Задание тогда будет засчитано как невыполненное.");
-  return { title: "Практическое задание", description: scenario.meta?.title ?? "", items };
+  return { title: "Практическое задание", description: play.meta?.title ?? "", items };
 }
 
 /**

@@ -178,6 +178,7 @@ interface FetchCfg {
   resume?: ReturnType<typeof jsonRes>;
   finish?: ReturnType<typeof jsonRes>;
   sectionResult?: ReturnType<typeof jsonRes>;
+  timerStart?: ReturnType<typeof jsonRes>;
   noSectionResultsTpl?: boolean;
 }
 
@@ -192,6 +193,10 @@ function installFetch(cfg: FetchCfg = {}) {
     if (u.includes("/attempts/start")) return cfg.startAttempt ?? jsonRes(attemptBody());
     if (u.includes("/resume")) return cfg.resume ?? jsonRes({ hasInProgress: false });
     if (u.includes("/save-progress")) return jsonRes({});
+    if (u.includes("/timer-start")) {
+      const now = new Date().toISOString();
+      return cfg.timerStart ?? jsonRes({ timerStartedAt: now, serverNow: now });
+    }
     if (u.includes("/section-result")) return cfg.sectionResult ?? jsonRes({ topicName: "Тема A", correct: 1, total: 1, percent: 100, passed: true });
     if (u.includes("/finish")) return cfg.finish ?? jsonRes({ id: "attempt-1" });
     return jsonRes({});
@@ -264,7 +269,8 @@ describe("<TakeTestPage /> resume variants", () => {
   it("aborts resume with a toast when the elapsed time already exceeds the limit", async () => {
     const stale = resumeAttempt([qSingle("q1", "В1")], ["q1"]);
     (stale.attempt as any).timeLimitMinutes = 30;
-    (stale.attempt as any).startedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    // The clock runs from the first question (`timerStartedAt`), not from «Начать».
+    (stale.attempt as any).timerStartedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     await renderToStart({
       tests: [standardTest({ inProgressAttemptId: "attempt-r", resumeIndex: 0, resumeTotal: 1 })],
       resume: jsonRes(stale),
@@ -272,6 +278,25 @@ describe("<TakeTestPage /> resume variants", () => {
     fireEvent.click(screen.getByTestId("ts-resume"));
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner"));
     expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Время истекло" }));
+  });
+
+  it("an attempt that never reached a question does not expire on its start: the clock waits for it", async () => {
+    const early = resumeAttempt([qSingle("q1", "В1")], ["q1"]);
+    (early.attempt as any).timeLimitMinutes = 30;
+    (early.attempt as any).startedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    (early.attempt as any).timerStartedAt = null;
+    await renderToStart({
+      tests: [standardTest({ inProgressAttemptId: "attempt-r", resumeIndex: 0, resumeTotal: 1 })],
+      resume: jsonRes(early),
+    });
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fireEvent.click(screen.getByTestId("ts-resume"));
+    await screen.findByTestId("question-screen");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([u]) => String(u) === "/api/attempts/attempt-r/timer-start")).toBe(true),
+    );
+    expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
+    expect(toastSpy).not.toHaveBeenCalledWith(expect.objectContaining({ title: "Время истекло" }));
   });
 
   it("toasts a restore error when the resume request fails", async () => {
@@ -628,5 +653,55 @@ describe("<TakeTestPage /> flat flexible обзор", () => {
     await screen.findByTestId("ts-goto:1");
     fireEvent.click(screen.getByTestId("ts-goto:1")); // обзор pill → jump to question 2
     await screen.findByTestId("question-screen");
+  });
+});
+
+// ─── test timer starts on the first question ─────────────────────────────────
+
+describe("<TakeTestPage /> test timer starts on the first question", () => {
+  const timerStartCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.filter(([u]) => String(u).endsWith("/timer-start"));
+
+  it("a timed attempt asks the server to start the clock once, when the question shows", async () => {
+    const fetchMock = installFetch({
+      tests: [standardTest({ timeLimitMinutes: 30 })],
+      startAttempt: jsonRes(attemptBody({ timeLimitMinutes: 30 })),
+    });
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    expect(timerStartCalls(fetchMock)).toHaveLength(0);
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await screen.findByTestId("question-screen");
+    await waitFor(() => expect(timerStartCalls(fetchMock)).toHaveLength(1));
+    expect(String(timerStartCalls(fetchMock)[0][0])).toBe("/api/attempts/attempt-1/timer-start");
+    // Moving on to the next question does not restart the clock.
+    fireEvent.click(screen.getByTestId("qs-ans-0"));
+    fireEvent.click(await screen.findByText("Далее"));
+    await waitFor(() => expect(counter()).toContain("Вопрос 2 из 2"));
+    expect(timerStartCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it("a clock the server started long ago expires the attempt", async () => {
+    const started = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    installFetch({
+      tests: [standardTest({ timeLimitMinutes: 30 })],
+      startAttempt: jsonRes(attemptBody({ timeLimitMinutes: 30 })),
+      timerStart: jsonRes({ timerStartedAt: started, serverNow: new Date().toISOString() }),
+    });
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Время истекло" })),
+    );
+  });
+
+  it("an untimed attempt never asks for a clock", async () => {
+    const fetchMock = installFetch();
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await screen.findByTestId("question-screen");
+    expect(timerStartCalls(fetchMock)).toHaveLength(0);
   });
 });

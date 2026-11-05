@@ -24,6 +24,7 @@ import { ArrowRight, CornerDownRight } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Question } from "@shared/schema";
 import { optionFeedbackAt } from "@shared/questions/option-feedback";
+import { questionLabel } from "@shared/questions/question-label";
 import type { TestEditorModel } from "../test-editor.types";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 
@@ -40,7 +41,9 @@ type QuestionRow = Pick<
   Question,
   | "id"
   | "topicId"
+  | "type"
   | "prompt"
+  | "promptFormat"
   | "dataJson"
   | "feedbackMode"
   | "feedback"
@@ -176,7 +179,7 @@ export function QuestionFeedbackRegistry({
                       return (
                         <Fragment key={q.id}>
                           <tr className={overrides.length > 0 ? "tb-qfeedback-row--has-sub" : undefined}>
-                            <td>{q.prompt || "Без формулировки"}</td>
+                            <td>{questionLabel(q) || "Без формулировки"}</td>
                             {/* Э5.8: режим называется ровно так же, как в карточке вопроса —
                                 из одного словаря, чтобы реестр не завёл своих синонимов. */}
                             <td>

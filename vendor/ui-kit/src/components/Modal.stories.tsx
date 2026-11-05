@@ -3,6 +3,7 @@ import { fn } from 'storybook/test';
 import { useState } from 'react';
 import { Button } from './Button';
 import { ModalDialog, DialogHeader, DialogContent } from './Modal';
+import { Tabs } from './Tabs';
 
 const meta: Meta<typeof ModalDialog> = {
   title: 'Overlay/ModalDialog',
@@ -95,3 +96,37 @@ export const Composable: Story = {
   },
 };
 
+/**
+ * `fill`: the dialog keeps the full available height, so switching between a short and a
+ * long tab does not make it jump; the body scrolls itself and the footer stays put.
+ */
+export const Fill: Story = {
+  args: { size: 'xl', title: 'Управление назначениями', description: 'Базовые технологии', fill: true },
+  render: (args) => {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Открыть</Button>
+        <ModalDialog {...args} open={open} onClose={() => { setOpen(false); args.onClose?.(); }}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setOpen(false)}>Отмена</Button>
+              <Button onClick={() => setOpen(false)}>Назначить (0)</Button>
+            </>
+          }
+        >
+          <Tabs
+            variant="segment" align="stretch" fill
+            items={[
+              { id: 'short', label: 'Коротко', content: <p>Три строки списка.</p> },
+              {
+                id: 'long', label: 'Длинно',
+                content: <div>{Array.from({ length: 60 }, (_, i) => <p key={i}>Строка {i + 1}</p>)}</div>,
+              },
+            ]}
+          />
+        </ModalDialog>
+      </>
+    );
+  },
+};

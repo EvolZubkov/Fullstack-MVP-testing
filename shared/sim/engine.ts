@@ -14,23 +14,26 @@
  * - a neutral zone absorbs the click; a click on a double-click zone waits for the double click;
  * - a click past every zone is a miss, and on a scene with `onMissGoto` also moves there;
  * - an action whose `when` does not hold applies `otherwise` and counts as «blocked» (a miss);
- * - effects run in order; entering a scene with a goal ends the run;
+ * - effects run in order; entering a scene with an end finishes the run: `success` is judged by
+ *   the goal checks, `fail` is a dead end, `finale` closes a research scenario;
+ * - an action without a role (research scenarios) counts as an action and nothing more;
+ * - every accepted action and field commit adds its cost to the run (`./costs`); traps do not;
  * - after `hints.afterMisses` consecutive errors on a scene the run raises a hint;
  * - element visibility is kept per element id across scenes, like field values.
  */
 import { checkRuleSet, type AnswerRuleSet } from "@shared/answer-check";
 import {
-  CONTRACT_VERSION,
   RESULT_FORMAT,
+  RESULT_VERSION,
   type ActionBase,
   type Box,
   type CheckResult,
   type Condition,
+  type Device,
   type Effect,
   type FieldDef,
   type FieldPlacement,
   type Outcome,
-  type Scenario,
   type Scene,
   type SceneElement,
   type SimEvent,
@@ -39,6 +42,9 @@ import {
   type Zone,
 } from "./contract";
 import { boundsOf, contains, type ZoneShape } from "./geometry";
+import { actionCost, fieldCost } from "./costs";
+import type { ScenarioInput } from "./upgrade";
+import { playable, type PlayableScenario } from "./variant";
 
 /** Default number of consecutive errors on a scene before a hint shows. */
 export const DEFAULT_HINT_AFTER = 3;
@@ -78,11 +84,13 @@ function shapeOf(z: Zone): ZoneShape {
 export interface RunOptions {
   /** Clock, injectable for tests. */
   now?: () => number;
+  /** The variant to play; desktop by default. */
+  device?: Device;
 }
 
 /** One live run of a scenario. */
 export interface SimRun {
-  readonly scenario: Scenario;
+  readonly scenario: PlayableScenario;
   /** The current scene. */
   scene(): Scene;
   /** Stage size of the current scene. */
@@ -113,6 +121,8 @@ export interface SimRun {
   /** Replay: a click past every zone at stage point `(x, y)`. */
   missAt(x: number, y: number): Reaction;
   exit(): Reaction;
+  /** «Я закончил» of a research scenario; does nothing in a control one or when switched off. */
+  declare(): Reaction;
   timeout(): Reaction;
   result(): SimResult;
 }
@@ -129,14 +139,15 @@ function passes(check: AnswerRuleSet | undefined, value: string): boolean {
  * @param options  Clock override for tests.
  * @returns The live run.
  */
-export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun {
+export function createRun(input: ScenarioInput | PlayableScenario, options: RunOptions = {}): SimRun {
+  const scenario = playable(input, options.device);
   const now = options.now ?? (() => Date.now());
   const t0 = now();
   const startedAt = new Date().toISOString();
   const scenes = new Map(scenario.scenes.map((s) => [s.id, s]));
   const fieldDefs = new Map<string, FieldDef>((scenario.fields ?? []).map((f) => [f.id, f]));
-  const hintsOn = scenario.settings?.hints?.enabled !== false;
-  const hintAfter = scenario.settings?.hints?.afterMisses ?? DEFAULT_HINT_AFTER;
+  const hintsOn = scenario.settings.hints?.enabled !== false;
+  const hintAfter = scenario.settings.hints?.afterMisses ?? DEFAULT_HINT_AFTER;
 
   let current = scenes.get(scenario.start) as Scene;
   const values: Record<string, string> = {};
@@ -146,10 +157,11 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
   const events: SimEvent[] = [];
   const counts = { actions: 0, misses: 0, blocked: 0, wrongValues: 0, detours: 0, traps: 0, hints: 0 };
   const traps: SimResult["traps"] = [];
+  let cost = 0;
   let localErrors = 0;
   let hintOn: Hint | null = null;
   let selected: string | null = null;
-  let finished: { outcome: Outcome; at: number; goal: SimResult["goal"] } | null = null;
+  let finished: { outcome: Outcome; at: number; goal: SimResult["goal"]; finale: NonNullable<SimResult["finale"]> | null } | null = null;
 
   const t = () => now() - t0;
   const elementOf = (id: string): SceneElement | undefined => current.elements.find((e) => e.id === id);
@@ -168,20 +180,25 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
     return !evaluate(c.not);
   }
 
-  function finish(outcome: Outcome, goal: SimResult["goal"]): void {
+  function finish(outcome: Outcome, goal: SimResult["goal"], finale: NonNullable<SimResult["finale"]> | null = null): void {
     if (finished) return;
-    finished = { outcome, at: t(), goal };
+    finished = { outcome, at: t(), goal, finale };
     hintOn = null;
   }
 
-  function judgeGoal(scene: Scene): void {
-    const g = scene.goal!;
-    if (g.outcome === "fail") {
+  function judgeEnd(scene: Scene): void {
+    const end = scene.end!;
+    if (end.outcome === "fail") {
       events.push({ t: t(), type: "goal", scene: scene.id, outcome: "fail" });
-      finish("fail", { scene: scene.id, message: g.message, checks: [], share: 0 });
+      finish("fail", { scene: scene.id, message: end.message, checks: [], share: 0 });
       return;
     }
-    const checks: CheckResult[] = (g.checks ?? []).map((c) => ({
+    if (end.outcome === "finale") {
+      events.push({ t: t(), type: "goal", scene: scene.id, outcome: "finale", finale: scene.id });
+      finish("finale", null, { scene: scene.id, title: end.title, target: end.target === true });
+      return;
+    }
+    const checks: CheckResult[] = (scenario.goal?.checks ?? []).map((c) => ({
       field: c.field,
       passed: passes(c.check ?? fieldDefs.get(c.field)?.check, values[c.field] ?? ""),
       critical: c.critical !== false,
@@ -193,7 +210,7 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
       ? "success"
       : checks.some((c) => c.critical && !c.passed) ? "fail" : "partial";
     events.push({ t: t(), type: "goal", scene: scene.id, outcome });
-    finish(outcome, { scene: scene.id, message: g.message, checks, share: total ? got / total : 1 });
+    finish(outcome, { scene: scene.id, message: end.message, checks, share: total ? got / total : 1 });
   }
 
   function enter(id: string): void {
@@ -204,7 +221,7 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
     localErrors = 0;
     hintOn = null;
     events.push({ t: t(), type: "enter", scene: id });
-    if (next.goal) judgeGoal(next);
+    if (next.end) judgeEnd(next);
   }
 
   /** Apply effects; returns whether the scene changed. */
@@ -251,8 +268,14 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
       if (a.role === "trap") {
         counts.traps += 1;
         traps.push({ id: a.id, error: a.error ?? a.id, t: t() });
+      } else {
+        cost += actionCost(a, scenario.settings.costs);
       }
-      events.push({ t: t(), type: "action", scene: current.id, id: a.id, role: a.role, ...(a.role === "trap" ? { error: a.error } : {}) });
+      events.push({
+        t: t(), type: "action", scene: current.id, id: a.id,
+        ...(a.role ? { role: a.role } : {}),
+        ...(a.role === "trap" ? { error: a.error } : {}),
+      });
       localErrors = 0;
       hintOn = null;
     }
@@ -304,7 +327,7 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
   const run: SimRun = {
     scenario,
     scene: () => current,
-    stage: () => current.size ?? scenario.settings?.stage ?? { w: 1920, h: 1080 },
+    stage: () => current.size ?? scenario.settings.stage ?? { w: 1920, h: 1080 },
     isVisible,
     value: (id) => values[id] ?? "",
     isWrong: (id) => !!wrong[id],
@@ -355,6 +378,7 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
       const placement: FieldPlacement | undefined = (current.fields ?? []).find((p) => p.field === fieldId && p.editable);
       const def = fieldDefs.get(fieldId);
       if (!placement || !def) return { kind: "none" };
+      cost += fieldCost(scenario.settings.costs);
       values[fieldId] = value;
       const judged = !!def.check && (def.checkWhen ?? "input") === "input" && value.trim() !== "";
       const correct = judged ? passes(def.check, value) : null;
@@ -393,6 +417,13 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
       return { kind: "done", outcome: "exited" };
     },
 
+    declare() {
+      if (finished || scenario.kind !== "research" || scenario.settings.finishButton === false) return { kind: "none" };
+      events.push({ t: t(), type: "declare" });
+      finish("declared", null);
+      return { kind: "done", outcome: "declared" };
+    },
+
     timeout() {
       if (finished) return { kind: "none" };
       events.push({ t: t(), type: "timeout" });
@@ -403,13 +434,16 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
     result() {
       return {
         format: RESULT_FORMAT,
-        version: CONTRACT_VERSION,
+        version: RESULT_VERSION,
         scenario: { title: scenario.meta.title },
+        variant: scenario.device,
         startedAt,
         durationMs: finished ? finished.at : t(),
         outcome: finished?.outcome ?? "exited",
         goal: finished?.goal ?? null,
+        finale: finished?.finale ?? null,
         counts: { ...counts },
+        cost,
         traps: traps.slice(),
         fields: { ...values },
         events: events.slice(),
@@ -418,6 +452,6 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
   };
 
   events.push({ t: 0, type: "enter", scene: current.id });
-  if (current.goal) judgeGoal(current);
+  if (current.end) judgeEnd(current);
   return run;
 }

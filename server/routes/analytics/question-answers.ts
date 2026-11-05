@@ -33,7 +33,7 @@ import { readTestFilterQuery } from "./observation-query";
 import { pickAttemptIds, type AttemptPick } from "@shared/analytics/attempt-pick";
 import { buildSimulationStats } from "../../services/analytics/simulation-stats";
 import { isSimulation } from "@shared/questions/question-type";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 
 const router = Router();
 
@@ -187,7 +187,7 @@ router.get(
       const { testId, questionId } = req.params;
       const found = await selectFacts(testId, questionId, readSelection(req, testId));
       if (!found) return res.status(404).json({ error: "Задание не входит в этот тест" });
-      const scenario = (found.question.dataJson as { scenario?: Scenario } | null)?.scenario;
+      const scenario = scenarioOf(found.question.dataJson);
       if (!isSimulation(found.question.type) || !scenario) {
         return res.status(422).json({ error: "Задание не сценарий" });
       }

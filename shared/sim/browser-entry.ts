@@ -8,4 +8,5 @@
 export { createRun } from "./engine";
 export { mountPlayer, comboOf } from "./player";
 export { diffScenes, appearSchedule } from "./diff";
-export { SCENARIO_FORMAT, RESULT_FORMAT, CONTRACT_VERSION } from "./contract";
+export { asScenario } from "./upgrade";
+export { SCENARIO_FORMAT, RESULT_FORMAT, CONTRACT_VERSION, RESULT_VERSION } from "./contract";

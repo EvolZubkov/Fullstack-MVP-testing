@@ -12,19 +12,19 @@ import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } 
 import { withTemplateAssetBase } from "@shared/template/asset-base";
 import { declaredThemes, isTestTheme, supportsThemes, TEST_THEMES } from "@shared/template/themes";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
+import { hiddenStartFacts } from "@shared/template/start-facts";
 import { colorParamKeys } from "@shared/template/theme-params";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
-import { readableTestScope, canGrantAccess } from "../services/test-access";
+import { readableTestScope, canGrantAccess, canAssignTest } from "../services/test-access";
 import { visibleTopic } from "../services/topic-access";
-import { assessTestPublish } from "../services/draw-feasibility";
-import { assessBreakdownPublish } from "../services/breakdown-warnings";
+import { assessTestPublish, type PublishCheckFinding } from "../services/draw-feasibility";
+import { planScormPublication, publishTest } from "../services/test-publish";
 import {
   createTestSnapshot,
   getPublicationState,
   publishedSnapshotOf,
-  type ExportVersion,
   type TestSnapshotContent,
 } from "../services/test-snapshot";
 import { countUnmappedPages } from "../services/page-variant-audit";
@@ -118,7 +118,6 @@ const scenarioBodySchema = z.object({
   title: z.string().max(200).nullable().optional(),
   required: z.boolean().optional(),
   timeLimitMinutes: z.number().int().positive().nullable().optional(),
-  imageUrl: z.string().nullable().optional(),
   // Группа тем, в которой стоит пункт роутера (как `group_key` раздела).
   groupKey: z.string().min(1).nullable().optional(),
   // Балл по умолчанию для сценариев пункта (как у раздела темы); null — по тесту.
@@ -184,6 +183,10 @@ const testBodyBaseSchema = z.object({
   // PRD-43: independent of allowReturnToUnanswered.
   quickAdvance: z.boolean().optional(),
   showSectionResults: z.boolean().optional(),
+  // Карточки «Результаты по темам» на экране итогов и в отчёте; умолчание колонки — печатать.
+  showTopicResults: z.boolean().optional(),
+  // Строка «Лучший результат за N попыток» в шапке отчёта; умолчание колонки — печатать.
+  showAttemptsCount: z.boolean().optional(),
   // Обзор при полностью отвеченном объёме — авторское решение, см. `review-gate`.
   skipReviewWhenComplete: z.boolean().optional(),
   // PRD-67: leaving a started section with a time limit closes it (see schema).
@@ -513,6 +516,10 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
         return {
           ...test,
           ownerName,
+          // The row's «Назначить» is drawn by the capability alone on the client;
+          // whether THIS test may be assigned is the object-level answer, so it
+          // travels with the row instead of being guessed from the role.
+          canAssign: await canAssignTest(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test),
           sections: sectionsWithDetails,
           adaptiveSettings,
           publication,
@@ -645,6 +652,13 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
         ...payload,
         design: { ...restDesign, ...(startImageUrl ? { startImageUrl } : {}) },
       };
+      // The facts the author switched off on the page — the client's start builder drops
+      // them, by the same shared rule the SCORM runtime applies. Absent when none are off.
+      const hiddenFacts = hiddenStartFacts(startVariant, startPageSettings);
+      if (hiddenFacts.length) {
+        res.json({ ...payload, hiddenFacts });
+        return;
+      }
     }
     // PRD-12 FR-6: the content screen also carries the manifest's placeholder
     // declarations — the web host builds its page skeleton from them through the
@@ -769,6 +783,8 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       allowAnswerChange,
       quickAdvance,
       showSectionResults,
+      showTopicResults,
+      showAttemptsCount,
       skipReviewWhenComplete,
       closeSectionOnLeave,
       lmsAttemptResult,
@@ -866,6 +882,8 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         allowAnswerChange,
         quickAdvance,
         showSectionResults,
+        showTopicResults,
+        showAttemptsCount,
         skipReviewWhenComplete,
         closeSectionOnLeave,
         lmsAttemptResult,
@@ -1263,6 +1281,8 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       allowAnswerChange,
       quickAdvance,
       showSectionResults,
+      showTopicResults,
+      showAttemptsCount,
       skipReviewWhenComplete,
       closeSectionOnLeave,
       lmsAttemptResult,
@@ -1340,6 +1360,8 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         allowAnswerChange,
         quickAdvance,
         showSectionResults,
+        showTopicResults,
+        showAttemptsCount,
         skipReviewWhenComplete,
         closeSectionOnLeave,
         lmsAttemptResult,
@@ -1458,6 +1480,20 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
   }
 });
 
+/**
+ * Body of the `409` refusing a publication whose draw is infeasible (PRD-15 FR-06): the same
+ * for the «Опубликовать» action, the forced republish and the SCORM export.
+ *
+ * @param findings why the draw cannot be delivered
+ */
+function publishInfeasibleBody(findings: PublishCheckFinding[]) {
+  return {
+    error: "publish_infeasible",
+    message: "Выдача вопросов невыполнима при текущем составе тем",
+    findings,
+  };
+}
+
 // PATCH /api/tests/:id/status - Сменить статус (без инкремента версии, PRD-7 §9)
 router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope("edit"), async (req, res) => {
   try {
@@ -1481,44 +1517,24 @@ router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope
       });
     }
 
-    // PRD-15 FR-06 (E-12): a test must not be published with an infeasible
-    // draw — pools, blueprint quotas and adaptive levels are checked against
-    // the current bank state.
+    // Publishing (feasibility check, snapshot, advisory breakdown notes) is one operation
+    // shared with the SCORM export, which publishes too (decision Р7а). Draft/archive
+    // create no snapshot.
     if (status === "published") {
-      const findings = await assessTestPublish(req.params.id);
-      if (findings.length > 0) {
-        return res.status(409).json({
-          error: "publish_infeasible",
-          message: "Выдача вопросов невыполнима при текущем составе тем",
-          findings,
-        });
-      }
+      const outcome = await publishTest(req.params.id, req.currentUser?.id ?? null);
+      if (!outcome) return res.status(404).json({ error: "Test not found" });
+      if (!outcome.ok) return res.status(409).json(publishInfeasibleBody(outcome.findings));
+      const { updated, breakdownWarnings, scoringWarnings } = outcome;
+      return res.json({
+        ...updated,
+        ...(breakdownWarnings.length > 0 ? { breakdownWarnings } : {}),
+        ...(scoringWarnings.length > 0 ? { scoringWarnings } : {}),
+      });
     }
 
-    const updated = await storage.patchTestStatus(req.params.id, status as "draft" | "published" | "archived");
+    const updated = await storage.patchTestStatus(req.params.id, status as "draft" | "archived");
     if (!updated) return res.status(404).json({ error: "Test not found" });
-
-    // PRD-15 FR-10: publishing (and re-publishing) freezes the test into a new
-    // snapshot. Delivery of this test now reads from the snapshot; edits to the
-    // bank do not affect it until the next publish. Draft/archive create none.
-    if (status === "published") {
-      await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
-    }
-
-    // PRD-50 FR-45 - FR-47: предупреждения, а не запреты. Считаются ПОСЛЕ успешной
-    // публикации и снимка: они ни на что не влияют, кроме того, что автор о них узнаёт.
-    // The publication itself has ALREADY succeeded above, so a failure to gather advisory
-    // notes must not turn that success into a 500 for the author: it is swallowed, logged
-    // and the response stays exactly what it was before this PRD.
-    let breakdownWarnings: Awaited<ReturnType<typeof assessBreakdownPublish>> = [];
-    if (status === "published") {
-      try {
-        breakdownWarnings = await assessBreakdownPublish(req.params.id);
-      } catch (error) {
-        logger.error("breakdown publish warnings failed: " + (error as Error).message, "tests");
-      }
-    }
-    res.json(breakdownWarnings.length > 0 ? { ...updated, breakdownWarnings } : updated);
+    res.json(updated);
   } catch (error) {
     logger.error("PATCH status error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to update test status" });
@@ -1540,13 +1556,7 @@ router.post("/:id/republish-force", requirePermission("tests.publish"), requireT
 
     // Publish-time feasibility still applies (E-12): do not freeze an unplayable test.
     const findings = await assessTestPublish(req.params.id);
-    if (findings.length > 0) {
-      return res.status(409).json({
-        error: "publish_infeasible",
-        message: "Выдача вопросов невыполнима при текущем составе тем",
-        findings,
-      });
-    }
+    if (findings.length > 0) return res.status(409).json(publishInfeasibleBody(findings));
 
     const annulled = await storage.annulInProgressAttempts(req.params.id);
     await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
@@ -1635,21 +1645,12 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
   }
 });
 
-// GET /api/tests/:id/export/scorm - Экспорт SCORM
-/**
- * Version an export asks for (stage E5, owner decision Р7): `?source=published|draft`.
- *
- * @returns the version; `undefined` when absent (the snapshot-aware default); `null` when invalid
- */
-function exportVersionOf(value: unknown): ExportVersion | undefined | null {
-  if (value === undefined || value === "") return undefined;
-  return value === "published" || value === "draft" ? value : null;
-}
-
 /**
  * GET /api/tests/:id/export/options — what the «Сохранить как…» window shows (stage E5):
  * whether a published version exists and which, and whether telemetry is on in each version.
  * Telemetry is shown, never overridden (owner decision Р8): it is a setting of the test.
+ * `scorm` — what a SCORM export will do with the publication (decision Р7а), from the same
+ * {@link planScormPublication} the export itself follows.
  */
 router.get("/:id/export/options", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
@@ -1659,6 +1660,7 @@ router.get("/:id/export/options", requirePermission("tests.read"), requireTestSc
     const content = snapshot?.contentJson as TestSnapshotContent | undefined;
     res.json({
       published: snapshot ? { version: snapshot.version, publishedAt: snapshot.publishedAt } : null,
+      scorm: await planScormPublication(test.id),
       telemetry: {
         draft: test.telemetryEnabled === true,
         published: content ? content.test.telemetryEnabled === true : null,
@@ -1670,14 +1672,37 @@ router.get("/:id/export/options", requirePermission("tests.read"), requireTestSc
   }
 });
 
+// GET /api/tests/:id/export/scorm - Экспорт SCORM
 router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
-    const version = exportVersionOf(req.query.source);
-    if (version === null) return res.status(400).json({ error: "source: published или draft" });
+    // Decision Р7а (2026-10-31): a SCORM export IS a publication, so there is no version to
+    // choose. A stale client asking for one is refused rather than silently given another.
+    if (req.query.source !== undefined) {
+      return res.status(400).json({ error: "У выгрузки SCORM нет выбора версии: выгрузка публикует тест", field: "source" });
+    }
+    // A draft, or a published test edited since its last publication, is published first and
+    // the package is baked from that new snapshot; an unchanged published test bakes its active
+    // snapshot. Archived tests are outside the decision: baked live, as before.
+    const plan = await planScormPublication(req.params.id);
+    if (plan?.publishes) {
+      const outcome = await publishTest(req.params.id, req.currentUser?.id ?? null);
+      if (outcome && !outcome.ok) return res.status(409).json(publishInfeasibleBody(outcome.findings));
+      if (outcome?.ok) {
+        logger.info(`Published by SCORM export: test ${req.params.id} version ${plan.version} by user=${req.session.userId}`, "scorm-export");
+        if (outcome.breakdownWarnings.length > 0) {
+          logger.warn(`Breakdown publish warnings for test ${req.params.id}: ${outcome.breakdownWarnings.length}`, "scorm-export");
+        }
+        if (outcome.scoringWarnings.length > 0) {
+          logger.warn(`Scoring publish warnings for test ${req.params.id}: ${outcome.scoringWarnings.length}`, "scorm-export");
+        }
+      }
+    }
     // Assemble the deliverable via the shared builder (NFR-18: the debug player
-    // builds the SAME data the same way). Export uses the snapshot-aware source
-    // (published → active snapshot, draft → live).
-    const data = await buildScormExportData(req.params.id, { source: "export", version });
+    // builds the SAME data the same way).
+    const data = await buildScormExportData(req.params.id, {
+      source: "export",
+      version: plan?.version != null ? "published" : undefined,
+    });
     const test = data.test;
 
     // Телеметрия включается НАСТРОЙКОЙ ТЕСТА («Интеграция» → «Отправлять телеметрию о
@@ -1860,11 +1885,35 @@ router.get("/:id/access", requirePermission("tests.access.grant"), async (req, r
     if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const grants = await storage.getTestAccessGrants(test.id);
+    // The panel manages the WORKING slot only; review grants belong to the review
+    // dialog (PRD-52, 14.8) and would show here with a level the panel cannot set.
+    const grants = (await storage.getTestAccessGrants(test.id))
+      .filter((grant) => grant.accessLevel !== "review");
     res.json({ testId: test.id, ownerId: test.ownerId ?? null, grants });
   } catch (error) {
     logger.error("Get test access error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to get test access" });
+  }
+});
+
+// GET /api/tests/:id/access/users — the people the access panel names and offers.
+// Behind the panel's own gate, not `users.read`: the author grants access to their
+// own tests yet holds no registry right, so `GET /api/users` answered the panel with
+// a 403 and left the owner, the grantees and the add-user list nameless and empty.
+// Only what the panel shows leaves: id, name, email and roles — no groups, no hashes.
+router.get("/:id/access/users", requirePermission("tests.access.grant"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const users = await storage.getUsers();
+    const roles = await Promise.all(users.map((user) => storage.getUserRoles(user.id)));
+    res.json(users.map((user, i) => ({ id: user.id, name: user.name, email: user.email, roles: roles[i] })));
+  } catch (error) {
+    logger.error("Get test access users error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to get users" });
   }
 });
 
@@ -1906,7 +1955,7 @@ router.delete("/:id/access/:userId", requirePermission("tests.access.grant"), as
     if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const removed = await storage.removeTestAccessGrant(req.params.id, req.params.userId);
+    const removed = await storage.removeTestAccessGrant(req.params.id, req.params.userId, "work");
     if (!removed) return res.status(404).json({ error: "Grant not found" });
     res.status(204).end();
   } catch (error) {

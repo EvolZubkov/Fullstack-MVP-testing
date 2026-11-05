@@ -93,6 +93,11 @@ function extractExtraColumns(sheet: string[][]): {
 const SUBHEADERS = ["Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ"];
 /** Префикс служебных блоков пакета: не вопрос, не шкала, не показатель. */
 const META_PREFIX = "meta_";
+/**
+ * Префикс строки, которую пакет обезвредил: хвост прежнего отчёта той же сессии SCO, длиннее
+ * нового. Удалить строку SCORM 2004 не даёт, поэтому пакет переименовывает её в `void_<n>`.
+ */
+const VOID_PREFIX = "void_";
 /** Блок достигнутого уровня темы: `topic_<topicId>_level` (адаптивный тест). */
 const TOPIC_LEVEL_RE = /^topic_(.+)_level$/;
 /** Блок рекомендованного курса темы: `topic_<topicId>_course_<n>`, ответ — `object_id` курса. */
@@ -269,6 +274,8 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
     // Служебные блоки пакета (`meta_*`) разбираются отдельно и неопознанными НЕ считаются:
     // иначе импорт предупреждал бы «пакет собран под другой версией теста» на каждой выгрузке.
     else if (b.id.startsWith(META_PREFIX)) continue;
+    // Обезвреженный хвост прежнего отчёта — ничей ответ, и предупреждать о нём не о чем.
+    else if (b.id.startsWith(VOID_PREFIX)) continue;
     // Уровни и рекомендованные курсы тем читаются построчно ниже; прочие `topic_*` неизвестны.
     else if (TOPIC_LEVEL_RE.test(b.id) || TOPIC_COURSE_RE.test(b.id)) continue;
     // Протокол сценария читается построчно ниже.

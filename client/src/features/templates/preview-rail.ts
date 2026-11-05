@@ -128,9 +128,10 @@ function screenLabel(spec: ScreenSpec): string {
  */
 // Types whose variants group UNDER the type node (each variant is a demonstration
 // leaf), so «варианты одного типа» read as one collapsible group instead of many
-// top-level entries: the start screen's layout variants, question kinds, learning
-// pages and galleries.
-const TYPE_GROUPED = new Set(["start", "question", "content", "gallery"]);
+// top-level entries: the start screen's layout variants, question kinds, the
+// router's design variants (menu cards / cards with images), learning pages and
+// galleries.
+const TYPE_GROUPED = new Set(["start", "question", "content.router", "content", "gallery"]);
 
 function groupOf(spec: ScreenSpec, typeKey: string): { key: string; label: string; fromManifest: boolean } {
   if (TYPE_GROUPED.has(typeKey)) {

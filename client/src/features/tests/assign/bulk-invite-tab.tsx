@@ -16,6 +16,7 @@
  * that owns the tab strip, this owns everything behind the fourth tab.
  */
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, KeyRound, Trash2 } from "lucide-react";
 import {
@@ -242,12 +243,18 @@ interface BulkInviteTabProps {
    * человеку выдают — и подписи, которые об этом говорят.
    */
   purpose?: "assign" | "review";
+  /**
+   * Where to put the action of the first step («Проверить список»): a node in the
+   * dialog footer, so the action stands next to «Отмена» like the other tabs' actions
+   * (approved wireframe 2026-10-20). Without it the action stays inside the panel.
+   */
+  actionsSlot?: HTMLElement | null;
 }
 
 type BulkStep = "upload" | "preview" | "running" | "report";
 
 export function BulkInviteTab({
-  testId, testTitle, onGoToAssignments, purpose = "assign",
+  testId, testTitle, onGoToAssignments, purpose = "assign", actionsSlot,
 }: BulkInviteTabProps) {
   const isReview = purpose === "review";
   const { push: toast } = useToast();
@@ -370,7 +377,12 @@ export function BulkInviteTab({
       setReport(result);
       setStep("report");
       setGroupNameConflict(false);
-      // The «Назначено (N)» counter and the list behind it are now stale.
+      // The «Назначено (N)» / «Приглашены (N)» counter and the list behind it are now stale.
+      if (isReview) {
+        queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/review/reviewers`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/review/candidates`] });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
@@ -463,8 +475,19 @@ export function BulkInviteTab({
     />
   );
 
+  const checkButton = (
+    <Button
+      onClick={() => previewMutation.mutate()}
+      disabled={source === null}
+      loading={previewMutation.isPending}
+    >
+      Проверить список
+    </Button>
+  );
+
+  // 4x between the blocks: the 4px grid of this dialog (approved wireframe 2026-10-20).
   const uploadPanel = (
-    <Stack gap={5}>
+    <Stack gap={4}>
       {/* Верхняя половина. Разбор — по кнопке «Проверить список», как и у книги:
           нераспознанная запись должна попасть в предпросмотр строкой с ошибкой,
           а не гаснуть под курсором (раздел 16). */}
@@ -499,6 +522,8 @@ export function BulkInviteTab({
         />
       ) : (
         <FileUploader
+          // One line instead of a 200px block, so the tab fits without scrolling.
+          compact
           accept=".xlsx"
           disabled={Boolean(emails.trim())}
           title="Перетащите книгу или нажмите, чтобы выбрать"
@@ -554,15 +579,9 @@ export function BulkInviteTab({
 
       {!isReview && groupField}
 
-      <Cluster justify="end" gap={2}>
-        <Button
-          onClick={() => previewMutation.mutate()}
-          disabled={source === null}
-          loading={previewMutation.isPending}
-        >
-          Проверить список
-        </Button>
-      </Cluster>
+      {actionsSlot
+        ? createPortal(checkButton, actionsSlot)
+        : <Cluster justify="end" gap={2}>{checkButton}</Cluster>}
     </Stack>
   );
 

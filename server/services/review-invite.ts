@@ -129,10 +129,13 @@ export async function inviteReviewers(opts: ReviewInviteOptions): Promise<Review
     try {
       const { user, created } = await resolveReviewer(row, { actorId, storage });
 
+      // Грант рецензирования живёт в СВОЁМ слоте рядом с рабочим (PRD-52, 14.8):
+      // методист с `assign` получает `review` вторым грантом и назначать не перестаёт.
       const existingGrant = await storage.getTestGrantForUser(testId, user.id);
+      const reviewGrant = await storage.getTestReviewGrant(testId, user.id);
       // Уже имеющийся edit-доступ не понижаем до `review`: у автора теста и так
       // есть всё, что даёт рецензирование, а понижение отняло бы у него правку.
-      const hadAccess = existingGrant?.accessLevel === "review" || existingGrant?.accessLevel === "edit";
+      const hadAccess = Boolean(reviewGrant) || existingGrant?.accessLevel === "edit";
       if (!hadAccess) {
         await storage.upsertTestAccessGrant({
           testId, userId: user.id, accessLevel: "review", grantedBy: actorId,

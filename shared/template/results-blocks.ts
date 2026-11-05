@@ -9,6 +9,11 @@
  * `show` and `hide` let the author see and override that derivation — an implicit
  * rule the author cannot inspect reads as a bug the first time a block vanishes.
  *
+ * The score bar under the screen header is the one exception to the three-position
+ * rule: its `auto` has nothing of its own to derive and follows the score summary
+ * (`summary`), so hiding the summary hides the bar with it, while `show`/`hide` let the
+ * author part the two.
+ *
  * Pure — no DOM, no Node.
  */
 
@@ -16,8 +21,13 @@ import type { ScalesChartKind } from "./scales-chart";
 
 export type BlockSetting = "auto" | "show" | "hide";
 
+/** The score bar's setting: `summary` follows the score summary, the other two override it. */
+export type ScoreBarSetting = "summary" | "show" | "hide";
+
 export interface ResultsBlockSettings {
   scoreSummary?: BlockSetting;
+  /** The thin bar under the results header whose length is the score percent. */
+  scoreBar?: ScoreBarSetting;
   indicators?: BlockSetting;
   scales?: BlockSetting;
   /**
@@ -46,6 +56,14 @@ export interface ResultsBlocks {
   scales: boolean;
 }
 
+/** Effective visibility of the two ways the screen prints the score. */
+export interface ScoreDisplay {
+  /** The score summary: the ring and the numbers beside it. */
+  summary: boolean;
+  /** The score bar under the header. */
+  bar: boolean;
+}
+
 function resolve(setting: BlockSetting | undefined, auto: boolean): boolean {
   if (setting === "show") return true;
   if (setting === "hide") return false;
@@ -62,4 +80,20 @@ export function resolveResultsBlocks(
     indicators: resolve(settings.indicators, state.hasVisibleIndicators),
     scales: resolve(settings.scales, state.hasVisibleScales),
   };
+}
+
+/**
+ * Effective visibility of the score summary and the score bar.
+ *
+ * @param settings The «Итоги» variant settings; only `scoreSummary` and `scoreBar` are read.
+ * @param summaryAuto The `auto` answer for the summary, which the caller derives from the test.
+ * @returns Both answers; an unknown `scoreBar` value degrades to following the summary.
+ */
+export function resolveScoreDisplay(
+  settings: Pick<ResultsBlockSettings, "scoreSummary" | "scoreBar">,
+  summaryAuto: boolean,
+): ScoreDisplay {
+  const summary = resolve(settings.scoreSummary, summaryAuto);
+  const bar = settings.scoreBar === "show" ? true : settings.scoreBar === "hide" ? false : summary;
+  return { summary, bar };
 }

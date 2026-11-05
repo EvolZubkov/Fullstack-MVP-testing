@@ -42,7 +42,7 @@ describe("ключ пункта теста", () => {
 
 describe("разделы выдачи теста с роутером", () => {
   const section = (topicId: string) => ({ topicId }) as never;
-  const item = (id: string, topicId = "bank") => ({ id, testId: "t", topicId, questionId: null, title: null, required: true, timeLimitMinutes: null, imageUrl: null, sortOrder: 0 }) as never;
+  const item = (id: string, topicId = "bank") => ({ id, testId: "t", topicId, questionId: null, title: null, required: true, timeLimitMinutes: null, sortOrder: 0 }) as never;
 
   it("роутер: темы и пункты; пункт на той же теме, что раздел, остаётся отдельным разделом", () => {
     const test = { mode: "standard", flowPolicyJson: { mode: "router_by_topics" } } as never;

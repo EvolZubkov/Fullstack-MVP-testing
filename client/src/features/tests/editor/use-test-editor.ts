@@ -46,6 +46,7 @@ import { saveResultVariables } from "./result-variables-api";
 import { saveScales, saveMeasurements } from "./scales-api";
 import { saveQuestionOverrides } from "./scoring-api";
 import { putDesign } from "./use-design-settings";
+import { reportClientError } from "@/lib/report-error";
 import type {
   ScaleModel,
   TestDesignDraft,
@@ -391,6 +392,23 @@ export class SaveHttpError extends Error {
   }
 }
 
+/**
+ * Turn a failed save response into a {@link SaveHttpError}. The body is read ONCE,
+ * as text, and parsed afterwards: `res.json()` consumes the stream even when it
+ * fails, so the former `json()`-then-`text()` fallback threw «Body is unusable»
+ * on any non-JSON reply (a proxy's HTML page) and lost the HTTP status with it.
+ */
+async function saveHttpError(res: Response): Promise<SaveHttpError> {
+  const text = await res.text().catch(() => "");
+  let body: unknown = text;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    /* not JSON — keep the raw text */
+  }
+  return new SaveHttpError(res.status, body);
+}
+
 async function putTest(testId: string, payload: unknown): Promise<unknown> {
   const res = await fetch(`/api/tests/${testId}`, {
     method: "PUT",
@@ -398,15 +416,7 @@ async function putTest(testId: string, payload: unknown): Promise<unknown> {
     credentials: "include",
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = await res.text();
-    }
-    throw new SaveHttpError(res.status, body);
-  }
+  if (!res.ok) throw await saveHttpError(res);
   return res.json();
 }
 
@@ -454,15 +464,7 @@ async function postTest(payload: unknown): Promise<unknown> {
     credentials: "include",
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = await res.text();
-    }
-    throw new SaveHttpError(res.status, body);
-  }
+  if (!res.ok) throw await saveHttpError(res);
   return res.json();
 }
 
@@ -788,6 +790,7 @@ export function useTestEditor(
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
     },
     onError: (err) => {
+      reportSaveFailure(isEdit ? editTestId : createdIdRef.current, err);
       if (err instanceof SaveHttpError) {
         if (err.status === 409 && isConflictBody(err.body)) {
           setConflict({
@@ -921,6 +924,32 @@ function isConflictBody(value: unknown): value is {
     typeof (value as { currentVersion?: unknown }).currentVersion === "number" &&
     typeof (value as { expectedVersion?: unknown }).expectedVersion === "number"
   );
+}
+
+/**
+ * Send a failed save to the server log («Логи»). The server records its own
+ * rejections, but not the ones it never received — a proxy in front of it, a
+ * dropped connection — and its recent-events buffer forgets the rest within
+ * hours; the browser is the only party that sees every failure, so it reports
+ * each one, with the response the author got.
+ *
+ * Version conflicts are skipped: they are an ordinary concurrent-edit outcome
+ * with their own dialog, not a fault to investigate.
+ *
+ * @param testId - The test being saved, or null/undefined before its first save.
+ * @param err - What the save mutation threw.
+ */
+function reportSaveFailure(testId: string | null | undefined, err: unknown): void {
+  if (err instanceof SaveHttpError && err.status === 409 && isConflictBody(err.body)) return;
+  const target = testId ? `/api/tests/${testId}` : "/api/tests (new)";
+  if (err instanceof SaveHttpError) {
+    // A non-JSON body is usually a proxy's HTML error page: tags carry no signal.
+    const body =
+      typeof err.body === "string" ? err.body.replace(/<[^>]*>/g, " ") : JSON.stringify(err.body);
+    reportClientError("test-editor", `save ${target} -> HTTP ${err.status}: ${body}`);
+    return;
+  }
+  reportClientError("test-editor", `save ${target} failed: ${(err as Error)?.message ?? String(err)}`);
 }
 
 /**

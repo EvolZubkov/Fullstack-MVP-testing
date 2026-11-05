@@ -25,6 +25,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { templates } from "@shared/schema";
 import { normalizeAuthorPlain, normalizeAuthorHtml } from "@shared/text";
+import { CARD_IMAGES_SETTING_TYPE, normalizeCardImageEntries } from "@shared/template/router-card-images";
 import {
   sanitizeHtmlWithDiagnostics,
   sanitizeValuesWithDiagnostics,
@@ -299,6 +300,12 @@ export function normalizeSettingsForTemplate(
       value = String(raw);
     } else if (def.type === "text" || def.type === "sequence") {
       value = sanitizeHtmlWithDiagnostics(String(raw)).value;
+    } else if (def.type === CARD_IMAGES_SETTING_TYPE) {
+      // Card pictures: canonical item keys, each with its address and the uploaded file's
+      // name — nothing else is stored. An empty map is «no pictures», not a value.
+      const pictures = normalizeCardImageEntries(raw);
+      if (Object.keys(pictures).length === 0) continue;
+      value = pictures;
     }
 
     out[def.key] = value;

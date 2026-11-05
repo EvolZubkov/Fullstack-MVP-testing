@@ -21,6 +21,7 @@ import {
   adaptiveTopicSettings,
   adaptiveLevels,
   adaptiveLevelLinks,
+  testScenarios,
 } from "../../shared/schema";
 import { RequiredFieldsMissingError } from "../../server/services/required-fields-validator";
 
@@ -1067,5 +1068,99 @@ describe("TestSettingsService — media usage sync on system page reconciliation
     });
 
     expect(syncEntityUsagesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("TestSettingsService — router card pictures follow the items", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  const routerPage = {
+    id: "p-router",
+    kind: "router",
+    topicId: null,
+    templateKey: "r.std",
+    valuesJson: {},
+    settingsJson: {
+      cardImages: {
+        "topic:tp1": { url: "/api/media/a", name: "a.png" },
+        "topic:tp2": { url: "/api/media/b", name: "b.png" },
+        "scenario:s1": { url: "/api/media/c" },
+      },
+    },
+  };
+
+  function captureUpdates(): Array<{ table: unknown; values: Record<string, unknown> }> {
+    const captured: Array<{ table: unknown; values: Record<string, unknown> }> = [];
+    tx.update.mockImplementation((table: unknown) => {
+      const c = makeChain(
+        table === contentPages
+          ? [{ ...routerPage }]
+          : [{ ...dbTest, flowPolicyJson: { mode: "router_by_topics" }, designSettingsJson: { templateId: "default" } }],
+      );
+      (c as any).set = vi.fn().mockImplementation((v: Record<string, unknown>) => {
+        captured.push({ table, values: v });
+        return c;
+      });
+      return c;
+    });
+    return captured;
+  }
+
+  it("drops the picture of a removed topic in the same save and re-indexes the page", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, [routerPage]],
+      [testSections, [{ topicId: "tp1" }]],
+      [testScenarios, [{ id: "s1" }]],
+    ]);
+    const updates = captureUpdates();
+    captureInserts();
+
+    await svc.save("t1", { test: {}, sections: [{ topicId: "tp1", drawCount: 5 }] });
+
+    const pageUpdate = updates.find((u) => u.table === contentPages);
+    expect(pageUpdate?.values.settingsJson).toEqual({
+      cardImages: {
+        "topic:tp1": { url: "/api/media/a", name: "a.png" },
+        "scenario:s1": { url: "/api/media/c" },
+      },
+    });
+    expect(syncEntityUsagesMock).toHaveBeenCalledWith("content_page", "p-router", expect.anything());
+  });
+
+  it("leaves the page alone while every picture still has its item", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, [routerPage]],
+      [testSections, [{ topicId: "tp1" }, { topicId: "tp2" }]],
+      [testScenarios, [{ id: "s1" }]],
+    ]);
+    const updates = captureUpdates();
+    captureInserts();
+
+    await svc.save("t1", {
+      test: {},
+      sections: [
+        { topicId: "tp1", drawCount: 5 },
+        { topicId: "tp2", drawCount: 5 },
+      ],
+    });
+
+    expect(updates.filter((u) => u.table === contentPages)).toHaveLength(0);
+  });
+
+  it("does not look at the pictures when the save changes no items", async () => {
+    setupSelectDispatch([[contentPages, [routerPage]]]);
+    const updates = captureUpdates();
+
+    await svc.save("t1", { test: { title: "Новое название" } });
+
+    expect(updates.filter((u) => u.table === contentPages)).toHaveLength(0);
   });
 });

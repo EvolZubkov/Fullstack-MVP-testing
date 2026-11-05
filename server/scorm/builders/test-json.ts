@@ -1,5 +1,6 @@
 import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring, ReportBlockRow } from "@shared/schema";
 import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
+import { withCurrentScenario } from "@shared/sim/upgrade";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { resolveFlowPolicy } from "@shared/flow/flow-policy";
@@ -17,6 +18,7 @@ import { hasGradedContent } from "@shared/questions/question-type";
 import { hasOptionFeedback } from "@shared/questions/option-feedback";
 import { feedbackAssets, normalizeFeedback, topicFeedbackTexts } from "@shared/template/result-context";
 import type { ReportBake } from "@shared/report/report-variants";
+import { CARD_IMAGES_SETTING_KEY, pruneCardImageEntries } from "@shared/template/router-card-images";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -255,12 +257,13 @@ export function buildTestJson(data: ExportData): string {
     for (const q of s.questions) for (const tag of q.tags ?? []) noteBreakdownKey(tag);
   }
 
-  const passPercent =
-    overallPassRule.type === "percent"
-      ? overallPassRule.value
-      : totalQuestions > 0
-        ? Math.round((overallPassRule.value / totalQuestions) * 100)
-        : 80;
+  // Only a percent rule HAS a percent. An `absolute` rule is a number of POINTS (the grader
+  // compares it with Σ earned, `aggregate.ts`), and the possible points depend on the
+  // delivered questions and their prices — a percent derived here (it used to be
+  // `value / totalQuestions`) printed «125 %» on the cover and pushed the LMS score past
+  // `max`. The runtime converts a points rule per attempt (`TBTemplate.lmsThresholdFor`)
+  // and the cover states it in points (`course.passPoints`).
+  const passPercent = overallPassRule.type === "percent" ? overallPassRule.value : null;
 
   // PRD-4 v1.1: export `flowPolicy` so the runtime can switch traversal
   // strategy (legacy_flat / linear_by_topics / router_by_topics) and apply
@@ -326,6 +329,12 @@ export function buildTestJson(data: ExportData): string {
     // `TEST_DATA.sectionGroups`, а отсутствие значит «блоков нет» — тот самый плоский
     // список тем, который печатал каждый пакет до этого PRD.
     ...(data.test.sectionGroupsJson?.length ? { sectionGroups: data.test.sectionGroupsJson } : {}),
+    // Карточки «Результаты по темам»: выпекается ТОЛЬКО `false`, поэтому пакет теста, который
+    // переключателя не касался, остаётся байт-в-байт прежним; рантайм читает отсутствие как
+    // «печатать».
+    ...(data.test.showTopicResults === false ? { showTopicResults: false } : {}),
+    // Строка «Лучший результат за N попыток» в отчёте — тем же приёмом: только `false`.
+    ...(data.test.showAttemptsCount === false ? { showAttemptsCount: false } : {}),
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,
@@ -503,7 +512,7 @@ export function buildTestJson(data: ExportData): string {
             // библиотека подсветки в ZIP не едет.
             ...promptHtmlOf(q),
             // PRD-57 FR-28v: предел печётся в пакет — конфигурации в рантайме там нет.
-            data: withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength),
+            data: withCurrentScenario(withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength)),
             correct: q.correctJson,
             points: baked.points,
             difficulty: baked.difficulty,
@@ -650,7 +659,7 @@ export function buildTestJson(data: ExportData): string {
             // библиотека подсветки в ZIP не едет.
             ...promptHtmlOf(q),
             // PRD-57 FR-28v: предел печётся в пакет — конфигурации в рантайме там нет.
-            data: withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength),
+            data: withCurrentScenario(withEffectiveMaxLength(q.type, q.dataJson, config.limits.shortAnswerMaxLength)),
             correct: q.correctJson,
             points: baked.points,
             difficulty: baked.difficulty,
@@ -738,6 +747,17 @@ export function buildTestJson(data: ExportData): string {
       // baked in HERE, alongside the settings it belongs to. Unconditional, like the ipsativity
       // verdict: the answer costs one lookup per build and has to be in the package before it
       // is known under which settings it will be read.
+      // Card pictures of the hub travel only for items the package delivers: the media packer
+      // walks the whole tree, and a picture left behind by a removed item would ride into the
+      // archive as a file nobody ever sees.
+      if (page.kind === "router" && sanitizedSettings[CARD_IMAGES_SETTING_KEY] !== undefined) {
+        const kept = pruneCardImageEntries(
+          sanitizedSettings[CARD_IMAGES_SETTING_KEY],
+          data.sections.map((s) => s.topic.id),
+        );
+        if (Object.keys(kept).length > 0) sanitizedSettings[CARD_IMAGES_SETTING_KEY] = kept;
+        else delete sanitizedSettings[CARD_IMAGES_SETTING_KEY];
+      }
       const packedSettings = withResolvedScaleIcons(sanitizedSettings);
 
       return {

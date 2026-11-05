@@ -115,6 +115,11 @@ function writeSuspendObj(obj) {
 // Shape: { limitMinutes, baselineTotalSec, sig } | null. Absence/failure = the
 // runtime degrades to the phase-1 (session-only) timer.
 //
+// The test countdown starts on the FIRST QUESTION, not on «Начать»: between the two
+// the anchor is PENDING — { limitMinutes, baselineTotalSec: null, pending: true, sig } —
+// so a reload on an intro page still finds an attempt whose clock has not started yet
+// (instead of reading «time cannot be restored» and dropping the run).
+//
 // PRD-20 phase 2f: obfuscation-grade tamper-evidence. The key ships inside the
 // package, so this detects a CASUAL suspend_data edit (e.g. bumping
 // baselineTotalSec to regain time), not a prepared attacker. On a signature
@@ -125,7 +130,11 @@ function timerSignatureKey() {
 }
 
 function computeAnchorSignature(anchor) {
-  var payload = timerSignatureKey() + '|' + anchor.limitMinutes + '|' + anchor.baselineTotalSec;
+  // The pending marker is signed too: rewriting a started anchor into a pending one
+  // would hand the learner the full limit again. Started anchors keep their old payload,
+  // so packages built before the marker existed still verify.
+  var payload = timerSignatureKey() + '|' + anchor.limitMinutes + '|' + anchor.baselineTotalSec +
+    (anchor.pending ? '|pending' : '');
   var hash = 5381; // djb2 (ES5-safe: no Math.imul / SubtleCrypto)
   for (var i = 0; i < payload.length; i++) {
     hash = ((hash << 5) + hash + payload.charCodeAt(i)) >>> 0;
@@ -147,7 +156,9 @@ function readTimerAnchor() {
 
 function writeTimerAnchor(anchor) {
   var s = readSuspendObj();
-  var a = { limitMinutes: anchor.limitMinutes, baselineTotalSec: anchor.baselineTotalSec };
+  var a = anchor.pending
+    ? { limitMinutes: anchor.limitMinutes, baselineTotalSec: null, pending: true }
+    : { limitMinutes: anchor.limitMinutes, baselineTotalSec: anchor.baselineTotalSec };
   a.sig = computeAnchorSignature(a);
   s.timer = a;
   writeSuspendObj(s);

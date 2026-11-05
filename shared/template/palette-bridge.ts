@@ -9,7 +9,7 @@
  * токены DS из палитры теста.
  *
  * Ключевой приём: вся акцентная рампа DS `--ou-purple-50..900` в самом ui-kit
- * выводится из ОДНОГО якоря (`#7700FF`) фиксированными долями `color-mix(in oklch)`,
+ * выводится из ОДНОГО якоря (`#7700FF`) фиксированными долями `color-mix(in oklab)`,
  * а все токены акцента (`--ou-accent-*` в светлой и тёмной темах) ссылаются на эти
  * шаги. Поэтому достаточно переопределить рампу теми же долями, но с якорем
  * `hsl(var(--primary))` — и весь акцент ребрендится в обеих темах автоматически.
@@ -62,9 +62,12 @@ export function buildPaletteBridge(p: TemplatePalette): string {
   if (p.primary) {
     // Акцентная рампа: якорь 500 = primary теста, остальные шаги — теми же долями
     // color-mix, что и в DS. Все --ou-accent-* ссылаются на эти шаги и следуют.
+    // Пространство oklab, а не oklch: у белого и чёрного нет оттенка, и часть движков
+    // считает его равным 0°, так что смесь в oklch уходила в розовый. В oklab оттенка
+    // как величины нет, а для смеси с бесцветным результат совпадает с oklch точно.
     const anchor = "hsl(var(--primary))";
     for (const [step, mixWith, pct] of RAMP) {
-      const value = pct === null ? anchor : `color-mix(in oklch, ${mixWith} ${pct}%, ${anchor})`;
+      const value = pct === null ? anchor : `color-mix(in oklab, ${mixWith} ${pct}%, ${anchor})`;
       lines.push(`--ou-purple-${step}:${value};`);
     }
   }

@@ -26,6 +26,10 @@ export const WORKBOOK_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
 const workbookUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: WORKBOOK_UPLOAD_LIMIT_BYTES },
+  // Busboy читает имя файла как latin1, если не сказано иное, а браузер шлёт его в UTF-8:
+  // кириллица доезжала до `originalname` кракозябрами («Ð\x94Ð...»), и в списке загрузок
+  // имя файла было нечитаемым.
+  defParamCharset: "utf8",
 });
 
 /**
@@ -65,6 +69,7 @@ export const TRANSFER_UPLOAD_LIMIT_BYTES = 200 * 1024 * 1024;
 const transferUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: TRANSFER_UPLOAD_LIMIT_BYTES },
+  defParamCharset: "utf8",
 });
 
 /** Accept one uploaded package under `field`, answering `413` when it is too large. */

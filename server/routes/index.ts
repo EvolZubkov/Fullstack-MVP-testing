@@ -22,6 +22,8 @@ import testsWorkbookRouter from "./tests-workbook";
 import testTransferRouter from "./test-transfer";
 import workbookRouter from "./workbook";
 import debugPlayerRouter from "./debug-player";
+import publicLinkRouter from "./public-link";
+import publicPlayRouter from "./public-play";
 import reviewRouter from "./review";
 import homeRouter from "./home";
 import reportRouter from "./report";
@@ -61,6 +63,7 @@ export {
 // Конфигурация монтирования роутеров
 export const routerConfig = [
   { path: "/access", router: accessRouter }, // magic link — до session guard
+  { path: "/p", router: publicPlayRouter }, // public test link — anonymous, no session needed
   { path: "/api/templates", router: templatesRouter },
   { path: "/api/admin/templates", router: adminTemplatesRouter },
   { path: "/api/tests", router: contentPagesRouter },
@@ -68,6 +71,7 @@ export const routerConfig = [
   { path: "/api/tests", router: scalesRouter },
   { path: "/api/tests", router: testsWorkbookRouter },
   { path: "/api/tests", router: testTransferRouter }, // перенос теста между инсталляциями (.tbtest)
+  { path: "/api/tests", router: publicLinkRouter }, // public test link: author API
   { path: "/api/tests", router: debugPlayerRouter }, // PRD-18 debug player (session/play/delete)
   { path: "/api/tests", router: reviewRouter }, // PRD-52 рецензирование: комментарии и прогон
   { path: "/api/workbook", router: workbookRouter },

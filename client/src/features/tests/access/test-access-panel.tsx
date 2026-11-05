@@ -25,7 +25,7 @@ interface GrantRow {
 interface AccessUser {
   id: string;
   name: string | null;
-  email: string;
+  email: string | null;
   roles?: string[];
 }
 
@@ -43,7 +43,7 @@ const LEVEL_OPTIONS: { value: AccessLevel; label: string }[] = [
 
 function displayName(u?: AccessUser): string {
   if (!u) return "—";
-  return u.name?.trim() || u.email;
+  return u.name?.trim() || u.email || "—";
 }
 
 function initials(u?: AccessUser): string {
@@ -68,8 +68,10 @@ export function TestAccessPanel({
   const testId = test?.id ?? null;
 
   // Users feed the owner select, the add-user combobox and the userId -> name map.
+  // Read behind the panel's own gate: `GET /api/users` needs `users.read`, which the
+  // author granting access to their own test does not hold.
   const { data: users = [] } = useQuery<AccessUser[]>({
-    queryKey: ["/api/users"],
+    queryKey: [`/api/tests/${testId}/access/users`],
     enabled: open,
   });
 

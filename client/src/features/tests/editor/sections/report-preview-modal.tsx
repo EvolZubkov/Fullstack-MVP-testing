@@ -55,6 +55,10 @@ export interface ReportPreviewModalProps {
   headings?: ReportPreviewTest["headings"];
   /** Настройка показа подытогов теста — оттуда же, откуда её берёт выдача. */
   breakdownDisplay?: ReportPreviewTest["breakdownDisplay"];
+  /** Печатать ли карточки тем: оттуда же, откуда её берёт выдача (`tests.show_topic_results`). */
+  showTopicResults?: boolean;
+  /** Печатать ли строку «Лучший результат за N попыток» (`tests.show_attempts_count`). */
+  showAttemptsCount?: boolean;
   /** Вводные блоки теста (PRD-61 FR-23): окно печатает их, как печатает выдача. */
   intro?: ReportPreviewTest["intro"];
   /** Группы тем теста — блок со счётчиком в предпросмотре. */
@@ -91,6 +95,8 @@ export function ReportPreviewModal({
   sections,
   headings,
   breakdownDisplay,
+  showTopicResults,
+  showAttemptsCount,
   sectionGroups,
   intro,
   levelNames,
@@ -163,6 +169,8 @@ export function ReportPreviewModal({
       levelNames,
       ...(headings ? { headings } : {}),
       ...(breakdownDisplay ? { breakdownDisplay } : {}),
+      ...(showTopicResults === false ? { showTopicResults: false } : {}),
+      ...(showAttemptsCount === false ? { showAttemptsCount: false } : {}),
       ...(barFill ? { barFill } : {}),
       ...(sectionGroups?.length ? { sectionGroups } : {}),
       // PRD-61 FR-23: вводный текст едет из РЕАЛЬНОГО теста — автор пишет его прямо перед
@@ -186,7 +194,7 @@ export function ReportPreviewModal({
     return adaptive
       ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, outcome), opts)
       : buildReportContext(buildReportPreviewInput(test, outcome), opts);
-  }, [adaptive, testName, sections, levelNames, headings, breakdownDisplay, sectionGroups, intro, outcome, previewValues, params, bundle]);
+  }, [adaptive, testName, sections, levelNames, headings, breakdownDisplay, showTopicResults, showAttemptsCount, sectionGroups, intro, outcome, previewValues, params, bundle]);
 
   const cssVars = useMemo(
     () => buildTemplateCssVars(params, bundle?.manifest.params),

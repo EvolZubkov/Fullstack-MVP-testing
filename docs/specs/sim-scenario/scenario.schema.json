@@ -1,20 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://skillum.local/schemas/sim-scenario/v1/scenario.schema.json",
-  "title": "Сценарий в информационной системе (формат обмена, версия 1)",
-  "description": "Содержимое файла scenario.json в архиве обмена. Описание и семантика — exchange-format.md рядом. Сценарий — граф сцен: сцена — холст с элементами-изображениями, зоны ведут к другим сценам.",
+  "$id": "https://skillum.local/schemas/sim-scenario/v2/scenario.schema.json",
+  "title": "Сценарий в информационной системе (формат обмена, версия 2)",
+  "description": "Содержимое файла scenario.json в архиве обмена. Описание и семантика — exchange-format.md рядом. Сценарий — общая часть (вид, задание, библиотека изображений, поля, цель, этапы) и варианты по устройствам; вариант — граф сцен: сцена — холст с элементами-изображениями, зоны ведут к другим сценам.",
   "type": "object",
-  "required": ["format", "version", "meta", "media", "start", "scenes"],
+  "required": ["format", "version", "kind", "meta", "media", "variants"],
   "properties": {
     "$schema": { "type": "string" },
     "format": { "const": "skillum.sim-scenario" },
-    "version": { "const": 1 },
+    "version": { "const": 2 },
+    "kind": { "enum": ["control", "research"], "description": "control — контрольный: судится целью и ролями действий; research — исследовательский: поведение без вердикта, концы — финалы." },
     "meta": { "$ref": "#/$defs/meta" },
     "settings": { "$ref": "#/$defs/settings" },
     "media": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/media" }, "description": "Библиотека изображений сценария." },
     "fields": { "type": "array", "items": { "$ref": "#/$defs/field" }, "description": "Поля: значения, общие на весь сценарий. Где поле стоит на сцене, задаёт сама сцена." },
-    "start": { "$ref": "#/$defs/id", "description": "Сцена, с которой начинается сценарий." },
-    "scenes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scene" } }
+    "goal": { "$ref": "#/$defs/goal", "description": "Только контрольный сценарий: проверки полей цели, общие для всех вариантов." },
+    "stages": { "type": "array", "items": { "$ref": "#/$defs/stageDef" }, "description": "Этапы задания: именованные группы сцен, одни для всех вариантов." },
+    "variants": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/variant" }, "description": "Варианты по устройствам, не более одного на устройство." }
   },
   "$defs": {
     "id": {
@@ -88,10 +90,8 @@
     "settings": {
       "type": "object",
       "properties": {
-        "stage": { "$ref": "#/$defs/size", "description": "Размер сцены по умолчанию в пикселях. Полный экран масштабирует сцену целиком." },
         "normSeconds": { "type": "integer", "minimum": 1, "description": "Норма времени: превышение штрафуется по правилам оценки в тесте." },
         "limitSeconds": { "type": ["integer", "null"], "minimum": 1, "description": "Жёсткий лимит: по его истечении сценарий завершается как невыполненный. null — без лимита." },
-        "minViewportWidth": { "type": "integer", "minimum": 320 },
         "hints": {
           "type": "object",
           "properties": { "enabled": { "type": "boolean" }, "afterMisses": { "type": "integer", "minimum": 1 } }
@@ -101,6 +101,73 @@
           "description": "Какие счётчики видит участник. Решает разработчик сценария; по умолчанию все выключены.",
           "additionalProperties": false,
           "properties": { "actions": { "type": "boolean" }, "misses": { "type": "boolean" }, "detours": { "type": "boolean" } }
+        },
+        "finishButton": { "type": "boolean", "default": true, "description": "Только исследовательский сценарий: участник может закончить кнопкой «Я закончил»." },
+        "costs": { "$ref": "#/$defs/actionCosts", "description": "Стоимость действий по умолчанию для сценария; нет — умолчания системы." },
+        "otherRouteRating": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "Оценка прогона вне всех объявленных маршрутов; нет — оценка относительно оптимума." }
+      }
+    },
+    "actionCosts": {
+      "type": "object",
+      "description": "Стоимость действия по его виду, в шагах. Нет вида — умолчание системы.",
+      "additionalProperties": false,
+      "properties": {
+        "click": { "type": "number", "minimum": 0 },
+        "dblclick": { "type": "number", "minimum": 0 },
+        "rightclick": { "type": "number", "minimum": 0 },
+        "hover": { "type": "number", "minimum": 0 },
+        "drag": { "type": "number", "minimum": 0 },
+        "tap": { "type": "number", "minimum": 0 },
+        "doubletap": { "type": "number", "minimum": 0 },
+        "longpress": { "type": "number", "minimum": 0 },
+        "swipe-left": { "type": "number", "minimum": 0 },
+        "swipe-right": { "type": "number", "minimum": 0 },
+        "swipe-up": { "type": "number", "minimum": 0 },
+        "swipe-down": { "type": "number", "minimum": 0 },
+        "key": { "type": "number", "minimum": 0 },
+        "field": { "type": "number", "minimum": 0 }
+      }
+    },
+    "stageDef": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "description": "Граф сцен для одного устройства.",
+      "required": ["device", "start", "scenes"],
+      "properties": {
+        "device": { "enum": ["desktop", "phone"] },
+        "stage": { "$ref": "#/$defs/size", "description": "Размер сцены по умолчанию в пикселях. Полный экран масштабирует сцену целиком." },
+        "minViewportWidth": { "type": "integer", "minimum": 320, "description": "Самое узкое окно участника, в котором играет вариант; на десктопе по умолчанию 1280." },
+        "start": { "$ref": "#/$defs/id", "description": "Сцена, с которой начинается вариант." },
+        "scenes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scene" } },
+        "routes": { "type": "array", "items": { "$ref": "#/$defs/route" }, "description": "Объявленные пути к цели с оценкой автора." }
+      }
+    },
+    "route": {
+      "type": "object",
+      "description": "Объявленный путь к цели с оценкой автора.",
+      "required": ["id", "title", "rating", "keys"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "rating": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "1 — лучший путь." },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Ключевые действия по порядку; другие действия между ними маршрут не прерывают.",
+          "items": {
+            "type": "object",
+            "required": ["scene", "action"],
+            "additionalProperties": false,
+            "properties": { "scene": { "$ref": "#/$defs/id" }, "action": { "$ref": "#/$defs/id", "description": "Зона или сочетание клавиш этой сцены." } }
+          }
         }
       }
     },
@@ -181,13 +248,14 @@
         "title": { "type": "string", "description": "Название для автора и аналитики; участнику не показывается." },
         "role": {
           "enum": ["path", "alt", "detour", "trap", "neutral"],
-          "description": "path — основной путь; alt — другой верный путь; detour — допустимое лишнее действие; trap — правдоподобная ошибка с последствиями; neutral — ни действие, ни ошибка."
+          "description": "path — основной путь; alt — другой верный путь; detour — допустимое лишнее действие; trap — правдоподобная ошибка с последствиями; neutral — ни действие, ни ошибка. Обязательна в контрольном сценарии, в исследовательском необязательна: действие без роли — просто действие."
         },
         "error": { "type": "string", "description": "Только для trap: название ошибки для протокола и аналитики." },
         "when": { "$ref": "#/$defs/condition" },
         "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
         "otherwise": { "type": "array", "items": { "$ref": "#/$defs/effect" }, "description": "Если when не выполнено. Такое действие — ошибка." },
-        "hint": { "type": "string" }
+        "hint": { "type": "string" },
+        "cost": { "type": "number", "minimum": 0, "description": "Стоимость действия в шагах; нет — умолчание сценария или системы по виду действия." }
       }
     },
     "zone": {
@@ -195,18 +263,18 @@
       "allOf": [
         { "$ref": "#/$defs/zoneShape" },
         { "$ref": "#/$defs/action" },
-        { "if": { "properties": { "role": { "const": "neutral" } } }, "then": { "not": { "anyOf": [{ "required": ["effects"] }, { "required": ["when"] }] } } },
-        { "if": { "properties": { "role": { "enum": ["path", "alt", "detour", "trap"] } } }, "then": { "required": ["effects"] } },
-        { "if": { "properties": { "role": { "const": "trap" } } }, "then": { "required": ["error"] } },
+        { "if": { "required": ["role"], "properties": { "role": { "const": "neutral" } } }, "then": { "not": { "anyOf": [{ "required": ["effects"] }, { "required": ["when"] }] } } },
+        { "if": { "required": ["role"], "properties": { "role": { "enum": ["path", "alt", "detour", "trap"] } } }, "then": { "required": ["effects"] } },
+        { "if": { "required": ["role"], "properties": { "role": { "const": "trap" } } }, "then": { "required": ["error"] } },
         { "if": { "required": ["otherwise"] }, "then": { "required": ["when"] } },
-        { "if": { "required": ["copyText"] }, "then": { "properties": { "role": { "const": "neutral" } } } },
+        { "if": { "required": ["copyText"] }, "then": { "required": ["role"], "properties": { "role": { "const": "neutral" } } } },
         { "if": { "properties": { "action": { "const": "drag" } }, "required": ["action"] }, "then": { "required": ["drop"] } }
       ],
-      "required": ["id", "role"],
+      "required": ["id"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "shape": { "enum": ["rect", "ellipse", "polygon"], "default": "rect" },
-        "action": { "enum": ["click", "dblclick", "rightclick", "hover", "drag"], "default": "click" },
+        "action": { "enum": ["click", "dblclick", "rightclick", "hover", "drag", "tap", "doubletap", "longpress", "swipe-left", "swipe-right", "swipe-up", "swipe-down"], "default": "click", "description": "Мышь в десктопном варианте, жесты в телефонном." },
         "hoverMs": { "type": "integer", "minimum": 0, "default": 400 },
         "drop": { "$ref": "#/$defs/box", "description": "Только для drag: куда отпустить." },
         "in": { "$ref": "#/$defs/id", "description": "Элемент с прокруткой, в координатах изображения которого лежит зона." },
@@ -217,9 +285,9 @@
       "type": "object",
       "allOf": [
         { "$ref": "#/$defs/action" },
-        { "if": { "properties": { "role": { "const": "trap" } } }, "then": { "required": ["error"] } }
+        { "if": { "required": ["role"], "properties": { "role": { "const": "trap" } } }, "then": { "required": ["error"] } }
       ],
-      "required": ["id", "keys", "role", "effects"],
+      "required": ["id", "keys", "effects"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "keys": {
@@ -235,15 +303,43 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string", "minLength": 1 },
-        "size": { "$ref": "#/$defs/size", "description": "Нет — settings.stage." },
+        "size": { "$ref": "#/$defs/size", "description": "Нет — stage варианта." },
         "elements": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/element" } },
         "fields": { "type": "array", "items": { "$ref": "#/$defs/fieldPlacement" } },
         "zones": { "type": "array", "items": { "$ref": "#/$defs/zone" } },
         "keys": { "type": "array", "items": { "$ref": "#/$defs/keyBinding" } },
         "onMissGoto": { "$ref": "#/$defs/id", "description": "Клик мимо всех зон — ошибка и переход сюда: так закрывается раскрытое меню." },
-        "goal": { "$ref": "#/$defs/goal" },
-        "views": { "type": "array", "items": { "$ref": "#/$defs/view" }, "description": "Зарезервировано: раскладка сцены для телефона." }
+        "stage": { "type": "string", "description": "Этап задания, к которому относится сцена (id из stages)." },
+        "end": { "$ref": "#/$defs/sceneEnd" }
       }
+    },
+    "sceneEnd": {
+      "description": "Конец прогона: вход на сцену с концом завершает сценарий.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["outcome"],
+          "additionalProperties": false,
+          "properties": { "outcome": { "const": "success" }, "message": { "type": "string", "description": "Только контрольный сценарий: исход решают проверки цели." } }
+        },
+        {
+          "type": "object",
+          "required": ["outcome"],
+          "additionalProperties": false,
+          "properties": { "outcome": { "const": "fail" }, "message": { "type": "string", "description": "Что случилось — для окна результата и протокола." } }
+        },
+        {
+          "type": "object",
+          "required": ["outcome", "title"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "finale" },
+            "title": { "type": "string", "minLength": 1, "description": "Название финала: по нему аналитика группирует прогоны." },
+            "message": { "type": "string" },
+            "target": { "type": "boolean", "description": "Целевой финал: до него измеряется эффективность." }
+          }
+        }
+      ]
     },
     "effect": {
       "description": "Эффект действия. Выполняются по порядку.",
@@ -266,40 +362,23 @@
         { "type": "object", "required": ["not"], "additionalProperties": false, "properties": { "not": { "$ref": "#/$defs/condition" } } }
       ]
     },
-    "goal": {
+    "goalCheck": {
       "type": "object",
-      "description": "Сцена-цель: вход на неё завершает сценарий.",
-      "required": ["outcome"],
+      "required": ["field"],
+      "additionalProperties": false,
       "properties": {
-        "outcome": { "enum": ["success", "fail"], "description": "success — исход решают проверки; fail — сцена-провал, цель не достигнута." },
-        "message": { "type": "string", "description": "Что случилось — для окна результата и протокола, прежде всего у провала." },
-        "checks": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["field"],
-            "additionalProperties": false,
-            "properties": {
-              "field": { "$ref": "#/$defs/id" },
-              "check": { "$ref": "#/$defs/ruleSet", "description": "Нет — проверка самого поля." },
-              "critical": { "type": "boolean", "default": true },
-              "weight": { "type": "number", "exclusiveMinimum": 0, "default": 1 }
-            }
-          }
-        }
+        "field": { "$ref": "#/$defs/id" },
+        "check": { "$ref": "#/$defs/ruleSet", "description": "Нет — проверка самого поля." },
+        "critical": { "type": "boolean", "default": true },
+        "weight": { "type": "number", "exclusiveMinimum": 0, "default": 1 }
       }
     },
-    "view": {
+    "goal": {
       "type": "object",
-      "description": "Зарезервировано: раскладка сцены для другого устройства — свой размер и геометрия, общая логика.",
-      "required": ["device", "size"],
-      "properties": {
-        "device": { "enum": ["phone", "tablet"] },
-        "size": { "$ref": "#/$defs/size" },
-        "elements": { "type": "object", "additionalProperties": { "type": "object" }, "description": "Переопределение элементов по id: другое изображение, место." },
-        "geometry": { "type": "object", "additionalProperties": { "$ref": "#/$defs/box" }, "description": "Место полей и зон по id." },
-        "gestures": { "type": "object", "additionalProperties": { "enum": ["tap", "doubletap", "longpress", "swipe-left", "swipe-right", "swipe-up", "swipe-down"] } }
-      }
+      "description": "Цель контрольного сценария: проверки полей, общие для всех вариантов. Исход судится по ним при входе на сцену с концом success.",
+      "required": ["checks"],
+      "additionalProperties": false,
+      "properties": { "checks": { "type": "array", "items": { "$ref": "#/$defs/goalCheck" } } }
     },
     "ruleSet": {
       "type": "object",

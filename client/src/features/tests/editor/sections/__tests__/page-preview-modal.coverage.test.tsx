@@ -206,6 +206,22 @@ describe("<PagePreviewModal /> — runtime-screen kinds (buildScreenInputs)", ()
     expect(screen.getByTestId("mock-template-screen")).toHaveAttribute("data-layout", "<div>start</div>");
   });
 
+  it("hands the real description's FORMAT to the start builder along with its text", () => {
+    buildScreenInputs.mockReturnValue([
+      { route: "start", layoutKey: "start", input: { context: {}, slots: {} } },
+    ]);
+    renderModal({
+      page: { id: "s", kind: "start", templateKey: null, valuesJson: { values: {} } },
+      realData: { description: "<p>Rich</p>", descriptionFormat: "richText" },
+    });
+    expect(buildScreenInputs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        course: expect.objectContaining({ description: "<p>Rich</p>", descriptionFormat: "richText" }),
+      }),
+      expect.anything(),
+    );
+  });
+
   it("falls back to «нет подходящего макета» when the demo has no dataset", () => {
     useTemplateBundleMock.mockReturnValue({ data: makeBundle({ demo: null }), isLoading: false, error: null });
     renderModal({ page: { id: "s", kind: "start", templateKey: null, valuesJson: { values: {} } } });

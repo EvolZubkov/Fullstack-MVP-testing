@@ -199,7 +199,9 @@ function reportBlock(meta: ReportMeta, topicCount: number, opts: ReportContextOp
   const learnerName = String(meta.learnerName ?? "").trim();
   return {
     attemptDateLabel: formatTimestamp(meta.timestamp),
-    attemptsCountLabel: attemptsCountLabel(meta.attemptsCount),
+    // Строку автор вправе погасить (`tests.show_attempts_count`): пустая подпись снимает
+    // её в макете целиком, тем же гейтом, которым её гасит тест без вердикта ниже.
+    attemptsCountLabel: meta.showAttemptsCount === false ? "" : attemptsCountLabel(meta.attemptsCount),
     learnerName,
     hasLearnerName: learnerName.length > 0,
     gridColumns: reportGridColumns(topicCount),
@@ -300,6 +302,9 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
     ...(input.breakdownDisplay ? { breakdownDisplay: input.breakdownDisplay } : {}),
     // Окраска полос подтем — тем же приёмом: документ красит их так же, как экран.
     ...(input.barFill ? { barFill: input.barFill } : {}),
+    // Карточки тем — тот же переключатель, что гасит их на экране итогов (§5.2): документ не
+    // печатает карточки там, где экран, с которого его скачали, их не печатает.
+    ...(input.showTopicResults === false ? { showTopicResults: false } : {}),
     // PRD-50 FR-50: порог, по которому общий построитель решает, какие тексты подтем
     // читает слушатель. Передаётся ТЕМ ЖЕ приёмом, что настройки выше, и по той же
     // причине: без него правило теряет предмет сравнения и печатает всё написанное — то
@@ -332,7 +337,9 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   // Признаком служит погашенная экраном метка: измерительный опросник несёт порог 70 % по
   // умолчанию и нулевые баллы, поэтому печатал зелёное «Тест пройден» над сводкой «0 из 0».
   const hasVerdict = base.result.statusLabel !== "";
-  const report = reportBlock(input, topics.length, opts);
+  // Счётчик карточек питает сетку и признак `hasTopics`: при погашенных карточках он нулевой,
+  // иначе макет оставил бы заголовок блока над пустым местом.
+  const report = reportBlock(input, input.showTopicResults === false ? 0 : topics.length, opts);
   // Шапка не пустеет: у документа над ней нет заголовка теста, который есть у экрана.
   // Формулировка не новая — её уже печатает адаптивный отчёт, где вердикта нет по природе
   // режима, поэтому два вида документа сходятся на одном слове.
@@ -449,6 +456,8 @@ export function buildAdaptiveReportContext(
     // с результатом.
     ...(input.breakdownDisplay ? { breakdownDisplay: input.breakdownDisplay } : {}),
     ...(input.barFill ? { barFill: input.barFill } : {}),
+    // Карточки тем — тем же приёмом, что у обычного отчёта выше (§5.2).
+    ...(input.showTopicResults === false ? { showTopicResults: false } : {}),
     // PRD-50 FR-50: порог отбора текстов подтем — по той же причине, что и в обычном
     // отчёте выше. Адаптивный экран его получает, и документ обязан отобрать то же самое.
     ...(input.overallPassRule ? { overallPassRule: input.overallPassRule } : {}),
@@ -457,7 +466,7 @@ export function buildAdaptiveReportContext(
     ...labelsOption(opts),
   });
   const topics = input.result.topicResults ?? [];
-  const report = reportBlock(input, topics.length, opts);
+  const report = reportBlock(input, input.showTopicResults === false ? 0 : topics.length, opts);
   // Адаптивные материалы перечисляются по КАЖДОЙ теме, у которой они есть, с названием
   // темы: понятия «проваленная тема» здесь нет.
   for (const t of topics) {

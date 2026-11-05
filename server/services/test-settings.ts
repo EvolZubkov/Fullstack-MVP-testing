@@ -49,6 +49,12 @@ import {
 } from "./flow-policy-validator";
 import { syncEntityUsages } from "./media/usage-index";
 import { logger } from "../logger";
+import { scenarioItemKey, topicItemKey } from "@shared/test-items";
+import {
+  CARD_IMAGES_SETTING_KEY,
+  normalizeCardImageEntries,
+  pruneCardImageEntries,
+} from "@shared/template/router-card-images";
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 
@@ -191,6 +197,10 @@ export interface TestPayload {
   // PRD-43: independent of allowReturnToUnanswered.
   quickAdvance?: boolean;
   showSectionResults?: boolean;
+  /** Печатать ли карточки тем (`tests.show_topic_results`); отсутствие = печатать. */
+  showTopicResults?: boolean;
+  /** Печатать ли строку «Лучший результат за N попыток» в отчёте (`tests.show_attempts_count`); отсутствие = печатать. */
+  showAttemptsCount?: boolean;
   skipReviewWhenComplete?: boolean;
   /** PRD-67: leaving a started section with a time limit closes it. */
   closeSectionOnLeave?: boolean;
@@ -234,7 +244,6 @@ export interface ScenarioPayload {
   title?: string | null;
   required?: boolean;
   timeLimitMinutes?: number | null;
-  imageUrl?: string | null;
   /** Группа тем, в которой стоит пункт; `null`/отсутствие — «вне групп». */
   groupKey?: string | null;
   /** Балл по умолчанию для сценариев пункта; `null`/отсутствие — по тесту. */
@@ -260,6 +269,8 @@ export interface CreatePayload {
 interface PageReconcileResult {
   created: ContentPage[];
   deletedIds: string[];
+  /** Existing pages whose settings the save rewrote (card pictures of removed items). */
+  updated?: ContentPage[];
 }
 
 export interface SavePayload {
@@ -362,6 +373,8 @@ export class TestSettingsService {
         // allowReturnToUnanswered defaulting to true, i.e. flexible-two-step).
         quickAdvance: payload.test.quickAdvance ?? false,
         showSectionResults: payload.test.showSectionResults ?? true,
+        showTopicResults: payload.test.showTopicResults ?? true,
+        showAttemptsCount: payload.test.showAttemptsCount ?? true,
         // Обзор при полностью отвеченном объёме: новый тест ведёт себя как прежде.
         skipReviewWhenComplete: payload.test.skipReviewWhenComplete ?? false,
         // PRD-67: новый тест — выход из раздела лишь замораживает время, как прежде.
@@ -554,6 +567,14 @@ export class TestSettingsService {
           sectionRows.map((s) => s.topicId),
           extractTemplateId(payload.test.designSettingsJson ?? updated.designSettingsJson),
         );
+      }
+
+      // Card pictures of the router hub are keyed by item: an item that left the test takes its
+      // picture with it, in the same transaction, so the file neither lingers in the media index
+      // nor rides into the package.
+      if (payload.sections !== undefined || payload.scenarios !== undefined) {
+        const rewritten = await this._pruneRouterCardImages(tx, testId);
+        if (rewritten.length > 0) pageSync = { ...pageSync, updated: [...(pageSync.updated ?? []), ...rewritten] };
       }
 
       // Required-fields validation runs ONLY on an actual transition into
@@ -749,8 +770,60 @@ export class TestSettingsService {
    * committed; the missing/stale row is safe (it only ever narrows access) and
    * is healed by the full reindex.
    */
+  /**
+   * Drops the card pictures of items that are no longer in the test from every router page of
+   * it (`shared/template/router-card-images`). Reads the items as they stand AFTER this save's
+   * writes, inside the same transaction.
+   *
+   * @returns The pages whose settings changed — the caller re-indexes their media.
+   */
+  private async _pruneRouterCardImages(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    testId: string,
+  ): Promise<ContentPage[]> {
+    const pages = await tx
+      .select()
+      .from(contentPages)
+      .where(and(eq(contentPages.testId, testId), eq(contentPages.kind, "router")));
+    const withPictures = pages.filter((p) => {
+      const settings = (p.settingsJson ?? {}) as Record<string, unknown>;
+      return settings[CARD_IMAGES_SETTING_KEY] !== undefined;
+    });
+    if (withPictures.length === 0) return [];
+
+    const sectionRows = await tx
+      .select({ topicId: testSections.topicId })
+      .from(testSections)
+      .where(eq(testSections.testId, testId));
+    const scenarioRows = await tx
+      .select({ id: testScenarios.id })
+      .from(testScenarios)
+      .where(eq(testScenarios.testId, testId));
+    const itemKeys = [
+      ...sectionRows.map((r) => topicItemKey(r.topicId)),
+      ...scenarioRows.map((r) => scenarioItemKey(r.id)),
+    ];
+
+    const rewritten: ContentPage[] = [];
+    for (const page of withPictures) {
+      const settings = { ...((page.settingsJson ?? {}) as Record<string, unknown>) };
+      const stored = normalizeCardImageEntries(settings[CARD_IMAGES_SETTING_KEY]);
+      const kept = pruneCardImageEntries(stored, itemKeys);
+      if (Object.keys(kept).length === Object.keys(stored).length) continue;
+      if (Object.keys(kept).length === 0) delete settings[CARD_IMAGES_SETTING_KEY];
+      else settings[CARD_IMAGES_SETTING_KEY] = kept;
+      const [row] = await tx
+        .update(contentPages)
+        .set({ settingsJson: settings, updatedAt: new Date() })
+        .where(eq(contentPages.id, page.id))
+        .returning();
+      if (row) rewritten.push(row);
+    }
+    return rewritten;
+  }
+
   private async _syncPageUsages(result: PageReconcileResult): Promise<void> {
-    for (const page of result.created) {
+    for (const page of [...result.created, ...(result.updated ?? [])]) {
       try {
         await syncEntityUsages("content_page", page.id, page);
       } catch (error) {
@@ -892,7 +965,6 @@ export class TestSettingsService {
         title: s.title?.trim() || null,
         required: s.required ?? true,
         timeLimitMinutes: s.timeLimitMinutes ?? null,
-        imageUrl: s.imageUrl ?? null,
         groupKey: s.groupKey ?? null,
         defaultPoints: s.defaultPoints ?? null,
         passRuleJson: s.passRuleJson ?? null,

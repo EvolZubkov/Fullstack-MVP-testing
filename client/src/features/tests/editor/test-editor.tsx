@@ -68,6 +68,7 @@ import type { ReviewAnchorItem } from "../review/review-comment-form";
 import { useReviewComments } from "../review/use-review-comments";
 import { QuestionEditorDrawer } from "@/features/questions/question-editor-drawer";
 import type { Question, Topic } from "@shared/schema";
+import { questionLabel } from "@shared/questions/question-label";
 import { useOptionalAuth } from "@/lib/auth";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -384,6 +385,14 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   const queryClient = useQueryClient();
 
   const drawerRef = useRef<HTMLElement | null>(null);
+  const saveErrorRef = useRef<HTMLDivElement | null>(null);
+
+  // The save-error banner sits at the TOP of the scrolled body. An author who
+  // pressed «Применить» deep down a long tab never saw it and read the failed
+  // save as «the button does nothing» — so bring the banner into view.
+  useEffect(() => {
+    if (editor.saveError) saveErrorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [editor.saveError]);
 
   // NFR-19: focus the first interactive element (the first tab) on open.
   // The Drawer stays mounted between openings, so the initial tab has to be
@@ -690,7 +699,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
         id: q.id,
         // Формулировка бывает длинной, и в списке от неё нужен только опознавательный
         // кусок — номер несёт остальное.
-        label: `Вопрос ${index + 1}: ${(q.prompt ?? "").slice(0, 60)}`,
+        label: `Вопрос ${index + 1}: ${questionLabel(q).slice(0, 60)}`,
         kind: "question" as const,
         topicId: q.topicId ?? null,
       }));
@@ -912,6 +921,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
           )}
           {editor.saveError && (
             <Banner
+              ref={saveErrorRef}
               tone="error"
               title="Не удалось сохранить тест"
               description={

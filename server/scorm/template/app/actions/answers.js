@@ -625,7 +625,10 @@ function restart() {
 
   // Попытка считается использованной только если тест был явно завершён через submit().
   // Прерванные (восстановленные) сессии не расходуют попытку.
-  if (state.submitted) {
+  if (typeof attemptReported !== 'undefined' && attemptReported) {
+    // Already reported on entry to the results (`reportAttempt`) — not a second time.
+    reopenLearningForRetry();
+  } else if (state.submitted) {
     console.log('💾 Сохраняем завершённую попытку перед перезапуском');
     var results = calculateResults();
     saveAttemptResult(results);

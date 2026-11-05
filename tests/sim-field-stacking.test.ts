@@ -12,7 +12,7 @@ import { fieldStacking } from "@shared/sim/diff";
 import type { MediaItem, Scenario, Scene } from "@shared/sim/contract";
 
 const example = JSON.parse(
-  readFileSync(resolve(process.cwd(), "docs/specs/sim-scenario/example/scenario.json"), "utf8"),
+  readFileSync(resolve(process.cwd(), "tests/fixtures/sim/scenario-v1.json"), "utf8"),
 ) as Scenario;
 const media = new Map<string, MediaItem>(example.media.map((m) => [m.id, m]));
 const sceneOf = (id: string) => example.scenes.find((s) => s.id === id) as Scene;

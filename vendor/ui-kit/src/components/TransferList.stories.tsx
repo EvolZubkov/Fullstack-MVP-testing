@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
 import { useState } from 'react';
 import { TransferList, type TransferItem } from './TransferList';
+import { Input } from './Input';
 
 const PEOPLE: TransferItem[] = Array.from({ length: 12 }, (_, i) => ({
   id: `p${i+1}`,
@@ -53,6 +54,33 @@ export const Default: Story = {
             { value: 'HR', label: 'HR' },
           ]}
           showSummary
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * `fill` + `above`: the panes reach the bottom of a bounded box, and the row above them
+ * lives in the same grid — the two fields line up with the panes edge to edge.
+ */
+export const FillWithAbove: Story = {
+  render: (args) => {
+    const [available, setAvailable] = useState<TransferItem[]>(PEOPLE.slice(0, 9));
+    const [assigned, setAssigned] = useState<TransferItem[]>(PEOPLE.slice(9));
+    return (
+      <div className="ou-story-pad" style={{ height: 560, display: 'flex', flexDirection: 'column' }}>
+        <TransferList
+          fill
+          available={available}
+          assigned={assigned}
+          onChange={({ available: a, assigned: b }) => { setAvailable(a); setAssigned(b); args.onChange?.({ available: a, assigned: b }); }}
+          leftTitle="Пользователи"
+          rightTitle="К назначению"
+          above={{
+            left: <Input type="date" label="Срок выполнения" fullWidth />,
+            right: <Input type="date" label="Ссылка активна до" fullWidth />,
+          }}
         />
       </div>
     );

@@ -6,7 +6,8 @@
       "Bash(npm install:*)",
       "Bash(node -e ':*)",
       "Bash(npx drizzle-kit:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(gh release create:*)"
     ]
   }
 }

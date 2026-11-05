@@ -57,7 +57,7 @@ export function requireTestScope(action: TestScopeAction, paramName = "id") {
           break;
       }
       if (!allowed) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(403).json(action === "assign" ? ASSIGN_DENIED : { error: "Forbidden" });
       }
       next();
     } catch (error) {
@@ -65,6 +65,17 @@ export function requireTestScope(action: TestScopeAction, paramName = "id") {
     }
   };
 }
+
+/**
+ * The refusal of an assign action. The operator holds the capability (the role
+ * opened the dialog), so a bare «Forbidden» sends them to look for a fault; the
+ * sentence names what is missing and who can supply it. `code` lets a screen
+ * recognize the refusal without matching the prose.
+ */
+const ASSIGN_DENIED = {
+  error: "Нет доступа к назначению этого теста. Попросите владельца теста или администратора выдать вам доступ «Назначение».",
+  code: "assign_scope_denied",
+} as const;
 
 /**
  * Require assign access to the test that an ASSIGNMENT belongs to (PRD-13). For
@@ -89,7 +100,7 @@ export function requireAssignmentScope(paramName = "id") {
         return res.status(404).json({ error: "Test not found" });
       }
       if (!(await canAssignTest(roles, user.id, test))) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(403).json(ASSIGN_DENIED);
       }
       next();
     } catch (error) {

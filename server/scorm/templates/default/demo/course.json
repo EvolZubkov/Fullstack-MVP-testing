@@ -26,12 +26,14 @@
       {
         "id": "topic-1",
         "title": "Базовые угрозы",
-        "status": "available"
+        "status": "available",
+        "image": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M32%206%2054%2014v16c0%2014-9.5%2024-22%2028C19.5%2054%2010%2044%2010%2030V14Z%22%20fill%3D%22%237c4dff%22%20opacity%3D%22.18%22%2F%3E%3Cpath%20d%3D%22M32%206%2054%2014v16c0%2014-9.5%2024-22%2028C19.5%2054%2010%2044%2010%2030V14Z%22%20fill%3D%22none%22%20stroke%3D%22%237c4dff%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22m22%2032%207%207%2013-14%22%20fill%3D%22none%22%20stroke%3D%22%237c4dff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"
       },
       {
         "id": "topic-2",
         "title": "Парольная защита",
-        "status": "locked"
+        "status": "locked",
+        "image": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ccircle%20cx%3D%2222%22%20cy%3D%2232%22%20r%3D%2212%22%20fill%3D%22%23ff7043%22%20opacity%3D%22.18%22%20stroke%3D%22%23ff7043%22%20stroke-width%3D%223%22%2F%3E%3Ccircle%20cx%3D%2222%22%20cy%3D%2232%22%20r%3D%224%22%20fill%3D%22%23ff7043%22%2F%3E%3Cpath%20d%3D%22M34%2032h22M48%2032v8M54%2032v6%22%20fill%3D%22none%22%20stroke%3D%22%23ff7043%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"
       }
     ],
     "contentPages": [
@@ -249,6 +251,34 @@
         "settings": {
           "sequenceId": "Демо-галерея",
           "nextLabel": "Начать"
+        }
+      },
+      {
+        "id": "router-menu",
+        "type": "router",
+        "kind": "router",
+        "route": "content.router",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 1,
+        "templateKey": "router.menu",
+        "values": {
+          "title": "Выберите раздел",
+          "instruction": "Пройдите разделы в любом порядке, затем нажмите «Завершить»."
+        }
+      },
+      {
+        "id": "router-menu-images",
+        "type": "router",
+        "kind": "router",
+        "route": "content.router",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 1,
+        "templateKey": "router.menu-images",
+        "values": {
+          "title": "Выберите раздел",
+          "instruction": "Пройдите разделы в любом порядке, затем нажмите «Завершить»."
         }
       }
     ],

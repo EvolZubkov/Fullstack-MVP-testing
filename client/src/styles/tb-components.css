@@ -2743,7 +2743,8 @@
 .tb-qlist__row { cursor: pointer; }
 .tb-qlist__row:hover > td { background: var(--ou-bg-surface-2); }
 .tb-qlist__cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
-.tb-qlist__text { font: var(--ou-text-body-m); }
+/* pre-line: the readable task keeps the paragraph breaks of a formatted task. */
+.tb-qlist__text { font: var(--ou-text-body-m); white-space: pre-line; }
 .tb-qlist__text .tb-qscoring__qtype { margin-right: var(--ou-space-1); }
 .tb-qlist__meta { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 .tb-qlist__flags { display: flex; flex-wrap: wrap; gap: var(--ou-space-1); }

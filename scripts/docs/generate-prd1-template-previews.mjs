@@ -223,7 +223,10 @@ function readPrd1Runtime() {
         console.warn(`  [warn] PRD1 runtime file not found: ${file}`);
         return "";
       }
-      return `/* ${path.relative(root, file)} */\n${readText(file)}`;
+      // The marker is written with `/` on every OS: the platform separator made each build on
+      // Windows rewrite the committed preview (and each build on Linux rewrite it back), so the
+      // tree was dirty after every build with no real change in it.
+      return `/* ${path.relative(root, file).split(path.sep).join("/")} */\n${readText(file)}`;
     })
     .join("\n\n");
 }

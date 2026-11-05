@@ -12,6 +12,9 @@
  * the save route runs on stored content, so «accepted on upload» and «accepted on save» cannot
  * disagree.
  *
+ * A version 1 archive is stored as version 2 (`shared/sim/upgrade`); the archive offered for
+ * download is always version 2.
+ *
  * After import the file name is gone for good: the scenario is named by `meta.title`, and the
  * archive offered for download is assembled anew from what is stored.
  */
@@ -19,6 +22,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import JSZip from "jszip";
 import type { Scenario } from "@shared/sim/contract";
+import { asScenario, type ScenarioInput } from "@shared/sim/upgrade";
 import { summarizeScenario, validateScenario, type ArchiveImage, type ScenarioSummary } from "@shared/sim/validate";
 import { storage } from "../../storage";
 import { mediaStore } from "../media/media-store";
@@ -114,7 +118,7 @@ function inspect(read: ReadArchive): ScenarioInspection {
     ok: errors.length === 0,
     errors,
     warnings,
-    summary: errors.length === 0 ? summarizeScenario(read.scenario as Scenario) : null,
+    summary: errors.length === 0 ? summarizeScenario(read.scenario as ScenarioInput) : null,
     mediaBytes,
   };
 }
@@ -145,7 +149,7 @@ export async function importScenarioArchive(
   const verdict = inspect(read);
   if (!verdict.ok) return { ...verdict, mediaCreated: 0, mediaReused: 0 };
 
-  const scenario = structuredClone(read.scenario) as Scenario;
+  const scenario = structuredClone(asScenario(read.scenario as ScenarioInput)) as Scenario;
   const addresses = new Map<string, string>();
   let mediaCreated = 0;
   let mediaReused = 0;

@@ -10,11 +10,11 @@
  * a transaction. Exposed through the `IStorage` facade, never imported by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   tests, topics, userRoles, testAccessGrants, topicAccessGrants,
-  type TestAccessGrant, type InsertTestAccessGrant, type TopicAccessGrant,
+  type TestAccessGrant, type InsertTestAccessGrant, type TestGrantSlot, type TopicAccessGrant,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 
@@ -77,13 +77,38 @@ export class AccessRepository {
     return db.select().from(testAccessGrants).where(eq(testAccessGrants.userId, userId));
   }
 
+  /**
+   * The WORKING grant of a user on a test (`edit` or `assign`). A `review` grant
+   * lives in its own slot beside it and is read by {@link getTestReviewGrant}.
+   */
   async getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
     const [grant] = await db.select().from(testAccessGrants)
-      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
+      .where(and(
+        eq(testAccessGrants.testId, testId),
+        eq(testAccessGrants.userId, userId),
+        ne(testAccessGrants.accessLevel, "review"),
+      ));
     return grant || undefined;
   }
 
+  /** The REVIEW grant of a user on a test (PRD-52), independent of the working one. */
+  async getTestReviewGrant(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
+    const [grant] = await db.select().from(testAccessGrants)
+      .where(and(
+        eq(testAccessGrants.testId, testId),
+        eq(testAccessGrants.userId, userId),
+        eq(testAccessGrants.accessLevel, "review"),
+      ));
+    return grant || undefined;
+  }
+
+  /**
+   * Writes a grant into its slot: `edit`/`assign` replace each other, `review`
+   * never touches the working grant. The conflict target names the partial
+   * unique index of that slot (migration `0060`).
+   */
   async upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
+    const isReview = grant.accessLevel === "review";
     const [row] = await db.insert(testAccessGrants).values({
       id: randomUUID(),
       testId: grant.testId,
@@ -93,14 +118,24 @@ export class AccessRepository {
       createdAt: new Date(),
     }).onConflictDoUpdate({
       target: [testAccessGrants.testId, testAccessGrants.userId],
+      targetWhere: isReview
+        ? sql`${testAccessGrants.accessLevel} = 'review'`
+        : sql`${testAccessGrants.accessLevel} <> 'review'`,
       set: { accessLevel: grant.accessLevel, grantedBy: grant.grantedBy ?? null },
     }).returning();
     return row;
   }
 
-  async removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
+  /** Removes one slot only: revoking access by hand leaves an invitation alone, and back. */
+  async removeTestAccessGrant(testId: string, userId: string, slot: TestGrantSlot): Promise<boolean> {
     const result = await db.delete(testAccessGrants)
-      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
+      .where(and(
+        eq(testAccessGrants.testId, testId),
+        eq(testAccessGrants.userId, userId),
+        slot === "review"
+          ? eq(testAccessGrants.accessLevel, "review")
+          : ne(testAccessGrants.accessLevel, "review"),
+      ));
     return (result.rowCount ?? 0) > 0;
   }
 

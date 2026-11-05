@@ -1,7 +1,7 @@
 {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.20.0",
+  "version": "1.23.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "themes": [
@@ -302,7 +302,37 @@
       "pageKind": "start",
       "layoutFile": "layouts/start.html",
       "isDefault": true,
-      "placeholders": []
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "questionCountShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число вопросов",
+          "description": "Плитка «вопросов» на обложке."
+        },
+        {
+          "key": "passConditionShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать условие прохождения",
+          "description": "Плитка проходного балла или числа тем для прохождения. Выключение убирает только плитку — порог и вердикт не меняются."
+        },
+        {
+          "key": "timeLimitShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать ограничение времени",
+          "description": "Плитка «на прохождение». Таймер в тесте работает как прежде."
+        },
+        {
+          "key": "maxAttemptsShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число попыток",
+          "description": "Плитка «попыток». Строка «Попытка N из M» над заголовком остаётся."
+        }
+      ]
     },
     {
       "key": "start.image-right",
@@ -316,6 +346,34 @@
           "key": "image",
           "type": "image",
           "label": "Изображение"
+        },
+        {
+          "key": "questionCountShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число вопросов",
+          "description": "Плитка «вопросов» на обложке."
+        },
+        {
+          "key": "passConditionShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать условие прохождения",
+          "description": "Плитка проходного балла или числа тем для прохождения. Выключение убирает только плитку — порог и вердикт не меняются."
+        },
+        {
+          "key": "timeLimitShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать ограничение времени",
+          "description": "Плитка «на прохождение». Таймер в тесте работает как прежде."
+        },
+        {
+          "key": "maxAttemptsShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать число попыток",
+          "description": "Плитка «попыток». Строка «Попытка N из M» над заголовком остаётся."
         }
       ]
     },
@@ -336,13 +394,13 @@
           "key": "headingPassed",
           "type": "text",
           "label": "Заголовок при успехе",
-          "description": "Пусто — «Тест пройден»."
+          "description": "Короткая надпись вердикта: плашка в шапке экрана итогов и заголовок отчёта. Пусто — «Тест пройден». Развёрнутое сообщение участнику — «Обратная связь» → «Общее» → «Если тест пройден»."
         },
         {
           "key": "headingFailed",
           "type": "text",
           "label": "Заголовок при неуспехе",
-          "description": "Пусто — «Тест не пройден»."
+          "description": "Короткая надпись вердикта: плашка в шапке экрана итогов и заголовок отчёта. Пусто — «Тест не пройден». Развёрнутое сообщение участнику — «Обратная связь» → «Общее» → «Если тест не пройден»."
         },
         {
           "key": "scoreSummary",
@@ -356,6 +414,23 @@
           ],
           "optionLabels": {
             "auto": "Автоматически",
+            "show": "Показывать",
+            "hide": "Скрывать"
+          }
+        },
+        {
+          "key": "scoreBar",
+          "type": "select",
+          "label": "Полоса балла",
+          "description": "Тонкая полоса под заголовком, длина которой равна проценту баллов. «Как сводка» — видна, пока видна сводка баллов.",
+          "default": "summary",
+          "options": [
+            "summary",
+            "show",
+            "hide"
+          ],
+          "optionLabels": {
+            "summary": "Как сводка",
             "show": "Показывать",
             "hide": "Скрывать"
           }
@@ -1438,6 +1513,43 @@
           "maxLength": 600
         }
       ]
+    },
+    {
+      "key": "router.menu-images",
+      "label": "Меню карточек с картинками",
+      "kind": "router",
+      "pageKind": "content.router",
+      "isDefault": false,
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок меню",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "instruction",
+          "type": "textarea",
+          "label": "Инструкция",
+          "required": false,
+          "maxLength": 600
+        }
+      ],
+      "settings": [
+        {
+          "key": "cardImages",
+          "type": "itemImages",
+          "label": "Картинки карточек",
+          "description": "Квадратная иллюстрация на прозрачном фоне."
+        }
+      ]
     }
 ,
     {
@@ -1694,6 +1806,18 @@
         "pageId": "demo-intro",
         "templateKey": "intro.standard",
         "label": "Введение раздела"
+      },
+      {
+        "route": "content.router",
+        "pageId": "router-menu",
+        "templateKey": "router.menu",
+        "label": "Роутер: меню разделов"
+      },
+      {
+        "route": "content.router",
+        "pageId": "router-menu-images",
+        "templateKey": "router.menu-images",
+        "label": "Роутер: карточки с картинками"
       },
       {
         "route": "question.single",

@@ -27,6 +27,9 @@ var state = {
   rankingTouched: {},
   timerInterval: null,
   timerStartPerfMs: null,
+  // The attempt started but its countdown waits for the first question (timer.js).
+  testTimerArmed: false,
+  sessionCommitStartPerfMs: null,
   timerCommitInterval: null,
   timerAnchorTampered: false,
   remainingSeconds: null,
@@ -34,7 +37,6 @@ var state = {
   submitted: false,
   answerConfirmed: false,
   feedbackShown: false,
-  attemptSavedForThisSession: false,
 
   // PRD-19 (Block B): per-question navigation status, keyed by question.id.
   // 'unanswered' (initial) | 'answered' (explicit fixation via confirmAnswer)

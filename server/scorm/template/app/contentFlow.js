@@ -367,6 +367,8 @@
     if (state.currentPageIndex < state.pageSequence.length - 1) {
       state.currentPageIndex += 1;
       syncPhaseToCurrentPage();
+      // A page change is a checkpoint: a reload lands back on this page.
+      if (typeof saveSessionOnPage === "function") saveSessionOnPage();
       render();
       return;
     }

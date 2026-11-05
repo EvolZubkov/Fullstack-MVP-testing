@@ -217,8 +217,7 @@
         topicDescription: t.description || null,
         required: t.required !== false,
         timeLimitMinutes: t.timeLimitMinutes || null,
-        drawCount: t.questionCount || null,
-        image: t.image || null
+        drawCount: t.questionCount || null
       };
     });
     return Object.assign({}, runtime, {
@@ -241,7 +240,7 @@
     var routes = (manifest.preview || {}).routes || [];
     var html = "";
     routes.forEach(function (r, i) {
-      html += '<button type="button" class="pv-nav-item' + (i === 0 ? " pv-active" : "") + '" data-route="' + escapeHtml(r.route) + '">' + escapeHtml(r.label) + "</button>";
+      html += '<button type="button" class="pv-nav-item' + (i === 0 ? " pv-active" : "") + '" data-route="' + escapeHtml(r.route) + '" data-route-index="' + i + '">' + escapeHtml(r.label) + "</button>";
     });
     nav.innerHTML = html;
     nav.addEventListener("click", function (e) {
@@ -257,8 +256,12 @@
   // ─── Route navigation ────────────────────────────────────────────────────────
   function navigateTo(route, btn) {
     var routes = (manifest.preview || {}).routes || [];
+    // Several screens may share one route (two router variants are both `content.router`):
+    // the button carries the screen's own index, the route string is only the fallback.
     var routeDef = null;
-    for (var i = 0; i < routes.length; i++) {
+    var index = btn ? Number(btn.getAttribute("data-route-index")) : NaN;
+    if (!isNaN(index) && routes[index] && routes[index].route === route) routeDef = routes[index];
+    for (var i = 0; !routeDef && i < routes.length; i++) {
       if (routes[i].route === route) { routeDef = routes[i]; break; }
     }
     var label = routeDef ? routeDef.label : route;
@@ -295,6 +298,22 @@
     updateProgress(route);
   }
 
+  /**
+   * The demo topics' pictures (`course.topics[].image`) as the router page's `cardImages`
+   * property, unless the demo page sets its own. The runtime reads card pictures ONLY from the
+   * page property and only through a variant that declares it, so the plain «Меню карточек»
+   * preview stays without pictures exactly as in a run.
+   */
+  function withDemoCardImages(page) {
+    var settings = page.settings || {};
+    if (settings.cardImages) return page;
+    var map = {};
+    ((demoData.course || {}).topics || []).forEach(function (t) {
+      if (t.image) map["topic:" + t.id] = { url: t.image };
+    });
+    return Object.assign({}, page, { settings: Object.assign({}, settings, { cardImages: map }) });
+  }
+
   // ─── Content page rendering ──────────────────────────────────────────────────
   function renderContentRoute(routeDef) {
     if (!routeDef) return;
@@ -318,7 +337,7 @@
     (manifest.contentTemplates || []).forEach(function (c) { if (c.key === page.templateKey) _ct = c; });
     if (((_ct && _ct.kind === "router") || page.kind === "router") &&
         root.RouterFlow && typeof root.RouterFlow.renderRouterPage === "function") {
-      root.RouterFlow.renderRouterPage(page);
+      root.RouterFlow.renderRouterPage(withDemoCardImages(page));
       return;
     }
 

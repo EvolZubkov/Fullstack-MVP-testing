@@ -33,3 +33,27 @@ export const Underline: Story = {};
 export const Pill: Story = { args: { variant: 'pill' } };
 export const Segment: Story = { args: { variant: 'segment' } };
 export const Stretch: Story = { args: { align: 'stretch' } };
+
+/**
+ * `fill`: the active panel takes what the tab list leaves in a bounded flex column and
+ * scrolls itself — a long tab does not push the tab list away.
+ */
+export const Fill: Story = {
+  args: {
+    variant: 'segment',
+    align: 'stretch',
+    fill: true,
+    items: [
+      { id: 'short', label: 'Коротко', content: <p>Одна строка.</p> },
+      {
+        id: 'long', label: 'Длинно',
+        content: <div>{Array.from({ length: 40 }, (_, i) => <p key={i}>Строка {i + 1}</p>)}</div>,
+      },
+    ],
+  },
+  render: (args) => (
+    <div style={{ height: 320, display: 'flex', flexDirection: 'column' }}>
+      <Tabs {...args} />
+    </div>
+  ),
+};

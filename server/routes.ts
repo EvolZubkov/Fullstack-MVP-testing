@@ -8,6 +8,7 @@ import { routerConfig } from "./routes/index";
 import { config } from "./config";
 import { magicScopeGuard } from "./middleware/magic-scope";
 import { legacyUploadsAlias } from "./routes/media";
+import { requestContext } from "./logger";
 
 const MemStore = MemoryStore(session);
 
@@ -41,6 +42,15 @@ export async function registerRoutes(
       },
     })
   );
+
+  // The request context is opened before the session exists, so the user is
+  // known only from here on: attach it now, or no log line of the request names
+  // who sent it.
+  app.use((req, _res, next) => {
+    const ctx = requestContext.getStore();
+    if (ctx && req.session?.userId) ctx.userId = req.session.userId;
+    next();
+  });
 
   // A magic-link session is access to ONE test: everything under /api that the
   // rule table does not name is refused here, before any router sees it.

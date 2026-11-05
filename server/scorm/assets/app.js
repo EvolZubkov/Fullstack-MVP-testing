@@ -405,12 +405,10 @@ function renderResults() {
     }
   }
 
-  // ✅ Сразу сохраняем результат попытки при показе результатов
-  if (typeof saveAttemptResult === 'function' && !state.attemptSavedForThisSession) {
-    saveAttemptResult(results);
-    state.attemptSavedForThisSession = true;
-    console.log('💾 renderResults: результат попытки сохранён', Math.round(results.percent) + '%');
-  }
+  // The attempt is reported on entry to the results — persisted, sent to telemetry and to
+  // the LMS — not on «Завершить»: a learner who closes the course from the LMS side never
+  // presses it (resultsPage.js, `reportAttempt`). Runs once per attempt.
+  if (typeof reportAttempt === 'function') reportAttempt();
 
   // Автор скрыл экран итогов (решение владельца 2026-09-20). Считать и СОХРАНИТЬ
   // результат всё равно надо — он уходит в LMS и в отчёт; ученику не показывают только

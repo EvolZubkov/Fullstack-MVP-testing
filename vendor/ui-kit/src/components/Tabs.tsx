@@ -32,12 +32,18 @@ export interface TabsProps<T extends string = string>
    * список вкладок остаётся безымянным.
    */
   listAriaLabel?: string;
+  /**
+   * Stretch to the parent's height: the active panel takes what the tab list leaves and
+   * scrolls itself, so a long tab does not push the tab list away. The parent has to be
+   * a flex column with a bounded height (for example `ModalDialog fill`).
+   */
+  fill?: boolean;
 }
 
 export function Tabs<T extends string = string>({
   items, value, defaultValue, onChange,
   variant = 'underline', size = 'm', align = 'start',
-  hidePanel, listAriaLabel, className, ...rest
+  hidePanel, listAriaLabel, fill, className, ...rest
 }: TabsProps<T>) {
   const controlled = value !== undefined;
   const [internal, setInternal] = useState<T | undefined>(
@@ -79,6 +85,7 @@ export function Tabs<T extends string = string>({
         `ou-tabs--${variant}`,
         `ou-tabs--${size}`,
         align !== 'start' && `ou-tabs--${align}`,
+        fill && 'ou-tabs--fill',
         className,
       )}
       {...rest}

@@ -400,6 +400,25 @@ describe("<CompositionSection />: группы тем", () => {
     expect(screen.getByTestId("composition-group-empty-group-1")).toBeInTheDocument();
   });
 
+  it("пояснение группы правится в модалке и снимается пустым текстом", async () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      sectionGroups: [{ key: "group-1", label: "Знания", description: { format: "plain", text: "Было" } }],
+      sections: [buildSection({ groupKey: "group-1" })],
+    });
+    renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("composition-group-description-group-1-edit"));
+    fireEvent.change(await screen.findByTestId("feedback-editor-text"), { target: { value: "Стало" } });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    expect(runUpdater(updateModel, model).sectionGroups?.[0].description).toEqual({ format: "plain", text: "Стало" });
+
+    updateModel.mockClear();
+    fireEvent.click(screen.getByTestId("composition-group-description-group-1-edit"));
+    fireEvent.change(await screen.findByTestId("feedback-editor-text"), { target: { value: "  " } });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    expect(runUpdater(updateModel, model).sectionGroups?.[0]).not.toHaveProperty("description");
+  });
+
   it("имя группы правится на месте", () => {
     const updateModel = vi.fn();
     const model = grouped();

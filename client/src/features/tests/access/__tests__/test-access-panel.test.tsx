@@ -50,7 +50,7 @@ beforeEach(() => {
     const method = (init?.method || "GET").toUpperCase();
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (method !== "GET") calls.push({ url: u, method, body });
-    if (u === "/api/users") return ok(users());
+    if (u === "/api/tests/t1/access/users") return ok(users());
     if (u === "/api/tests/t1/access" && method === "GET") return ok(access);
     if (u === "/api/tests/t1/owner") return ownerPatchOk ? ok({}) : fail({ error: "Владельца сменить нельзя" });
     if (u === "/api/tests/t1/access" && method === "POST") return ok({});
@@ -88,6 +88,14 @@ describe("<TestAccessPanel />", () => {
     renderPanel({ test: null });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reads people behind the panel's own gate, not the user registry", async () => {
+    // An author holds `tests.access.grant` but not `users.read`.
+    await renderLoaded();
+    const urls = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(urls).toContain("/api/tests/t1/access/users");
+    expect(urls).not.toContain("/api/users");
   });
 
   it("renders the owner and the existing grant row", async () => {

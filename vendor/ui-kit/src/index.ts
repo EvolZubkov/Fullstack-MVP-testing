@@ -261,7 +261,7 @@ export type {
 } from './components/Toast';
 export type { TooltipProps, TooltipPlacement, TooltipTone } from './components/Tooltip';
 export type {
-  TransferListProps, TransferItem, TransferFilter,
+  TransferListProps, TransferItem, TransferFilter, TransferAbove, TransferControlLabels,
 } from './components/TransferList';
 export type {
   TreeProps, TreeNodeData, TreeRowContext, TreeDensity,

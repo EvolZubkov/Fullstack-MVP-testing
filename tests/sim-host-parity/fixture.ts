@@ -39,7 +39,7 @@ export const LEARNER_ID = "learner-parity";
 
 /** The reference quest of the contract — a real scenario, so `/finish` can replay its protocol. */
 export const EXAMPLE_SCENARIO = JSON.parse(
-  readFileSync(resolve(process.cwd(), "docs/specs/sim-scenario/example/scenario.json"), "utf8"),
+  readFileSync(resolve(process.cwd(), "tests/fixtures/sim/scenario-v1.json"), "utf8"),
 ) as Scenario;
 
 /** What a passage varies. Everything else is the same fixture for every passage. */

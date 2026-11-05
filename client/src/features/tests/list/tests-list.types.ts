@@ -49,6 +49,11 @@ export type TestListEntry = {
   unmappedPageCount?: number;
   /** PRD-52 FR-32: открытых комментариев рецензентов у этого теста. */
   openReviewComments?: number;
+  /**
+   * May the reader assign THIS test (object-level scope, not the role's capability).
+   * The server decides; absence means «an older answer», which keeps the action.
+   */
+  canAssign?: boolean;
 };
 
 export type FolderEntry = {

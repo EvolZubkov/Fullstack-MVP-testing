@@ -14,11 +14,12 @@ import { describeRuleSet } from "@shared/answer-check/describe";
 import type { AnswerRuleSet } from "@shared/answer-check";
 import type { BlankRuleSet } from "@shared/questions/blanks-render";
 import { summarizeScenario } from "@shared/sim/validate";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 import { summaryTags } from "@/features/questions/scenario/scenario-summary";
 
 export function QuestionPreview({ question }: { question: Question }) {
   const data = question.dataJson as { options?: string[]; left?: string[]; right?: string[]; items?: string[] };
+  const simScenario = scenarioOf(question.dataJson);
   const correct = question.correctJson as { correctIndex?: number; correctIndices?: number[] };
   const type = question.type;
   const tags = Array.isArray(question.tags) ? question.tags : [];
@@ -64,10 +65,14 @@ export function QuestionPreview({ question }: { question: Question }) {
                 ? (correct?.correctIndices ?? []).includes(i)
                 : i === correct?.correctIndex;
               return (
-                <Cluster key={i} gap={2} wrap={false} align="center">
-                  {isCorrect
-                    ? <CheckSquare size={15} color="var(--ou-success-default)" />
-                    : <Square size={15} color="var(--ou-fg-muted)" />}
+                <Cluster key={i} gap={2} wrap={false} align="start">
+                  {/* The mark must not shrink under a long option, and it sits on the
+                      option's first line rather than the middle of a wrapped paragraph. */}
+                  <span className="ct-qpreview__mark">
+                    {isCorrect
+                      ? <CheckSquare size={15} color="var(--ou-success-default)" />
+                      : <Square size={15} color="var(--ou-fg-muted)" />}
+                  </span>
                   <Text variant="body-s" tone={isCorrect ? "success" : undefined}>{opt}</Text>
                 </Cluster>
               );
@@ -95,11 +100,11 @@ export function QuestionPreview({ question }: { question: Question }) {
           <Text variant="body-s" tone="muted">Развёрнутый ответ без автоматической проверки</Text>
         )}
         {/* «Сценарий в ИС»: вариантов нет — показывается задание и та же сводка, что в ящике. */}
-        {isSimulation(type) && (data as { scenario?: Scenario }).scenario && (
+        {isSimulation(type) && simScenario && (
           <Stack gap={1}>
             <Text variant="body-s">{question.prompt}</Text>
             <Cluster gap={1} wrap>
-              {summaryTags(summarizeScenario((data as { scenario: Scenario }).scenario)).map((tag) => (
+              {summaryTags(summarizeScenario(simScenario)).map((tag) => (
                 <Chip key={tag} size="s">{tag}</Chip>
               ))}
             </Cluster>

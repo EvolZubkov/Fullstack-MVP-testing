@@ -180,6 +180,17 @@ export interface MeasuresSource {
    */
   breakdownDisplayJson?: BreakdownDisplaySetting | null;
   /**
+   * Печатать ли карточки тем (`tests.show_topic_results`), из ВЫДАННОЙ версии теста. Только
+   * явное `false` гасит их — отсутствие (тест до переключателя, материал не прочитан)
+   * оставляет экран и отчёт прежними. Едет тем же путём, что {@link breakdownDisplayJson}.
+   */
+  showTopicResults?: boolean;
+  /**
+   * Печатать ли в отчёте строку «Лучший результат за N попыток» (`tests.show_attempts_count`),
+   * из ВЫДАННОЙ версии теста. Только явное `false` гасит её; отсутствие оставляет отчёт прежним.
+   */
+  showAttemptsCount?: boolean;
+  /**
    * Заголовки итога — свойства узла «Итоги теста» (`content_pages.settings_json` страницы
    * `results`). Едут ЗДЕСЬ, а не в `blockSettings`, потому что действуют на каждый тест:
    * `blockSettings` доезжает до построителя только внутри `measures`, то есть у теста со
@@ -256,6 +267,26 @@ function labelOptions(
 function barFillOption(measures?: MeasuresSource): { barFill?: BarFillSetting } {
   const barFill = barFillFromParams(measures?.params);
   return barFill ? { barFill } : {};
+}
+
+/**
+ * Переключатели «Сводка баллов» и «Полоса балла» страницы «Итоги теста».
+ *
+ * Едут ВНЕ `measures`, как заголовки итога: `blockSettings` доезжает до построителя только
+ * у теста со шкалами или показателями, а скрыть кольцо должен мочь и контрольный тест.
+ * Пустой объект, когда автор не трогал ни один из двух, — контекст тогда прежний.
+ */
+function scoreDisplayOption(
+  measures?: MeasuresSource,
+): { scoreDisplay?: Pick<ResultsBlockSettings, "scoreSummary" | "scoreBar"> } {
+  const settings = measures?.blockSettings;
+  if (!settings?.scoreSummary && !settings?.scoreBar) return {};
+  return {
+    scoreDisplay: {
+      ...(settings.scoreSummary ? { scoreSummary: settings.scoreSummary } : {}),
+      ...(settings.scoreBar ? { scoreBar: settings.scoreBar } : {}),
+    },
+  };
 }
 
 // Рампа уровней теста собирается ОБЩЕЙ `rampFromParams` (`@shared/template/level-ramp`): по
@@ -494,6 +525,7 @@ export function buildResultContext(
     testTitle,
     {
       ...(measures?.resultHeadings ? { headings: measures.resultHeadings } : {}),
+      ...scoreDisplayOption(measures),
       ...(recommendedCourses.length ? { recommendedCourses } : {}),
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
       ...(testFeedback ? { testFeedback } : {}),
@@ -515,6 +547,7 @@ export function buildResultContext(
       // column absent (every test predating this PRD) resolves to the builder's own
       // «hidden» default and prints no rows, whatever {@link TopicInput.breakdown} carries.
       breakdownDisplay: measures?.breakdownDisplayJson ?? null,
+      ...(measures?.showTopicResults === false ? { showTopicResults: false } : {}),
       ...barFillOption(measures),
       // Вводный блок ЭКРАНА: у отчёта свой текст, и путать их нельзя — адресаты разные.
       ...(measures?.intro?.results ? { intro: measures.intro.results } : {}),
@@ -554,6 +587,10 @@ function reportFeedbackMeta(measures?: MeasuresSource): Partial<ReportMeta> {
     // отчёт печатает полосы разреза ровно тогда же, когда их печатает экран, с
     // которого его скачали (§5.2).
     ...(measures?.breakdownDisplayJson ? { breakdownDisplay: measures.breakdownDisplayJson } : {}),
+    // Карточки тем — тот же переключатель, что у экрана (§5.2).
+    ...(measures?.showTopicResults === false ? { showTopicResults: false } : {}),
+    // Строка «Лучший результат за N попыток» — переключатель одного лишь документа.
+    ...(measures?.showAttemptsCount === false ? { showAttemptsCount: false } : {}),
     // Окраска полос подтем — из тех же параметров оформления, что красят экран.
     ...barFillOption(measures),
     // Заголовки итога — тем же приёмом: документ печатает ту же шапку, что экран.
@@ -731,6 +768,7 @@ export function buildAdaptiveResultContext(
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
       // PRD-50 FR-13: настройка показа — тот же источник, что у обычного экрана.
       ...(measures?.breakdownDisplayJson ? { breakdownDisplay: measures.breakdownDisplayJson } : {}),
+      ...(measures?.showTopicResults === false ? { showTopicResults: false } : {}),
       ...barFillOption(measures),
       // PRD-49. Same wording, its OWN screen: the adaptive results screen may carry
       // per-screen defaults and, in the shipped manifest, a different sub-block list

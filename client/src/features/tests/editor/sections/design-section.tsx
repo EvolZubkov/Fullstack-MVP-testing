@@ -75,6 +75,7 @@ import { TemplateGalleryModal } from "./template-gallery-modal";
 import { TemplateThumb, templateAssetUrl } from "./template-thumb";
 import { ReportSettingsCard } from "./report-settings-card";
 import type { TestEditorModel } from "../test-editor.types";
+import { IMAGE_UPLOAD_MAX_KB } from "../image-upload-limit";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -1242,7 +1243,7 @@ function MediaParamRow({
       ? "image/png,image/jpeg,image/svg+xml,image/webp"
       : undefined;
   const accept = param.accept ?? acceptDefault;
-  const maxSizeKb = param.maxSizeKb ?? (param.type === "image" ? 512 : 5 * 1024);
+  const maxSizeKb = param.maxSizeKb ?? (param.type === "image" ? IMAGE_UPLOAD_MAX_KB : 5 * 1024);
 
   const buttonLabel: Record<typeof param.type, string> = {
     image: stored ? "Заменить изображение" : "Загрузить изображение",

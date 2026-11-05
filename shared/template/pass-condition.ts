@@ -6,7 +6,8 @@
  * Two screens state the condition before the learner has answered anything:
  *
  * - the cover (`course.passCondition`) — how many topics must be passed, when the
- *   «Тест пройден, если» policy makes the topics decide;
+ *   «Тест пройден, если» policy makes the topics decide; and (`course.passPoints`) the
+ *   overall threshold when the author set it in points rather than in percent;
  * - the section intro (`sectionIntro.passCondition` / `isRequired` / `timerWarning`) — the
  *   threshold of THIS topic, whether the topic is one the verdict depends on, and the
  *   warning that the section countdown starts on «Далее».
@@ -41,6 +42,20 @@ export interface CtxCoursePassCondition {
   /** The tile number, «8 из 8». */
   countLabel: string;
   /** The tile caption, «обязательных тем для прохождения» / «тем для прохождения». */
+  label: string;
+}
+
+/**
+ * `course.passPoints`: the overall threshold of the cover when the author set it in POINTS.
+ * A points threshold has no fixed percent: the possible points depend on the delivered
+ * questions and their prices, so the cover states it in the unit it was authored in.
+ */
+export interface CtxCoursePassPoints {
+  /** The threshold, as authored. */
+  value: number;
+  /** The tile number, «5» / «7,5». */
+  valueLabel: string;
+  /** The tile caption, «баллов для прохождения». */
   label: string;
 }
 
@@ -100,6 +115,24 @@ function pluralPoints(n: number): string {
   if (d === 1) return "балл";
   if (d > 1 && d < 5) return "балла";
   return "баллов";
+}
+
+/**
+ * The overall threshold for the cover when it is set in points, or `null` for a percent
+ * rule, for «none» and for a malformed value. The grader compares such a rule with Σ earned
+ * points ({@link module:shared/scoring/aggregate}), so the cover says «5 баллов», never a
+ * percent computed against a guessed maximum.
+ *
+ * @param overallPassRule `tests.overall_pass_rule_json`, as authored.
+ */
+export function buildCoursePassPoints(overallPassRule: unknown): CtxCoursePassPoints | null {
+  const rule = resolveOverallRule(overallPassRule);
+  if (!rule || rule.type !== "count" || !Number.isFinite(rule.value) || rule.value <= 0) return null;
+  return {
+    value: rule.value,
+    valueLabel: formatPoints(rule.value),
+    label: pluralPoints(rule.value) + " для прохождения",
+  };
 }
 
 /**

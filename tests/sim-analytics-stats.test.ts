@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { createRun } from "@shared/sim/engine";
 import type { Scenario, SimResult } from "@shared/sim/contract";
-import example from "../docs/specs/sim-scenario/example/scenario.json";
+import example from "./fixtures/sim/scenario-v1.json";
 import { buildSimulationStats, readSimRun, simulationSpread } from "../server/services/analytics/simulation-stats";
 
 const scenario = example as unknown as Scenario;

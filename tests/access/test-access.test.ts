@@ -14,6 +14,7 @@ import { ROLES } from "@shared/access";
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTestGrantForUser: vi.fn(),
+    getTestReviewGrant: vi.fn(),
     getTestIdsByOwner: vi.fn(),
     getUserTestGrants: vi.fn(),
     isTestAssignedToUser: vi.fn(),
@@ -42,6 +43,7 @@ const TEST = { id: "t1", ownerId: "owner-1" } as const;
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getTestGrantForUser.mockResolvedValue(undefined);
+  storageMock.getTestReviewGrant.mockResolvedValue(undefined);
   storageMock.getTestIdsByOwner.mockResolvedValue([]);
   storageMock.getUserTestGrants.mockResolvedValue([]);
   storageMock.isTestAssignedToUser.mockResolvedValue(false);
@@ -127,9 +129,25 @@ describe("AC-05 — manager assign scope (assign or edit grant)", () => {
     storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "assign" });
     await expect(canAssignTest([ROLES.AUTHOR], "u2", TEST)).resolves.toBe(false);
   });
+
+  it("allows the owner who holds author AND manager roles, without any grant", async () => {
+    await expect(
+      canAssignTest([ROLES.AUTHOR, ROLES.MANAGER], "owner-1", TEST),
+    ).resolves.toBe(true);
+  });
+
+  it("denies the owner-less author+manager without a grant (author scope does not widen)", async () => {
+    await expect(
+      canAssignTest([ROLES.AUTHOR, ROLES.MANAGER], "u2", TEST),
+    ).resolves.toBe(false);
+  });
+
+  it("denies an author-only owner: assigning still needs the manager role", async () => {
+    await expect(canAssignTest([ROLES.AUTHOR], "owner-1", TEST)).resolves.toBe(false);
+  });
 });
 
-describe("AC-06 / BRC-27 — granting access (owner or admin); owner change admin-only", () => {
+describe("AC-06 /BRC-27 — granting access (owner or admin); owner change admin-only", () => {
   it("allows administrator and superadmin to grant on any test", () => {
     expect(canGrantAccess([ROLES.ADMINISTRATOR], "anyone", TEST)).toBe(true);
     expect(canGrantAccess([ROLES.SUPERADMIN], "anyone", TEST)).toBe(true);
@@ -244,9 +262,16 @@ describe("AC-10 — readableTestScope (list/analytics filtering)", () => {
 
 describe("PRD-52 — review scope (grant `review` or edit scope)", () => {
   it("allows a holder of the review grant, whatever their role", async () => {
-    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "review" });
+    storageMock.getTestReviewGrant.mockResolvedValue({ accessLevel: "review" });
     // An external expert holds `learner` only: the grant, not the role, opens the door.
     await expect(canReviewTest([ROLES.LEARNER], "expert-1", TEST)).resolves.toBe(true);
+  });
+
+  it("allows a manager holding `assign` and a review grant side by side (14.8)", async () => {
+    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "assign" });
+    storageMock.getTestReviewGrant.mockResolvedValue({ accessLevel: "review" });
+    await expect(canReviewTest([ROLES.MANAGER], "mgr-1", TEST)).resolves.toBe(true);
+    await expect(canAssignTest([ROLES.MANAGER], "mgr-1", TEST)).resolves.toBe(true);
   });
 
   it("allows the test owner without any grant", async () => {

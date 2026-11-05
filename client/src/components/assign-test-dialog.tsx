@@ -27,7 +27,9 @@ import {
   Tabs,
   Tag,
   Text,
+  TransferList,
   type TableColumn,
+  type TransferItem,
   useToast,
 } from "@skillum/ui-kit";
 import { t } from "@/lib/i18n";
@@ -220,7 +222,14 @@ export function AssignTestDialog({
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<AssignTab>("current");
+  /**
+   * The basket of the «Пользователи» tab: the people moved to the right half. A tick
+   * on the left is not a choice yet — only what is in the basket is assigned, so a new
+   * search on the left never loses anyone (approved wireframe 2026-10-20).
+   */
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  /** Where «Списком» puts its step action: a slot in the dialog footer. */
+  const [bulkActionsSlot, setBulkActionsSlot] = useState<HTMLSpanElement | null>(null);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState<string>("");
   const [linkExpiresAt, setLinkExpiresAt] = useState<string>("");
@@ -262,21 +271,28 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/review/reviewers`] });
+      queryClient.invalidateQueries({ queryKey: [candidatesKey] });
       toast({ tone: "success", title: "Доступ отозван", description: "Ссылка рецензента больше не работает." });
     },
     onError: (e: Error) => toast({ tone: "error", title: t.common.error, description: e.message }),
   });
 
-  // Fetch all users
-  const { data: allUsers = [] } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+  /**
+   * Whom the «Пользователи» tab offers. Review mode reads its own candidate list
+   * under `tests.review.invite`: the user registry is gated by `users.read`, which
+   * the author — the role review exists for — does not hold (PRD-52, 14.7). The
+   * server already applies the selection rule there.
+   */
+  const candidatesKey = `/api/tests/${testId}/review/candidates`;
+  const { data: allUsers = [], isError: usersFailed } = useQuery<User[]>({
+    queryKey: [isReview ? candidatesKey : "/api/users"],
     enabled: open,
   });
 
-  // Fetch all groups
+  // Fetch all groups. Review mode has no «Группы» tab (FR-38), so it does not ask.
   const { data: allGroups = [] } = useQuery<Group[]>({
     queryKey: ["/api/groups"],
-    enabled: open,
+    enabled: open && !isReview,
   });
 
   // Assign mutation
@@ -305,7 +321,12 @@ export function AssignTestDialog({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      if (isReview) {
+        queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/review/reviewers`] });
+        queryClient.invalidateQueries({ queryKey: [candidatesKey] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      }
       setSelectedUserIds([]);
       setSelectedGroupIds([]);
       setDueDate("");
@@ -416,7 +437,8 @@ export function AssignTestDialog({
   const assignedUserIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!));
   const groupMemberIds = new Set(assignments.flatMap((a) => a.groupMemberIds ?? []));
   // PRD-54 BR-54-42: an account without email cannot receive the link, so it is not offered.
-  const availableUsers = allUsers.filter(
+  // Review candidates arrive already selected by the server and carry no roles.
+  const availableUsers = isReview ? allUsers : allUsers.filter(
     (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && (u.roles ?? []).includes("learner")
       && Boolean(u.email)
   );
@@ -450,29 +472,29 @@ export function AssignTestDialog({
   // рецензента отправляет только срок жизни ссылки (`assignMutation`), и поле
   // сдачи обещало бы поведение, которого не будет. Срок ссылки остаётся: он
   // работает в обоих режимах.
+  const dueDateField = (
+    <Input
+      label={t.assignments.dueDate}
+      type="date"
+      fullWidth
+      value={dueDate}
+      onChange={(e) => handleDueDateChange(e.target.value)}
+    />
+  );
+  const linkExpiryField = (
+    <Input
+      label="Ссылка активна до"
+      type="date"
+      fullWidth
+      value={linkExpiresAt}
+      onChange={(e) => setLinkExpiresAt(e.target.value)}
+      placeholder="По умолчанию: +30 дней"
+    />
+  );
   const dateFields = (
     <Stack direction="row" gap={4}>
-      {!isReview && (
-        <Box grow>
-          <Input
-            label={t.assignments.dueDate}
-            type="date"
-            fullWidth
-            value={dueDate}
-            onChange={(e) => handleDueDateChange(e.target.value)}
-          />
-        </Box>
-      )}
-      <Box grow>
-        <Input
-          label="Ссылка активна до"
-          type="date"
-          fullWidth
-          value={linkExpiresAt}
-          onChange={(e) => setLinkExpiresAt(e.target.value)}
-          placeholder="По умолчанию: +30 дней"
-        />
-      </Box>
+      {!isReview && <Box grow>{dueDateField}</Box>}
+      <Box grow>{linkExpiryField}</Box>
     </Stack>
   );
 
@@ -596,19 +618,11 @@ export function AssignTestDialog({
     },
   ];
 
-  const userColumns: TableColumn<User>[] = [
-    { key: "email", header: "Email", render: (u) => u.email },
-    { key: "name", header: t.users.name, render: (u) => u.name || "—" },
-    {
-      key: "status",
-      header: t.users.status,
-      render: (u) => (
-        <Tag tone={u.status === "active" ? "success" : "neutral"}>
-          {u.status === "active" ? t.users.active : t.users.pending}
-        </Tag>
-      ),
-    },
-  ];
+  /** A person as a row of the two-pane picker: the name, the address under it (both searched). */
+  const toTransferItem = (u: User): TransferItem => ({ id: u.id, name: u.name || u.email, meta: u.email });
+  const basket = new Set(selectedUserIds);
+  const leftUsers = availableUsers.filter((u) => !basket.has(u.id)).map(toTransferItem);
+  const basketUsers = availableUsers.filter((u) => basket.has(u.id)).map(toTransferItem);
 
   const groupColumns: TableColumn<Group>[] = [
     { key: "name", header: t.groups.name, render: (g) => <Text weight="medium">{g.name}</Text> },
@@ -703,53 +717,40 @@ export function AssignTestDialog({
     />
   );
 
-  const usersPanel = (
-    <Stack gap={4}>
-      <Stack gap={3}>
-        {dateFields}
-        <Cluster justify="end" gap={0} wrap={false}>
-          <Button
-            onClick={handleAssignUsers}
-            disabled={selectedUserIds.length === 0}
-            loading={assignMutation.isPending}
-          >
-            {isReview ? "Пригласить" : t.assignments.assign} ({selectedUserIds.length})
-          </Button>
-        </Cluster>
-      </Stack>
-      {availableUsers.length === 0 ? (
-        <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
-          <p>{isReview ? "Все пользователи уже приглашены" : "Все пользователи уже назначены"}</p>
-        </Box>
-      ) : (
-        <ScrollArea maxH="lg">
-          <Table
-            selectable
-            selected={selectedUserIds}
-            onSelectChange={setSelectedUserIds}
-            columns={userColumns}
-            rows={availableUsers}
-            rowKey={(u) => u.id}
-          />
-        </ScrollArea>
-      )}
-    </Stack>
+  // The dates stand in the picker's own grid, over the halves, so their edges are the
+  // halves' edges: two fields — one over each half; review has one — across both.
+  const usersPanel = usersFailed ? (
+    // A refusal is not an empty list: saying «all invited» here hid a 403 (PRD-52, 14.7).
+    <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+      <p>Не удалось загрузить список пользователей</p>
+    </Box>
+  ) : availableUsers.length === 0 ? (
+    <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+      <p>{isReview ? "Все пользователи уже приглашены" : "Все пользователи уже назначены"}</p>
+    </Box>
+  ) : (
+    <TransferList
+      fill
+      available={leftUsers}
+      assigned={basketUsers}
+      onChange={({ assigned }) => setSelectedUserIds(assigned.map((item) => item.id))}
+      leftTitle="Пользователи"
+      rightTitle={isReview ? "К приглашению" : "К назначению"}
+      searchPlaceholder="Имя или адрес"
+      above={isReview ? linkExpiryField : { left: dueDateField, right: linkExpiryField }}
+      // The arrows only fill the basket; «назначить» would be wrong in review mode (FR-37).
+      controlLabels={{
+        moveSelected: "Добавить отмеченных",
+        moveAll: "Добавить всех видимых",
+        removeSelected: "Убрать отмеченных",
+        removeAll: "Убрать всех видимых",
+      }}
+    />
   );
 
   const groupsPanel = (
     <Stack gap={4}>
-      <Stack gap={3}>
-        {dateFields}
-        <Cluster justify="end" gap={0} wrap={false}>
-          <Button
-            onClick={handleAssignGroups}
-            disabled={selectedGroupIds.length === 0}
-            loading={assignMutation.isPending}
-          >
-            {isReview ? "Пригласить" : t.assignments.assign} ({selectedGroupIds.length})
-          </Button>
-        </Cluster>
-      </Stack>
+      {dateFields}
       {availableGroups.length === 0 ? (
         <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
           <p>Все группы уже назначены</p>
@@ -769,17 +770,46 @@ export function AssignTestDialog({
     </Stack>
   );
 
+  // The action of the active tab stands in the footer, right of «Отмена» (approved
+  // wireframe 2026-10-20); the tabs without an action leave «Отмена» alone.
+  const actionVerb = isReview ? "Пригласить" : t.assignments.assign;
+  const tabAction = activeTab === "users" ? (
+    <Button
+      onClick={handleAssignUsers}
+      disabled={selectedUserIds.length === 0}
+      loading={assignMutation.isPending}
+    >
+      {actionVerb} ({selectedUserIds.length})
+    </Button>
+  ) : activeTab === "groups" ? (
+    <Button
+      onClick={handleAssignGroups}
+      disabled={selectedGroupIds.length === 0}
+      loading={assignMutation.isPending}
+    >
+      {actionVerb} ({selectedGroupIds.length})
+    </Button>
+  ) : activeTab === "bulk" ? (
+    // «Списком» draws its step action itself, into this slot (a portal); `display:
+    // contents` keeps the slot out of the footer layout, so the gap stays the footer's.
+    <span ref={setBulkActionsSlot} style={{ display: "contents" }} />
+  ) : null;
+
   return (
     <ModalDialog
       open={open}
       onClose={() => onOpenChange(false)}
       size="xl"
+      fill
       title={isReview ? "Отправить на рецензирование" : t.assignments.manageAssignments}
       description={testTitle}
       footer={
-        <Button variant="secondary" onClick={() => onOpenChange(false)}>
-          {t.common.cancel}
-        </Button>
+        <>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {t.common.cancel}
+          </Button>
+          {tabAction}
+        </>
       }
     >
       {isReview ? (
@@ -791,6 +821,7 @@ export function AssignTestDialog({
       <Tabs<AssignTab>
         variant="segment"
         align="stretch"
+        fill
         value={activeTab}
         onChange={setActiveTab}
         items={[
@@ -821,6 +852,7 @@ export function AssignTestDialog({
                 testTitle={testTitle}
                 onGoToAssignments={() => setActiveTab("current")}
                 purpose={mode}
+                actionsSlot={bulkActionsSlot}
               />
             ),
           },

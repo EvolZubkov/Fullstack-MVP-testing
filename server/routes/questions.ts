@@ -19,7 +19,7 @@ import { normalizeOptionalText, normalizeQuestionData, normalizePromptByFormat }
 import { promptFormatOf } from "@shared/questions/prompt-format";
 import { normalizeOptionFeedback, optionCountOf } from "@shared/questions/option-feedback";
 import type { SanitizeRemoval } from "@shared/security/html-sanitize";
-import { formulasFor, promptHtmlOf } from "../services/prompt-html";
+import { withFormulas, promptHtmlOf } from "../services/prompt-html";
 import { importQuestionRows } from "../services/questions-import";
 import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
@@ -49,7 +49,7 @@ import {
   importScenarioArchive,
   storedScenarioErrors,
 } from "../services/sim/scenario-archive";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf, withCurrentScenario } from "@shared/sim/upgrade";
 import { summarizeScenario } from "@shared/sim/validate";
 import multer from "multer";
 import { config } from "../config";
@@ -64,19 +64,6 @@ import { config } from "../config";
  * невыполнимой, и вводить общую проверку «на всякий случай» значит менять поведение,
  * о котором PRD-44 не просил.
  */
-/**
- * Положить в содержимое задания готовые формулы (PRD-57 FR-07).
- *
- * Пустой словарь НЕ кладётся: задание без формул обязано остаться байт в байт таким же,
- * каким было, иначе хеш содержимого дрогнет у каждого вопроса в базе.
- */
-function withFormulas(dataJson: unknown, prompt: string): unknown {
-  const formulas = formulasFor(prompt);
-  if (Object.keys(formulas).length === 0) return dataJson;
-  const base = (dataJson ?? {}) as Record<string, unknown>;
-  return { ...base, formulas };
-}
-
 /**
  * Приложить к ответу то, что санитайзер вырезал из текста задания (согласованный эскиз
  * `prd57-question-text.html`, состояние `s-diag`).
@@ -258,7 +245,8 @@ router.get("/scenario-banks", requirePermission("questions.read"), async (req: R
         topicName: topic.name,
         scenarios: await Promise.all(
           scenarios.map(async (q) => {
-            const scenario = (q.dataJson as { scenario: Scenario }).scenario;
+            const scenario = scenarioOf(q.dataJson);
+            if (!scenario) return null;
             return {
               questionId: q.id,
               summary: summarizeScenario(scenario),
@@ -267,7 +255,7 @@ router.get("/scenario-banks", requirePermission("questions.read"), async (req: R
               scenario,
             };
           }),
-        ),
+        ).then((items) => items.filter(Boolean)),
       });
     }
     res.json(banks);
@@ -397,6 +385,7 @@ router.post(
       if (scenarioError) {
         return res.status(422).json({ error: scenarioError, field: "dataJson" });
       }
+      const storedDataJson = isSimulation(type ?? "") ? withCurrentScenario(dataJson) : dataJson;
 
       const questionInput = {
         topicId,
@@ -406,7 +395,7 @@ router.post(
         // PRD-57 FR-07: готовые SVG формул кладутся В ЗАДАНИЕ. Требование прямое: при
         // переносе теста между установками картинка едет вместе с вопросом, а не
         // пересчитывается на приёмнике — иначе её вид зависит от версии библиотеки там.
-        dataJson: withFormulas(normalizeQuestionData(dataJson), canonicalPrompt),
+        dataJson: withFormulas(normalizeQuestionData(storedDataJson), canonicalPrompt),
         correctJson,
         // PRD-16 FR-10: `null` — «Не задано», а не 50; ноль — сложность, а не пустота. Умолчание 50
         // только для запроса, где поля нет вовсе. `||` подменял и то и другое.
@@ -511,7 +500,8 @@ router.get(
       if (!scope.all && !scope.ids.has(question.topicId)) {
         return res.status(404).json({ error: "Question not found" });
       }
-      const scenario = (question.dataJson as { scenario: Scenario }).scenario;
+      const scenario = scenarioOf(question.dataJson);
+      if (!scenario) return res.status(422).json({ error: "Сценарий не читается" });
       const archive = await buildScenarioArchive(scenario);
       res.setHeader("Content-Type", "application/zip");
       res.setHeader(
@@ -596,6 +586,8 @@ router.put(
           return res.status(422).json({ error: scenarioError, field: "dataJson" });
         }
       }
+      const storedDataJson =
+        dataJson !== undefined && isSimulation(type ?? existing.type) ? withCurrentScenario(dataJson) : dataJson;
       let feasibilityWarnings: unknown[] = [];
       const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
       if (affectsDelivery) {
@@ -640,7 +632,7 @@ router.put(
         // PRD-57 FR-07: готовые SVG формул кладутся В ЗАДАНИЕ. Требование прямое: при
         // переносе теста между установками картинка едет вместе с вопросом, а не
         // пересчитывается на приёмнике — иначе её вид зависит от версии библиотеки там.
-        dataJson: withFormulas(normalizeQuestionData(dataJson), canonicalEdit ?? ""),
+        dataJson: withFormulas(normalizeQuestionData(storedDataJson), canonicalEdit ?? ""),
         correctJson,
         difficulty,
         mediaUrl,

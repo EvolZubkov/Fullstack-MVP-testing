@@ -72,6 +72,18 @@ describe("<QuestionPreview />", () => {
     expect(marked[0].textContent).toBe("Часто");
   });
 
+  it("wraps every option mark in the non-shrinking first-line box", () => {
+    // A bare SVG in the flex row used to shrink as the option text grew longer.
+    const { container } = render(<QuestionPreview question={q({
+      type: "multiple",
+      dataJson: { options: ["Short", "A much longer option text ".repeat(10)] } as never,
+      correctJson: { correctIndices: [0] } as never,
+    })} />);
+    const marks = container.querySelectorAll(".ct-qpreview__mark");
+    expect(marks).toHaveLength(2);
+    marks.forEach((m) => expect(m.querySelector("svg")).not.toBeNull());
+  });
+
   it("single with no options renders without crashing (empty fallback)", () => {
     const { container } = render(<QuestionPreview question={q({ type: "single", dataJson: {} as never })} />);
     expect(container.querySelector(".ct-qpreview")).toBeInTheDocument();

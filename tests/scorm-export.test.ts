@@ -63,6 +63,12 @@ vi.mock("../server/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock("../server/db", () => ({ db: {} }));
+// Р7а: the export publishes a draft first. These cases are about the design-template bake,
+// not about publication, so the plan is «no publication, live bake».
+vi.mock("../server/services/test-publish", () => ({
+  planScormPublication: vi.fn(async () => ({ publishes: false, version: null })),
+  publishTest: vi.fn(),
+}));
 
 import testsRouter from "../server/routes/tests";
 import { buildTestJson } from "../server/scorm/builders/test-json";

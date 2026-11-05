@@ -443,7 +443,8 @@ describe("<StructureSection /> — image placeholder", () => {
     fireEvent.click(screen.getByTestId("structure-page-expand-pg-img2"));
     const fileInput = await screen.findByTestId("structure-page-field-pg-img2-pic-file");
     const big = new File(["x"], "big.png", { type: "image/png" });
-    Object.defineProperty(big, "size", { value: 600 * 1024, configurable: true });
+    // Над общим лимитом редактора (1000 КБ, `image-upload-limit`).
+    Object.defineProperty(big, "size", { value: 1100 * 1024, configurable: true });
     fireEvent.change(fileInput, { target: { files: [big] } });
 
     await waitFor(() => expect(screen.getByTestId("structure-page-field-pg-img2-pic-error")).toBeInTheDocument());

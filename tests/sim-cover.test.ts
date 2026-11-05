@@ -7,7 +7,8 @@ import { describe, it, expect } from "vitest";
 import type { Scenario } from "@shared/sim/contract";
 import { DEFAULT_SIM_PENALTIES } from "@shared/sim/scoring";
 import { renderSimCover, renderSimRulesDialog, simCoverShot, simCoverState, simRules, simRunReplaces } from "@shared/sim/cover";
-import example from "../docs/specs/sim-scenario/example/scenario.json";
+import { asScenario } from "@shared/sim/upgrade";
+import example from "./fixtures/sim/scenario-v1.json";
 
 const scenario = example as unknown as Scenario;
 
@@ -97,5 +98,15 @@ describe("какой прогон остаётся (техдолг №7)", () =>
   it("если завершённого не было, записывается любой прогон", () => {
     expect(simRunReplaces(undefined, { outcome: "exited" })).toBe(true);
     expect(simRunReplaces({ outcome: "exited" }, { outcome: "exited" })).toBe(true);
+  });
+});
+
+describe("обложка на v2", () => {
+  it("снимок первой сцены берётся и из v2", () => {
+    expect(simCoverShot(asScenario(example as never))).toBe(simCoverShot(example as never));
+  });
+  it("финал и «Я закончил» — задание завершено", () => {
+    expect(simCoverState({ outcome: "finale" })).toBe("done");
+    expect(simCoverState({ outcome: "declared" })).toBe("done");
   });
 });

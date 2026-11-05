@@ -111,10 +111,12 @@ export const DEFAULT_SECTION_SUBTITLE = "Инструкция";
 export const PASS_CONDITION_SHOWN_SETTING_KEY = "passConditionShown";
 
 /** The settings bag of a page, whichever shape the host ships it in. */
-function settingsOf(page: SequenceContentPage | null | undefined): Record<string, unknown> | null {
+export function pageSettingsOf(page: SequenceContentPage | null | undefined): Record<string, unknown> | null {
   if (!page) return null;
   return (page.settingsJson ?? page.settings ?? null) as Record<string, unknown> | null;
 }
+
+const settingsOf = pageSettingsOf;
 
 /** Sequence identifier of a page, or `""` when it is not in one. */
 export function sequenceIdOf(page: SequenceContentPage | null | undefined): string {

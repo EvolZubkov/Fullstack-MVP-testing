@@ -91,11 +91,16 @@ export async function canReviewTest(
   test: TestRef,
 ): Promise<boolean> {
   if (await canEditTest(roles, userId, test)) return true;
-  const grant = await storage.getTestGrantForUser(test.id, userId);
-  return grant?.accessLevel === "review";
+  // The review grant has its own slot, so a manager's `assign` beside it does not hide it.
+  return Boolean(await storage.getTestReviewGrant(test.id, userId));
 }
 
-/** Can assign the test: assign- or edit-grant for managers (plus admin/super). */
+/**
+ * Can assign the test (plus admin/super). The manager role opens the action;
+ * the test decides: an assign- or edit-grant, or - for a manager who also holds
+ * an authoring role - the author's own edit scope (owner or edit grant). The
+ * authoring role alone never opens it: `assignments.manage` is the manager's.
+ */
 export async function canAssignTest(
   roles: readonly Role[],
   userId: string,
@@ -103,6 +108,7 @@ export async function canAssignTest(
 ): Promise<boolean> {
   if (isAdminOrSuper(roles)) return true;
   if (hasRole(roles, ROLES.MANAGER)) {
+    if (hasAuthoringRole(roles) && (await canEditTest(roles, userId, test))) return true;
     const grant = await storage.getTestGrantForUser(test.id, userId);
     return grant?.accessLevel === "assign" || grant?.accessLevel === "edit";
   }

@@ -13,7 +13,7 @@ import { boundsOf } from "@shared/sim/geometry";
 import type { Scenario, Zone } from "@shared/sim/contract";
 
 const scenario = JSON.parse(
-  readFileSync(resolve(process.cwd(), "docs/specs/sim-scenario/example/scenario.json"), "utf8"),
+  readFileSync(resolve(process.cwd(), "tests/fixtures/sim/scenario-v1.json"), "utf8"),
 ) as Scenario;
 
 function zone(id: string): Zone {
@@ -260,7 +260,7 @@ describe("результат", () => {
     hit(run, "home-inbox");
     const r = run.result();
     expect(r.format).toBe("skillum.sim-result");
-    expect(r.version).toBe(1);
+    expect(r.version).toBe(2);
     expect(r.events.filter((e) => e.type === "enter").map((e) => (e as { scene: string }).scene)).toEqual(["home", "list"]);
   });
 });

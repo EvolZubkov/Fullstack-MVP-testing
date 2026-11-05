@@ -16,7 +16,8 @@
  */
 import { replayRun } from "@shared/sim/replay";
 import { decodeProtocol } from "@shared/sim/protocol-codec";
-import type { Scenario, SimResult } from "@shared/sim/contract";
+import type { SimResult } from "@shared/sim/contract";
+import type { ScenarioInput } from "@shared/sim/upgrade";
 import { readSimRun } from "../analytics/simulation-stats";
 
 /** Что импорт пишет в ответ сценария. */
@@ -37,7 +38,7 @@ export interface ImportedSimAnswer {
  * @param protocol закодированный протокол из блоков `sim_<id>_<n>`; `null` — не пришёл
  * @returns ответ к записи; `answer: null`, когда шаги не читаются
  */
-export function importedSimAnswer(scenario: Scenario | null, steps: string, protocol: string | null): ImportedSimAnswer {
+export function importedSimAnswer(scenario: ScenarioInput | null, steps: string, protocol: string | null): ImportedSimAnswer {
   const reported = readSimRun(steps);
   if (!reported) return { answer: null, restored: false, rejected: false };
   if (!protocol) return { answer: steps, restored: false, rejected: false };

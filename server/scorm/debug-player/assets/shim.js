@@ -83,10 +83,27 @@
     emit();
   }
 
+  // `_count` of a collection, derived the way an LMS reports it: one past the highest index
+  // written. The package reads it to neutralize the tail of an earlier report in the same
+  // session, so a flat store answering "" would hide that path from both players.
+  function collectionCount(prefix) {
+    var count = 0;
+    var re = new RegExp("^" + prefix.replace(/\./g, "\\.") + "\\.(\\d+)\\.");
+    for (var key in cmi) {
+      var m = re.exec(key);
+      if (m && Number(m[1]) + 1 > count) count = Number(m[1]) + 1;
+    }
+    return count;
+  }
+
   var API_1484_11 = {
     Initialize: function () { creditSessionTime(); lastError = "0"; record("Initialize", "", null, "true"); return "true"; },
     Terminate: function () { lastError = "0"; persist(); record("Terminate", "", null, "true"); return "true"; },
-    GetValue: function (k) { var v = cmi[k] != null ? String(cmi[k]) : ""; lastError = "0"; record("GetValue", k, null, v); return v; },
+    GetValue: function (k) {
+      var coll = /^(cmi\.(?:interactions|objectives))\._count$/.exec(k);
+      var v = coll ? String(collectionCount(coll[1])) : (cmi[k] != null ? String(cmi[k]) : "");
+      lastError = "0"; record("GetValue", k, null, v); return v;
+    },
     SetValue: function (k, v) {
       if (k === "cmi.total_time") { lastError = "404"; record("SetValue", k, v, "false"); return "false"; } // read-only element
       cmi[k] = v; lastError = "0"; record("SetValue", k, v, "true"); return "true";

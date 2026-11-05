@@ -88,3 +88,12 @@ describe("resolveSectionGroups", () => {
     expect(out.map((g) => g.order)).toEqual([0, 1]);
   });
 });
+
+describe("resolveSectionGroups: пояснения", () => {
+  it("блок, сохранивший ключ, сохраняет и пояснение — книга его не несёт", () => {
+    const description = { format: "richText" as const, text: "<p>Пояснение</p>" };
+    const out = resolveSectionGroups(["Теория", "Новый"], [{ key: "t", label: "Теория", description }]);
+    expect(out[0]).toMatchObject({ key: "t", description });
+    expect(out[1]).not.toHaveProperty("description");
+  });
+});

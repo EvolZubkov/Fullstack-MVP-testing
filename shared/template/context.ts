@@ -22,7 +22,7 @@ import type { CtxMeasureView } from "./measure-view";
 import type { CtxScalesChart } from "./scales-chart";
 import type { CtxScaleBars } from "./scale-bars";
 import type { CtxRecommendations } from "./recommendations";
-import type { CtxCoursePassCondition } from "./pass-condition";
+import type { CtxCoursePassCondition, CtxCoursePassPoints } from "./pass-condition";
 
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
@@ -74,6 +74,14 @@ export interface CtxCourse {
    * measurement method and when no topic carries a threshold. Contract 3.14.0.
    */
   passCondition?: CtxCoursePassCondition;
+  /**
+   * The overall threshold when the author set it in POINTS: `{ value, valueLabel, label }` —
+   * the cover tile «5 / баллов для прохождения». `passPercent` is then `null`: a points
+   * threshold has no fixed percent. Absent for a percent rule and under the same conditions
+   * that drop `passPercent` (a measurement method, topics deciding the outcome).
+   * Contract 3.17.0.
+   */
+  passPoints?: CtxCoursePassPoints;
 }
 
 /** A recommended course/event link for failed-topic guidance (SCORM-extra). */
@@ -175,6 +183,12 @@ export interface CtxTopicGroup {
   key: string;
   /** Heading of the group; may be empty if the author left it so. */
   label: string;
+  /**
+   * Author's explanation of the group, ready HTML (`richTextToHtml`). Absent when the author
+   * wrote none, so the layout's `{{#if descriptionHtml}}` prints nothing and a test without
+   * explanations keeps its context byte-identical.
+   */
+  descriptionHtml?: string;
   /** The group's topic cards, in delivery order — the SAME objects as in `topicResults`. */
   topics: CtxTopicResultView[];
   /** Sections of the group with a PASSED verdict. */
@@ -407,6 +421,12 @@ export interface CtxResult {
    * be absent and the layout would hide the summary everywhere. Absent = shown.
    */
   hideScoreSummary?: boolean;
+  /**
+   * The score bar under the results header («Полоса балла»), NEGATIVE for the same reason
+   * as {@link hideScoreSummary}: absent = shown. Follows the summary unless the author set
+   * the bar on its own.
+   */
+  hideScoreBar?: boolean;
   /**
    * PRD-49. The visible sub-blocks of the results umbrella, already ordered and already
    * carrying their heading. The layout walks this ONE array instead of printing four

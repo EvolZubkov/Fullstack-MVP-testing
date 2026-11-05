@@ -15,7 +15,7 @@ import { scoreAnswer } from "@shared/scoring/engine";
 import type { Scenario, Zone } from "@shared/sim/contract";
 
 const scenario = JSON.parse(
-  readFileSync(resolve(process.cwd(), "docs/specs/sim-scenario/example/scenario.json"), "utf8"),
+  readFileSync(resolve(process.cwd(), "tests/fixtures/sim/scenario-v1.json"), "utf8"),
 ) as Scenario;
 
 function zone(id: string): Zone {

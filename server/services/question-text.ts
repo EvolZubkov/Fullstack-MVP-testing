@@ -27,15 +27,42 @@ export type TextNormalizeOptions = {
    * editor, where the paste handler has already converted what the author pasted.
    */
   convertHtml?: boolean;
+  /**
+   * The value this field holds now, when the incoming text may be its own export
+   * coming back. If the incoming text equals it up to the canonical whitespace, it is
+   * stored as is and `convertHtml` does not apply: the author's own text is not foreign
+   * markup, and a tag they wrote on purpose must survive the round trip through the book.
+   */
+  stored?: unknown;
 };
+
+/** Code spans and fenced blocks: their content is literal, never markup to convert. */
+const CODE_SPANS = /```[\s\S]*?```|`[^`\n]+`/g;
+
+/** Placeholder of a parked code span; differs from the one `normalizeAuthorText` uses. */
+const PARKED = /\u0000k(\d+)\u0000/g;
 
 /**
  * Bring one incoming text value to its stored form: markup converted when the
  * caller asked for it, canonical whitespace always.
+ *
+ * Code spans and fenced blocks are parked before the markup check and the conversion:
+ * `<div>` inside a listing is what the listing shows, and converting it would strip the
+ * very tags the question asks about.
  */
 export function normalizeIncomingText(value: string, options?: TextNormalizeOptions): string {
-  if (options?.convertHtml && looksLikeHtml(value)) return htmlToMarkdown(value);
-  return normalizeAuthorText(value);
+  if (!options?.convertHtml) return normalizeAuthorText(value);
+
+  const plain = normalizeAuthorText(value);
+  if (typeof options.stored === "string" && plain === normalizeAuthorText(options.stored)) return plain;
+
+  const parked: string[] = [];
+  const masked = value.replace(CODE_SPANS, (code) => {
+    parked.push(code);
+    return `\u0000k${parked.length - 1}\u0000`;
+  });
+  if (!looksLikeHtml(masked)) return plain;
+  return htmlToMarkdown(masked).replace(PARKED, (_whole, index: string) => parked[Number(index)]);
 }
 
 /**
@@ -54,17 +81,25 @@ export function normalizeOptionalText<T>(value: T): T | string {
  * Normalise the author texts inside a question's `dataJson` — the answer options,
  * ranking items or matching sides — leaving every other field of the payload as
  * it was. A value that is not an object is returned untouched.
+ *
+ * @param dataJson Incoming payload.
+ * @param options How each text is normalised (`stored` is ignored here).
+ * @param stored The `dataJson` the question holds now: each element is compared with
+ *   the stored element at the same position of the same collection (see
+ *   {@link TextNormalizeOptions.stored}).
  */
-export function normalizeQuestionData<T>(dataJson: T, options?: TextNormalizeOptions): T {
+export function normalizeQuestionData<T>(dataJson: T, options?: TextNormalizeOptions, stored?: unknown): T {
   if (!dataJson || typeof dataJson !== "object" || Array.isArray(dataJson)) return dataJson;
 
   const source = dataJson as Record<string, unknown>;
+  const previous = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
   const result: Record<string, unknown> = { ...source };
   for (const key of TEXT_COLLECTIONS) {
     const collection = source[key];
     if (!Array.isArray(collection)) continue;
-    result[key] = collection.map((item) =>
-      typeof item === "string" ? normalizeIncomingText(item, options) : item,
+    const before = Array.isArray(previous[key]) ? (previous[key] as unknown[]) : [];
+    result[key] = collection.map((item, i) =>
+      typeof item === "string" ? normalizeIncomingText(item, { ...options, stored: before[i] }) : item,
     );
   }
   return result as T;

@@ -27,6 +27,7 @@ import {
   isOpenText,
 } from "@shared/questions/question-type";
 import { printRulesCell, printAnswerKind, printJoin, printPromptFormat } from "./workbook-answer-rules";
+import { joinListCell } from "./workbook-list-cell";
 
 /** Маппинг типов: внутренний -> Excel. */
 const typeToExcel: Record<string, string> = {
@@ -111,7 +112,7 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
   let correctStr = "";
 
   if (hasOptionList(q.type)) {
-    optionsStr = (data.options || []).join("#");
+    optionsStr = joinListCell(data.options || []);
     if (q.type === "multiple") {
       correctStr = (correct.correctIndices || []).map((i: number) => i + 1).join(",");
     } else if (isMeasurementOnly(q)) {
@@ -125,10 +126,10 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     // PRD-14 Ф0 (FR-01): "left list || right list" (round-trippable, distractors).
     const left = data.left || [];
     const right = data.right || [];
-    optionsStr = `${left.join(" # ")} || ${right.join(" # ")}`;
+    optionsStr = `${joinListCell(left, " # ")} || ${joinListCell(right, " # ")}`;
     correctStr = (correct.pairs || []).map((p: any) => `${p.left + 1}-${p.right + 1}`).join(", ");
   } else if (q.type === "ranking") {
-    optionsStr = (data.items || []).join("#");
+    optionsStr = joinListCell(data.items || []);
     correctStr = (correct.correctOrder || []).map((i: number) => i + 1).join(",");
   } else if (isTextEntry(q.type) || hasBlanks(q.type) || isOpenText(q.type)) {
     // PRD-57 FR-31: у текстовых типов вариантов нет, а эталон — набор правил сравнения.
@@ -187,5 +188,5 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
 function printOptionFeedback(q: Question): string {
   if (q.type !== OPTION_FEEDBACK_TYPE || !hasOptionFeedback(q.optionFeedbackJson)) return "";
   const count = optionCountOf(q.dataJson);
-  return Array.from({ length: count }, (_, i) => optionFeedbackAt(q.optionFeedbackJson, i) ?? "").join("#");
+  return joinListCell(Array.from({ length: count }, (_, i) => optionFeedbackAt(q.optionFeedbackJson, i) ?? ""));
 }

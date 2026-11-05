@@ -19,6 +19,7 @@ import { BarChart3, CircleDot, Eye, Pencil, Plus, Search } from "lucide-react";
 import { Button, EmptyState, FormSection, IconButton, Input, Tag } from "@skillum/ui-kit";
 import type { Question } from "@shared/schema";
 import type { QuestionType } from "@shared/questions/question-type";
+import { questionLabel } from "@shared/questions/question-label";
 import { QuestionPreviewModal } from "@/features/questions/question-preview-modal";
 import { useOptionalAuth } from "@/lib/auth";
 import {
@@ -113,7 +114,7 @@ export function TestQuestionsSection({
   );
   const needle = searchableText(query);
   const shown = needle
-    ? questions.filter((q) => searchableText(q.prompt ?? "").includes(needle))
+    ? questions.filter((q) => searchableText(questionLabel(q)).includes(needle))
     : questions;
 
   const overrideByQuestion = useMemo(
@@ -229,7 +230,7 @@ export function TestQuestionsSection({
                         <span className="tb-qscoring__qtype" title={QUESTION_TYPE_LABEL[qType] ?? qType}>
                           <TypeIcon width={16} height={16} aria-hidden="true" />
                         </span>
-                        {q.prompt}
+                        {questionLabel(q)}
                       </span>
                       <span className="tb-qlist__meta">{summary.meta.join(" · ")}</span>
                       {stats.line && (

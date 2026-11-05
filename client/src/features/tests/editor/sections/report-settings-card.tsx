@@ -166,6 +166,14 @@ export function ReportSettingsCard(props: {
   headings?: ReportPreviewTest["headings"];
   /** Настройка показа подытогов теста; уходит в предпросмотр. */
   breakdownDisplay?: ReportPreviewTest["breakdownDisplay"];
+  /** Печатать ли карточки тем; уходит в предпросмотр. */
+  showTopicResults?: boolean;
+  /**
+   * Печатать ли строку «Лучший результат за N попыток» (`tests.show_attempts_count`).
+   * Переключатель рисуется только на стороне содержания и только когда передан обработчик.
+   */
+  showAttemptsCount?: boolean;
+  onShowAttemptsCountChange?: (next: boolean) => void;
   /** Группы тем теста; уходят в предпросмотр. */
   sectionGroups?: ReportPreviewTest["sectionGroups"];
   /** Вводные блоки теста (PRD-61 FR-23); уходят в предпросмотр. */
@@ -202,6 +210,24 @@ export function ReportSettingsCard(props: {
   // Отсутствие признака = выдавать: до этой настройки отчёт получал каждый (см.
   // `isReportEnabled`), и переключатель обязан открываться в том же положении.
   const enabled = props.value?.enabled !== false;
+
+  // Строка «Лучший результат за N попыток» — вопрос содержания документа, поэтому стоит
+  // рядом с выбором вида. Печатается и у стандартного вида, к которому отчёт откатывается
+  // без каталога, — значит, переключатель нужен и там.
+  const onAttemptsChange = props.onShowAttemptsCountChange;
+  const attemptsSwitch = isContent && onAttemptsChange ? (
+    <div className="ou-formfield">
+      <Switch
+        id="report-attempts-count"
+        label="Показывать число попыток"
+        description="Строка «Лучший результат за N попыток» в шапке отчёта."
+        checked={props.showAttemptsCount !== false}
+        disabled={props.readOnly}
+        onChange={(e) => onAttemptsChange(e.target.checked)}
+        data-testid="report-attempts-count-switch"
+      />
+    </div>
+  ) : null;
 
   const setBranch = (variantKey: string, nextValues: Record<string, unknown>) => {
     props.onChange({ ...props.value, [branchKey]: { variantKey, values: nextValues } });
@@ -284,7 +310,9 @@ export function ReportSettingsCard(props: {
               title="Шаблон не предлагает видов отчёта"
               description="Отчёт будет собран по виду шаблона «Стандартный», с цветами и логотипом этого теста. Настраиваемых параметров у него нет."
             />
-          ) : (
+          ) : null}
+          {catalogue.none && attemptsSwitch}
+          {catalogue.loading || catalogue.none ? null : (
             <>
               {/* Вид отчёта отвечает на вопрос «ЧТО в нём будет» — итоги, разбор по
                   темам, сертификат, — поэтому живёт он рядом с содержанием. «Оформление»
@@ -309,6 +337,7 @@ export function ReportSettingsCard(props: {
                   />
                 </div>
               )}
+              {attemptsSwitch}
               {!isContent && catalogue.selected && (
                 <div className="ou-formfield">
                   <span className="ou-formfield__lbl">Вид отчёта</span>
@@ -446,6 +475,8 @@ export function ReportSettingsCard(props: {
         testName={props.testName ?? ""}
         headings={props.headings}
         breakdownDisplay={props.breakdownDisplay}
+        showTopicResults={props.showTopicResults}
+        showAttemptsCount={props.showAttemptsCount}
         sectionGroups={props.sectionGroups}
         intro={props.intro}
         sections={props.sections ?? []}

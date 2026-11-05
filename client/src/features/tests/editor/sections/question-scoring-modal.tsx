@@ -25,7 +25,7 @@ import { distributesBudget, isSimulation } from "@shared/questions/question-type
 import { questionLabel } from "@shared/questions/question-label";
 import { resolveSimScoring, type ResolvedSimScoring } from "@shared/sim/scoring";
 import { summarizeScenario } from "@shared/sim/validate";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 import type { SimScoringSettings } from "@shared/schema";
 import { plural } from "@/features/questions/scenario/scenario-summary";
 import { SimPartialChoice, SimPenaltiesTable } from "./sim-penalties";
@@ -102,8 +102,8 @@ function simulationScoring(
 
 /** «Сценарий: 11 сцен, 1 ловушка, 4 проверки цели. » — из сводки хранимого сценария. */
 function scenarioFacts(question: Question): string {
-  const scenario = (question.dataJson as { scenario?: Scenario } | null)?.scenario;
-  if (!scenario?.scenes) return "";
+  const scenario = scenarioOf(question.dataJson);
+  if (!scenario) return "";
   try {
     const s = summarizeScenario(scenario);
     return `Сценарий: ${plural(s.scenes, ["сцена", "сцены", "сцен"])}, ${plural(s.traps, ["ловушка", "ловушки", "ловушек"])}, ${plural(s.checks, ["проверка", "проверки", "проверок"])} цели. `;
@@ -241,7 +241,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
         </div>
       ) : (
       <div className="tb-qscoring__recap">
-        <b>{question.prompt}</b>
+        <b>{questionLabel(question)}</b>
         <br />
         Базовая сложность вопроса: {question.difficulty}. Текст и варианты правятся в банке
         вопросов; здесь — только оценка для этого теста.

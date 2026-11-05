@@ -595,6 +595,18 @@ export const sectionGroupSchema = z.object({
   key: z.string().trim().min(1).max(64),
   label: z.string().trim().max(200),
   order: z.number().int().min(0).optional(),
+  /**
+   * Пояснение к группе: печатается под её заголовком на экране итогов и в отчёте при ЛЮБОМ
+   * вердикте («Целевой уровень говорит о…»). Форма та же, что у толкования темы
+   * (`interpretationSchema`), и разметку строит тот же `richTextToHtml`. Пустой текст =
+   * пояснения нет. Поле необязательно: тесты и снимки без него печатаются как прежде.
+   */
+  description: z
+    .object({
+      format: z.enum(["plain", "richText", "html"]).default("plain"),
+      text: z.string().max(10000).default(""),
+    })
+    .optional(),
 });
 
 /**
@@ -802,6 +814,20 @@ export const tests = pgTable("tests", {
    */
   breakdownGateEnabled: boolean("breakdown_gate_enabled").notNull().default(false),
   /**
+   * Показывать ли карточки «Результаты по темам» — на экране итогов и в отчёте разом.
+   * `true` (умолчание и значение для всех существующих тестов) = печатать, как печатали
+   * всегда. `false` гасит ТОЛЬКО сами карточки вместе с вложенными строками разреза:
+   * вердикт по темам, блок «Рекомендации» и сводный блок разреза читают данные тем до
+   * этого переключателя и не меняются.
+   */
+  showTopicResults: boolean("show_topic_results").notNull().default(true),
+  /**
+   * Печатать ли в шапке отчёта строку «Лучший результат за N попыток». `true` (умолчание и
+   * значение для всех существующих тестов) = печатать, как печатали всегда. Экран итогов
+   * этой строки не знает, поэтому переключатель касается только документа.
+   */
+  showAttemptsCount: boolean("show_attempts_count").notNull().default(true),
+  /**
    * PRD-50 FR-11: named groups of sections, in author order (see {@link sectionGroupSchema}).
    * Null/empty = no groups, and the results screen prints exactly the flat list of topic
    * cards every test has printed so far (FR-27).
@@ -815,8 +841,14 @@ export const tests = pgTable("tests", {
 /**
  * PRD-13 RBAC: explicit access to a test for a non-owner. `edit` lets an author
  * edit/publish/export the test; `assign` lets a manager assign it. Grants are
- * created and revoked only by an administrator or superadmin. One grant per
- * (test, user); `edit` covers the `assign` scope during access resolution.
+ * created and revoked only by an administrator or superadmin. `edit` covers the
+ * `assign` scope during access resolution.
+ *
+ * Two independent slots per (test, user), each holding at most one row: the
+ * WORKING grant (`edit` or `assign`, mutually exclusive, managed by the access
+ * panel) and the REVIEW grant (`review`, managed by the review invitation). A
+ * manager may therefore assign a test and review it at the same time (PRD-52,
+ * 14.8); before, the single slot made an invitation silently replace `assign`.
  */
 export const testAccessGrants = pgTable("test_access_grants", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -828,8 +860,32 @@ export const testAccessGrants = pgTable("test_access_grants", {
   grantedBy: varchar("granted_by", { length: 36 }), // which admin granted it
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
-  testUserIdx: uniqueIndex("test_access_grants_test_user_idx").on(table.testId, table.userId),
+  workIdx: uniqueIndex("test_access_grants_work_idx")
+    .on(table.testId, table.userId)
+    .where(sql`${table.accessLevel} <> 'review'`),
+  reviewIdx: uniqueIndex("test_access_grants_review_idx")
+    .on(table.testId, table.userId)
+    .where(sql`${table.accessLevel} = 'review'`),
 }));
+
+/**
+ * Public link of a test (stage 1: at most one per test). Kept out of `tests` on purpose:
+ * the test row is copied into publication snapshots and spread into `/api/learner/tests`,
+ * so a token column there would leak to every learner of the test.
+ */
+export const testPublicLinks = pgTable("test_public_links", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull()
+    .references(() => tests.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 64 }).notNull(),
+  createdBy: varchar("created_by", { length: 36 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  testIdx: uniqueIndex("test_public_links_test_idx").on(table.testId),
+  tokenIdx: uniqueIndex("test_public_links_token_idx").on(table.token),
+}));
+
+export type TestPublicLink = typeof testPublicLinks.$inferSelect;
 
 // ─── PRD-11: tag draw quotas (квоты выдачи по тегам) ─────────────────────────
 // Optional per-section stratified-draw blueprint guaranteeing coverage of
@@ -998,8 +1054,6 @@ export const testScenarios = pgTable("test_scenarios", {
   title: text("title"),
   required: boolean("required").notNull().default(true),
   timeLimitMinutes: integer("time_limit_minutes"),
-  /** Картинка карточки пункта в хабе; NULL — без картинки. */
-  imageUrl: text("image_url"),
   /**
    * Группа тем, в которой стоит пункт (PRD-50 `tests.section_groups_json`), — как
    * `test_sections.group_key`. NULL или ключ, которого тест не объявлял, — «вне групп».
@@ -1086,6 +1140,15 @@ export const attempts = pgTable("attempts", {
    */
   sectionTimerJson: jsonb("section_timer_json"),
   startedAt: timestamp("started_at").notNull(),
+  /**
+   * When the test-wide countdown started: on the FIRST QUESTION shown, not on
+   * «Начать» (`startedAt`) — intro pages and the router hub before the first topic
+   * do not spend the limit. Stamped once, by the server's clock
+   * (`startAttemptTimer`), so a reload resumes from it. NULL = the attempt has not
+   * reached a question yet; migration `0063` backfilled unfinished legacy attempts
+   * with `startedAt`, so a run begun before the rule keeps its old clock.
+   */
+  timerStartedAt: timestamp("timer_started_at"),
   finishedAt: timestamp("finished_at"),
 }, (table) => ({
   // Attempts is the fastest-growing table; these back the hot read/delete paths.
@@ -1223,6 +1286,8 @@ export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
 export type UserRole = typeof userRoles.$inferSelect;
 
 export type InsertTestAccessGrant = z.infer<typeof insertTestAccessGrantSchema>;
+/** Which of the two grant slots of a (test, user) pair: `edit`/`assign` or `review`. */
+export type TestGrantSlot = "work" | "review";
 export type TestAccessGrant = typeof testAccessGrants.$inferSelect;
 
 export type InsertFolder = z.infer<typeof insertFolderSchema>;

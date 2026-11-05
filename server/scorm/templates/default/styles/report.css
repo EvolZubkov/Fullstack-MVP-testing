@@ -138,6 +138,13 @@
 .tb-report__topic-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .tb-report__topic-group-title { font-size: 13px; font-weight: 700; line-height: 1.2; }
 .tb-report__topic-group-counter { font-size: 11px; color: #aca9a9; white-space: nowrap; }
+/* Пояснение к группе: мелкий приглушённый текст под заголовком. Заголовок не должен
+   оставаться внизу страницы без своего текста, поэтому он держится за описание. */
+.tb-report__topic-group-head { break-after: avoid; }
+.tb-report__topic-group-description { font-size: 11px; line-height: 1.45; color: #6b6868; margin-bottom: 8px; break-after: avoid; }
+.tb-report__topic-group-description > :first-child { margin-top: 0; }
+.tb-report__topic-group-description > :last-child { margin-bottom: 0; }
+.tb-report__topic-group-description p, .tb-report__topic-group-description ul, .tb-report__topic-group-description ol { margin: 0 0 4px; }
 
 /* Темы: сетка, число колонок ставит хост инлайном по `report.gridColumns`. */
 .tb-report__topics { display: grid; gap: 10px; }

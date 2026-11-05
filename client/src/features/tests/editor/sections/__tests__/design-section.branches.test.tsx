@@ -361,10 +361,10 @@ describe("<DesignSection /> — MediaParamRow upload", () => {
   it("rejects an oversize image before uploading (КБ hint)", async () => {
     renderBranding([{ key: "logo", type: "image", label: "Логотип" }]);
     const input = screen.getByTestId("design-param-input-logo-file") as HTMLInputElement;
-    // Default image limit is 512 KB.
-    fireEvent.change(input, { target: { files: [fileOfSize(600 * 1024)] } });
+    // Default image limit is the editor-wide one, 1000 KB (`image-upload-limit`).
+    fireEvent.change(input, { target: { files: [fileOfSize(1100 * 1024)] } });
     await waitFor(() =>
-      expect(screen.getByTestId("design-param-error-logo")).toHaveTextContent("512 КБ"),
+      expect(screen.getByTestId("design-param-error-logo")).toHaveTextContent("1000 КБ"),
     );
     // No upload attempted.
     expect(fetch).not.toHaveBeenCalled();

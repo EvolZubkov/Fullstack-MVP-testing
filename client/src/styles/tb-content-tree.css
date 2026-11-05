@@ -13,7 +13,12 @@
 /* Page wrapper fills the shell main so the tree scrolls internally and the
    title + toolbar + table header stay put (sticky region). */
 .tb-content-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.tb-content-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tb-content-tree {
+  display: flex; flex-direction: column; flex: 1; min-height: 0;
+  /* Room under the last row so it (and its ⋯-menu) scrolls clear of the fixed
+     FAB: FAB height + its bottom offset + the same gap above it. */
+  --fab-clearance: calc(var(--wf-size-56, 56px) + var(--ou-space-6) * 2);
+}
 
 /* Filter bar above the tree — DS FilterBar; its panel is a FilterPanel (PRD-70 FR-70). */
 .tb-content-tree > .ou-filterbar { margin-bottom: var(--ou-space-4); flex-shrink: 0; }
@@ -23,7 +28,7 @@
 
 /* Tree + columns: НАЗВАНИЕ | ВЛАДЕЛЕЦ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ actions.
    The tree scrolls internally; the column header (.ct-thead) is sticky. */
-.tb-content-tree .ct-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+.tb-content-tree .ct-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding-bottom: var(--fab-clearance); }
 
 /* Depth-based indentation (avoids inline styles; --ct-depth drives .ct-name padding) */
 .tb-content-tree .ct-d0 { --ct-depth: 0; }
@@ -126,6 +131,10 @@
   top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
 }
 .tb-content-tree .ct-qpreview { max-width: 40rem; }
+/* Option mark: fixed size whatever the option length, centred on the first text line
+   (the box takes the option text's font, so `1lh` is exactly one line of it). */
+.tb-content-tree .ct-qpreview__mark { flex: none; display: inline-flex; align-items: center; height: 1lh; font: var(--ou-text-body-s); }
+.tb-content-tree .ct-qpreview__mark svg { flex: none; }
 
 /* States */
 .tb-content-tree .ct-empty { padding: var(--ou-space-7) var(--ou-space-3); }
@@ -148,6 +157,12 @@
   background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
   border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
   padding: var(--ou-space-1); display: flex; flex-direction: column;
+}
+.tb-content-tree .ct-menu::after {
+  /* An open menu is out of flow, so the tree's padding does not extend past it;
+     this invisible tail does, letting the menu scroll clear of the FAB too. */
+  content: ""; position: absolute; top: 100%; left: 0;
+  width: 1px; height: var(--fab-clearance); pointer-events: none;
 }
 .tb-content-tree .ct-menu__item {
   display: flex; align-items: center; gap: var(--ou-space-2);

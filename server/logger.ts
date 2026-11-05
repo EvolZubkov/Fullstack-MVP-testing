@@ -29,7 +29,9 @@ import { config } from "./config";
 const LOG_DIR = path.resolve(process.cwd(), "logs");
 const MAX_AUDIT_DAYS = 90;
 const SLOW_REQUEST_MS = 1000;
-const RING_BUFFER_SIZE = 2000;
+// 2000 entries lasted about five hours on the test stand: a failure reported in the
+// afternoon was already gone. Entries are short (~200 bytes), so this is a few MB.
+const RING_BUFFER_SIZE = 20000;
 const ROOT_PATH = "app";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -360,8 +362,14 @@ export function getRecentLogs(filter: LogFilter = {}): {
   }
   if (filter.search) {
     const q = filter.search.toLowerCase();
+    // userId/reqId are fields, not part of the message: without them here an
+    // entry cannot be found by who sent the request.
     entries = entries.filter(
-      (e) => e.message.toLowerCase().includes(q) || e.source.toLowerCase().includes(q)
+      (e) =>
+        e.message.toLowerCase().includes(q) ||
+        e.source.toLowerCase().includes(q) ||
+        e.userId?.toLowerCase().includes(q) ||
+        e.reqId?.toLowerCase().includes(q)
     );
   }
 

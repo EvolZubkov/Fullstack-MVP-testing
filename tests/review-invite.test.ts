@@ -19,6 +19,7 @@ const { storageMock, emailMock } = vi.hoisted(() => ({
     updateUser: vi.fn(),
     setUserRoles: vi.fn(),
     getTestGrantForUser: vi.fn(),
+    getTestReviewGrant: vi.fn(),
     upsertTestAccessGrant: vi.fn(),
     createAssignmentAccessToken: vi.fn(),
     createAssignment: vi.fn(),
@@ -52,6 +53,7 @@ beforeEach(() => {
     id: "new-user", email: data.email, name: data.name ?? null,
   }));
   storageMock.getTestGrantForUser.mockResolvedValue(undefined);
+  storageMock.getTestReviewGrant.mockResolvedValue(undefined);
   storageMock.upsertTestAccessGrant.mockResolvedValue({ id: "g1" });
   storageMock.createAssignmentAccessToken.mockResolvedValue({ id: "tok1" });
   emailMock.sendReviewInviteEmail.mockResolvedValue(true);
@@ -100,7 +102,7 @@ describe("inviteReviewers", () => {
 
   it("повторное приглашение не плодит грантов", async () => {
     storageMock.getUserByEmail.mockResolvedValue({ id: "u9", email: "expert@x.test", name: "Ирина" });
-    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "review" });
+    storageMock.getTestReviewGrant.mockResolvedValue({ accessLevel: "review" });
     const report = await run([{ email: "expert@x.test" }]);
     expect(storageMock.upsertTestAccessGrant).not.toHaveBeenCalled();
     expect(report.alreadyHadAccess).toBe(1);
@@ -114,9 +116,21 @@ describe("inviteReviewers", () => {
     expect(storageMock.upsertTestAccessGrant).not.toHaveBeenCalled();
   });
 
+  // PRD-52 14.8: назначать и рецензировать один человек может одновременно.
+  it("методисту с правом назначать выдаёт рецензирование ВТОРЫМ грантом", async () => {
+    storageMock.getUserByEmail.mockResolvedValue({ id: "mgr-1", email: "mgr@x.test", name: "Методист" });
+    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "assign" });
+    const report = await run([{ email: "mgr@x.test" }]);
+    expect(storageMock.upsertTestAccessGrant).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "mgr-1", accessLevel: "review" }),
+    );
+    expect(report.failed).toEqual([]);
+    expect(report.invited).toBe(1);
+  });
+
   it("ссылка всё равно выпускается: доступ уже есть, а войти по письму человек хочет", async () => {
     storageMock.getUserByEmail.mockResolvedValue({ id: "u9", email: "expert@x.test", name: "Ирина" });
-    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "review" });
+    storageMock.getTestReviewGrant.mockResolvedValue({ accessLevel: "review" });
     await run([{ email: "expert@x.test" }]);
     expect(storageMock.createAssignmentAccessToken).toHaveBeenCalledTimes(1);
   });

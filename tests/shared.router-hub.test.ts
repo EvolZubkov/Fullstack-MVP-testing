@@ -230,3 +230,43 @@ describe("недостижимый пункт не держит «Заверши
     expect(isRouterReadyToFinish(sections, { ...base, rerunScenarios: true })).toBe(false);
   });
 });
+
+describe("router-hub — card pictures (the router page's `cardImages`)", () => {
+  it("puts a picture on the card it belongs to and marks that card", () => {
+    const html = buildRouterHubHtml(SECTIONS, base(), { images: { "topic:t1": "/api/media/a" } });
+    const first = html.slice(html.indexOf('data-topic-id="t1"') - 200, html.indexOf('data-topic-id="t2"'));
+    expect(first).toContain("router-topic-card--with-img");
+    expect(first).toContain('<span class="router-topic-card__img"><img src="/api/media/a" alt=""></span>');
+  });
+
+  it("leaves a card without a picture plain — no modifier, no empty frame", () => {
+    const html = buildRouterHubHtml(SECTIONS, base(), { images: { "topic:t1": "/api/media/a" } });
+    const second = html.slice(html.indexOf('data-topic-id="t2"') - 200);
+    expect(second.split("</button>")[0]).not.toContain("router-topic-card--with-img");
+    expect(second.split("</button>")[0]).not.toContain("router-topic-card__img");
+  });
+
+  it("places the picture as the card's own child, after the name block", () => {
+    const html = buildRouterHubHtml(SECTIONS, base(), { images: { "topic:t1": "/api/media/a" } });
+    expect(html).toMatch(/<\/span><\/span><span class="router-topic-card__img">/);
+  });
+
+  it("finds a scenario item's picture by its item key", () => {
+    const sections: RouterSection[] = [{ topicId: "scenario:s1", topicName: "Работа в CRM" }];
+    const html = buildRouterHubHtml(sections, base(), { images: { "scenario:s1": "/api/media/c" } });
+    expect(html).toContain('<img src="/api/media/c" alt="">');
+    expect(html).toContain("router-topic-card--scenario router-topic-card--with-img");
+  });
+
+  it("draws no picture at all without the option — the hub of a variant without the property", () => {
+    const html = buildRouterHubHtml(SECTIONS, base());
+    expect(html).not.toContain("router-topic-card__img");
+    expect(html).not.toContain("--with-img");
+  });
+
+  it("escapes the address rather than letting it break out of the attribute", () => {
+    const html = buildRouterHubHtml(SECTIONS, base(), { images: { "topic:t1": '/x" onerror="alert(1)' } });
+    expect(html).not.toContain('onerror="alert(1)"');
+    expect(html).toContain("&quot;");
+  });
+});

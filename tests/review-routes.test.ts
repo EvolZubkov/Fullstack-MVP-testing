@@ -19,6 +19,7 @@ const { storageMock, accessMock, anchorMock, runMock } = vi.hoisted(() => ({
   storageMock: {
     getUser: vi.fn(),
     getUserRoles: vi.fn(),
+    getUsers: vi.fn(),
     getTest: vi.fn(),
     getTestGrantForUser: vi.fn(),
     // Классификация строк списка рецензентов читает то же, что у участников.
@@ -393,17 +394,16 @@ describe("рецензенты теста", () => {
 
   it("отзыв снимает грант И гасит живые ссылки", async () => {
     storageMock.getReviewComment.mockResolvedValue(root());
-    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "review" });
     const res = await request(authorApp()).delete("/api/tests/t1/review/reviewers/expert-1");
     expect(res.status).toBe(200);
-    expect(storageMock.removeTestAccessGrant).toHaveBeenCalledWith("t1", "expert-1");
+    expect(storageMock.removeTestAccessGrant).toHaveBeenCalledWith("t1", "expert-1", "review");
     expect(storageMock.revokeReviewLinks).toHaveBeenCalledWith("t1", "expert-1");
   });
 
-  it("отзыв не трогает грант другого уровня: edit-доступ отзывают не здесь", async () => {
-    storageMock.getTestGrantForUser.mockResolvedValue({ accessLevel: "edit" });
+  it("отзыв снимает только слот рецензирования: рабочий грант отзывают не здесь", async () => {
     await request(authorApp()).delete("/api/tests/t1/review/reviewers/author-2");
-    expect(storageMock.removeTestAccessGrant).not.toHaveBeenCalled();
+    expect(storageMock.removeTestAccessGrant).toHaveBeenCalledWith("t1", "author-2", "review");
+    expect(storageMock.removeTestAccessGrant).not.toHaveBeenCalledWith("t1", "author-2", "work");
     // Ссылки всё равно гасим: ревью-ссылка могла быть выдана раньше повышения.
     expect(storageMock.revokeReviewLinks).toHaveBeenCalledWith("t1", "author-2");
   });
@@ -466,5 +466,51 @@ describe("список рецензентов", () => {
       .send({ count: 3 });
 
     expect(res.status).toBe(403);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-52 раздел 14.7: вкладка «Пользователи» берёт кандидатов СВОИМ маршрутом.
+// Раньше она читала `GET /api/users` под `users.read`, которого у автора нет:
+// список приходил отказом, а диалог показывал его как «все уже приглашены».
+describe("кандидаты в рецензенты", () => {
+  beforeEach(() => {
+    storageMock.getUsers.mockResolvedValue([
+      { id: "learner-1", email: "l1@x", name: "Анна", status: "active", passwordHash: "h", emailHash: "e" },
+      { id: "learner-2", email: null, name: "Без почты", status: "active" },
+      { id: "expert-1", email: "expert@x", name: "Ирина Петрова", status: "active" },
+      { id: "manager-1", email: "m1@x", name: "Методист", status: "active" },
+      { id: "author-1", email: "a1@x", name: "Автор Теста", status: "active" },
+      { id: "author-2", email: "a2@x", name: "Другой автор", status: "active" },
+    ]);
+  });
+
+  // Решения владельца 2026-10-19: позвать на рецензирование можно любого — роль не важна,
+  // и рабочий грант рядом не мешает (методист с `assign` в списке есть).
+  it("отдаёт людей любой роли; без адреса, приглашённых и самого автора — нет", async () => {
+    const res = await request(authorApp()).get("/api/tests/t1/review/candidates");
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((u: { id: string }) => u.id)).toEqual(["learner-1", "manager-1", "author-2"]);
+  });
+
+  it("не отдаёт ничего сверх нужного выбору: ни хешей, ни ролей, ни групп", async () => {
+    const res = await request(authorApp()).get("/api/tests/t1/review/candidates");
+
+    expect(Object.keys(res.body[0]).sort()).toEqual(["email", "id", "name", "status"]);
+  });
+
+  it("не владельцу теста отказывает", async () => {
+    const res = await request(makeApp("author-2")).get("/api/tests/t1/review/candidates");
+
+    expect(res.status).toBe(403);
+    expect(storageMock.getUsers).not.toHaveBeenCalled();
+  });
+
+  it("на несуществующем тесте отвечает 404", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(authorApp()).get("/api/tests/t1/review/candidates");
+
+    expect(res.status).toBe(404);
   });
 });

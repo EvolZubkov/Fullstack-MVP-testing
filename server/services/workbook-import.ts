@@ -51,6 +51,7 @@
  */
 
 import type ExcelJS from "exceljs";
+import type { SectionGroup } from "@shared/scoring/section-groups";
 import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -420,11 +421,14 @@ function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record
  */
 export function resolveSectionGroups(
   labels: string[],
-  current: Array<{ key: string; label: string }>,
-): Array<{ key: string; label: string; order: number }> {
+  current: Array<{ key: string; label: string; description?: SectionGroup["description"] }>,
+): Array<{ key: string; label: string; order: number; description?: SectionGroup["description"] }> {
   const keyByLabel = new Map(current.map((g) => [normalizeName(g.label), g.key]));
+  // Пояснение в книгу не попадает, поэтому блок, сохранивший ключ, сохраняет и его —
+  // иначе повторная загрузка книги стирала бы текст, написанный в редакторе.
+  const descriptionByKey = new Map(current.map((g) => [g.key, g.description]));
   const taken = new Set<string>();
-  const out: Array<{ key: string; label: string; order: number }> = [];
+  const out: Array<{ key: string; label: string; order: number; description?: SectionGroup["description"] }> = [];
   labels.forEach((label, index) => {
     let key = keyByLabel.get(normalizeName(label));
     if (key && taken.has(key)) key = undefined;
@@ -434,7 +438,8 @@ export function resolveSectionGroups(
       key = `block-${n}`;
     }
     taken.add(key);
-    out.push({ key, label, order: index });
+    const description = descriptionByKey.get(key);
+    out.push({ key, label, order: index, ...(description ? { description } : {}) });
   });
   return out;
 }

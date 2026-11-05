@@ -15,9 +15,17 @@
  *   `/api/media/<id>`, and the files themselves are not at hand.
  *
  * Pure and framework-free: the server runs it on upload and on save, tests run it directly.
+ *
+ * Version 1 is checked as its upgrade: `liftV1` moves it into the version 2 shape without trusting
+ * it, and every rule below runs on that shape. Messages about scenes, elements, fields and zones
+ * are the same in both versions; a scenario with several variants prefixes them with the device.
  */
 import { CONTRACT_VERSION, SCENARIO_FORMAT, type Condition, type Effect, type Scenario, type Size } from "./contract";
 import { boundsOf, polygonProblem, type Point } from "./geometry";
+import { cheapestPath } from "./optimum";
+import { routeProblems } from "./routes";
+import { liftV1, type ScenarioInput } from "./upgrade";
+import { playable } from "./variant";
 
 /** What the server read from one image of the archive. */
 export interface ArchiveImage {
@@ -59,7 +67,6 @@ const KEYS = /^((Ctrl|Alt|Shift|Meta)\+)*([A-Z0-9]|F([1-9]|1[0-2])|Enter|Escape|
 const ARCHIVE_MEDIA = /^media\/[A-Za-z0-9._-]+\.(png|jpe?g|webp)$/i;
 const STORED_MEDIA = /^\/api\/media\/[A-Za-z0-9-]+$/;
 const ROLES = new Set(["path", "alt", "detour", "trap", "neutral"]);
-const ACTIONS = new Set(["click", "dblclick", "rightclick", "hover", "drag"]);
 const SHAPES = new Set(["rect", "ellipse", "polygon"]);
 
 type Obj = Record<string, unknown>;
@@ -67,6 +74,13 @@ const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+const MOUSE = new Set(["click", "dblclick", "rightclick", "hover", "drag"]);
+const GESTURES = new Set(["tap", "doubletap", "longpress", "swipe-left", "swipe-right", "swipe-up", "swipe-down"]);
+const DEVICE_ACTIONS: Record<string, Set<string>> = { desktop: MOUSE, phone: GESTURES };
+const DEVICE_TITLES: Record<string, string> = { desktop: "десктоп", phone: "телефон" };
+const COST_KINDS = new Set([...MOUSE, ...GESTURES, "key", "field"]);
+const isCost = (v: unknown): boolean => isNum(v) && v >= 0;
 
 /**
  * Check a scenario against the contract.
@@ -81,26 +95,36 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
 
   if (!isObj(input)) return { errors: ["scenario.json — не объект JSON"], warnings };
   if (input.format !== SCENARIO_FORMAT) errors.push(`Поле format должно быть «${SCENARIO_FORMAT}»`);
-  if (input.version !== CONTRACT_VERSION) {
+  let doc: Obj = input;
+  if (input.version === 1) {
+    const lifted = liftV1(input);
+    doc = lifted.doc;
+    warnings.push(...lifted.notes);
+    if (lifted.conflict) errors.push(lifted.conflict);
+  } else if (input.version !== CONTRACT_VERSION) {
     errors.push(isNum(input.version) && input.version > CONTRACT_VERSION
       ? `Версия формата ${input.version} новее поддерживаемой (${CONTRACT_VERSION})`
       : `Поле version должно быть ${CONTRACT_VERSION}`);
   }
-  const meta = isObj(input.meta) ? input.meta : null;
+  const kind = doc.kind;
+  if (kind !== "control" && kind !== "research") errors.push("Вид сценария должен быть control или research");
+  const control = kind !== "research";
+  const meta = isObj(doc.meta) ? doc.meta : null;
   if (!meta || !isStr(meta.title) || !meta.title.trim()) errors.push("Нет названия сценария (meta.title)");
   if (!meta || !isStr(meta.task) || !meta.task.trim()) errors.push("Нет текста задания (meta.task)");
-  if (!Array.isArray(input.scenes) || input.scenes.length === 0) errors.push("В сценарии нет сцен");
-  if (!Array.isArray(input.media)) errors.push("Нет библиотеки изображений (media)");
+  const variants = arr(doc.variants).filter(isObj);
+  if (variants.length === 0) errors.push("В сценарии нет вариантов");
+  if (variants.length === 1 && arr(variants[0].scenes).length === 0) errors.push("В сценарии нет сцен");
+  if (!Array.isArray(doc.media)) errors.push("Нет библиотеки изображений (media)");
   if (errors.length) return { errors, warnings };
 
-  const settings = isObj(input.settings) ? input.settings : {};
-  const stage = sizeOf(settings.stage);
+  const settings = isObj(doc.settings) ? doc.settings : {};
 
   // ── Library ──
   const media = new Map<string, Obj>();
   const files = options.files ?? new Map<string, ArchiveImage>();
   const maxBytes = options.maxImageBytes ?? MAX_IMAGE_BYTES;
-  for (const raw of arr(input.media)) {
+  for (const raw of arr(doc.media)) {
     if (!isObj(raw) || !isStr(raw.id)) { errors.push("Изображение библиотеки без id"); continue; }
     const id = raw.id;
     if (!ID.test(id)) errors.push(`Изображение ${id}: недопустимый id`);
@@ -135,7 +159,7 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
 
   // ── Fields ──
   const fields = new Map<string, Obj>();
-  for (const raw of arr(input.fields)) {
+  for (const raw of arr(doc.fields)) {
     if (!isObj(raw) || !isStr(raw.id)) { errors.push("Поле без id"); continue; }
     if (!ID.test(raw.id)) errors.push(`Поле ${raw.id}: недопустимый id`);
     if (fields.has(raw.id)) errors.push(`Поле ${raw.id} объявлено дважды`);
@@ -144,18 +168,108 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
     if (raw.fill === "keyboard" && !raw.check) warnings.push(`Поле ${raw.id}: ввод без проверки`);
   }
 
-  // ── Scenes ──
+  // ── Settings ──
+  if (isObj(settings.costs)) {
+    for (const [k, v] of Object.entries(settings.costs)) {
+      if (!COST_KINDS.has(k)) errors.push(`Стоимость по умолчанию: неизвестный вид действия ${k}`);
+      else if (!isCost(v)) errors.push(`Стоимость по умолчанию для ${k} должна быть числом не меньше нуля`);
+    }
+  }
+  if (settings.otherRouteRating !== undefined && !(isNum(settings.otherRouteRating) && settings.otherRouteRating > 0 && settings.otherRouteRating <= 1)) {
+    errors.push("Оценка прочих путей должна быть больше 0 и не больше 1");
+  }
+
+  // ── Stages ──
+  const stages = new Set<string>();
+  for (const raw of arr(doc.stages)) {
+    if (!isObj(raw) || !isStr(raw.id)) { errors.push("Этап без id"); continue; }
+    if (!ID.test(raw.id)) errors.push(`Этап ${raw.id}: недопустимый id`);
+    if (stages.has(raw.id)) errors.push(`Этап ${raw.id} объявлен дважды`);
+    if (!isStr(raw.title) || !raw.title.trim()) errors.push(`Этап ${raw.id}: нет названия`);
+    stages.add(raw.id);
+  }
+
+  // ── Goal ──
+  const goal = isObj(doc.goal) ? doc.goal : null;
+  if (!control && doc.goal !== undefined) errors.push("У исследовательского сценария не бывает проверок цели");
+  if (control && goal) {
+    for (const check of arr(goal.checks)) {
+      if (!isObj(check)) continue;
+      const def = fields.get(String(check.field));
+      if (!def) errors.push(`Проверка цели по необъявленному полю ${String(check.field)}`);
+      else if (!check.check && !def.check) errors.push(`Проверка цели по полю ${String(check.field)}, у которого нет проверки`);
+      if (check.weight !== undefined && !(isNum(check.weight) && check.weight > 0)) errors.push(`Вес проверки поля ${String(check.field)} должен быть больше нуля`);
+    }
+  }
+
+  // ── Variants ──
+  const devices = new Set<string>();
+  for (const variant of variants) {
+    const device = String(variant.device);
+    const actions = DEVICE_ACTIONS[device];
+    if (!actions) { errors.push(`Неизвестное устройство варианта ${device}`); continue; }
+    if (devices.has(device)) errors.push(`Вариант для устройства «${DEVICE_TITLES[device]}» объявлен дважды`);
+    devices.add(device);
+    const prefix = variants.length > 1 ? `Вариант «${DEVICE_TITLES[device]}»: ` : "";
+    checkVariant(variant, {
+      prefix, device, actions, control, settings, media, fields, stages, errors, warnings,
+      finishButton: settings.finishButton !== false,
+    });
+  }
+
+  // ── Routes and the optimum — only on a structurally sound scenario ──
+  if (errors.length === 0) {
+    const scenario = doc as unknown as Scenario;
+    for (const variant of scenario.variants) {
+      const play = playable(scenario, variant.device);
+      const prefix = scenario.variants.length > 1 ? `Вариант «${DEVICE_TITLES[variant.device]}»: ` : "";
+      const routes = routeProblems(play);
+      errors.push(...routes.errors.map((e) => prefix + e));
+      warnings.push(...routes.warnings.map((w) => prefix + w));
+      const best = cheapestPath(play);
+      if (best.status === "limit") warnings.push(`${prefix}Сценарий слишком велик: оптимальный путь не посчитан, эффективность — только по маршрутам`);
+      if (control && best.status === "found") {
+        const strict = cheapestPath(play, { detours: false });
+        if (strict.status !== "found" || strict.cost > best.cost) warnings.push(`${prefix}Шаг в сторону даёт путь дешевле основного: проверьте роли зон`);
+      }
+    }
+  }
+
+  return { errors, warnings };
+}
+
+interface VariantScope {
+  prefix: string;
+  device: string;
+  actions: Set<string>;
+  control: boolean;
+  finishButton: boolean;
+  settings: Obj;
+  media: Map<string, Obj>;
+  fields: Map<string, Obj>;
+  stages: Set<string>;
+  errors: string[];
+  warnings: string[];
+}
+
+/** The checks of one device's graph: scenes, elements, fields, zones, ends and reachability. */
+function checkVariant(variant: Obj, v: VariantScope): void {
+  const { prefix, errors, warnings, media, fields } = v;
+  const stage = sizeOf(variant.stage);
   const scenes = new Map<string, Obj>();
-  for (const raw of arr(input.scenes)) {
-    if (!isObj(raw) || !isStr(raw.id)) { errors.push("Сцена без id"); continue; }
-    if (!ID.test(raw.id)) errors.push(`Сцена ${raw.id}: недопустимый id`);
-    if (scenes.has(raw.id)) errors.push(`Сцена ${raw.id} объявлена дважды`);
+  for (const raw of arr(variant.scenes)) {
+    if (!isObj(raw) || !isStr(raw.id)) { errors.push(`${prefix}Сцена без id`); continue; }
+    if (!ID.test(raw.id)) errors.push(`${prefix}Сцена ${raw.id}: недопустимый id`);
+    if (scenes.has(raw.id)) errors.push(`${prefix}Сцена ${raw.id} объявлена дважды`);
     scenes.set(raw.id, raw);
   }
-  const start = isStr(input.start) ? input.start : "";
-  if (!scenes.has(start)) errors.push(`Стартовая сцена ${start || "не задана"} не найдена`);
+  const start = isStr(variant.start) ? variant.start : "";
+  if (!scenes.has(start)) errors.push(`${prefix}Стартовая сцена ${start || "не задана"} не найдена`);
+  if (variant.minViewportWidth !== undefined && !(isNum(variant.minViewportWidth) && variant.minViewportWidth > 0)) {
+    errors.push(`${prefix}Минимальная ширина окна должна быть больше нуля`);
+  }
 
-  const label = (scene: Obj) => `Сцена «${isStr(scene.title) && scene.title.trim() ? scene.title : String(scene.id)}»`;
+  const label = (scene: Obj) => `${prefix}Сцена «${isStr(scene.title) && scene.title.trim() ? scene.title : String(scene.id)}»`;
   const edges = new Map<string, Set<string>>();
   const pathEdges = new Map<string, Set<string>>();
   const actionIds = new Set<string>();
@@ -164,9 +278,14 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
     const sid = String(scene.id);
     const where = label(scene);
     const size = sizeOf(scene.size) ?? stage;
-    if (!size) errors.push(`${where}: не задан размер — ни у сцены, ни в settings.stage`);
+    // Changed: the default size is the variant's stage, not settings.stage.
+    if (!size) errors.push(`${where}: не задан размер — ни у сцены, ни у варианта`);
     edges.set(sid, new Set());
     pathEdges.set(sid, new Set());
+    // New: the stage of the task.
+    if (scene.stage !== undefined && !(isStr(scene.stage) && v.stages.has(scene.stage))) {
+      errors.push(`${where}: этап ${String(scene.stage)} не объявлен`);
+    }
 
     const elements = new Map<string, Obj>();
     for (const raw of arr(scene.elements)) {
@@ -202,12 +321,24 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
       actionIds.add(zid);
 
       const role = raw.role;
-      if (!isStr(role) || !ROLES.has(role)) { errors.push(`${what}: неизвестная роль ${String(role)}`); continue; }
+      // Changed: a research scenario may leave the role out.
+      if (role === undefined ? v.control : !(isStr(role) && ROLES.has(role))) { errors.push(`${what}: неизвестная роль ${String(role)}`); continue; }
+      // New: the cost.
+      if (raw.cost !== undefined && !isCost(raw.cost)) errors.push(`${what} — стоимость должна быть числом не меньше нуля`);
       if (key) {
         if (!isStr(raw.keys) || !KEYS.test(raw.keys)) errors.push(`${what}: запись «${String(raw.keys)}» не по шаблону (Ctrl+S, Shift+F10, Escape)`);
+        // A keyboard shortcut needs a keyboard: only the desktop variant has one.
+        if (v.device !== "desktop") errors.push(`${what}: сочетаний клавиш не бывает на устройстве «${DEVICE_TITLES[v.device]}»`);
       } else {
         checkShape(raw, size, what, errors);
-        if (raw.action !== undefined && !(isStr(raw.action) && ACTIONS.has(raw.action))) errors.push(`${what}: неизвестное действие ${String(raw.action)}`);
+        // Changed: the action must be one of the variant's device.
+        if (raw.action !== undefined) {
+          if (!(isStr(raw.action) && (MOUSE.has(raw.action) || GESTURES.has(raw.action)))) errors.push(`${what}: неизвестное действие ${String(raw.action)}`);
+          else if (!v.actions.has(raw.action)) errors.push(`${what}: действие ${raw.action} не бывает на устройстве «${DEVICE_TITLES[v.device]}»`);
+        } else if (role !== "neutral" && !v.actions.has("click")) {
+          // The default action is a click; a device without a mouse has to name its gesture.
+          errors.push(`${what}: на устройстве «${DEVICE_TITLES[v.device]}» действие зоны задаётся явно — click по умолчанию здесь не бывает`);
+        }
         if (raw.action === "drag" && !isObj(raw.drop)) errors.push(`${what}: перетаскивание без drop`);
         if (raw.in !== undefined && !(isStr(raw.in) && isObj(elements.get(raw.in)?.scroll))) errors.push(`${what}: in ${String(raw.in)} — нет такого прокручиваемого элемента на сцене`);
         if (raw.copyText !== undefined && role !== "neutral") errors.push(`${what}: копируемый текст бывает только у нейтральной зоны`);
@@ -223,7 +354,9 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
         const target = checkEffect(effect, { scenes, elements, fields }, what, errors);
         if (target) {
           edges.get(sid)!.add(target);
-          if (role === "path" || role === "alt") pathEdges.get(sid)!.add(target);
+          // Changed: in a research scenario every non-trap action leads somewhere legitimately.
+          const leads = v.control ? role === "path" || role === "alt" : role !== "trap";
+          if (leads) pathEdges.get(sid)!.add(target);
         }
       }
       if (raw.when !== undefined) checkCondition(raw.when, { elements, fields }, what, errors);
@@ -234,35 +367,38 @@ export function validateScenario(input: unknown, options: ValidateOptions): Vali
       else edges.get(sid)!.add(scene.onMissGoto);
     }
 
-    if (scene.goal !== undefined) {
-      const goal = isObj(scene.goal) ? scene.goal : {};
-      if (goal.outcome !== "success" && goal.outcome !== "fail") errors.push(`${where}: исход цели должен быть success или fail`);
-      for (const check of arr(goal.checks)) {
-        if (!isObj(check)) continue;
-        const def = fields.get(String(check.field));
-        if (!def) errors.push(`${where}: проверка цели по необъявленному полю ${String(check.field)}`);
-        else if (!check.check && !def.check) errors.push(`${where}: проверка цели по полю ${String(check.field)}, у которого нет проверки`);
-        if (check.weight !== undefined && !(isNum(check.weight) && check.weight > 0)) errors.push(`${where}: вес проверки поля ${String(check.field)} должен быть больше нуля`);
+    // Changed: `end` instead of `goal`; the checks themselves are the scenario's goal.
+    if (scene.end !== undefined) {
+      const end = isObj(scene.end) ? scene.end : {};
+      if (end.outcome === "success" && !v.control) errors.push(`${where}: конец success бывает только у контрольного сценария`);
+      else if (end.outcome === "finale") {
+        if (v.control) errors.push(`${where}: финал бывает только у исследовательского сценария`);
+        else if (!isStr(end.title) || !end.title.trim()) errors.push(`${where}: у финала нет названия`);
+      } else if (end.outcome !== "success" && end.outcome !== "fail") {
+        errors.push(v.control ? `${where}: исход цели должен быть success или fail` : `${where}: конец должен быть fail или finale`);
       }
     } else if (!acts.some(({ z }) => isObj(z) && z.role !== "neutral")) {
       errors.push(`${where}: тупик — ни цели, ни одного действия`);
     }
   }
 
-  // ── Graph ──
-  if (scenes.has(start)) {
-    const all = reach(start, edges);
-    const byPath = reach(start, pathEdges);
-    for (const scene of scenes.values()) if (!all.has(String(scene.id))) warnings.push(`${label(scene)} недостижима от старта`);
-    const success = [...scenes.values()].filter((s) => isObj(s.goal) && s.goal.outcome === "success");
-    if (success.length === 0) errors.push("В сценарии нет цели с исходом success");
-    else if (!success.some((s) => byPath.has(String(s.id)))) {
-      const names = success.map((s) => `«${isStr(s.title) ? s.title : String(s.id)}»`).join(", ");
-      errors.push(`К цели ${names} нельзя дойти только по основному и другим верным путям`);
+  if (!scenes.has(start)) return;
+  const all = reach(start, edges);
+  const byPath = reach(start, pathEdges);
+  for (const scene of scenes.values()) if (!all.has(String(scene.id))) warnings.push(`${label(scene)} недостижима от старта`);
+  const endsOf = (outcome: string) => [...scenes.values()].filter((s) => isObj(s.end) && s.end.outcome === outcome);
+  const names = (list: Obj[]) => list.map((s) => `«${isStr(s.title) ? s.title : String(s.id)}»`).join(", ");
+  if (v.control) {
+    const success = endsOf("success");
+    if (success.length === 0) errors.push(`${prefix}В сценарии нет цели с исходом success`);
+    else if (!success.some((s) => byPath.has(String(s.id)))) errors.push(`${prefix}К цели ${names(success)} нельзя дойти только по основному и другим верным путям`);
+  } else {
+    const finales = endsOf("finale");
+    if (finales.length === 0 && !v.finishButton) errors.push(`${prefix}Исследовательскому сценарию нужен финал или кнопка «Я закончил»`);
+    else if (finales.length > 0 && !finales.some((s) => byPath.has(String(s.id))) && !v.finishButton) {
+      errors.push(`${prefix}До финалов ${names(finales)} нельзя дойти`);
     }
   }
-
-  return { errors, warnings };
 }
 
 function sizeOf(v: unknown): Size | null {
@@ -376,26 +512,29 @@ export interface ScenarioSummary {
   images: number;
   fields: number;
   traps: number;
-  /** Field checks of the success goals. */
+  /** Field checks of the goal. */
   checks: number;
   /** The scenario's own time limit, seconds; `null` — none. */
   limitSeconds: number | null;
 }
 
-/** Summarize a scenario that passed {@link validateScenario}. */
-export function summarizeScenario(scenario: Scenario): ScenarioSummary {
-  const actions = scenario.scenes.flatMap((s) => [...(s.zones ?? []), ...(s.keys ?? [])]);
-  const successGoals = scenario.scenes.filter((s) => s.goal?.outcome === "success");
+/**
+ * Summarize a scenario that passed {@link validateScenario}. Counts are of the desktop variant:
+ * that is the one every scenario has until phone variants are authored.
+ */
+export function summarizeScenario(input: ScenarioInput): ScenarioSummary {
+  const play = playable(input);
+  const actions = play.scenes.flatMap((s) => [...(s.zones ?? []), ...(s.keys ?? [])]);
   return {
-    title: scenario.meta.title,
-    system: scenario.meta.system ?? null,
-    task: scenario.meta.task,
-    stage: scenario.settings?.stage ?? null,
-    scenes: scenario.scenes.length,
-    images: scenario.media.length,
-    fields: scenario.fields?.length ?? 0,
+    title: play.meta.title,
+    system: play.meta.system ?? null,
+    task: play.meta.task,
+    stage: play.settings.stage ?? null,
+    scenes: play.scenes.length,
+    images: play.media.length,
+    fields: play.fields.length,
     traps: actions.filter((a) => a.role === "trap").length,
-    checks: successGoals.reduce((n, s) => n + (s.goal?.checks?.length ?? 0), 0),
-    limitSeconds: scenario.settings?.limitSeconds ?? null,
+    checks: play.goal?.checks.length ?? 0,
+    limitSeconds: play.settings.limitSeconds ?? null,
   };
 }

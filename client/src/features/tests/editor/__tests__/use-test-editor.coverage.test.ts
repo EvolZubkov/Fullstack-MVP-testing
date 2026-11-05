@@ -16,6 +16,9 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { useTestEditor } from "../use-test-editor";
+import { reportClientError } from "@/lib/report-error";
+
+vi.mock("@/lib/report-error", () => ({ reportClientError: vi.fn() }));
 
 const TEST_ID = "test-1";
 
@@ -336,6 +339,53 @@ describe("useTestEditor — save-error surfaces", () => {
     expect(result.current.saveError?.message).toContain("basic.title");
   });
 
+  it("reports a failed save to the server log, with the response the author got", async () => {
+    vi.mocked(reportClientError).mockClear();
+    installApi({
+      putHandler: () => jsonResponse({ error: "Validation failed", fields: [{ field: "sections" }] }, 400),
+    });
+    const { result } = renderHook(() => useTestEditor(editOpts), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({ ...m, basic: { ...m.basic, title: "Edited" } }));
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(reportClientError).toHaveBeenCalledTimes(1);
+    const [scope, message] = vi.mocked(reportClientError).mock.calls[0];
+    expect(scope).toBe("test-editor");
+    expect(message).toContain(`/api/tests/${TEST_ID}`);
+    expect(message).toContain("HTTP 400");
+    expect(message).toContain('"field":"sections"');
+  });
+
+  it("reports a non-JSON (proxy) rejection as plain text, without markup", async () => {
+    vi.mocked(reportClientError).mockClear();
+    installApi({
+      putHandler: () =>
+        Promise.resolve(new Response("<html><body><h1>400 Bad Request</h1></body></html>", { status: 400 })),
+    });
+    const { result } = renderHook(() => useTestEditor(editOpts), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({ ...m, basic: { ...m.basic, title: "Edited" } }));
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+
+    // The author sees the real status, not «Body is unusable» with status 0.
+    expect(result.current.saveError?.status).toBe(400);
+    const [, message] = vi.mocked(reportClientError).mock.calls[0];
+    expect(message).toContain("HTTP 400");
+    expect(message).toContain("400 Bad Request");
+    expect(message).not.toContain("<h1>");
+  });
+
   it("surfaces a non-HTTP (network) error with status 0", async () => {
     installApi({ putHandler: () => Promise.reject(new Error("network down")) });
     const { result } = renderHook(() => useTestEditor(editOpts), { wrapper: wrapper() });
@@ -405,9 +455,12 @@ describe("useTestEditor — 409 conflict resolution", () => {
   }
 
   it("dismissConflict clears the conflict without retrying", async () => {
+    vi.mocked(reportClientError).mockClear();
     installApi({ putHandler: () => jsonResponse({ error: "version_conflict", currentVersion: 9, expectedVersion: 7 }, 409) });
     const { result } = await loadWithConflict();
     expect(result.current.conflict).toEqual({ currentVersion: 9, expectedVersion: 7 });
+    // A concurrent edit is an expected outcome with its own dialog, not a fault.
+    expect(reportClientError).not.toHaveBeenCalled();
     act(() => result.current.dismissConflict());
     expect(result.current.conflict).toBeNull();
   });

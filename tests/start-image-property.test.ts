@@ -35,16 +35,20 @@ const startPageSrc = readFileSync(
   "utf8",
 );
 
-/** Extract the plain-JS `resolveStartImage` and run it with injected globals. */
+/**
+ * Extract the plain-JS `resolveStartImage` — with `scormStartPageAndVariant`, which finds the
+ * page and its variant for it — and run it with injected globals.
+ */
 function makeResolver(testData: unknown, tbTemplate: unknown, manifest?: unknown): (params: unknown) => string {
+  const lookup = startPageSrc.match(/function scormStartPageAndVariant\([\s\S]*?\n\}/);
   const match = startPageSrc.match(/function resolveStartImage\([\s\S]*?\n\}/);
-  if (!match) throw new Error("resolveStartImage not found in startPage.js");
+  if (!match || !lookup) throw new Error("resolveStartImage not found in startPage.js");
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   return new Function(
     "TEST_DATA",
     "window",
     "state",
-    `${match[0]}\n;return resolveStartImage;`,
+    `${lookup[0]}\n${match[0]}\n;return resolveStartImage;`,
   )(testData, { TBTemplate: tbTemplate }, { templateManifest: manifest ?? {} }) as (params: unknown) => string;
 }
 

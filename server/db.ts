@@ -11,6 +11,7 @@
 
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as schema from "@shared/schema";
 import { logger } from "./logger";
 import { config } from "./config";
@@ -205,17 +206,36 @@ function getDb(): NodePgDatabase<typeof schema> {
 }
 
 /**
+ * Транзакция, внутри которой сейчас выполняется код. Пока она задана, КАЖДОЕ обращение к
+ * {@link db} в этом асинхронном потоке идёт через неё: репозитории по-прежнему зовут глобальный
+ * `db`, и обернуть многошаговую операцию в одну транзакцию можно, не меняя ни одного из них.
+ * Потоки других запросов её не видят — контекст принадлежит только вызвавшему.
+ */
+export const transactionContext = new AsyncLocalStorage<unknown>();
+
+/**
  * The Drizzle database. Backed by a lazily-created pool/instance so importing
  * this module does not open a connection; the first property access initializes
- * it from `config.database.url`.
+ * it from `config.database.url`. Inside {@link runInTransaction} it is the open transaction.
  */
 export const db: NodePgDatabase<typeof schema> = new Proxy(
   {} as NodePgDatabase<typeof schema>,
   {
     get(_target, prop, receiver) {
-      const instance = getDb();
+      const instance = (transactionContext.getStore() as NodePgDatabase<typeof schema> | undefined) ?? getDb();
       const value = Reflect.get(instance as object, prop, receiver);
       return typeof value === "function" ? value.bind(instance) : value;
     },
   }
 );
+
+/**
+ * Выполнить `work` одной транзакцией: всё, что она пишет через {@link db}, либо ложится целиком,
+ * либо не остаётся вовсе. Вложенный вызов `db.transaction` внутри работает как точка сохранения.
+ *
+ * @param work многошаговая операция над `db`
+ * @returns результат `work`; при его ошибке транзакция откатывается, а ошибка идёт дальше
+ */
+export function runInTransaction<T>(work: () => Promise<T>): Promise<T> {
+  return db.transaction((tx) => transactionContext.run(tx, work));
+}

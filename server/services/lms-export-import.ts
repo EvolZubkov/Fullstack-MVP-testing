@@ -11,9 +11,10 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { participantKey } from "../utils/crypto";
+import { sql } from "drizzle-orm";
 import { decodeLearnerResponse, decodeResultShare } from "@shared/lms-export/response-codec";
 import { hasBlanks, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
-import type { Scenario } from "@shared/sim/contract";
+import { scenarioOf } from "@shared/sim/upgrade";
 import type { InsertScormAnswer } from "@shared/schema";
 import { importedSimAnswer } from "./sim/imported-run";
 import { TOPIC_LEVEL_NOT_ACHIEVED, type LmsExportBook, type LmsExportRow } from "@shared/lms-export/parse";
@@ -508,6 +509,21 @@ export interface ImportResult {
 }
 
 /**
+ * Ответ, которого у прохождения нет: задание выдано, а участник его пропустил.
+ *
+ * Пакет пишет такому заданию исход «неверно» и пустой «Полученный ответ», разбор отдаёт `null`.
+ * Колонка `user_answer_json` обязательна, а `null` драйвер пишет как SQL NULL — вся загрузка
+ * падала на первом же пропуске. JSON `null` — значение, а не отсутствие значения: колонка его
+ * принимает, и читатели получают прежний `null`.
+ */
+const NO_ANSWER = sql`'null'::jsonb`;
+
+/** Ответ для записи в `scorm_answers`: разобранный либо JSON `null`, если разбирать нечего. */
+function answerColumn(answer: unknown): InsertScormAnswer["userAnswerJson"] {
+  return (answer ?? NO_ANSWER) as InsertScormAnswer["userAnswerJson"];
+}
+
+/**
  * Выполнить импорт: партия, прохождения, ответы (PRD-54 разделы 8.3 — 8.5).
  *
  * При `dryRun` не создаётся НИЧЕГО, но счётчики считаются теми же ветками кода, что и при настоящей
@@ -756,7 +772,7 @@ export async function runImport(
             resultsMissing += 1;
             return [];
           }
-          const scenario = (q.dataJson as { scenario?: Scenario } | null)?.scenario ?? null;
+          const scenario = scenarioOf(q.dataJson);
           const run = importedSimAnswer(scenario, a.raw, a.protocol);
           if (run.rejected) simProtocolsRejected += 1;
           const full = ratio >= 1;
@@ -767,7 +783,7 @@ export async function runImport(
             questionPrompt: q.prompt,
             questionType: q.type,
             topicId: q.topicId,
-            userAnswerJson: run.answer as InsertScormAnswer["userAnswerJson"],
+            userAnswerJson: answerColumn(run.answer),
             result: full ? "correct" : "incorrect",
             isCorrect: full,
             points: ratio,
@@ -802,7 +818,7 @@ export async function runImport(
           // выравнены с версии 2, а выданные до неё пакеты шлют старый формат вечно.
           // PRD-57 FR-34: у пропусков строка несёт одни значения, а имена — в эталоне
           // задания; без них разложить ответ по полям нечем.
-          userAnswerJson: decodeLearnerResponse(q.type, a.raw, row.responseFormat, blankIdsOf(q)),
+          userAnswerJson: answerColumn(decodeLearnerResponse(q.type, a.raw, row.responseFormat, blankIdsOf(q))),
           // Три состояния вместо булева: измерительный ответ не может быть неверным
           // (PRD-54 раздел 5.3). Всё, что не «верно» и не «неверно», — `neutral`.
           result: share !== null

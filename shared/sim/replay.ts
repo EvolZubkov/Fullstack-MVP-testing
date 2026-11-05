@@ -10,14 +10,16 @@
  * result THAT produces. A forged outcome without a protocol leading to it grades as nothing.
  *
  * What the protocol records is enough to replay: actions and refusals by id, misses by
- * coordinates, committed values, exit and timeout. Entering scenes, hints and goals are not
+ * coordinates, committed values, «Я закончил», exit and timeout. Entering scenes, hints and goals are not
  * inputs — the engine derives them itself. Time is taken from the protocol, so durations and
  * trap times are reproduced.
  *
  * Pure and framework-free.
  */
 import { createRun } from "./engine";
-import type { Scenario, SimEvent, SimResult } from "./contract";
+import type { SimEvent, SimResult } from "./contract";
+import type { ScenarioInput } from "./upgrade";
+import type { PlayableScenario } from "./variant";
 
 /** What a replay produced. */
 export interface ReplayVerdict {
@@ -53,10 +55,12 @@ export interface ReplayObserver {
  * @param observe Optional observers: the analytics needs the open layers at each miss, which only
  *   the engine knows — the protocol records the click, not the screen.
  */
-export function replayRun(scenario: Scenario, posted: unknown, observe?: ReplayObserver): ReplayVerdict {
+export function replayRun(scenario: ScenarioInput | PlayableScenario, posted: unknown, observe?: ReplayObserver): ReplayVerdict {
   let clock = 0;
-  const run = createRun(scenario, { now: () => clock });
   const claimed = posted as Partial<SimResult> | null;
+  // The posted device decides which variant is replayed; a result of version 1 is desktop.
+  const device = claimed?.variant === "phone" ? "phone" : "desktop";
+  const run = createRun(scenario, { now: () => clock, device });
   const events: SimEvent[] = Array.isArray(claimed?.events) ? (claimed!.events as SimEvent[]) : [];
   let consistent = true;
 
@@ -95,6 +99,9 @@ export function replayRun(scenario: Scenario, posted: unknown, observe?: ReplayO
         break;
       case "value":
         if (run.commitField(event.field, String(event.value)).kind === "none") consistent = false;
+        break;
+      case "declare":
+        run.declare();
         break;
       case "exit":
         run.exit();

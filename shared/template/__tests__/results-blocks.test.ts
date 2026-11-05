@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveResultsBlocks } from "../results-blocks";
+import { resolveResultsBlocks, resolveScoreDisplay } from "../results-blocks";
 
 const STATE = { hasPassThreshold: true, hasVisibleScales: true, hasVisibleIndicators: true };
 
@@ -33,5 +33,37 @@ describe("resolveResultsBlocks", () => {
   it("неизвестное значение настройки читается как auto", () => {
     const b = resolveResultsBlocks({ scales: "maybe" } as never, STATE);
     expect(b.scales).toBe(true);
+  });
+});
+
+describe("resolveScoreDisplay", () => {
+  it("без настроек сводка берёт ответ auto, полоса идёт за сводкой", () => {
+    expect(resolveScoreDisplay({}, true)).toEqual({ summary: true, bar: true });
+    expect(resolveScoreDisplay({}, false)).toEqual({ summary: false, bar: false });
+  });
+
+  it("скрытая сводка гасит и полосу, если полоса «Как сводка»", () => {
+    expect(resolveScoreDisplay({ scoreSummary: "hide", scoreBar: "summary" }, true)).toEqual({
+      summary: false,
+      bar: false,
+    });
+  });
+
+  it("полоса «Показывать» остаётся при скрытой сводке", () => {
+    expect(resolveScoreDisplay({ scoreSummary: "hide", scoreBar: "show" }, true)).toEqual({
+      summary: false,
+      bar: true,
+    });
+  });
+
+  it("полоса «Скрывать» уходит при видимой сводке", () => {
+    expect(resolveScoreDisplay({ scoreSummary: "show", scoreBar: "hide" }, false)).toEqual({
+      summary: true,
+      bar: false,
+    });
+  });
+
+  it("неизвестное значение полосы читается как «Как сводка»", () => {
+    expect(resolveScoreDisplay({ scoreSummary: "hide", scoreBar: "maybe" } as never, true).bar).toBe(false);
   });
 });

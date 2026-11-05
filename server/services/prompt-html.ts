@@ -168,3 +168,24 @@ export function formulasFor(prompt: unknown): Record<string, string> {
   }
   return out;
 }
+
+/**
+ * Положить в содержимое задания готовые формулы (PRD-57 FR-07).
+ *
+ * Один вход для редактора и импорта книги: задание, пришедшее из Excel, обязано везти
+ * тот же запас SVG, что и сохранённое в редакторе, иначе после круга через книгу формула
+ * рисуется заново и её вид зависит от версии библиотеки на установке.
+ *
+ * Пустой словарь НЕ кладётся: задание без формул обязано остаться байт в байт таким же,
+ * каким было, иначе хеш содержимого дрогнет у каждого вопроса в базе.
+ *
+ * @param dataJson Содержимое задания.
+ * @param prompt Текст задания.
+ * @returns Содержимое с запасом формул или исходное значение, когда формул нет.
+ */
+export function withFormulas(dataJson: unknown, prompt: string): unknown {
+  const formulas = formulasFor(prompt);
+  if (Object.keys(formulas).length === 0) return dataJson;
+  const base = (dataJson ?? {}) as Record<string, unknown>;
+  return { ...base, formulas };
+}

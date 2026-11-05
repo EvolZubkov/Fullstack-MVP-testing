@@ -218,13 +218,19 @@ function reviewMark(review: string): string {
   return "";
 }
 
-/** One option card: control + title, with `is-on`/review classes, verdict mark and the delegated action. */
+/**
+ * One option card: control + title, with `is-on`/review classes, verdict mark and the delegated action.
+ *
+ * `display:block` overrides the DS `inline-flex` of `.ou-radio-card__title` (meant for a
+ * title + pill): the title holds rendered markdown, and under flex every inline run — the
+ * text before a link and the `<a>` itself — became a separate flex item, i.e. a column.
+ */
 function optionCard(control: string, title: string, chosen: boolean, review: string, oi: number): string {
   return (
     `<label class="ou-radio-card${chosen ? " is-on" : ""}${review}" ` +
     `data-action="select:${oi}" data-index="${oi}" role="button" tabindex="0">${control}` +
     `<span class="ou-radio-card__text">` +
-    `<span class="ou-radio-card__title" style="font-weight:400;font-size:var(--tb-answer-fs,1.25rem);` +
+    `<span class="ou-radio-card__title" style="display:block;font-weight:400;font-size:var(--tb-answer-fs,1.25rem);` +
     `line-height:1.35;text-wrap:pretty">${title}</span></span>${reviewMark(review)}</label>`
   );
 }

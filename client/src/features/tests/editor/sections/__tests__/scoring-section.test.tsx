@@ -82,7 +82,22 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
   };
 }
 
-const dbQuestions = [
+/** Bank row as `/api/questions` returns it; `dataJson`/`correctJson` differ per question type. */
+interface DbQuestion {
+  id: string;
+  topicId: string;
+  type: string;
+  prompt: string;
+  dataJson: unknown;
+  correctJson: unknown;
+  points: number;
+  difficulty: number | null;
+  scoringJson: unknown;
+  contentHash: string;
+  tags: string[];
+}
+
+const dbQuestions: DbQuestion[] = [
   {
     id: "q1", topicId: "top-1", type: "multiple", prompt: "Какой документ закрепляет лимиты?",
     dataJson: { options: ["А", "Б", "В"] }, correctJson: { correctIndices: [0, 1] },
@@ -335,5 +350,55 @@ describe("<ScoringSection />", () => {
     renderWithClient(<ScoringSection model={model} updateModel={() => {}} />);
     expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
     expect(screen.queryByTestId("scoring-create-hint")).toBeNull();
+  });
+
+  // «Сценарий в ИС» в обычном разделе (техдолг трека №5): раздел его выдаёт — значит, и оценка его
+  // показывает, а с ним и блок «Штрафы сценариев по умолчанию» (user-journey.md, раздел 4, шаг 1).
+  describe("вопрос-сценарий в обычном разделе", () => {
+    const simQuestion = {
+      id: "q-sim", topicId: "top-1", type: "simulation", prompt: "Внесите запись",
+      dataJson: { scenario: {} }, correctJson: null,
+      points: 1, difficulty: null, scoringJson: null, contentHash: "h-sim", tags: [],
+    };
+    beforeEach(() => {
+      dbQuestions.push(simQuestion);
+    });
+    afterEach(() => {
+      dbQuestions.splice(dbQuestions.indexOf(simQuestion), 1);
+    });
+
+    it("стандартный тест: строка сценария со «Штрафы» и блок штрафов теста", async () => {
+      const model = baseModel({ sections: [buildSection()] });
+      const updateModel = vi.fn();
+      renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={updateModel} />);
+      const row = await screen.findByTestId("scoring-row-q-sim");
+      expect(row).toHaveTextContent("Штрафы");
+      expect(screen.getByText("Штрафы сценариев по умолчанию")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByTestId("scoring-sim-miss"), { target: { value: "10" } });
+      expect(runUpdater(updateModel, model).scoring.simDefaults?.penalties?.miss).toBe(0.1);
+    });
+
+    it("карандаш сценария открывает окно со штрафами этого вопроса", async () => {
+      const model = baseModel({ sections: [buildSection()] });
+      renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+      fireEvent.click(await screen.findByTestId("scoring-edit-q-sim"));
+      expect(await screen.findByTestId("qscoring-sim-miss")).toBeInTheDocument();
+    });
+
+    it("адаптивный тест сценарий не выдаёт — в оценке его нет, блока штрафов тоже", async () => {
+      const model = baseModel({ mode: "adaptive", sections: [buildSection()] });
+      renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+      expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
+      expect(screen.queryByTestId("scoring-row-q-sim")).toBeNull();
+      expect(screen.queryByText("Штрафы сценариев по умолчанию")).toBeNull();
+    });
+  });
+
+  it("без сценариев блока «Штрафы сценариев по умолчанию» нет", async () => {
+    const model = baseModel({ sections: [buildSection()] });
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+    expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
+    expect(screen.queryByText("Штрафы сценариев по умолчанию")).toBeNull();
   });
 });

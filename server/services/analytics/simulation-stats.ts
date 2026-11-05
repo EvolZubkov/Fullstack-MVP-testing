@@ -15,7 +15,9 @@
  *
  * Модуль чистый: на входе сценарий и факты, на выходе вид для страницы.
  */
-import type { Outcome, Scenario, Scene, SimEvent } from "@shared/sim/contract";
+import type { Outcome, Scene, SimEvent } from "@shared/sim/contract";
+import type { ScenarioInput } from "@shared/sim/upgrade";
+import { playable, type PlayableScenario } from "@shared/sim/variant";
 import { replayRun } from "@shared/sim/replay";
 
 /** Прогон в том виде, в каком его читает аналитика. */
@@ -37,6 +39,9 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   fail: "Цель не достигнута",
   exited: "Вышли досрочно",
   timeout: "Время вышло",
+  // Shown as separate rows by the analytics track (П6); labelled here so the key is total.
+  finale: "Финал достигнут",
+  declared: "Заявили о завершении",
 };
 
 const COUNT_KEYS = ["misses", "blocked", "wrongValues", "detours", "traps", "hints"] as const;
@@ -50,7 +55,7 @@ function n(value: unknown): number {
 }
 
 function isOutcome(value: unknown): value is Outcome {
-  return typeof value === "string" && (OUTCOMES as readonly string[]).includes(value);
+  return typeof value === "string" && Object.keys(OUTCOME_LABEL).includes(value);
 }
 
 /**
@@ -171,7 +176,7 @@ function median(values: number[]): number | null {
 }
 
 /** Сцены основного пути по порядку: от старта по переходам действий роли `path`. */
-function mainPath(scenario: Scenario): string[] {
+function mainPath(scenario: PlayableScenario): string[] {
   const byId = new Map(scenario.scenes.map((s) => [s.id, s]));
   const order: string[] = [];
   const queue = [scenario.start];
@@ -203,10 +208,11 @@ const ERRORS_MAX = 12;
 /**
  * Аналитика вопроса-сценария по фактам его ответов.
  *
- * @param scenario хранимый сценарий вопроса
+ * @param input хранимый сценарий вопроса любой версии
  * @param facts факты ответов на него в выборке страницы
  */
-export function buildSimulationStats(scenario: Scenario, facts: readonly SimFact[]): SimulationStatsView {
+export function buildSimulationStats(input: ScenarioInput, facts: readonly SimFact[]): SimulationStatsView {
+  const scenario = playable(input);
   const scenes = new Map(scenario.scenes.map((s) => [s.id, s]));
   const titleOf = (id: string) => scenes.get(id)?.title ?? id;
   const fieldTitle = new Map((scenario.fields ?? []).map((f) => [f.id, f.title ?? f.id]));

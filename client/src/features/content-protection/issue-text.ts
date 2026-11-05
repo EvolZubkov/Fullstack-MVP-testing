@@ -6,7 +6,7 @@
  * and tests.
  */
 
-import type { BreakdownWarning, FeasibilityIssue } from "./types";
+import type { BreakdownWarning, FeasibilityIssue, ScoringWarning } from "./types";
 
 /** One short sentence describing why a dependent test is affected. */
 export function describeIssue(issue: FeasibilityIssue): string {
@@ -75,5 +75,22 @@ export function describeBreakdownWarning(w: BreakdownWarning): string {
     case "gate_without_display":
       return w.message
         ?? "Подтемы учитываются в вердикте темы, но подытоги по подтемам скрыты — участник не увидит причину.";
+    case "breakdown_inside_hidden_cards":
+      return w.message
+        ?? "Карточки тем выключены, а подытоги по подтемам настроены «В карточках тем» — они нигде не покажутся.";
   }
+}
+
+/** «варианта 2» / «вариантов 1 и 2» / «вариантов 1, 2 и 3» — 1-based, as the scoring modal numbers options. */
+function optionsPhrase(indices: number[]): string {
+  const numbers = indices.map((i) => String(i + 1));
+  if (numbers.length === 1) return `варианта ${numbers[0]}`;
+  return `вариантов ${numbers.slice(0, -1).join(", ")} и ${numbers[numbers.length - 1]}`;
+}
+
+/** Одно предупреждение публикации об оценке ответа человеческим языком. */
+export function describeScoringWarning(w: ScoringWarning): string {
+  const marked = w.correctIndex + 1;
+  return `Тема «${w.topicName}»: в вопросе «${w.questionExcerpt}» наибольший балл стоит у ${optionsPhrase(w.topIndices)}, ` +
+    `а верным отмечен вариант ${marked}. Баллы считаются по весам; в разборе ответов и аналитике верным будет показан вариант ${marked}.`;
 }

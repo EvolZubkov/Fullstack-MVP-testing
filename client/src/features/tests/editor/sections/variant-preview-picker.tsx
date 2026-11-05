@@ -24,6 +24,7 @@ import {
 } from "@shared/template/preview-context";
 import { buildTemplateCssVars, buildTemplateDataAttrs } from "@shared/template/params-css";
 import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
+import { hiddenStartFacts, hideStartFactsInContext } from "@shared/template/start-facts";
 import { useTemplateBundle, type TemplateBundle } from "./use-template-bundle";
 
 /** One selectable variant (list row + the keys needed to build its preview spec). */
@@ -248,7 +249,9 @@ export function VariantPreviewPicker(props: {
         (ct) => ct.key === selected?.variantKey,
       ) as StartVariantDecl | undefined;
       const design = previewDesign(props.params, declaration, props.pageSettings);
-      return { ...s, input: { ...s.input, context: { ...(s.input?.context ?? {}), design } } };
+      // The fact switches of the page count only where the PICKED variant declares them.
+      const context = hideStartFactsInContext(s.input?.context ?? {}, hiddenStartFacts(declaration, props.pageSettings));
+      return { ...s, input: { ...s.input, context: { ...(context as object), design } } };
     }
     return s;
   }, [bundle, selected, props.params, props.pageSettings]);

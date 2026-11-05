@@ -39,6 +39,9 @@
   --wf-size-43: 43px;
   --wf-size-44: 44px;
   --wf-size-56: 56px;
+  /* Room under the last row so it (and its more-menu) scrolls clear of the
+     fixed FAB: FAB height + its bottom offset + the same gap above it. */
+  --fab-clearance: calc(var(--wf-size-56) + var(--ou-space-6) * 2);
   --wf-size-60: 60px;
   --wf-size-65: 65px;
   --wf-size-90: 90px;
@@ -95,7 +98,7 @@
 /* `scrollbar-gutter: stable` always reserves the scrollbar strip so opening a
    bottom more-menu (which extends the scroll height) cannot make a scrollbar
    pop in and shift the whole grid sideways. */
-.tb-tests-list .tree-area { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.tb-tests-list .tree-area { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding-bottom: var(--fab-clearance); }
 
 .tb-tests-list .tree-header,
 .tb-tests-list .tree-root,
@@ -272,6 +275,12 @@
   border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-md);
   z-index: 20; min-width: var(--wf-size-210);
   padding: var(--ou-space-1) 0;
+}
+.tb-tests-list .tree-area .dropdown-menu::after {
+  /* An open menu is out of flow, so the scroller's padding does not extend past
+     it; this invisible tail does, letting the menu scroll clear of the FAB too. */
+  content: ""; position: absolute; top: 100%; left: 0;
+  width: var(--wf-border-w); height: var(--fab-clearance); pointer-events: none;
 }
 .tb-tests-list .dropdown-item {
   display: flex; align-items: center; gap: var(--ou-space-2);

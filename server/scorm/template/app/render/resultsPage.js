@@ -1,5 +1,11 @@
 var scormFinished = false;
 
+// Whether the CURRENT attempt has already been reported (suspend_data, telemetry, LMS).
+// The report goes out the moment the learner reaches the results, not on «Завершить»:
+// a learner who closes the course from the LMS side never presses it, and the LMS then
+// closed the learning with no score and no answers. Reset when a retry starts.
+var attemptReported = false;
+
 // PRD-31 barrier B: Commit()/Terminate() return as soon as the LMS API accepts
 // the call, not once the LMS has actually written cmi.suspend_data to its own
 // backend — that write can still be in flight. Closing the SCO window right
@@ -229,6 +235,9 @@ function disableFinishButtons() {
   for (var i = 0; i < els.length; i++) els[i].disabled = true;
 }
 
+/**
+ * «Завершить»: report the attempt if that has not happened yet, then close the SCO.
+ */
 function finishAndClose() {
   // A viewing of a finished learning grades and reports nothing (main.js).
   if (typeof state !== 'undefined' && state && state.reviewLaunch) {
@@ -238,6 +247,29 @@ function finishAndClose() {
   if (scormFinished) return;
   scormFinished = true;
   try { disableFinishButtons(); } catch (e) { }
+
+  reportAttempt();
+
+  try { SCORM.commit(); } catch (e) { }
+  try { SCORM.terminate(); } catch (e) { }
+  setTimeout(function () {
+    try { window.close(); } catch (e) { }
+  }, RESULTS_CLOSE_DELAY_MS);
+}
+
+/**
+ * Report the finished attempt: persist it in suspend_data, send the telemetry `finish`,
+ * write score, verdict, objectives and interactions to the LMS and Commit. The session is
+ * NOT terminated — the learner is still on the results screen and may download the report,
+ * read the pages after it or start a retry.
+ *
+ * Runs once per attempt: the results screen calls it on entry, «Завершить» and the unload
+ * handler call it again as a safety net, and the repeat is a no-op.
+ */
+function reportAttempt() {
+  if (typeof state !== 'undefined' && state && state.reviewLaunch) return;
+  if (attemptReported) return;
+  attemptReported = true;
 
   // Определяем режим и получаем результаты
   var isAdaptive = TEST_DATA.mode === 'adaptive' && state.adaptiveState;
@@ -318,8 +350,11 @@ function finishAndClose() {
   var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
   var realPassed = (typeof rcStatus.success === 'boolean') ? rcStatus.success : !!results.passed;
 
+  // An attempt ended by the time limit is closed the same way: it is just as spent and just
+  // as failed. Exempting it (the rule until 2026-11-05) left the course «in progress» with
+  // a «Продолжить» button in WebTutor after the last attempt ran out of time.
   var forcePassedHack = false;
-  if (attemptsExhausted && !realPassed && !state.timeExpired) {
+  if (attemptsExhausted && !realPassed) {
     console.log('🔴 Попытки кончились, принудительно закрываем с passed=true');
     forcePassedHack = true;
     try {
@@ -428,10 +463,25 @@ function finishAndClose() {
   }
 
   try { SCORM.commit(); } catch (e) { }
-  try { SCORM.terminate(); } catch (e) { }
-  setTimeout(function () {
-    try { window.close(); } catch (e) { }
-  }, RESULTS_CLOSE_DELAY_MS);
+}
+
+/**
+ * A retry starts after the previous attempt was reported. Its score and verdict stay in
+ * the LMS, but the learning is open again: `incomplete` + `suspend`, so a retry abandoned
+ * half-way resumes on the next launch instead of opening as a viewing of a finished
+ * learning (`detectReviewLaunch` reads `completed`). The next report closes it again.
+ * No-op when nothing was reported — the LMS has nothing to reopen.
+ */
+function reopenLearningForRetry() {
+  if (!attemptReported) return;
+  attemptReported = false;
+  try {
+    SCORM.setValue('cmi.completion_status', 'incomplete');
+    SCORM.setValue('cmi.exit', 'suspend');
+    SCORM.commit();
+  } catch (e) {
+    console.log('⚠️ Ошибка открытия обучения для новой попытки:', e);
+  }
 }
 
 /**
@@ -1484,7 +1534,9 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
     percent: percentScore,
     possiblePoints: results.possiblePoints,
     passed: (results.gradingComplete === false || typeof verdictForLms !== 'boolean') ? null : verdictForLms,
-    lmsThreshold: TEST_DATA.passPercent
+    // The threshold in percent of THIS run: a points rule has no fixed percent, the
+    // delivered questions decide the maximum.
+    lmsThreshold: window.TBTemplate.lmsThresholdFor(TEST_DATA.overallPassRule, results.possiblePoints)
   });
   SCORM.finish(
     lmsScore ? lmsScore.raw : null,

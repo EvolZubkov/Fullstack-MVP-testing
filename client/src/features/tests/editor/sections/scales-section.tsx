@@ -68,6 +68,7 @@ import { parseAuthorNumber } from "../numeric-input";
 import { isEmptyBandRow } from "../test-editor.validation";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { isSingleIndexChoice, distributesBudget, type QuestionType } from "@shared/questions/question-type";
+import { questionLabel } from "@shared/questions/question-label";
 import { achievableRange } from "@shared/scales/engine";
 import { DEFAULT_SCALE_SCORM_TARGET } from "@shared/schema";
 import { reachesLmsReport } from "@shared/lms-export/meta";
@@ -1169,7 +1170,7 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
           <div className="tb-section-label">Демо-ответ</div>
           {supported.map((q) => (
             <div className="ou-formfield" key={q.id}>
-              <label className="ou-formfield__lbl">{q.prompt}</label>
+              <label className="ou-formfield__lbl">{questionLabel(q)}</label>
               {/* Демо-ответ шкалы — тот же выбор ОДНОЙ единицы, что у одиночного
                   выбора: список градаций (PRD-26). */}
               {isSingleIndexChoice(q.type) ? (
@@ -1524,7 +1525,7 @@ function QuestionContribCard({
   // the question contributes to no scale, green once it contributes to ≥1.
   const measured = contributed.size > 0;
   const dotClass = measured ? "tb-status-dot--ok" : "tb-status-dot--warn";
-  const heading = `${index + 1}. ${q.prompt}`;
+  const heading = `${index + 1}. ${questionLabel(q)}`;
   const hint = UNIT_HINT[q.type];
 
   return (

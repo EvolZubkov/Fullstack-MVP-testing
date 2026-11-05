@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { buildImportPlan, runImport } from "../lms-export-import";
+import { asScenario } from "@shared/sim/upgrade";
 
 /** Разобранная книга из одной строки — форма ровно та, что отдаёт `parseLmsExport`. */
 const book = {
@@ -558,6 +559,25 @@ describe("runImport — версия публикации и варианты (P
  * PRD-57 FR-34: новые взаимодействия отчёта. Пакет кодирует текстовые ответы с Э3, Э8 и
  * Э9; до этого разбор их не знал, и ответ участника при импорте терялся целиком.
  */
+describe("runImport — пропущенное задание", () => {
+  it("пустой ответ при известном исходе пишется JSON null, а не SQL NULL", async () => {
+    // Пакет пишет пропущенному заданию «неверно» и пустой ответ. Колонка `user_answer_json`
+    // обязательна, а JS `null` драйвер отправляет как SQL NULL: загрузка падала на первом же
+    // пропуске (ответ 400 «Не удалось прочитать файл» при записи), хотя сухой прогон проходил.
+    const skipped = { ...book, rows: [{ ...book.rows[0], answers: { q2: "" }, results: { q2: "incorrect" } }] };
+    const s = storageStub();
+    s.getQuestionsByIds = async (ids: string[]) =>
+      [{ id: "q2", type: "single", prompt: "Вопрос", topicId: "t1", correctJson: { correctIndex: 0 } }]
+        .filter((q) => ids.includes(q.id)) as never;
+    const res = await runImport({ ...skipped, questionIds: ["q2"] } as never, ON, ctx, s as never);
+    const [answer] = s.answers[0] as Array<Record<string, unknown>>;
+    expect(res.rowsCreated).toBe(1);
+    expect(answer).toMatchObject({ result: "incorrect", isCorrect: false });
+    expect(answer.userAnswerJson).not.toBeNull();
+    expect(answer.userAnswerJson).not.toBeUndefined();
+  });
+});
+
 describe("runImport — текстовые взаимодействия (PRD-57 FR-34)", () => {
   /** Та же книга, но вопрос текстовый: заглушка отдаёт его тип и эталон. */
   function textBook(raw: string, result: string) {
@@ -821,9 +841,14 @@ describe("runImport — «Сценарий в ИС» (Э5б)", () => {
     ...book,
     rows: [{ ...book.rows[0], answers: { q1: steps }, results: { q1: result }, simProtocols: protocol ? { q1: protocol } : {} }],
   });
-  /** Сценарий из одной сцены с одним шагом в сторону: щелчок по нему и выход. */
+  /**
+   * Сценарий из одной сцены с одним шагом в сторону: щелчок по нему и выход. Версия 1 — так лежат вопросы,
+   * сохранённые до версии 2, и импорт обязан читать их через перевод (`shared/sim/upgrade`).
+   */
   const scenario = {
-    meta: { title: "Мини" },
+    format: "skillum.sim-scenario",
+    version: 1,
+    meta: { title: "Мини", task: "Задание" },
     settings: {},
     media: [{ id: "bg", file: "media/bg.png", w: 100, h: 100 }],
     fields: [],
@@ -869,6 +894,28 @@ describe("runImport — «Сценарий в ИС» (Э5б)", () => {
     const s = withSim();
     await runImport(simBook("") as never, ON, ctx, s as never);
     expect((s as unknown as { answers: unknown[][] }).answers[0]).toEqual([]);
+  });
+
+  it("вопрос, сохранённый версией 2, повторяется так же, как версии 1", async () => {
+    const s = {
+      ...storageStub(),
+      getQuestionsByIds: async () => [{ id: "q1", type: "simulation", prompt: "Задание", topicId: "t1", dataJson: { scenario: asScenario(scenario as never) } }],
+    };
+    await runImport(simBook("0.75", "1;aside@3e8;x@3e8;z@0") as never, ON, ctx, s as never);
+    const run = (s as unknown as { answers: Array<Array<Record<string, unknown>>> }).answers[0][0].userAnswerJson as { outcome: string; durationMs: number };
+    expect(run.outcome).toBe("exited");
+    expect(run.durationMs).toBe(2 * parseInt("3e8", 36));
+  });
+
+  it("сценарий не по контракту (без format) не читается: остаются шаги и предупреждение", async () => {
+    const { format: _format, version: _version, ...broken } = scenario;
+    const s = {
+      ...storageStub(),
+      getQuestionsByIds: async () => [{ id: "q1", type: "simulation", prompt: "Задание", topicId: "t1", dataJson: { scenario: broken } }],
+    };
+    const res = await runImport(simBook("0.75", "1;aside@3e8;x@3e8;z@0") as never, ON, ctx, s as never);
+    expect((s as unknown as { answers: Array<Array<Record<string, unknown>>> }).answers[0][0]).toMatchObject({ userAnswerJson: steps });
+    expect(res.warnings.join(" ")).toContain("Протоколов сценариев, не совпавших со сценарием вопроса: 1");
   });
 });
 

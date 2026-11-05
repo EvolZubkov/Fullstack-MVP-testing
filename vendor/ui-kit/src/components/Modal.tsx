@@ -28,6 +28,15 @@ export interface ModalDialogProps {
   className?: string;
   /** aria-label when no title is provided. */
   ariaLabel?: string;
+  /**
+   * Keep the dialog at the full available height instead of growing with its content.
+   *
+   * For a dialog whose content changes in place — tabs, steps — so the window does not
+   * jump between them: the body takes everything between the header and the footer and
+   * scrolls itself, the footer stays at the bottom. The height leaves the toast zone at
+   * the bottom of the screen free, so a toast never covers the footer actions.
+   */
+  fill?: boolean;
 }
 
 /** @deprecated Use ModalDialogProps */
@@ -85,7 +94,7 @@ export const ModalDialog = forwardRef<HTMLDivElement, ModalDialogProps>(
     open, onClose, title, description, size = 'm', footer,
     icon, iconTone, children,
     closeOnBackdrop = true, closeOnEsc = true, hideCloseButton, usePortal = true,
-    className, ariaLabel,
+    className, ariaLabel, fill,
   }, ref) => {
     const titleId = useId();
     const descId = useId();
@@ -127,7 +136,7 @@ export const ModalDialog = forwardRef<HTMLDivElement, ModalDialogProps>(
           className="ou-modal__backdrop"
           onClick={closeOnBackdrop ? onClose : undefined}
         />
-        <div className={cn('ou-modal', `ou-modal--${size}`)}>
+        <div className={cn('ou-modal', `ou-modal--${size}`, fill && 'ou-modal--fill')}>
           {(title || icon || description || !hideCloseButton) && (
             <header className={cn('ou-modal__head', icon ? 'ou-modal__head--icon' : undefined)}>
               {icon && (

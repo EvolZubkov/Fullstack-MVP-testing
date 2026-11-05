@@ -113,3 +113,44 @@ describe("buildResultContext + блоки разделов", () => {
     expect(declared).toEqual(before);
   });
 });
+
+describe("buildResultContext + пояснение группы", () => {
+  const withDescription = [
+    {
+      key: "competencies",
+      label: "Управленческие компетенции",
+      order: 0,
+      description: { format: "plain", text: "Целевой уровень говорит о соответствии.\n\nНачальный уровень — о несоответствии." },
+    },
+    { key: "knowledge", label: "Знания", order: 1 },
+  ];
+
+  it("печатает пояснение как разметку при любом вердикте, а группе без него поле не добавляет", () => {
+    for (const passed of [true, false]) {
+      const { result } = buildResultContext(
+        input([topic("К", passed, "competencies"), topic("З", passed, "knowledge")], withDescription),
+        "Тест",
+      );
+      expect(result.topicGroups![0].descriptionHtml).toContain("Целевой уровень говорит о соответствии.");
+      expect(result.topicGroups![0].descriptionHtml).toContain("<br>");
+      expect(result.topicGroups![1]).not.toHaveProperty("descriptionHtml");
+    }
+  });
+
+  it("plain экранируется, а rich-текст печатается как есть — как толкования тем", () => {
+    const { result } = buildResultContext(
+      input([topic("К", true, "competencies")], [
+        { key: "competencies", label: "К", description: { format: "richText", text: "<p>Ок <b>жирный</b></p>" } },
+      ]),
+      "Тест",
+    );
+    expect(result.topicGroups![0].descriptionHtml).toBe("<p>Ок <b>жирный</b></p>");
+    const plain = buildResultContext(
+      input([topic("К", true, "competencies")], [
+        { key: "competencies", label: "К", description: { format: "plain", text: "<b>x</b>" } },
+      ]),
+      "Тест",
+    );
+    expect(plain.result.topicGroups![0].descriptionHtml).toBe("&lt;b&gt;x&lt;/b&gt;");
+  });
+});

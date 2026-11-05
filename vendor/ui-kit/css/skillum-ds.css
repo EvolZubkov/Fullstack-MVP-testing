@@ -61,44 +61,51 @@
    LAYER 1 — PRIMITIVES
    Raw values. Theme-independent. Never reference these from
    component CSS — go through semantic tokens below.
+
+   Tints and shades are mixed with white, black or transparent IN OKLAB,
+   not oklch: an achromatic colour has no hue, and some engines treat it
+   as 0deg, so an oklch mix drifts towards pink (an "info" or "success"
+   banner printed pink). With an achromatic side the oklab result is
+   identical to a correct oklch one. Mixes of two chromatic colours
+   stay in oklch.
    ----------------------------------------------------------------- */
 
 :root {
   /* ---- Brand · Purple (primary accent) ----------------------- */
-  --ou-purple-50:  color-mix(in oklch, #fff 92%, #7700FF);
-  --ou-purple-100: color-mix(in oklch, #fff 80%, #7700FF);
-  --ou-purple-200: color-mix(in oklch, #fff 60%, #7700FF);
-  --ou-purple-300: color-mix(in oklch, #fff 40%, #7700FF);
-  --ou-purple-400: color-mix(in oklch, #fff 18%, #7700FF);
+  --ou-purple-50:  color-mix(in oklab, #fff 92%, #7700FF);
+  --ou-purple-100: color-mix(in oklab, #fff 80%, #7700FF);
+  --ou-purple-200: color-mix(in oklab, #fff 60%, #7700FF);
+  --ou-purple-300: color-mix(in oklab, #fff 40%, #7700FF);
+  --ou-purple-400: color-mix(in oklab, #fff 18%, #7700FF);
   --ou-purple-500: #7700FF;
-  --ou-purple-600: color-mix(in oklch, #000 16%, #7700FF);
-  --ou-purple-700: color-mix(in oklch, #000 32%, #7700FF);
-  --ou-purple-800: color-mix(in oklch, #000 50%, #7700FF);
-  --ou-purple-900: color-mix(in oklch, #000 68%, #7700FF);
+  --ou-purple-600: color-mix(in oklab, #000 16%, #7700FF);
+  --ou-purple-700: color-mix(in oklab, #000 32%, #7700FF);
+  --ou-purple-800: color-mix(in oklab, #000 50%, #7700FF);
+  --ou-purple-900: color-mix(in oklab, #000 68%, #7700FF);
 
   /* ---- Brand · Orange (secondary accent) --------------------- */
-  --ou-orange-50:  color-mix(in oklch, #fff 92%, #FF5E2E);
-  --ou-orange-100: color-mix(in oklch, #fff 80%, #FF5E2E);
-  --ou-orange-200: color-mix(in oklch, #fff 60%, #FF5E2E);
-  --ou-orange-300: color-mix(in oklch, #fff 40%, #FF5E2E);
-  --ou-orange-400: color-mix(in oklch, #fff 18%, #FF5E2E);
+  --ou-orange-50:  color-mix(in oklab, #fff 92%, #FF5E2E);
+  --ou-orange-100: color-mix(in oklab, #fff 80%, #FF5E2E);
+  --ou-orange-200: color-mix(in oklab, #fff 60%, #FF5E2E);
+  --ou-orange-300: color-mix(in oklab, #fff 40%, #FF5E2E);
+  --ou-orange-400: color-mix(in oklab, #fff 18%, #FF5E2E);
   --ou-orange-500: #FF5E2E;
-  --ou-orange-600: color-mix(in oklch, #000 16%, #FF5E2E);
-  --ou-orange-700: color-mix(in oklch, #000 32%, #FF5E2E);
-  --ou-orange-800: color-mix(in oklch, #000 50%, #FF5E2E);
-  --ou-orange-900: color-mix(in oklch, #000 68%, #FF5E2E);
+  --ou-orange-600: color-mix(in oklab, #000 16%, #FF5E2E);
+  --ou-orange-700: color-mix(in oklab, #000 32%, #FF5E2E);
+  --ou-orange-800: color-mix(in oklab, #000 50%, #FF5E2E);
+  --ou-orange-900: color-mix(in oklab, #000 68%, #FF5E2E);
 
   /* ---- Brand · Yellow (tertiary accent) ---------------------- */
-  --ou-yellow-50:  color-mix(in oklch, #fff 92%, #FFB608);
-  --ou-yellow-100: color-mix(in oklch, #fff 80%, #FFB608);
-  --ou-yellow-200: color-mix(in oklch, #fff 60%, #FFB608);
-  --ou-yellow-300: color-mix(in oklch, #fff 40%, #FFB608);
-  --ou-yellow-400: color-mix(in oklch, #fff 18%, #FFB608);
+  --ou-yellow-50:  color-mix(in oklab, #fff 92%, #FFB608);
+  --ou-yellow-100: color-mix(in oklab, #fff 80%, #FFB608);
+  --ou-yellow-200: color-mix(in oklab, #fff 60%, #FFB608);
+  --ou-yellow-300: color-mix(in oklab, #fff 40%, #FFB608);
+  --ou-yellow-400: color-mix(in oklab, #fff 18%, #FFB608);
   --ou-yellow-500: #FFB608;
-  --ou-yellow-600: color-mix(in oklch, #000 16%, #FFB608);
-  --ou-yellow-700: color-mix(in oklch, #000 32%, #FFB608);
-  --ou-yellow-800: color-mix(in oklch, #000 50%, #FFB608);
-  --ou-yellow-900: color-mix(in oklch, #000 68%, #FFB608);
+  --ou-yellow-600: color-mix(in oklab, #000 16%, #FFB608);
+  --ou-yellow-700: color-mix(in oklab, #000 32%, #FFB608);
+  --ou-yellow-800: color-mix(in oklab, #000 50%, #FFB608);
+  --ou-yellow-900: color-mix(in oklab, #000 68%, #FFB608);
 
   /* ---- Neutrals (cool-tinted, anchored to fg #1D2533) -------- */
   --ou-neutral-0:   #FFFFFF;
@@ -115,64 +122,64 @@
   --ou-neutral-950: #11151E;
 
   /* ---- Status · Success -------------------------------------- */
-  --ou-success-50:  color-mix(in oklch, #fff 90%, #0ACB5B);
-  --ou-success-100: color-mix(in oklch, #fff 76%, #0ACB5B);
+  --ou-success-50:  color-mix(in oklab, #fff 90%, #0ACB5B);
+  --ou-success-100: color-mix(in oklab, #fff 76%, #0ACB5B);
   --ou-success-500: #0ACB5B;
-  --ou-success-600: color-mix(in oklch, #000 14%, #0ACB5B);
-  --ou-success-700: color-mix(in oklch, #000 30%, #0ACB5B);
+  --ou-success-600: color-mix(in oklab, #000 14%, #0ACB5B);
+  --ou-success-700: color-mix(in oklab, #000 30%, #0ACB5B);
 
   /* ---- Status · Error ---------------------------------------- */
-  --ou-error-50:  color-mix(in oklch, #fff 90%, #FF2626);
-  --ou-error-100: color-mix(in oklch, #fff 76%, #FF2626);
+  --ou-error-50:  color-mix(in oklab, #fff 90%, #FF2626);
+  --ou-error-100: color-mix(in oklab, #fff 76%, #FF2626);
   --ou-error-500: #FF2626;
-  --ou-error-600: color-mix(in oklch, #000 14%, #FF2626);
-  --ou-error-700: color-mix(in oklch, #000 30%, #FF2626);
+  --ou-error-600: color-mix(in oklab, #000 14%, #FF2626);
+  --ou-error-700: color-mix(in oklab, #000 30%, #FF2626);
 
   /* ---- Status · Warning (≠ brand yellow; namespaced) --------- */
-  --ou-warning-50:  color-mix(in oklch, #fff 90%, #FFB608);
-  --ou-warning-100: color-mix(in oklch, #fff 76%, #FFB608);
+  --ou-warning-50:  color-mix(in oklab, #fff 90%, #FFB608);
+  --ou-warning-100: color-mix(in oklab, #fff 76%, #FFB608);
   --ou-warning-500: #FFB608;
-  --ou-warning-600: color-mix(in oklch, #000 14%, #FFB608);
-  --ou-warning-700: color-mix(in oklch, #000 30%, #FFB608);
+  --ou-warning-600: color-mix(in oklab, #000 14%, #FFB608);
+  --ou-warning-700: color-mix(in oklab, #000 30%, #FFB608);
 
   /* ---- Status · Info ----------------------------------------- */
-  --ou-info-50:  color-mix(in oklch, #fff 90%, #2563EB);
-  --ou-info-100: color-mix(in oklch, #fff 76%, #2563EB);
+  --ou-info-50:  color-mix(in oklab, #fff 90%, #2563EB);
+  --ou-info-100: color-mix(in oklab, #fff 76%, #2563EB);
   --ou-info-500: #2563EB;
-  --ou-info-600: color-mix(in oklch, #000 14%, #2563EB);
-  --ou-info-700: color-mix(in oklch, #000 30%, #2563EB);
+  --ou-info-600: color-mix(in oklab, #000 14%, #2563EB);
+  --ou-info-700: color-mix(in oklab, #000 30%, #2563EB);
 
   /* ---- Directions (categorical — separate namespace --cat-*)
      Used ONLY for category identity (badges, list markers).
      Never on interactive surfaces. Per design rule (variant C),
      brand and directions never co-exist on the same screen.    */
   --ou-cat-business:    #A078FF;
-  --ou-cat-business-soft:   color-mix(in oklch, #fff 82%, #A078FF);
-  --ou-cat-business-strong: color-mix(in oklch, #000 28%, #A078FF);
+  --ou-cat-business-soft:   color-mix(in oklab, #fff 82%, #A078FF);
+  --ou-cat-business-strong: color-mix(in oklab, #000 28%, #A078FF);
 
   --ou-cat-b2c:         #FE842D;
-  --ou-cat-b2c-soft:        color-mix(in oklch, #fff 82%, #FE842D);
-  --ou-cat-b2c-strong:      color-mix(in oklch, #000 28%, #FE842D);
+  --ou-cat-b2c-soft:        color-mix(in oklab, #fff 82%, #FE842D);
+  --ou-cat-b2c-strong:      color-mix(in oklab, #000 28%, #FE842D);
 
   --ou-cat-digital:     #FFB608;
-  --ou-cat-digital-soft:    color-mix(in oklch, #fff 82%, #FFB608);
-  --ou-cat-digital-strong:  color-mix(in oklch, #000 28%, #FFB608);
+  --ou-cat-digital-soft:    color-mix(in oklab, #fff 82%, #FFB608);
+  --ou-cat-digital-strong:  color-mix(in oklab, #000 28%, #FFB608);
 
   --ou-cat-b2o:         #29CCA3;
-  --ou-cat-b2o-soft:        color-mix(in oklch, #fff 82%, #29CCA3);
-  --ou-cat-b2o-strong:      color-mix(in oklch, #000 28%, #29CCA3);
+  --ou-cat-b2o-soft:        color-mix(in oklab, #fff 82%, #29CCA3);
+  --ou-cat-b2o-strong:      color-mix(in oklab, #000 28%, #29CCA3);
 
   --ou-cat-b2b:         #5F657B;
-  --ou-cat-b2b-soft:        color-mix(in oklch, #fff 82%, #5F657B);
-  --ou-cat-b2b-strong:      color-mix(in oklch, #000 28%, #5F657B);
+  --ou-cat-b2b-soft:        color-mix(in oklab, #fff 82%, #5F657B);
+  --ou-cat-b2b-strong:      color-mix(in oklab, #000 28%, #5F657B);
 
   --ou-cat-bti:         #5887FF;
-  --ou-cat-bti-soft:        color-mix(in oklch, #fff 82%, #5887FF);
-  --ou-cat-bti-strong:      color-mix(in oklch, #000 28%, #5887FF);
+  --ou-cat-bti-soft:        color-mix(in oklab, #fff 82%, #5887FF);
+  --ou-cat-bti-strong:      color-mix(in oklab, #000 28%, #5887FF);
 
   --ou-cat-leadership:  #FF5E2E;
-  --ou-cat-leadership-soft:    color-mix(in oklch, #fff 82%, #FF5E2E);
-  --ou-cat-leadership-strong:  color-mix(in oklch, #000 28%, #FF5E2E);
+  --ou-cat-leadership-soft:    color-mix(in oklab, #fff 82%, #FF5E2E);
+  --ou-cat-leadership-strong:  color-mix(in oklab, #000 28%, #FF5E2E);
 
   /* ---- Typography primitives --------------------------------- */
   --ou-font-family-base:  'Roboto', 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -184,7 +191,7 @@
   --ou-shadow-md:  0 4px 8px rgba(17, 21, 30, 0.06), 0 2px 4px rgba(17, 21, 30, 0.06);
   --ou-shadow-lg:  0 12px 24px rgba(17, 21, 30, 0.10), 0 4px 8px rgba(17, 21, 30, 0.06);
   --ou-shadow-xl:  0 24px 48px rgba(17, 21, 30, 0.16), 0 8px 16px rgba(17, 21, 30, 0.08);
-  --ou-shadow-focus: 0 0 0 3px color-mix(in oklch, transparent 70%, var(--ou-purple-500));
+  --ou-shadow-focus: 0 0 0 3px color-mix(in oklab, transparent 70%, var(--ou-purple-500));
 
   /* ---- Motion primitives ------------------------------------- */
   --ou-motion-fast:    120ms;
@@ -223,8 +230,8 @@
   --ou-bg-elevated:    var(--ou-neutral-0);
   --ou-bg-overlay:     rgba(17, 21, 30, 0.48);
   --ou-bg-disabled:    var(--ou-neutral-200);
-  --ou-bg-hover:       color-mix(in oklch, transparent 94%, var(--ou-neutral-900));
-  --ou-bg-pressed:     color-mix(in oklch, transparent 90%, var(--ou-neutral-900));
+  --ou-bg-hover:       color-mix(in oklab, transparent 94%, var(--ou-neutral-900));
+  --ou-bg-pressed:     color-mix(in oklab, transparent 90%, var(--ou-neutral-900));
 
   /* Border */
   --ou-border-soft:    var(--ou-neutral-100);
@@ -355,8 +362,8 @@
   --ou-bg-elevated:    #232A38;
   --ou-bg-overlay:     rgba(0, 0, 0, 0.66);
   --ou-bg-disabled:    #232A38;
-  --ou-bg-hover:       color-mix(in oklch, transparent 90%, #ffffff);
-  --ou-bg-pressed:     color-mix(in oklch, transparent 84%, #ffffff);
+  --ou-bg-hover:       color-mix(in oklab, transparent 90%, #ffffff);
+  --ou-bg-pressed:     color-mix(in oklab, transparent 84%, #ffffff);
 
   /* Border */
   --ou-border-soft:    #2F3543;
@@ -383,13 +390,13 @@
   --ou-success-on-soft: var(--ou-success-500);
 
   --ou-error-soft:      color-mix(in oklch, #11151E 78%, var(--ou-error-500));
-  --ou-error-on-soft:   color-mix(in oklch, #fff 30%, var(--ou-error-500));
+  --ou-error-on-soft:   color-mix(in oklab, #fff 30%, var(--ou-error-500));
 
   --ou-warning-soft:    color-mix(in oklch, #11151E 78%, var(--ou-warning-500));
   --ou-warning-on-soft: var(--ou-warning-500);
 
   --ou-info-soft:       color-mix(in oklch, #11151E 78%, var(--ou-info-500));
-  --ou-info-on-soft:    color-mix(in oklch, #fff 30%, var(--ou-info-500));
+  --ou-info-on-soft:    color-mix(in oklab, #fff 30%, var(--ou-info-500));
 
   /* Medals — dark: deepen bg, lift fg so chip reads on surface-2 */
   --ou-medal-gold-bg:     oklch(0.32 0.08 85);
@@ -909,8 +916,8 @@
 .ou-avatar--c-blue   { background: var(--ou-info-100);     color: var(--ou-info-700); }
 .ou-avatar--c-green  { background: var(--ou-success-100);  color: var(--ou-success-700); }
 .ou-avatar--c-amber  { background: var(--ou-warning-100);  color: var(--ou-warning-700); }
-.ou-avatar--c-pink   { background: color-mix(in oklch, #fff 78%, #E5388B); color: color-mix(in oklch, #000 36%, #E5388B); }
-.ou-avatar--c-teal   { background: color-mix(in oklch, #fff 78%, #08A6A0); color: color-mix(in oklch, #000 32%, #08A6A0); }
+.ou-avatar--c-pink   { background: color-mix(in oklab, #fff 78%, #E5388B); color: color-mix(in oklab, #000 36%, #E5388B); }
+.ou-avatar--c-teal   { background: color-mix(in oklab, #fff 78%, #08A6A0); color: color-mix(in oklab, #000 32%, #08A6A0); }
 .ou-avatar--c-slate  { background: var(--ou-neutral-200);  color: var(--ou-neutral-700); }
 
 .ou-avatar--solid.ou-avatar--c-purple { background: var(--ou-purple-500);   color: var(--ou-fg-on-accent); }
@@ -1028,25 +1035,25 @@
 
 /* ============ Variant: subtle (default) — soft-tinted bg, цветная иконка ============ */
 .ou-banner--subtle.ou-banner--success {
-  background: var(--ou-success-soft); border-color: color-mix(in oklch, var(--ou-success-500) 24%, transparent);
+  background: var(--ou-success-soft); border-color: color-mix(in oklab, var(--ou-success-500) 24%, transparent);
 }
 .ou-banner--subtle.ou-banner--success .ou-banner__ico { color: var(--ou-success-on-soft); }
 .ou-banner--subtle.ou-banner--success .ou-banner__title { color: var(--ou-success-on-soft); }
 
 .ou-banner--subtle.ou-banner--error {
-  background: var(--ou-error-soft); border-color: color-mix(in oklch, var(--ou-error-500) 24%, transparent);
+  background: var(--ou-error-soft); border-color: color-mix(in oklab, var(--ou-error-500) 24%, transparent);
 }
 .ou-banner--subtle.ou-banner--error .ou-banner__ico { color: var(--ou-error-on-soft); }
 .ou-banner--subtle.ou-banner--error .ou-banner__title { color: var(--ou-error-on-soft); }
 
 .ou-banner--subtle.ou-banner--warning {
-  background: var(--ou-warning-soft); border-color: color-mix(in oklch, var(--ou-warning-500) 30%, transparent);
+  background: var(--ou-warning-soft); border-color: color-mix(in oklab, var(--ou-warning-500) 30%, transparent);
 }
 .ou-banner--subtle.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-on-soft); }
 .ou-banner--subtle.ou-banner--warning .ou-banner__title { color: var(--ou-warning-on-soft); }
 
 .ou-banner--subtle.ou-banner--info {
-  background: var(--ou-info-soft); border-color: color-mix(in oklch, var(--ou-info-500) 24%, transparent);
+  background: var(--ou-info-soft); border-color: color-mix(in oklab, var(--ou-info-500) 24%, transparent);
 }
 .ou-banner--subtle.ou-banner--info .ou-banner__ico { color: var(--ou-info-on-soft); }
 .ou-banner--subtle.ou-banner--info .ou-banner__title { color: var(--ou-info-on-soft); }
@@ -1057,13 +1064,13 @@
 
 /* ============ Variant: outline — белый фон, цветной бордер + иконка ============ */
 .ou-banner--outline { background: var(--ou-bg-elevated); }
-.ou-banner--outline.ou-banner--success { border-color: color-mix(in oklch, var(--ou-success-500) 50%, transparent); }
+.ou-banner--outline.ou-banner--success { border-color: color-mix(in oklab, var(--ou-success-500) 50%, transparent); }
 .ou-banner--outline.ou-banner--success .ou-banner__ico { color: var(--ou-success-default); }
-.ou-banner--outline.ou-banner--error   { border-color: color-mix(in oklch, var(--ou-error-500) 50%, transparent); }
+.ou-banner--outline.ou-banner--error   { border-color: color-mix(in oklab, var(--ou-error-500) 50%, transparent); }
 .ou-banner--outline.ou-banner--error   .ou-banner__ico { color: var(--ou-error-default); }
-.ou-banner--outline.ou-banner--warning { border-color: color-mix(in oklch, var(--ou-warning-500) 56%, transparent); }
+.ou-banner--outline.ou-banner--warning { border-color: color-mix(in oklab, var(--ou-warning-500) 56%, transparent); }
 .ou-banner--outline.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-default); }
-.ou-banner--outline.ou-banner--info    { border-color: color-mix(in oklch, var(--ou-info-500) 50%, transparent); }
+.ou-banner--outline.ou-banner--info    { border-color: color-mix(in oklab, var(--ou-info-500) 50%, transparent); }
 .ou-banner--outline.ou-banner--info    .ou-banner__ico { color: var(--ou-info-default); }
 
 /* ============ Variant: leading-bar — нейтральный фон, цветная полоска слева ============ */
@@ -1331,7 +1338,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
   background: var(--ou-accent-default); color: var(--ou-accent-on-default);
   font-weight: 600;
 }
-.ou-cal__day.is-weekend { background: color-mix(in oklch, var(--ou-bg-page) 60%, transparent); }
+.ou-cal__day.is-weekend { background: color-mix(in oklab, var(--ou-bg-page) 60%, transparent); }
 
 .ou-cal__event {
   font: var(--ou-text-body-xs); font-weight: 500;
@@ -1395,7 +1402,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-cal__col-slot {
   border-bottom: 1px solid var(--ou-border-soft);
 }
-.ou-cal__col-slot.is-half { border-bottom: 1px dashed color-mix(in oklch, var(--ou-border-soft) 60%, transparent); }
+.ou-cal__col-slot.is-half { border-bottom: 1px dashed color-mix(in oklab, var(--ou-border-soft) 60%, transparent); }
 .ou-cal__col-event {
   position: absolute; left: 4px; right: 4px;
   padding: 6px 8px; border-radius: 6px;
@@ -1788,9 +1795,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-histogram--m .ou-histogram__bars { --ou-histogram-h: 64px; }
 .ou-histogram--l .ou-histogram__bars { --ou-histogram-h: 96px; }
 /* Tones — map bar colour onto status tokens */
-.ou-histogram--success .ou-histogram__bar { background: color-mix(in oklch, var(--ou-success-default) 22%, transparent); border-top-color: var(--ou-success-default); }
-.ou-histogram--warn    .ou-histogram__bar { background: color-mix(in oklch, var(--ou-warning-default) 22%, transparent); border-top-color: var(--ou-warning-default); }
-.ou-histogram--danger  .ou-histogram__bar { background: color-mix(in oklch, var(--ou-error-default)   22%, transparent); border-top-color: var(--ou-error-default); }
+.ou-histogram--success .ou-histogram__bar { background: color-mix(in oklab, var(--ou-success-default) 22%, transparent); border-top-color: var(--ou-success-default); }
+.ou-histogram--warn    .ou-histogram__bar { background: color-mix(in oklab, var(--ou-warning-default) 22%, transparent); border-top-color: var(--ou-warning-default); }
+.ou-histogram--danger  .ou-histogram__bar { background: color-mix(in oklab, var(--ou-error-default)   22%, transparent); border-top-color: var(--ou-error-default); }
 
 /* === Heatmap === */
 .ou-heatmap { display: grid; gap: 3px; }
@@ -1799,9 +1806,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
   border-radius: 3px;
   background: var(--ou-bg-surface-2);
 }
-.ou-heatmap__cell--l1 { background: color-mix(in oklch, var(--ou-accent-default) 18%, transparent); }
-.ou-heatmap__cell--l2 { background: color-mix(in oklch, var(--ou-accent-default) 38%, transparent); }
-.ou-heatmap__cell--l3 { background: color-mix(in oklch, var(--ou-accent-default) 62%, transparent); }
+.ou-heatmap__cell--l1 { background: color-mix(in oklab, var(--ou-accent-default) 18%, transparent); }
+.ou-heatmap__cell--l2 { background: color-mix(in oklab, var(--ou-accent-default) 38%, transparent); }
+.ou-heatmap__cell--l3 { background: color-mix(in oklab, var(--ou-accent-default) 62%, transparent); }
 .ou-heatmap__cell--l4 { background: var(--ou-accent-default); }
 .ou-heatmap__cell--off { background: transparent; }
 
@@ -2390,7 +2397,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
   border: 1px solid var(--ou-border-soft);
   background: var(--swatch, #ffffff);
   /* Inset ring keeps near-bg-color swatches (white-on-white, black-on-black) distinguishable */
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, transparent 88%, var(--ou-fg-default));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, transparent 88%, var(--ou-fg-default));
   cursor: pointer;
   padding: 0;
   position: relative;
@@ -2989,7 +2996,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-grid__table .col-stick--shadow { box-shadow: none; }
 .ou-grid__table .col-stick--shadow:has(+ td:not(.col-stick)),
 .ou-grid__table .col-stick--shadow:has(+ th:not(.col-stick)) {
-  box-shadow: 6px 0 8px -6px color-mix(in oklch, var(--ou-fg-default) 16%, transparent);
+  box-shadow: 6px 0 8px -6px color-mix(in oklab, var(--ou-fg-default) 16%, transparent);
 }
 
 /* Body */
@@ -3669,7 +3676,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-uploader.is-active { border-style: solid; border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
 .ou-uploader.is-active .ou-uploader__cta { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); }
 .ou-uploader.is-error { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
-.ou-uploader.is-error .ou-uploader__icon { background: color-mix(in oklch, transparent 80%, var(--ou-error-default)); color: var(--ou-error-default); }
+.ou-uploader.is-error .ou-uploader__icon { background: color-mix(in oklab, transparent 80%, var(--ou-error-default)); color: var(--ou-error-default); }
 .ou-uploader.is-error .ou-uploader__title,
 .ou-uploader.is-error .ou-uploader__sub { color: var(--ou-error-default); }
 .ou-uploader.is-disabled { border-color: var(--ou-border-soft); background: var(--ou-bg-disabled); color: var(--ou-fg-disabled); cursor: not-allowed; }
@@ -3710,6 +3717,11 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
   letter-spacing: 0.04em; text-transform: uppercase;
 }
 .ou-file__thumb svg { width: 18px; height: 18px; }
+/* A thumb may carry the file itself (`thumb={<img>}`): the picture fills the tile whole,
+   on a neutral surface instead of the type colour, so a cut-out illustration with a
+   transparent background reads as itself and not as a purple badge. */
+.ou-file__thumb:has(> img) { background: var(--ou-bg-surface-3); overflow: hidden; }
+.ou-file__thumb > img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .ou-file__thumb--pdf { background: #C5311A; }
 .ou-file__thumb--doc { background: #1F60C0; }
 .ou-file__thumb--xls { background: #1F8A5B; }
@@ -3746,7 +3758,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 /* States */
 .ou-file.is-error { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
 .ou-file.is-error .ou-file__meta { color: var(--ou-error-on-soft); }
-.ou-file.is-success { border-color: color-mix(in oklch, transparent 60%, var(--ou-success-default)); }
+.ou-file.is-success { border-color: color-mix(in oklab, transparent 60%, var(--ou-success-default)); }
 .ou-file.is-success .ou-file__meta { color: var(--ou-success-on-soft); }
 .ou-file.is-uploading .ou-file__name { color: var(--ou-fg-default); }
 
@@ -3782,7 +3794,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-file-tile__close {
   position: absolute; top: 8px; right: 8px;
   width: 24px; height: 24px; border-radius: 999px;
-  background: color-mix(in oklch, transparent 10%, var(--ou-bg-elevated));
+  background: color-mix(in oklab, transparent 10%, var(--ou-bg-elevated));
   color: var(--ou-fg-muted);
   border: 0; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
@@ -3961,7 +3973,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-formactions--sticky {
   position: -webkit-sticky;
   position: sticky; bottom: 0; z-index: 2;
-  box-shadow: 0 -1px 0 var(--ou-border-soft), 0 -8px 16px -8px color-mix(in oklch, var(--ou-fg-default) 8%, transparent);
+  box-shadow: 0 -1px 0 var(--ou-border-soft), 0 -8px 16px -8px color-mix(in oklab, var(--ou-fg-default) 8%, transparent);
 }
 .ou-formactions__hint {
   font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
@@ -4620,7 +4632,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou--dark .ou-kanban__add-col {
   border-color: var(--ou-border-strong, var(--ou-fg-soft));
   color: var(--ou-fg-default);
-  background: color-mix(in oklch, transparent 92%, #ffffff);
+  background: color-mix(in oklab, transparent 92%, #ffffff);
 }
 .ou--dark .ou-kanban__add-col:hover {
   border-color: var(--ou-accent-default);
@@ -5288,7 +5300,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-menu__item--danger { color: var(--ou-error-on-soft); }
 .ou-menu__item--danger .ou-menu__item-ico { color: var(--ou-error-on-soft); }
 .ou-menu__item--danger:hover {
-  background: color-mix(in oklch, transparent 88%, var(--ou-error-500));
+  background: color-mix(in oklab, transparent 88%, var(--ou-error-500));
   color: var(--ou-error-700);
 }
 
@@ -5337,6 +5349,18 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-modal--l { max-width: 720px; }
 .ou-modal--xl { max-width: 960px; }
 
+/* fill: the dialog keeps one height instead of growing with its content (tabs and steps
+   do not make it jump). The body takes the rest as a column, 4x between its blocks; it
+   scrolls itself, the footer stays at the bottom.
+   The height leaves the toast zone free: toasts stack at the bottom right, so the footer
+   actions must end above one toast (stack offset + a title-and-description toast, 64px)
+   plus 4x. The dialog is centred, hence the same inset on top. */
+.ou-modal--fill {
+  --ou-modal-fill-inset: calc(var(--ou-space-5) + 64px + var(--ou-space-4));
+  height: calc(100vh - var(--ou-modal-fill-inset) * 2);
+}
+.ou-modal--fill > .ou-modal__body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+
 /* Модульная сетка: от краёв окна 6x, после заголовка 1x — заголовок и содержимое родственны. */
 .ou-modal__head { display: flex; align-items: flex-start; gap: var(--ou-space-4); padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-1); }
 .ou-modal__head-text { flex: 1; min-width: 0; }
@@ -5353,6 +5377,13 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 /* До и после разделителя — 4x. */
 .ou-modal__foot { display: flex; justify-content: flex-end; gap: var(--ou-space-2); padding: var(--ou-space-4) var(--ou-space-6); border-top: 1px solid var(--ou-border-soft); }
 .ou-modal__foot--between { justify-content: space-between; }
+
+/* The 4px grid (1x related, 4x different) inside a fill dialog ONLY. The same intervals
+   are off the grid in the DS defaults everywhere; making them the default is tech debt
+   (ROADMAP, section 0.0.4, item 19), then these scoped rules go. */
+.ou-modal--fill > .ou-modal__foot { gap: var(--ou-space-1); }
+.ou-modal--fill .ou-field { gap: var(--ou-space-1); }
+.ou-modal--fill .ou-tabs__panel { padding-top: var(--ou-space-4); }
 
 /* Icon-led variant (alert / success / info) */
 .ou-modal__head--icon .ou-modal__icon {
@@ -6813,8 +6844,8 @@ span.ou-quiz__dot:hover { transform: none; }
 */
 
 .ou-skel {
-  --_bg: color-mix(in oklch, transparent 50%, var(--ou-bg-surface-3));
-  --_hl: color-mix(in oklch, transparent 30%, var(--ou-bg-surface-4));
+  --_bg: color-mix(in oklab, transparent 50%, var(--ou-bg-surface-3));
+  --_hl: color-mix(in oklab, transparent 30%, var(--ou-bg-surface-4));
   display: block;
   background-color: var(--_bg);
   background-image: linear-gradient(
@@ -6964,7 +6995,7 @@ span.ou-quiz__dot:hover { transform: none; }
   transform: translate(-50%, -50%);
   transition: box-shadow var(--ou-motion-fast), transform var(--ou-motion-fast);
 }
-.ou-slider__thumb:hover { box-shadow: 0 0 0 6px color-mix(in oklch, var(--ou-accent-default) 18%, transparent); }
+.ou-slider__thumb:hover { box-shadow: 0 0 0 6px color-mix(in oklab, var(--ou-accent-default) 18%, transparent); }
 .ou-slider__thumb:active { cursor: -webkit-grabbing; cursor: grabbing; transform: translate(-50%, -50%) scale(1.08); }
 .ou-slider--h .ou-slider__thumb { top: 50%; }
 .ou-slider--v .ou-slider__thumb { left: 50%; }
@@ -7099,7 +7130,7 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-spinner-overlay {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  background: color-mix(in oklch, var(--ou-bg-page) 70%, transparent);
+  background: color-mix(in oklab, var(--ou-bg-page) 70%, transparent);
   -webkit-backdrop-filter: blur(2px);
           backdrop-filter: blur(2px);
   border-radius: inherit;
@@ -7370,6 +7401,11 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-tabs--segment .ou-tabs__tab.is-active { background: var(--ou-bg-elevated); color: var(--ou-fg-default); box-shadow: var(--ou-shadow-xs); }
 
 .ou-tabs__panel { padding-top: var(--ou-space-5); }
+
+/* fill: the active panel takes what the tab list leaves and scrolls itself. The parent
+   is a flex column with a bounded height (ModalDialog fill). */
+.ou-tabs--fill { flex: 1; min-height: 0; }
+.ou-tabs--fill > .ou-tabs__panel { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 
 
 /* ─── Tag.css ───────────────────────────────── */
@@ -8074,7 +8110,7 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .ou-transfer__row:hover { background: var(--ou-bg-hover); }
 .ou-transfer__row.is-selected { background: var(--ou-accent-soft); }
-.ou-transfer__row.is-selected:hover { background: color-mix(in oklch, var(--ou-accent-soft) 70%, black); }
+.ou-transfer__row.is-selected:hover { background: color-mix(in oklab, var(--ou-accent-soft) 70%, black); }
 
 .ou-transfer__row input[type="checkbox"] { accent-color: var(--ou-accent-default); }
 .ou-transfer__row-avatar {
@@ -8136,6 +8172,36 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-transfer__summary-text { font: var(--ou-text-body-s); color: var(--ou-fg-default); }
 .ou-transfer__summary-text strong { font-weight: 600; }
 .ou-transfer__summary-text strong { color: var(--ou-accent-default); }
+
+/* fill: the panes reach the parent's bottom, the lists scroll inside them. The picker
+   never shrinks below 360px, so a list keeps at least 240px (four and a half rows) under
+   the pane's header, search and toolbar; on a low screen the parent scrolls instead.
+   The minimum is set on the picker itself: the intrinsic minimum of a grid row or a
+   flex column would be the height of ALL the list's rows, not its min-height. */
+.ou-transfer--fill { flex: 1; min-height: 360px; grid-template-rows: minmax(0, 1fr); }
+.ou-transfer--fill .ou-transfer__pane { min-height: 0; }
+
+/* above: a row over the panes in the SAME grid, so its content lines up with the panes
+   edge to edge — left, right, or across both panes and the arrows. */
+.ou-transfer--has-above > .ou-transfer__pane,
+.ou-transfer--has-above > .ou-transfer__controls { grid-row: 2; }
+/* The row above (a 64px field) and its 4x gap add to the minimum. */
+.ou-transfer--fill.ou-transfer--has-above { min-height: 440px; grid-template-rows: auto minmax(0, 1fr); }
+.ou-transfer__above { min-width: 0; }
+.ou-transfer__above--left { grid-row: 1; grid-column: 1; }
+.ou-transfer__above--right { grid-row: 1; grid-column: 3; }
+.ou-transfer__above--span { grid-row: 1; grid-column: 1 / -1; }
+
+/* The 4px grid inside a fill list ONLY (tech debt as above): a pane is a panel, its
+   content sits 6x from the edges; related things in a band 1x, different things 4x. */
+.ou-transfer--fill .ou-transfer__header,
+.ou-transfer--fill .ou-transfer__search,
+.ou-transfer--fill .ou-transfer__toolbar,
+.ou-transfer--fill .ou-transfer__row { padding-left: var(--ou-space-6); padding-right: var(--ou-space-6); }
+.ou-transfer--fill .ou-transfer__search,
+.ou-transfer--fill .ou-transfer__select-all,
+.ou-transfer--fill .ou-transfer__row { gap: var(--ou-space-1); }
+.ou-transfer--fill .ou-transfer__toolbar { gap: var(--ou-space-4); }
 
 
 /* ─── Tree.css ───────────────────────────────── */

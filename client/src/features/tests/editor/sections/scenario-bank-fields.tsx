@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Play } from "lucide-react";
 import { Banner, Button, Cluster, SegmentedControl, Select, Tag } from "@skillum/ui-kit";
 import { expectedExposure, type ExpectedExposure } from "@shared/draw/expected-exposure";
-import type { Scenario } from "@shared/sim/contract";
+import type { ScenarioInput } from "@shared/sim/upgrade";
 import type { ScenarioSummary } from "@shared/sim/validate";
 import { megabytes, plural, summaryTags } from "@/features/questions/scenario/scenario-summary";
 import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
@@ -23,7 +23,7 @@ export interface BankScenario {
   questionId: string;
   summary: ScenarioSummary;
   mediaBytes: number;
-  scenario: Scenario;
+  scenario: ScenarioInput;
 }
 
 /** A topic that holds scenarios. */
@@ -134,7 +134,7 @@ export interface ScenarioBankFieldsProps {
 
 /** Поля пункта-сценария. */
 export function ScenarioBankFields({ item, onChange, banks, isLoading, loadError, beforeActions }: ScenarioBankFieldsProps) {
-  const [playing, setPlaying] = useState<Scenario | null>(null);
+  const [playing, setPlaying] = useState<ScenarioInput | null>(null);
   const { bank, fixed, exposure } = scenarioItemFacts(item, banks);
   const mode: PickMode = item?.questionId ? "fixed" : "random";
   const bankOptions = useMemo(() => banks.map((b) => ({ value: b.topicId, label: b.topicName })), [banks]);

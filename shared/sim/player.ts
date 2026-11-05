@@ -15,15 +15,25 @@
  *
  * Fullscreen is the host's business: the host requests it on the element it mounts the player
  * into (it needs the participant's click), the player only fills its container.
+ *
+ * The container may sit inside a shadow root: the web host mounts the player there together with
+ * the design template's stylesheet, so a template skin (`.tbsim …` rules) reaches the player the
+ * same way it does in the package document. The player's own stylesheet, focus checks and key
+ * targets therefore go through the container's root node, never straight through `document`.
  */
 import { createRun, type Reaction, type SimRun } from "./engine";
 import { appearSchedule, diffScenes, elementBox, fieldStacking } from "./diff";
 import { boundsOf, radiusOf, svgPoints, type ZoneShape } from "./geometry";
-import type { FieldPlacement, MediaItem, Outcome, Scenario, Scene, SimResult } from "./contract";
+import type { Device, FieldPlacement, MediaItem, Outcome, Scene, SimResult } from "./contract";
+import type { ScenarioInput } from "./upgrade";
+import { playable, type PlayableScenario } from "./variant";
 
 /** Options of a mounted player. */
 export interface PlayerOptions {
-  scenario: Scenario;
+  /** The scenario of any version, or a device view. */
+  scenario: ScenarioInput | PlayableScenario;
+  /** The variant to play; desktop by default. */
+  device?: Device;
   /** URL of a media file given its path inside the archive (`media/x.png`). */
   mediaUrl: (file: string) => string;
   /** Called once when the run ends, before the result dialog shows. */
@@ -87,12 +97,26 @@ const CSS = `
 .tbsim__actions{display:flex;justify-content:flex-end;gap:8px}
 `;
 
-function ensureStyle(doc: Document): void {
-  if (doc.getElementById("tbsim-css")) return;
+/** The root node a player lives in: the document itself or a shadow root inside it. */
+type PlayerScope = Document | ShadowRoot;
+
+/** The root node of the container; by node type, not `instanceof` (a frame has its own window). */
+function scopeOf(root: HTMLElement): PlayerScope {
+  const node = root.getRootNode();
+  return node.nodeType === 11 ? (node as ShadowRoot) : root.ownerDocument;
+}
+
+/**
+ * Put the player's stylesheet where its markup can see it, once per scope: the document head,
+ * or the shadow root itself — a stylesheet in the head does not reach into a shadow tree.
+ */
+function ensureStyle(scope: PlayerScope, doc: Document): void {
+  if (scope.getElementById("tbsim-css")) return;
   const s = doc.createElement("style");
   s.id = "tbsim-css";
   s.textContent = CSS;
-  doc.head.appendChild(s);
+  if (scope.nodeType === 11) scope.insertBefore(s, scope.firstChild);
+  else doc.head.appendChild(s);
 }
 
 function h<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -161,6 +185,8 @@ const TITLES: Record<Outcome, string> = {
   fail: "Цель не достигнута",
   exited: "Задание прервано",
   timeout: "Время вышло",
+  finale: "Задание завершено",
+  declared: "Задание завершено",
 };
 
 /**
@@ -172,13 +198,16 @@ const TITLES: Record<Outcome, string> = {
  */
 export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedPlayer {
   const doc = root.ownerDocument;
-  ensureStyle(doc);
-  const { scenario } = options;
+  // Focus and stylesheet are per root node: inside a shadow root `document.activeElement` is the
+  // shadow HOST, never the field being typed into.
+  const scope = scopeOf(root);
+  ensureStyle(scope, doc);
+  const scenario = playable(options.scenario, options.device);
   const media = new Map<string, MediaItem>(scenario.media.map((m) => [m.id, m]));
-  const fieldDefs = new Map((scenario.fields ?? []).map((f) => [f.id, f]));
+  const fieldDefs = new Map(scenario.fields.map((f) => [f.id, f]));
   const run = createRun(scenario);
-  const counters = scenario.settings?.counters ?? {};
-  const limitMs = scenario.settings?.limitSeconds ? scenario.settings.limitSeconds * 1000 : null;
+  const counters = scenario.settings.counters ?? {};
+  const limitMs = scenario.settings.limitSeconds ? scenario.settings.limitSeconds * 1000 : null;
   const startedAt = Date.now();
 
   // ── Skeleton ──
@@ -336,7 +365,7 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
     // By tag, not `instanceof`: in the package the player runs inside a frame with its own window.
     if (node.tagName === "INPUT") {
       node.tabIndex = reachable ? 0 : -1;
-      if (!reachable && doc.activeElement === node) node.blur();
+      if (!reachable && scope.activeElement === node) node.blur();
     }
   }
 
@@ -355,7 +384,7 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
           input.value = run.value(p.field);
           committed.set(p.field, input.value);
         }
-        if (doc.activeElement !== input) input.value = run.value(p.field);
+        if (scope.activeElement !== input) input.value = run.value(p.field);
         input.classList.toggle("is-wrong", run.isWrong(p.field));
         place(input, p);
         input.style.fontSize = `${fontPx}px`;
@@ -461,7 +490,9 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
       text = result.goal?.message
         ? `${result.goal.message}.${trap ? ` Ошибка: ${trap.error}.` : ""}`
         : `Документ оформлен с ошибками: ${result.goal?.checks.filter((c) => !c.passed).map((c) => fieldDefs.get(c.field)?.title ?? c.field).join(", ")}.`;
-    } else if (result.outcome === "timeout") text = "Задание завершено по времени и засчитано как невыполненное.";
+    } else if (result.outcome === "finale") text = result.finale ? result.finale.title + "." : "Задание завершено.";
+    else if (result.outcome === "declared") text = "Вы завершили задание.";
+    else if (result.outcome === "timeout") text = "Задание завершено по времени и засчитано как невыполненное.";
     else text = "Задание засчитано как невыполненное.";
     box.append(h(doc, "p", "", text));
     if (options.showDetails !== false) {
@@ -508,7 +539,10 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
     if (run.done() || shell.querySelector(".tbsim__veil")) return;
     const combo = comboOf(e);
     if (!combo) return;
-    const inInput = (e.target as HTMLElement)?.classList?.contains("tbsim__input");
+    // The listener sits on the document, where an event from a shadow tree is retargeted to the
+    // shadow host: the real target is the first node of the composed path.
+    const target = (e.composedPath?.()[0] ?? e.target) as HTMLElement | null;
+    const inInput = target?.classList?.contains("tbsim__input");
     // Inside a field only shortcuts reach the scenario; plain typing stays in the field.
     if (inInput && !/^(Ctrl|Alt|Meta)\+/.test(combo) && combo !== "Escape") return;
     if (inInput && /^(Ctrl|Meta)\+[CVXAZ]$/.test(combo)) return;

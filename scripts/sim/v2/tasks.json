@@ -1,0 +1,483 @@
+{
+    "$comment":  "Manifest of «Сценарий в ИС» P1 «Модель v2» tasks, read by scripts/sim/v2/verify-task.ps1. Plan: docs/plans/PLAN_sim_v2_model.md; coordination: docs/plans/COORD_sim_v2_model.md. Paths use forward slashes; \u0027*\u0027 in patterns matches any characters including \u0027/\u0027.",
+    "integration":  {
+                        "branch":  "sim-editor",
+                        "worktree":  "C:/Repositories/test-builder-sim-editor"
+                    },
+    "forbidden":  [
+                      "package.json",
+                      "package-lock.json",
+                      "tsconfig.json",
+                      "vitest.config.ts",
+                      "vitest.it.config.ts",
+                      "vite.config.ts",
+                      ".markdownlint.jsonc",
+                      "tests/sim-host-parity/known-divergences.ts",
+                      "tests/fixtures/sim/scorm-sample-hashes.json",
+                      "scripts/sim/v2/*",
+                      "docs/plans/PLAN_sim_v2_model.md",
+                      "docs/plans/COORD_sim_v2_model.md",
+                      "docs/specs/sim-scenario/v2-design.md"
+                  ],
+    "regressionTests":  [
+                            "tests/sim-engine.test.ts",
+                            "tests/sim-validate.test.ts",
+                            "tests/sim-scenario-archive.test.ts",
+                            "tests/sim-replay-scoring.test.ts",
+                            "tests/sim-lms-protocol.test.ts",
+                            "tests/sim-cover.test.ts",
+                            "tests/sim-analytics-stats.test.ts",
+                            "tests/sim-field-stacking.test.ts",
+                            "tests/sim-player-shadow-root.test.ts",
+                            "tests/sim-rules-dialog-theme.test.ts",
+                            "tests/sim-router-items.test.ts",
+                            "tests/sim-geometry.test.ts",
+                            "tests/sim-host-parity",
+                            "tests/sim-scenario-delivery.test.ts",
+                            "tests/sim-scoring-chain.test.ts",
+                            "tests/sim-scorm-runtime.test.ts",
+                            "tests/sim-router-section-passed.test.ts",
+                            "tests/sim-workbook-router-items.test.ts",
+                            "server/services/__tests__/lms-export-import.test.ts",
+                            "server/services/__tests__/questions-import-simulation.test.ts",
+                            "client/src/features/questions/__tests__/question-editor-scenario.test.tsx",
+                            "client/src/features/questions/__tests__/scenario-run-skin.test.tsx"
+                        ],
+    "waves":  [
+                  {
+                      "n":  0,
+                      "tscClean":  false
+                  },
+                  {
+                      "n":  1,
+                      "tscClean":  false
+                  },
+                  {
+                      "n":  2,
+                      "tscClean":  false
+                  },
+                  {
+                      "n":  3,
+                      "tscClean":  false
+                  },
+                  {
+                      "n":  4,
+                      "tscClean":  true
+                  },
+                  {
+                      "n":  5,
+                      "tscClean":  true
+                  },
+                  {
+                      "n":  6,
+                      "tscClean":  true
+                  }
+              ],
+    "tasks":  [
+                  {
+                      "id":  "W0",
+                      "wave":  0,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        0,
+                                        1,
+                                        2,
+                                        3,
+                                        4
+                                    ],
+                      "worktree":  "C:/Repositories/test-builder-sim-editor",
+                      "branch":  "sim-editor",
+                      "allowed":  [
+                                      "tests/fixtures/sim/scenario-v1.json",
+                                      "tests/helpers/sim-runs.ts",
+                                      "tests/sim-host-parity/fixture.ts",
+                                      "tests/sim-replay-scoring.test.ts",
+                                      "tests/sim-field-stacking.test.ts",
+                                      "tests/sim-engine.test.ts",
+                                      "tests/sim-lms-protocol.test.ts",
+                                      "tests/sim-cover.test.ts",
+                                      "tests/sim-analytics-stats.test.ts",
+                                      "tests/sim-validate.test.ts",
+                                      "tests/sim-scenario-archive.test.ts",
+                                      "shared/sim/contract.ts",
+                                      "shared/sim/contract-v1.ts",
+                                      "shared/sim/upgrade.ts",
+                                      "shared/sim/variant.ts",
+                                      "shared/sim/costs.ts",
+                                      "shared/sim/engine.ts",
+                                      "shared/sim/validate.ts",
+                                      "tests/sim-upgrade.test.ts",
+                                      "tests/sim-variant.test.ts",
+                                      "tests/sim-costs.test.ts"
+                                  ],
+                      "newTests":  [
+                                       "tests/sim-upgrade.test.ts",
+                                       "tests/sim-variant.test.ts",
+                                       "tests/sim-costs.test.ts"
+                                   ],
+                      "modifiedTests":  {
+                                            "tests/helpers/sim-runs.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-host-parity/fixture.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-replay-scoring.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-field-stacking.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-engine.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-lms-protocol.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-cover.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-analytics-stats.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-validate.test.ts":  "fixtures/sim/scenario-v1\\.json",
+                                            "tests/sim-scenario-archive.test.ts":  "fixtures/sim/scenario-v1\\.json"
+                                        },
+                      "tscOwn":  [
+                                     "shared/sim/contract.ts",
+                                     "shared/sim/contract-v1.ts",
+                                     "shared/sim/upgrade.ts",
+                                     "shared/sim/variant.ts",
+                                     "shared/sim/costs.ts"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни задачи 0, 1, 2, 3, 4."
+                  },
+                  {
+                      "id":  "W1-engine",
+                      "wave":  1,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        5,
+                                        6
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w1-engine",
+                      "branch":  "sim-w1-engine",
+                      "allowed":  [
+                                      "shared/sim/engine.ts",
+                                      "shared/sim/protocol-codec.ts",
+                                      "shared/sim/replay.ts",
+                                      "tests/sim-engine.test.ts",
+                                      "tests/sim-engine-v2.test.ts",
+                                      "tests/sim-replay-v2.test.ts",
+                                      "tests/sim-lms-protocol.test.ts"
+                                  ],
+                      "newTests":  [
+                                       "tests/sim-engine-v2.test.ts",
+                                       "tests/sim-replay-v2.test.ts"
+                                   ],
+                      "modifiedTests":  {
+                                            "tests/sim-engine.test.ts":  "toBe\\(2\\)",
+                                            "tests/sim-lms-protocol.test.ts":  "^\\s*expect\\(decodeProtocol\\(\"9;a1@0\"\\)\\)\\.toBeNull\\(\\);\\s*$"
+                                        },
+                      "tscOwn":  [
+                                     "shared/sim/engine.ts",
+                                     "shared/sim/protocol-codec.ts",
+                                     "shared/sim/replay.ts"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни задачи 5 и 6."
+                  },
+                  {
+                      "id":  "W1-optimum",
+                      "wave":  1,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        7
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w1-optimum",
+                      "branch":  "sim-w1-optimum",
+                      "allowed":  [
+                                      "shared/sim/optimum.ts",
+                                      "tests/sim-optimum.test.ts"
+                                  ],
+                      "newTests":  [
+                                       "tests/sim-optimum.test.ts"
+                                   ],
+                      "modifiedTests":  {
+
+                                        },
+                      "tscOwn":  [
+                                     "shared/sim/optimum.ts"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "review":  true,
+                      "brief":  "Выполни задачу 7. Если код плана не проходит тест из-за логики поиска — стоп и доклад, алгоритм не переписывать.",
+                      "minCounts":  {
+                                        "tests/sim-optimum.test.ts":  {
+                                                                          "it":  20,
+                                                                          "expect":  37
+                                                                      }
+                                    }
+                  },
+                  {
+                      "id":  "W1-docs",
+                      "wave":  1,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        "14: steps 3-7"
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w1-docs",
+                      "branch":  "sim-w1-docs",
+                      "allowed":  [
+                                      "docs/specs/sim-scenario/scenario.schema.json",
+                                      "docs/specs/sim-scenario/result.schema.json",
+                                      "docs/specs/sim-scenario/exchange-format.md",
+                                      "docs/specs/sim-scenario/result-format.md"
+                                  ],
+                      "newTests":  [
+
+                                   ],
+                      "modifiedTests":  {
+
+                                        },
+                      "tscOwn":  [
+
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "markdown":  [
+                                       "docs/specs/sim-scenario/exchange-format.md",
+                                       "docs/specs/sim-scenario/result-format.md"
+                                   ],
+                      "json":  [
+                                   "docs/specs/sim-scenario/scenario.schema.json",
+                                   "docs/specs/sim-scenario/result.schema.json"
+                               ],
+                      "brief":  "Выполни из задачи 14 только шаги 3, 4, 5, 6, 7: схемы и документы формата. Шаги 1-2 (пример) — не твои."
+                  },
+                  {
+                      "id":  "W2-routes",
+                      "wave":  2,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        8,
+                                        9
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w2-routes",
+                      "branch":  "sim-w2-routes",
+                      "allowed":  [
+                                      "shared/sim/routes.ts",
+                                      "shared/sim/analysis.ts",
+                                      "tests/sim-routes.test.ts",
+                                      "tests/sim-analysis.test.ts"
+                                  ],
+                      "newTests":  [
+                                       "tests/sim-routes.test.ts",
+                                       "tests/sim-analysis.test.ts"
+                                   ],
+                      "modifiedTests":  {
+
+                                        },
+                      "tscOwn":  [
+                                     "shared/sim/routes.ts",
+                                     "shared/sim/analysis.ts"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни задачи 8 и 9.",
+                      "minCounts":  {
+                                        "tests/sim-routes.test.ts":  {
+                                                                         "it":  5,
+                                                                         "expect":  11
+                                                                     },
+                                        "tests/sim-analysis.test.ts":  {
+                                                                           "it":  6,
+                                                                           "expect":  13
+                                                                       }
+                                    }
+                  },
+                  {
+                      "id":  "W2-player",
+                      "wave":  2,
+                      "model":  "haiku",
+                      "planTasks":  [
+                                        11
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w2-player",
+                      "branch":  "sim-w2-player",
+                      "allowed":  [
+                                      "shared/sim/cover.ts",
+                                      "shared/sim/player.ts",
+                                      "shared/sim/browser-entry.ts",
+                                      "tests/sim-cover.test.ts"
+                                  ],
+                      "newTests":  [
+
+                                   ],
+                      "modifiedTests":  {
+                                            "tests/sim-cover.test.ts":  null
+                                        },
+                      "tscOwn":  [
+                                     "shared/sim/cover.ts",
+                                     "shared/sim/player.ts",
+                                     "shared/sim/browser-entry.ts"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни задачу 11."
+                  },
+                  {
+                      "id":  "W3-validate",
+                      "wave":  3,
+                      "model":  "opus",
+                      "planTasks":  [
+                                        10
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w3-validate",
+                      "branch":  "sim-w3-validate",
+                      "allowed":  [
+                                      "shared/sim/validate.ts",
+                                      "tests/sim-validate.test.ts",
+                                      "tests/sim-validate-v2.test.ts"
+                                  ],
+                      "newTests":  [
+                                       "tests/sim-validate-v2.test.ts"
+                                   ],
+                      "modifiedTests":  {
+                                            "tests/sim-validate.test.ts":  "version: 3"
+                                        },
+                      "tscOwn":  [
+                                     "shared/sim/validate.ts"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "review":  true,
+                      "brief":  "Выполни задачу 10. Новое предупреждение на эталонном примере не глушить — назвать в докладе.",
+                      "minCounts":  {
+                                        "tests/sim-validate-v2.test.ts":  {
+                                                                              "it":  21,
+                                                                              "expect":  38
+                                                                          }
+                                    }
+                  },
+                  {
+                      "id":  "W4-server",
+                      "wave":  4,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        12
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w4-server",
+                      "branch":  "sim-w4-server",
+                      "allowed":  [
+                                      "server/*",
+                                      "tests/sim-scenario-archive.test.ts"
+                                  ],
+                      "newTests":  [
+
+                                   ],
+                      "modifiedTests":  {
+                                            "tests/sim-scenario-archive.test.ts":  null
+                                        },
+                      "tscOwn":  [
+                                     "changed"
+                                 ],
+                      "extraTests":  [
+                                         "server/services/__tests__/questions-import-simulation.test.ts"
+                                     ],
+                      "brief":  "Выполни задачу 12."
+                  },
+                  {
+                      "id":  "W4-client",
+                      "wave":  4,
+                      "model":  "haiku",
+                      "planTasks":  [
+                                        13
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w4-client",
+                      "branch":  "sim-w4-client",
+                      "allowed":  [
+                                      "client/src/*"
+                                  ],
+                      "newTests":  [
+
+                                   ],
+                      "modifiedTests":  {
+
+                                        },
+                      "tscOwn":  [
+                                     "changed"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни задачу 13."
+                  },
+                  {
+                      "id":  "W5-lms",
+                      "wave":  5,
+                      "model":  "haiku",
+                      "planTasks":  [
+                                        16
+                                    ],
+                      "worktree":  "C:/Repositories/tb-sim-w5-lms",
+                      "branch":  "sim-w5-lms",
+                      "allowed":  [
+                                      "server/services/__tests__/lms-export-import.test.ts"
+                                  ],
+                      "newTests":  [
+
+                                   ],
+                      "modifiedTests":  {
+                                            "server/services/__tests__/lms-export-import.test.ts":  null
+                                        },
+                      "tscOwn":  [
+
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни задачу 16. Только тестовый файл, код не трогать.",
+                      "minCounts":  {
+                                        "server/services/__tests__/lms-export-import.test.ts":  {
+                                                                                                    "it":  81,
+                                                                                                    "expect":  158
+                                                                                                }
+                                    }
+                  },
+                  {
+                      "id":  "W5",
+                      "wave":  6,
+                      "model":  "sonnet",
+                      "planTasks":  [
+                                        "14: steps 1-2",
+                                        15
+                                    ],
+                      "worktree":  "C:/Repositories/test-builder-sim-editor",
+                      "branch":  "sim-editor",
+                      "allowed":  [
+                                      "docs/specs/sim-scenario/example/scenario.json",
+                                      "tests/sim-example-v2.test.ts"
+                                  ],
+                      "newTests":  [
+                                       "tests/sim-example-v2.test.ts"
+                                   ],
+                      "modifiedTests":  {
+
+                                        },
+                      "tscOwn":  [
+                                     "changed"
+                                 ],
+                      "extraTests":  [
+
+                                     ],
+                      "brief":  "Выполни из задачи 14 шаги 1 и 2, затем задачу 15. Шаг 5 задачи 15 (полный прогон) — только спросить у владельца, не запускать.",
+                      "minCounts":  {
+                                        "tests/sim-example-v2.test.ts":  {
+                                                                             "it":  1,
+                                                                             "expect":  2
+                                                                         }
+                                    }
+                  }
+              ],
+    "harness":  [
+                    "scripts/sim/v2/*",
+                    "docs/plans/PLAN_sim_v2_model.md",
+                    "docs/plans/COORD_sim_v2_model.md"
+                ]
+}

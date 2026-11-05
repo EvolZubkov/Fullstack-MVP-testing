@@ -21,6 +21,8 @@ import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly, distributesBudge
 import { isAllocationFeasible } from "@shared/questions/allocation";
 import { normalizeOptionFeedback, optionCountOf, OPTION_FEEDBACK_TYPE } from "@shared/questions/option-feedback";
 import { normalizeIncomingText, normalizeQuestionData, normalizePromptByFormat } from "./question-text";
+import { withFormulas } from "./prompt-html";
+import { readListCell, splitListCell } from "./workbook-list-cell";
 import { blankIds } from "@shared/questions/blanks";
 import { parseRulesCell, parsePromptFormatCell } from "./workbook-answer-rules";
 import { isMarkupFormat } from "@shared/questions/prompt-format";
@@ -116,8 +118,8 @@ export interface QuestionImportResult {
  * Read one text cell the way the import must store it: markup converted to the
  * markdown subset, whitespace canonical. An empty cell reads as an empty string.
  */
-function cellText(raw: unknown): string {
-  return normalizeIncomingText(String(raw ?? ""), { convertHtml: true });
+function cellText(raw: unknown, stored?: unknown): string {
+  return normalizeIncomingText(String(raw ?? ""), { convertHtml: true, stored });
 }
 
 /** Derive the option/pair/item count from a parsed dataJson. */
@@ -224,6 +226,13 @@ export async function importQuestionRows(
         continue;
       }
 
+      // Вопрос, который строка обновляет. Нужен ДО разбора текстов: ячейка, совпадающая с
+      // сохранённым значением, — это собственная выгрузка, вернувшаяся по кругу, и её
+      // оформление переписывать нельзя (см. `cellText`).
+      const rowId = String(row["ID"] || "").trim();
+      const existing = rowId ? await storage.getQuestion(rowId) : undefined;
+      const storedData = (existing?.dataJson ?? {}) as Record<string, unknown>;
+
       // Текст вопроса — в канонической форме: ячейка приходит из Word, из чужой
       // системы или из ручной правки, а храниться должна так же, как из редактора.
       // Разметку в ячейке переводим в markdown: автор её не набирал, а хранить
@@ -234,7 +243,7 @@ export async function importQuestionRows(
       const promptFormat = parsePromptFormatCell(row["Формат текста"]);
       const prompt = isMarkupFormat(promptFormat)
         ? normalizePromptByFormat(String(row["Текст вопроса"] || row["Вопрос"] || ""), promptFormat).prompt
-        : cellText(row["Текст вопроса"] || row["Вопрос"]);
+        : cellText(row["Текст вопроса"] || row["Вопрос"], existing?.promptFormat === "markdown" ? existing.prompt : undefined);
       if (!prompt) {
         result.errors.push(`Строка ${rowNum}: пустой вопрос`);
         continue;
@@ -255,8 +264,7 @@ export async function importQuestionRows(
       let correctJson: unknown = {};
 
       if (hasOptionList(type)) {
-        const separator = optionsStr.includes("#") ? "#" : "|";
-        const options = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
+        const options = readListCell(optionsStr);
 
         if (options.length < 2) {
           result.errors.push(
@@ -368,13 +376,9 @@ export async function importQuestionRows(
 
         if (optionsStr.includes("||")) {
           // PRD-14 Ф0 (FR-01): "left list || right list" с дистракторами.
-          const sideSep = (s: string) => {
-            const sep = s.includes("#") ? "#" : "|";
-            return s.split(sep).map((x) => x.trim()).filter(Boolean);
-          };
           const [leftStr, rightStr] = optionsStr.split("||");
-          left = sideSep(leftStr || "");
-          right = sideSep(rightStr || "");
+          left = readListCell(leftStr || "");
+          right = readListCell(rightStr || "");
 
           if (left.length < 2 || right.length < 2) {
             result.errors.push(`Строка ${rowNum}: нужно минимум 2 пары для сопоставления`);
@@ -408,7 +412,7 @@ export async function importQuestionRows(
               }
             }
           } else {
-            const parts = optionsStr.split("#").map((s) => s.trim()).filter(Boolean);
+            const parts = splitListCell(optionsStr).map((s) => s.trim()).filter(Boolean);
             for (let j = 0; j < parts.length - 1; j += 2) {
               left.push(parts[j]);
               right.push(parts[j + 1] || "");
@@ -455,7 +459,7 @@ export async function importQuestionRows(
           result.errors.push(`Строка ${rowNum}: «Предел длины» — целое число больше нуля, получено "${maxLengthRaw}"`);
           continue;
         }
-        const placeholder = cellText(row["Подсказка в поле"]).trim();
+        const placeholder = cellText(row["Подсказка в поле"], storedData.placeholder).trim();
         const requiredRaw = String(row["Ответ обязателен"] ?? "").trim().toLowerCase();
         const required = requiredRaw === "да" || requiredRaw === "yes" || requiredRaw === "true";
 
@@ -468,8 +472,7 @@ export async function importQuestionRows(
           ...(type === "long" && required ? { required: true } : {}),
         };
       } else if (type === "ranking") {
-        const separator = optionsStr.includes("#") ? "#" : "|";
-        const items = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
+        const items = readListCell(optionsStr);
 
         if (items.length < 2) {
           result.errors.push(`Строка ${rowNum}: нужно минимум 2 элемента для ранжирования`);
@@ -556,24 +559,29 @@ export async function importQuestionRows(
       const feedbackModeRaw = String(row["Режим ОС"] || "").trim().toLowerCase();
       const feedbackMode: "general" | "conditional" =
         feedbackModeRaw === "условная" || feedbackModeRaw === "conditional" ? "conditional" : "general";
-      const feedback = cellText(row["Обратная связь"]) || null;
-      const feedbackCorrect = cellText(row["ОС при верном"]) || null;
-      const feedbackIncorrect = cellText(row["ОС при неверном"]) || null;
+      const feedback = cellText(row["Обратная связь"], existing?.feedback) || null;
+      const feedbackCorrect = cellText(row["ОС при верном"], existing?.feedbackCorrect) || null;
+      const feedbackIncorrect = cellText(row["ОС при неверном"], existing?.feedbackIncorrect) || null;
 
       // Canonical answer texts BEFORE the hash: the hash deduplicates imported
       // rows and pins published snapshots, so hashing a value the write path is
       // about to rewrite would produce a hash no stored row can ever match.
       // Per element, AFTER the separator split — otherwise markup spanning two
       // options would swallow the `#`/`|` between them.
-      dataJson = normalizeQuestionData(dataJson, { convertHtml: true });
+      dataJson = normalizeQuestionData(dataJson, { convertHtml: true }, existing?.dataJson);
 
       // «ОС по вариантам»: слоты через `#` в порядке вариантов, пустой слот — у варианта
       // своего текста нет. Разбирается ПОСЛЕ канонизации вариантов: число слотов сверяется
       // с числом вариантов, которые действительно будут сохранены.
       const optionFeedbackRaw = String(row["ОС по вариантам"] ?? "");
-      const optionFeedbackSlots = optionFeedbackRaw.trim() === "" ? [] : optionFeedbackRaw.split("#");
+      const optionFeedbackSlots = optionFeedbackRaw.trim() === "" ? [] : splitListCell(optionFeedbackRaw);
       const optionCount = optionCountOf(dataJson);
-      const optionFeedback = normalizeOptionFeedback(optionFeedbackSlots, type, optionCount, cellText);
+      const storedOptionFeedback = Array.isArray(existing?.optionFeedbackJson) ? existing.optionFeedbackJson : [];
+      const optionFeedback = normalizeOptionFeedback(
+        optionFeedbackSlots.map((slot, idx) => cellText(slot, storedOptionFeedback[idx])),
+        type,
+        optionCount,
+      );
       if (optionFeedbackSlots.some((slot) => slot.trim() !== "")) {
         if (type !== OPTION_FEEDBACK_TYPE) {
           result.warnings.push(
@@ -593,10 +601,12 @@ export async function importQuestionRows(
 
       const contentHash = computeQuestionHash(type, prompt, dataJson);
 
+      // PRD-57 FR-07: запас готовых формул — как у редактора. Кладётся ПОСЛЕ хеша: хеш
+      // описывает содержимое, которое написал автор, а запас — производная от него.
+      dataJson = withFormulas(dataJson, prompt);
+
       // Обновление по ID если указан.
-      const rowId = String(row["ID"] || "").trim();
       if (rowId) {
-        const existing = await storage.getQuestion(rowId);
         if (existing) {
           // PRD-15 block C: import updates respect topic ownership — the
           // importer must manage the question's CURRENT topic (owner / manage

@@ -29,6 +29,8 @@ export interface SectionGroup {
   label: string;
   /** Author order; absent = the element's position in the list. */
   order?: number;
+  /** Author's explanation printed under the group heading; empty text = none. */
+  description?: { format?: "plain" | "richText" | "html"; text?: string | null };
 }
 
 /** What {@link groupSections} needs to know about a section — verdict and membership. */
@@ -43,6 +45,8 @@ export interface GroupableSection {
 export interface GroupedSections<T> {
   key: string;
   label: string;
+  /** The group's explanation as stored; the layout gets it as ready HTML from the core. */
+  description?: { format: "plain" | "richText" | "html"; text: string };
   sections: T[];
   /** Sections of this group with a PASSED verdict. */
   passedCount: number;
@@ -70,13 +74,23 @@ export function normalizeSectionGroups(raw: unknown): SectionGroup[] {
   const out: Array<{ group: SectionGroup; sortKey: number; position: number }> = [];
   raw.forEach((entry, position) => {
     if (!entry || typeof entry !== "object") return;
-    const g = entry as { key?: unknown; label?: unknown; order?: unknown };
+    const g = entry as { key?: unknown; label?: unknown; order?: unknown; description?: unknown };
     const key = typeof g.key === "string" ? g.key.trim() : "";
     if (!key || seen.has(key)) return;
     seen.add(key);
     const order = typeof g.order === "number" && Number.isFinite(g.order) ? g.order : undefined;
+    // The explanation survives only with a real text: an empty one means «none», and a
+    // malformed one is dropped rather than thrown on, like any other broken entry here.
+    const d = g.description as { format?: unknown; text?: unknown } | null | undefined;
+    const descText = d && typeof d === "object" && typeof d.text === "string" ? d.text : "";
+    const descFormat = d && (d.format === "richText" || d.format === "html") ? d.format : "plain";
     out.push({
-      group: { key, label: typeof g.label === "string" ? g.label.trim() : "", ...(order === undefined ? {} : { order }) },
+      group: {
+        key,
+        label: typeof g.label === "string" ? g.label.trim() : "",
+        ...(order === undefined ? {} : { order }),
+        ...(descText.trim() === "" ? {} : { description: { format: descFormat, text: descText } }),
+      },
       // No `order` = the position in the list, which is what «упорядоченный список» means
       // for data written by an importer that never filled the number in.
       sortKey: order === undefined ? position : order,
@@ -112,7 +126,14 @@ export function groupSections<T extends GroupableSection>(
 
   const buckets = new Map<string, GroupedSections<T>>();
   for (const g of declared) {
-    buckets.set(g.key, { key: g.key, label: g.label, sections: [], passedCount: 0, totalCount: 0 });
+    buckets.set(g.key, {
+      key: g.key,
+      label: g.label,
+      ...(g.description ? { description: g.description as GroupedSections<T>["description"] } : {}),
+      sections: [],
+      passedCount: 0,
+      totalCount: 0,
+    });
   }
   for (const section of sections) {
     const bucket = section.groupKey ? buckets.get(section.groupKey) : undefined;
